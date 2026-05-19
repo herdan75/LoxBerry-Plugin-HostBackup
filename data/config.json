@@ -1,0 +1,9 @@
+{
+  "backup_root": "",
+  "rsync_extra_excludes": [],
+  "stop_docker_before_backup": false,
+  "create_export_after_backup": false,
+  "keep_backups": 0,
+  "pre_backup_hook": "",
+  "post_backup_hook": ""
+}
