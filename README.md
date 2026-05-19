@@ -1,5 +1,39 @@
 # LoxBerry Host Backup
 
+## Project status
+
+This repository contains an early, not yet released development version.
+It has not been validated on a real LoxBerry/DietPi host yet and must not be
+used as the only backup for productive systems.
+
+Before relying on this plugin, test the full cycle on a non-critical system:
+
+- Install the plugin ZIP in LoxBerry.
+- Run preflight checks.
+- Create a backup.
+- Browse and export the backup.
+- Restore to a fresh test system.
+- Verify LoxBerry, Docker containers, native services, permissions, and data.
+
+## Current validation status
+
+Checked locally:
+
+- Bash syntax for backend, postinstall, restore helper, and uninstall scripts.
+- Backend `list` command with isolated test directories.
+- Backend `preflight-backup` command with isolated test directories.
+- Backend `task-status` command with a synthetic log file.
+- Plugin ZIP packaging.
+
+Not yet validated:
+
+- Installation through the LoxBerry plugin manager.
+- Web UI execution with the LoxBerry webserver user and sudoers rule.
+- Real backup on LoxBerry/DietPi hardware.
+- Real restore on a fresh target system.
+- Docker/database consistency with active containers.
+- Platform migration between different CPU architectures.
+
 LoxBerry Host Backup is a disaster-recovery plugin for a complete host backup.
 It is intended for LoxBerry systems that also run Docker containers, DietPi
 software, native services, scripts, and other data outside LoxBerry itself.
@@ -46,6 +80,10 @@ shares or very large media paths to `rsync_extra_excludes` if they should not be
 part of disaster recovery.
 
 ## Important notes
+
+This plugin is currently experimental and not approved for production use.
+The restore workflow writes back to `/` and can overwrite the target system.
+Use it only after verifying the backup on test hardware.
 
 For consistent Docker and database backups, stop affected containers or add
 pre/post hooks before the backup. A live filesystem backup can otherwise contain

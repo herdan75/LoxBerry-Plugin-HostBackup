@@ -252,11 +252,15 @@ calculate_files() {
 }
 
 preflight_backup() {
-  local root available_mb docker_available docker_running excludes_count status warnings_json checks_json
+  local root available_mb docker_available docker_running excludes_count status warnings_json checks_json rsync_available target_writable
   root="$(backup_root)"
   mkdir -p "$root"
   available_mb="$(df -Pm "$root" 2>/dev/null | awk 'NR==2 {print $4}')"
   [ -n "$available_mb" ] || available_mb=0
+  rsync_available=false
+  command -v rsync >/dev/null 2>&1 && rsync_available=true
+  target_writable=false
+  [ -w "$root" ] && target_writable=true
   docker_available=false
   docker_running=0
   if command -v docker >/dev/null 2>&1; then
@@ -266,7 +270,10 @@ preflight_backup() {
   excludes_count="$(backup_excludes "$root" | wc -l | tr -d ' ')"
   status="ok"
   warnings_json="[]"
-  if [ "$available_mb" -lt 1024 ]; then
+  if [ "$rsync_available" != "true" ] || [ "$target_writable" != "true" ]; then
+    status="error"
+    warnings_json='["Pflichtcheck fehlgeschlagen: rsync oder Schreibzugriff fehlt."]'
+  elif [ "$available_mb" -lt 1024 ]; then
     status="warning"
     warnings_json='["Backup-Ziel hat weniger als 1 GB freien Speicher."]'
   elif [ "$docker_running" -gt 0 ] && [ "$(json_get_bool stop_docker_before_backup)" != "true" ]; then
@@ -275,8 +282,8 @@ preflight_backup() {
   fi
   checks_json="$(cat <<EOF
 [
-  {"name":"rsync verfuegbar","ok":$(command -v rsync >/dev/null 2>&1 && echo true || echo false)},
-  {"name":"Backup-Ziel beschreibbar","ok":$([ -w "$root" ] && echo true || echo false)},
+  {"name":"rsync verfuegbar","ok":$rsync_available},
+  {"name":"Backup-Ziel beschreibbar","ok":$target_writable},
   {"name":"Freier Speicher MB","ok":$([ "$available_mb" -ge 1024 ] && echo true || echo false),"value":"$available_mb"},
   {"name":"Docker verfuegbar","ok":$docker_available,"value":"running=$docker_running"},
   {"name":"Exclude-Regeln","ok":true,"value":"$excludes_count"}
@@ -297,16 +304,21 @@ EOF
 
 preflight_restore() {
   local backup_id="$1"
-  local root target status warnings_json backup_arch host_arch_value backup_status
+  local root target status warnings_json backup_arch host_arch_value backup_status rsync_available
   root="$(backup_root)"
   target="$root/$backup_id"
   [ -d "$target/rootfs" ] || { echo "Backup rootfs not found: $backup_id" >&2; exit 6; }
   host_arch_value="$(host_arch)"
+  rsync_available=false
+  command -v rsync >/dev/null 2>&1 && rsync_available=true
   backup_arch="$(perl -MJSON::PP -e 'local $/; open my $fh,"<",$ARGV[0] or exit 0; my $d=eval{decode_json(<$fh>)}||{}; print $d->{host}{architecture} // "";' "$target/manifest.json" 2>/dev/null || true)"
   backup_status="$(perl -MJSON::PP -e 'local $/; open my $fh,"<",$ARGV[0] or exit 0; my $d=eval{decode_json(<$fh>)}||{}; print $d->{status} // "";' "$target/manifest.json" 2>/dev/null || true)"
   status="ok"
   warnings_json="[]"
-  if [ "$backup_status" != "complete" ]; then
+  if [ "$rsync_available" != "true" ]; then
+    status="error"
+    warnings_json='["Pflichtcheck fehlgeschlagen: rsync fehlt."]'
+  elif [ "$backup_status" != "complete" ]; then
     status="warning"
     warnings_json='["Backup ist nicht als complete markiert."]'
   elif [ -n "$backup_arch" ] && [ "$backup_arch" != "$host_arch_value" ]; then
@@ -321,7 +333,7 @@ preflight_restore() {
   "backup_path": $(json_escape "$target"),
   "warnings": $warnings_json,
   "checks": [
-    {"name":"rsync verfuegbar","ok":$(command -v rsync >/dev/null 2>&1 && echo true || echo false)},
+    {"name":"rsync verfuegbar","ok":$rsync_available},
     {"name":"Backup rootfs vorhanden","ok":$([ -d "$target/rootfs" ] && echo true || echo false)},
     {"name":"Backup vollstaendig","ok":$([ "$backup_status" = "complete" ] && echo true || echo false),"value":$(json_escape "$backup_status")},
     {"name":"Architektur passend","ok":$([ -z "$backup_arch" ] || [ "$backup_arch" = "$host_arch_value" ] && echo true || echo false),"value":$(json_escape "$backup_arch -> $host_arch_value")}
@@ -407,7 +419,8 @@ start_backup() {
 task_log_path() {
   local task="$1"
   case "$task" in
-    backup-*.log|restore-*.log|*.launch.log) ;;
+    *[!A-Za-z0-9._-]*|.*|*..*|*/*) echo "Unsafe task id." >&2; exit 11 ;;
+    backup-*.log|restore-*.log) ;;
     *) echo "Unsafe task id." >&2; exit 11 ;;
   esac
   printf '%s/%s\n' "$LBP_LOGDIR" "$task"

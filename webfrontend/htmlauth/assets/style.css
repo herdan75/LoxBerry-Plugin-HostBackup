@@ -177,6 +177,11 @@ button.danger {
   color: #805900;
 }
 
+.status-error {
+  background: #fff0f0;
+  color: #9e2f2f;
+}
+
 .warnings {
   margin-top: 0;
 }
