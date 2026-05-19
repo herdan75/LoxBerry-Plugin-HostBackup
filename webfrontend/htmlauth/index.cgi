@@ -105,6 +105,17 @@ if ($q->request_method eq 'POST') {
     } else {
       $error = "Zielordner muss ein absoluter Pfad sein.";
     }
+  } elsif ($action eq 'save-config') {
+    my $backup_root = $q->param('backup_root') || '';
+    my $excludes = $q->param('rsync_extra_excludes') || '';
+    my $stop_docker = $q->param('stop_docker_before_backup') ? 'true' : 'false';
+    my $create_export = $q->param('create_export_after_backup') ? 'true' : 'false';
+    my $keep_backups = $q->param('keep_backups') || '0';
+    my $pre_hook = $q->param('pre_backup_hook') || '';
+    my $post_hook = $q->param('post_backup_hook') || '';
+    my ($status, $out) = run_shell(backend_cmd('save-config', $backup_root, $excludes, $stop_docker, $create_export, $keep_backups, $pre_hook, $post_hook));
+    if ($status == 0) { $message = "Einstellungen gespeichert."; }
+    else { $error = escapeHTML($out); }
   } elsif ($action eq 'import') {
     my $upload = $q->upload('backup_archive');
     if ($upload) {
@@ -192,6 +203,14 @@ if ($list_status == 0) {
   $error ||= escapeHTML($list_json);
 }
 
+my ($config_status, $config_json) = run_shell(backend_cmd('config'));
+my $config = {};
+if ($config_status == 0) {
+  $config = eval { decode_json($config_json) } || {};
+} else {
+  $error ||= escapeHTML($config_json);
+}
+
 my $browser = undef;
 if ($action eq 'browse' && valid_backup_id($backup_id) && valid_rel_path($browse_path)) {
   my ($status, $out) = run_shell(backend_cmd('browse', $backup_id, $browse_path));
@@ -254,6 +273,11 @@ sub render_check {
   print '</tbody></table>';
 }
 
+sub checked_attr {
+  my ($value) = @_;
+  return $value ? ' checked' : '';
+}
+
 print header(-type => 'text/html', -charset => 'utf-8');
 print <<'HTML';
 <!doctype html>
@@ -288,6 +312,54 @@ if ($message) {
 if ($error) {
   print qq{<section class="notice error"><pre>$error</pre></section>};
 }
+
+my $cfg_backup_root = escapeHTML($config->{backup_root} || '');
+my $cfg_keep = escapeHTML(defined $config->{keep_backups} ? $config->{keep_backups} : 0);
+my $cfg_pre_hook = escapeHTML($config->{pre_backup_hook} || '');
+my $cfg_post_hook = escapeHTML($config->{post_backup_hook} || '');
+my $cfg_excludes = escapeHTML(join "\n", @{$config->{rsync_extra_excludes} || []});
+my $cfg_stop_docker = checked_attr($config->{stop_docker_before_backup});
+my $cfg_create_export = checked_attr($config->{create_export_after_backup});
+
+print <<HTML;
+    <section class="panel settings-panel">
+      <h2>Einstellungen</h2>
+      <form method="post" class="settings-form">
+        <input type="hidden" name="action" value="save-config">
+        <label>
+          <span>Backup-Ziel</span>
+          <input name="backup_root" value="$cfg_backup_root" placeholder="/mnt/backupdisk/loxberry-hostbackup">
+        </label>
+        <label>
+          <span>Aufbewahrung</span>
+          <input name="keep_backups" type="number" min="0" step="1" value="$cfg_keep">
+        </label>
+        <label>
+          <span>Pre-Backup-Hook</span>
+          <input name="pre_backup_hook" value="$cfg_pre_hook" placeholder="/opt/scripts/before-backup.sh">
+        </label>
+        <label>
+          <span>Post-Backup-Hook</span>
+          <input name="post_backup_hook" value="$cfg_post_hook" placeholder="/opt/scripts/after-backup.sh">
+        </label>
+        <label class="wide">
+          <span>Zusaetzliche rsync-Excludes</span>
+          <textarea name="rsync_extra_excludes" rows="5" placeholder="/mnt/nas&#10;/media/bigdata">$cfg_excludes</textarea>
+        </label>
+        <label class="checkline">
+          <input type="checkbox" name="stop_docker_before_backup" value="1"$cfg_stop_docker>
+          <span>Docker-Container vor dem Backup stoppen und danach wieder starten</span>
+        </label>
+        <label class="checkline">
+          <input type="checkbox" name="create_export_after_backup" value="1"$cfg_create_export>
+          <span>Nach jedem Backup automatisch ein Export-Archiv erstellen</span>
+        </label>
+        <div class="form-actions">
+          <button type="submit">Einstellungen speichern</button>
+        </div>
+      </form>
+    </section>
+HTML
 
 print <<'HTML';
     <section class="panel">

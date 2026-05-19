@@ -70,6 +70,55 @@ table {
   margin-bottom: 14px;
 }
 
+.settings-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.settings-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.settings-form input,
+.settings-form textarea {
+  border: 1px solid #bcc8d6;
+  border-radius: 6px;
+  font: inherit;
+  min-height: 36px;
+  padding: 7px 9px;
+}
+
+.settings-form textarea {
+  font-family: Consolas, "Liberation Mono", monospace;
+  resize: vertical;
+}
+
+.settings-form .wide,
+.settings-form .checkline,
+.settings-form .form-actions {
+  grid-column: 1 / -1;
+}
+
+.settings-form .checkline {
+  align-items: center;
+  flex-direction: row;
+  font-weight: 400;
+}
+
+.settings-form .checkline input {
+  min-height: auto;
+  width: auto;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
 th,
 td {
   border-bottom: 1px solid #e2e7ef;
@@ -251,6 +300,10 @@ button.danger {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .settings-form {
+    grid-template-columns: 1fr;
   }
 
   table,

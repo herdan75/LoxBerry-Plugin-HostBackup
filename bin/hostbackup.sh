@@ -81,6 +81,65 @@ json_get_array_lines() {
   ' "$CONFIG_FILE" "$key"
 }
 
+show_config() {
+  perl -MJSON::PP -e '
+    my ($file) = @ARGV;
+    open my $fh, "<", $file or die "Cannot read config: $!";
+    local $/;
+    my $cfg = eval { decode_json(<$fh>) } || {};
+    $cfg->{backup_root} //= "";
+    $cfg->{rsync_extra_excludes} = [] unless ref($cfg->{rsync_extra_excludes}) eq "ARRAY";
+    $cfg->{stop_docker_before_backup} = $cfg->{stop_docker_before_backup} ? JSON::PP::true : JSON::PP::false;
+    $cfg->{create_export_after_backup} = $cfg->{create_export_after_backup} ? JSON::PP::true : JSON::PP::false;
+    $cfg->{keep_backups} = ($cfg->{keep_backups} && $cfg->{keep_backups} =~ /^\d+$/) ? 0 + $cfg->{keep_backups} : 0;
+    $cfg->{pre_backup_hook} //= "";
+    $cfg->{post_backup_hook} //= "";
+    print JSON::PP->new->ascii->pretty->canonical->encode($cfg);
+  ' "$CONFIG_FILE"
+}
+
+save_config() {
+  require_root_for_write
+  local backup_root="$1"
+  local excludes_text="$2"
+  local stop_docker="$3"
+  local create_export="$4"
+  local keep_backups="$5"
+  local pre_hook="$6"
+  local post_hook="$7"
+
+  perl -MJSON::PP -e '
+    my ($file, $backup_root, $excludes_text, $stop_docker, $create_export, $keep_backups, $pre_hook, $post_hook) = @ARGV;
+    my @excludes;
+    for my $line (split /\r?\n/, $excludes_text) {
+      $line =~ s/^\s+|\s+$//g;
+      next if $line eq "" || $line =~ /^#/;
+      push @excludes, $line;
+    }
+    if ($backup_root ne "" && $backup_root !~ m{^/}) {
+      die "Backup-Ziel muss leer oder ein absoluter Pfad sein.\n";
+    }
+    if ($pre_hook ne "" && $pre_hook !~ m{^/}) {
+      die "Pre-Backup-Hook muss leer oder ein absoluter Pfad sein.\n";
+    }
+    if ($post_hook ne "" && $post_hook !~ m{^/}) {
+      die "Post-Backup-Hook muss leer oder ein absoluter Pfad sein.\n";
+    }
+    $keep_backups = ($keep_backups =~ /^\d+$/) ? 0 + $keep_backups : 0;
+    my $cfg = {
+      backup_root => $backup_root,
+      rsync_extra_excludes => \@excludes,
+      stop_docker_before_backup => ($stop_docker eq "true" ? JSON::PP::true : JSON::PP::false),
+      create_export_after_backup => ($create_export eq "true" ? JSON::PP::true : JSON::PP::false),
+      keep_backups => $keep_backups,
+      pre_backup_hook => $pre_hook,
+      post_backup_hook => $post_hook,
+    };
+    open my $fh, ">", $file or die "Cannot write config: $!";
+    print $fh JSON::PP->new->ascii->pretty->canonical->encode($cfg);
+  ' "$CONFIG_FILE" "$backup_root" "$excludes_text" "$stop_docker" "$create_export" "$keep_backups" "$pre_hook" "$post_hook"
+}
+
 json_escape() {
   perl -MJSON::PP -e 'print encode_json($ARGV[0] // "")' "$1"
 }
@@ -741,6 +800,8 @@ Actions:
   start [NAME]           Start a full host backup in the background
   preflight-backup       Check whether backup can start
   preflight-restore ID   Check whether restore can start
+  config                 Print plugin config as JSON
+  save-config ARGS       Save plugin config
   tasks                  List task logs as JSON
   task-log TASK [LINES]  Print recent task log lines
   task-status TASK [N]   Print task status and recent log as JSON
@@ -763,6 +824,8 @@ case "$action" in
   start) shift; start_backup "${1:-}" ;;
   preflight-backup) preflight_backup ;;
   preflight-restore) shift; preflight_restore "${1:?BACKUP_ID required}" ;;
+  config) show_config ;;
+  save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-0}" "${6:-}" "${7:-}" ;;
   tasks) list_tasks ;;
   task-log) shift; show_task_log "${1:?TASK required}" "${2:-300}" ;;
   task-status) shift; task_status "${1:?TASK required}" "${2:-400}" ;;

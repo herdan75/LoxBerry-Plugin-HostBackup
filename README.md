@@ -22,6 +22,7 @@ Checked locally:
 - Bash syntax for backend, postinstall, restore helper, and uninstall scripts.
 - Backend `list` command with isolated test directories.
 - Backend `preflight-backup` command with isolated test directories.
+- Backend `config` command with isolated test directories.
 - Backend `task-status` command with a synthetic log file.
 - Plugin ZIP packaging.
 
@@ -29,6 +30,7 @@ Not yet validated:
 
 - Installation through the LoxBerry plugin manager.
 - Web UI execution with the LoxBerry webserver user and sudoers rule.
+- Web UI config save flow through sudoers.
 - Real backup on LoxBerry/DietPi hardware.
 - Real restore on a fresh target system.
 - Docker/database consistency with active containers.
@@ -56,7 +58,19 @@ whole host filesystem with runtime-only paths excluded.
 - Restore a selected backup from the web UI after explicit confirmation.
 - Run preflight checks before backup and restore.
 - Show running backup/restore tasks as terminal-like live log output in the web UI.
+- Configure backup target, retention, additional excludes, Docker handling, automatic exports, and hooks from the web UI.
 - Keep a manifest next to every backup for restore checks and migration review.
+
+## Configuration
+
+The web UI provides a settings section for the main backup behavior:
+
+- **Backup target**: empty uses the plugin data directory; absolute paths such as `/mnt/backupdisk/loxberry-hostbackup` are recommended for real backups.
+- **Additional rsync excludes**: one path or pattern per line, for example large media folders or mounted network shares.
+- **Docker handling**: optionally stop running containers before backup and start them again afterwards.
+- **Automatic export**: optionally create a `.tar.gz` export after every backup.
+- **Retention**: keep the newest `n` backups; `0` disables automatic pruning.
+- **Hooks**: optional executable pre/post backup scripts with absolute paths.
 
 ## Backup content
 
@@ -107,6 +121,7 @@ Examples:
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh backup
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh start
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh preflight-backup
+sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh config
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh list
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh export BACKUP_ID
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh import BACKUP_ID.tar.gz

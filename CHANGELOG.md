@@ -11,3 +11,4 @@
 - Added selected-backup restore workflow in the web UI.
 - Added backup and restore preflight checks.
 - Added terminal-like live task log view for running backup and restore jobs.
+- Added web UI settings for backup target, excludes, Docker handling, exports, retention, and hooks.
