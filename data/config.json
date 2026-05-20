@@ -4,6 +4,11 @@
   "stop_docker_before_backup": false,
   "create_export_after_backup": false,
   "keep_backups": 0,
+  "schedule_enabled": false,
+  "schedule_mode": "daily",
+  "schedule_time": "02:00",
+  "schedule_weekday": "0",
+  "schedule_monthday": "1",
   "pre_backup_hook": "",
   "post_backup_hook": ""
 }

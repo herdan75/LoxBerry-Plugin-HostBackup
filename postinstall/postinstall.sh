@@ -23,4 +23,6 @@ if command -v visudo >/dev/null 2>&1; then
   visudo -cf "$SUDOERS_FILE"
 fi
 
+"$BACKEND" install-schedule 2>/dev/null || true
+
 exit 0

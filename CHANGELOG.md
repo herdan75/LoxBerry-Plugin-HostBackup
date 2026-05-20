@@ -12,3 +12,4 @@
 - Added backup and restore preflight checks.
 - Added terminal-like live task log view for running backup and restore jobs.
 - Added web UI settings for backup target, excludes, Docker handling, exports, retention, and hooks.
+- Added daily, weekly, and monthly cron scheduling with retention-based pruning.

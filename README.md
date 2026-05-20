@@ -36,6 +36,25 @@ Not yet validated:
 - Docker/database consistency with active containers.
 - Platform migration between different CPU architectures.
 
+## Platform compatibility
+
+The plugin is intended to be platform-neutral across LoxBerry/DietPi/Debian
+hosts on Raspberry Pi, Odroid, VM, and x86 hardware. It does not depend on
+Raspberry Pi specific tools such as `raspiBackup`.
+
+Required base components:
+
+- Linux with Bash
+- Perl with `JSON::PP`
+- Perl CGI support for the web UI
+- `rsync`
+- `tar`, `find`, `awk`, `sed`, `tail`, `base64`, `stat`
+- `cron` for scheduled backups
+- `sudo` for privileged web actions
+
+Docker is optional. If Docker is present, the plugin can inventory containers
+and optionally stop/start them during backup.
+
 LoxBerry Host Backup is a disaster-recovery plugin for a complete host backup.
 It is intended for LoxBerry systems that also run Docker containers, DietPi
 software, native services, scripts, and other data outside LoxBerry itself.
@@ -59,6 +78,7 @@ whole host filesystem with runtime-only paths excluded.
 - Run preflight checks before backup and restore.
 - Show running backup/restore tasks as terminal-like live log output in the web UI.
 - Configure backup target, retention, additional excludes, Docker handling, automatic exports, and hooks from the web UI.
+- Schedule automatic backups daily, weekly, or monthly using `/etc/cron.d`.
 - Keep a manifest next to every backup for restore checks and migration review.
 
 ## Configuration
@@ -69,8 +89,13 @@ The web UI provides a settings section for the main backup behavior:
 - **Additional rsync excludes**: one path or pattern per line, for example large media folders or mounted network shares.
 - **Docker handling**: optionally stop running containers before backup and start them again afterwards.
 - **Automatic export**: optionally create a `.tar.gz` export after every backup.
-- **Retention**: keep the newest `n` backups; `0` disables automatic pruning.
+- **Schedule**: optionally run automatic backups daily, weekly, or monthly at the configured time.
+- **Retention**: keep the newest `n` backups; `0` disables automatic pruning. When the limit is reached, the oldest backup is removed after a new backup completes.
 - **Hooks**: optional executable pre/post backup scripts with absolute paths.
+
+The schedule is installed as `/etc/cron.d/loxberryhostbackup` and calls the
+backend `start` action. This keeps the scheduler compatible with LoxBerry,
+DietPi, and Debian-style systems that provide cron.
 
 ## Backup content
 
@@ -122,6 +147,7 @@ sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh backup
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh start
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh preflight-backup
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh config
+sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh install-schedule
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh list
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh export BACKUP_ID
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh import BACKUP_ID.tar.gz

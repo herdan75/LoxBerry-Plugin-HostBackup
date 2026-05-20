@@ -84,6 +84,7 @@ table {
 }
 
 .settings-form input,
+.settings-form select,
 .settings-form textarea {
   border: 1px solid #bcc8d6;
   border-radius: 6px;

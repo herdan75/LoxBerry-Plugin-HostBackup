@@ -111,9 +111,14 @@ if ($q->request_method eq 'POST') {
     my $stop_docker = $q->param('stop_docker_before_backup') ? 'true' : 'false';
     my $create_export = $q->param('create_export_after_backup') ? 'true' : 'false';
     my $keep_backups = $q->param('keep_backups') || '0';
+    my $schedule_enabled = $q->param('schedule_enabled') ? 'true' : 'false';
+    my $schedule_mode = $q->param('schedule_mode') || 'daily';
+    my $schedule_time = $q->param('schedule_time') || '02:00';
+    my $schedule_weekday = $q->param('schedule_weekday') || '0';
+    my $schedule_monthday = $q->param('schedule_monthday') || '1';
     my $pre_hook = $q->param('pre_backup_hook') || '';
     my $post_hook = $q->param('post_backup_hook') || '';
-    my ($status, $out) = run_shell(backend_cmd('save-config', $backup_root, $excludes, $stop_docker, $create_export, $keep_backups, $pre_hook, $post_hook));
+    my ($status, $out) = run_shell(backend_cmd('save-config', $backup_root, $excludes, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $pre_hook, $post_hook));
     if ($status == 0) { $message = "Einstellungen gespeichert."; }
     else { $error = escapeHTML($out); }
   } elsif ($action eq 'import') {
@@ -320,6 +325,15 @@ my $cfg_post_hook = escapeHTML($config->{post_backup_hook} || '');
 my $cfg_excludes = escapeHTML(join "\n", @{$config->{rsync_extra_excludes} || []});
 my $cfg_stop_docker = checked_attr($config->{stop_docker_before_backup});
 my $cfg_create_export = checked_attr($config->{create_export_after_backup});
+my $cfg_schedule_enabled = checked_attr($config->{schedule_enabled});
+my $cfg_schedule_time = escapeHTML($config->{schedule_time} || '02:00');
+my $cfg_schedule_weekday = escapeHTML(defined $config->{schedule_weekday} ? $config->{schedule_weekday} : '0');
+my $cfg_schedule_monthday = escapeHTML(defined $config->{schedule_monthday} ? $config->{schedule_monthday} : '1');
+my $cfg_mode = $config->{schedule_mode} || 'daily';
+my $daily_selected = $cfg_mode eq 'daily' ? ' selected' : '';
+my $weekly_selected = $cfg_mode eq 'weekly' ? ' selected' : '';
+my $monthly_selected = $cfg_mode eq 'monthly' ? ' selected' : '';
+my @weekday_selected = map { $cfg_schedule_weekday eq "$_" ? ' selected' : '' } 0..6;
 
 print <<HTML;
     <section class="panel settings-panel">
@@ -333,6 +347,34 @@ print <<HTML;
         <label>
           <span>Aufbewahrung</span>
           <input name="keep_backups" type="number" min="0" step="1" value="$cfg_keep">
+        </label>
+        <label>
+          <span>Zeitplan</span>
+          <select name="schedule_mode">
+            <option value="daily"$daily_selected>Taeglich</option>
+            <option value="weekly"$weekly_selected>Woechentlich</option>
+            <option value="monthly"$monthly_selected>Monatlich</option>
+          </select>
+        </label>
+        <label>
+          <span>Uhrzeit</span>
+          <input name="schedule_time" type="time" value="$cfg_schedule_time">
+        </label>
+        <label>
+          <span>Wochentag</span>
+          <select name="schedule_weekday">
+            <option value="1"$weekday_selected[1]>Montag</option>
+            <option value="2"$weekday_selected[2]>Dienstag</option>
+            <option value="3"$weekday_selected[3]>Mittwoch</option>
+            <option value="4"$weekday_selected[4]>Donnerstag</option>
+            <option value="5"$weekday_selected[5]>Freitag</option>
+            <option value="6"$weekday_selected[6]>Samstag</option>
+            <option value="0"$weekday_selected[0]>Sonntag</option>
+          </select>
+        </label>
+        <label>
+          <span>Monatstag</span>
+          <input name="schedule_monthday" type="number" min="1" max="31" step="1" value="$cfg_schedule_monthday">
         </label>
         <label>
           <span>Pre-Backup-Hook</span>
@@ -353,6 +395,10 @@ print <<HTML;
         <label class="checkline">
           <input type="checkbox" name="create_export_after_backup" value="1"$cfg_create_export>
           <span>Nach jedem Backup automatisch ein Export-Archiv erstellen</span>
+        </label>
+        <label class="checkline">
+          <input type="checkbox" name="schedule_enabled" value="1"$cfg_schedule_enabled>
+          <span>Automatische Backups per Cron aktivieren</span>
         </label>
         <div class="form-actions">
           <button type="submit">Einstellungen speichern</button>
