@@ -186,23 +186,6 @@ Die Anzahl zu behaltender Backups ist auf 1 bis 10 begrenzt. Sobald das Limit
 ueberschritten wird, entfernt das Plugin nach einem erfolgreichen Backup das
 aelteste Backup.
 
-**Aufbewahrung**
-
-Definiert, wie viele Backups behalten werden. `0` deaktiviert automatisches
-Aufraeumen. Wenn ein Wert groesser `0` gesetzt ist, wird nach einem erfolgreichen
-neuen Backup das aelteste Backup entfernt, sobald die Anzahl ueberschritten ist.
-
-**Zeitplan**
-
-Automatische Backups koennen aktiviert werden als:
-
-- Taeglich
-- Woechentlich
-- Monatlich
-
-Die Uhrzeit ist frei waehlbar. Bei woechentlichen Backups wird zusaetzlich der
-Wochentag verwendet, bei monatlichen Backups der Monatstag.
-
 Der Zeitplan wird als Datei installiert:
 
 ```text
@@ -212,8 +195,9 @@ Der Zeitplan wird als Datei installiert:
 **Hooks**
 
 Pre- und Post-Backup-Hooks sind optionale ausfuehrbare Skripte mit absolutem
-Pfad. Sie koennen genutzt werden, um Datenbanken zu dumpen, Dienste vorzubereiten
-oder nach dem Backup aufzuraeumen.
+Pfad. Sie muessen Root gehoeren und duerfen nicht durch Gruppe oder andere
+Benutzer beschreibbar sein. Sie koennen genutzt werden, um Datenbanken zu
+dumpen, Dienste vorzubereiten oder nach dem Backup aufzuraeumen.
 
 ## Backup-Inhalt
 
