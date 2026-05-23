@@ -1,18 +1,70 @@
 # Changelog
 
-## 0.1.0
+Alle nennenswerten Aenderungen an diesem Projekt werden in dieser Datei
+dokumentiert.
 
-- Hardened LoxBerry installation compatibility with official plugin directory variables and script-path based folder detection.
-- Moved default config into the plugin `config/` directory.
-- Added `sudo -n` for web backend calls so missing sudoers rules fail fast.
-- Initial prototype for full host backups.
-- Added rsync-based backup and restore backend.
-- Added backup manifest, package inventory, service inventory, mount inventory, and Docker inventory.
-- Added web UI for listing, starting, importing, exporting, downloading, deleting, and restore planning.
-- Added backup snapshot explorer with individual file downloads.
-- Added controlled move action for full backup sets.
-- Added selected-backup restore workflow in the web UI.
-- Added backup and restore preflight checks.
-- Added terminal-like live task log view for running backup and restore jobs.
-- Added web UI settings for backup target, excludes, Docker handling, exports, retention, and hooks.
-- Added daily, weekly, and monthly cron scheduling with retention-based pruning.
+Dieses Projekt befindet sich noch in einem fruehen Entwicklungsstand. Es gibt
+noch keine freigegebene produktive Version.
+
+## [Unreleased]
+
+### Dokumentation
+
+- README vollstaendig auf Deutsch neu strukturiert.
+- Zweck, Plattform-Kompatibilitaet, Voraussetzungen und bekannte Grenzen ergaenzt.
+- Installations- und erster Testablauf fuer LoxBerry beschrieben.
+- Restore-Risiken, Docker-/Datenbank-Hinweise und Branch-Modell dokumentiert.
+
+### LoxBerry-Kompatibilitaet
+
+- Offizielle LoxBerry-Plugin-Pfadvariablen beruecksichtigt.
+- Skriptpfad-basierte Erkennung des tatsaechlichen Pluginordners ergaenzt.
+- Default-Konfiguration in das Plugin-Verzeichnis `config/` verschoben.
+- `postinstall.sh` nutzt LoxBerry-Installationsargumente fuer Pluginordner und Basisverzeichnis.
+- Web-Backend-Aufrufe verwenden `sudo -n`, damit fehlende sudoers-Regeln nicht haengen bleiben.
+
+### Planung und Aufbewahrung
+
+- Zeitgesteuerte Backups per `/etc/cron.d/loxberryhostbackup` ergaenzt.
+- Auswahl fuer taegliche, woechentliche und monatliche Backups ergaenzt.
+- Uhrzeit, Wochentag und Monatstag konfigurierbar gemacht.
+- Retention-Regel ergaenzt: Bei gesetztem Limit werden nach erfolgreichem Backup alte Backups entfernt.
+- Cron-Eintrag wird bei Deinstallation entfernt.
+
+### Weboberflaeche
+
+- Einstellungen-Seite ergaenzt.
+- Backup-Ziel, Excludes, Docker-Verhalten, automatische Exporte, Retention und Hooks konfigurierbar gemacht.
+- Backup-Start fuehrt zuerst zum Preflight-Check.
+- Live-Loganzeige fuer laufende Backup- und Restore-Jobs ergaenzt.
+- Backup-Explorer mit Download einzelner Dateien ergaenzt.
+- Import, Export, Verschieben und Loeschen von Backups ergaenzt.
+- Restore-Workflow mit Backup-Auswahl, Restore-Check, Restore-Plan und expliziter Bestaetigung ergaenzt.
+
+### Backend
+
+- `rsync`-basiertes Host-Backup ergaenzt.
+- Restore-Backend ergaenzt.
+- Manifest pro Backup ergaenzt.
+- Paketliste, systemd-Service-Liste, Mount-Liste und Docker-Inventar ergaenzt.
+- Preflight-Checks fuer Backup und Restore ergaenzt.
+- Task-Status- und Task-Log-Kommandos ergaenzt.
+- Backup-Import und -Export ergaenzt.
+- Sichere Pfadpruefungen fuer Backup-Explorer, Datei-Download und Task-Logs ergaenzt.
+- Pre-/Post-Backup-Hooks ergaenzt.
+
+### Paketierung
+
+- Plugin-ZIP-Build per `package.ps1` ergaenzt.
+- `.gitattributes` fuer passende Zeilenenden ergaenzt.
+- `.gitignore` fuer lokale Test- und Build-Artefakte ergaenzt.
+
+## [0.1.0] - Entwicklungsversion
+
+### Hinweis
+
+- Noch nicht produktiv freigegeben.
+- Noch nicht vollstaendig auf echter LoxBerry-/DietPi-Hardware validiert.
+- Nur fuer Tests auf nicht-kritischen Systemen verwenden.
+
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/main...develop
