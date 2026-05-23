@@ -80,7 +80,7 @@ Noch nicht validiert:
 Pre-Release-Paket:
 
 ```text
-https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.1.0-dev/LoxBerryHostBackup_0.1.0.zip
+https://raw.githubusercontent.com/herdan75/LoxBerry-Plugin-HostBackup/develop/dist/LoxBerryHostBackup_0.1.0.zip
 ```
 
 Lokales Paket nach dem Build:
@@ -324,7 +324,7 @@ Branches:
 Update-Dateien:
 
 - `release.cfg`: Stable-Kanal, derzeit ohne freigegebenes ZIP
-- `prerelease.cfg`: Pre-Release-Kanal mit ZIP-Download
+- `prerelease.cfg`: Pre-Release-Kanal mit ZIP-Download aus `develop/dist/`
 
 Das installierbare ZIP soll bis zur Freigabe nur ueber den Pre-Release-Kanal
 bereitgestellt werden.
