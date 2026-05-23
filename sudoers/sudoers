@@ -1,3 +1,4 @@
 # Managed by LoxBerry Host Backup.
-loxberry ALL=(root) NOPASSWD: LBPBIN/hostbackup.sh *
-www-data ALL=(root) NOPASSWD: LBPBIN/hostbackup.sh *
+# Wird nach der Installation durch postinstall.sh mit dem echten Plugin-Pfad ersetzt.
+loxberry ALL=(root) NOPASSWD: /bin/true
+www-data ALL=(root) NOPASSWD: /bin/true
