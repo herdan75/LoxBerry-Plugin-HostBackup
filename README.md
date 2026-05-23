@@ -172,6 +172,20 @@ kann aber Dienste waehrend des Backups kurz unterbrechen.
 
 Wenn aktiviert, wird nach jedem Backup automatisch ein `.tar.gz`-Export erstellt.
 
+**Zeitplan**
+
+Automatische Backups koennen taeglich, woechentlich oder monatlich laufen.
+
+- Taeglich: Es ist nur die Uhrzeit relevant.
+- Woechentlich: Wochentag und Uhrzeit sind relevant.
+- Monatlich: Monatstag, Monat beziehungsweise Monate und Uhrzeit sind relevant.
+
+**Aufbewahrung**
+
+Die Anzahl zu behaltender Backups ist auf 1 bis 10 begrenzt. Sobald das Limit
+ueberschritten wird, entfernt das Plugin nach einem erfolgreichen Backup das
+aelteste Backup.
+
 **Aufbewahrung**
 
 Definiert, wie viele Backups behalten werden. `0` deaktiviert automatisches

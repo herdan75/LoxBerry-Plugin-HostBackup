@@ -31,6 +31,9 @@ noch keine freigegebene produktive Version.
 
 ### Planung und Aufbewahrung
 
+- Zeitplan-Oberflaeche klarer strukturiert: taeglich zeigt nur Uhrzeit, woechentlich Wochentag und Uhrzeit, monatlich Monatstag, Monate und Uhrzeit.
+- Monatsauswahl fuer monatliche Backups ergaenzt.
+- Aufbewahrung auf 1 bis 10 Backups begrenzt.
 - Zeitgesteuerte Backups per `/etc/cron.d/loxberryhostbackup` ergaenzt.
 - Auswahl fuer taegliche, woechentliche und monatliche Backups ergaenzt.
 - Uhrzeit, Wochentag und Monatstag konfigurierbar gemacht.

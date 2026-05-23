@@ -100,6 +100,7 @@ table {
 
 .settings-form .wide,
 .settings-form .checkline,
+.settings-form .schedule-card,
 .settings-form .form-actions {
   grid-column: 1 / -1;
 }
@@ -126,6 +127,79 @@ table {
 
 .settings-form .root-confirm input {
   margin-top: 3px;
+}
+
+.settings-form small {
+  color: #526173;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.schedule-card {
+  border: 1px solid #c8d3df;
+  border-radius: 8px;
+  margin: 0;
+  padding: 14px;
+}
+
+.schedule-card legend {
+  font-weight: 700;
+  padding: 0 6px;
+}
+
+.schedule-enable {
+  margin-bottom: 12px;
+}
+
+.schedule-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.schedule-modes label,
+.month-grid label {
+  align-items: center;
+  border: 1px solid #d8dee8;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: row;
+  font-weight: 400;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 9px;
+}
+
+.schedule-modes input,
+.month-grid input {
+  min-height: auto;
+}
+
+.schedule-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+}
+
+.month-picker {
+  margin-top: 14px;
+}
+
+.month-picker > span {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 7px;
+}
+
+.month-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(100px, 1fr));
+}
+
+.schedule-hidden {
+  display: none !important;
 }
 
 .form-actions {
@@ -322,6 +396,11 @@ button.danger {
 
   .settings-form .root-confirm {
     align-items: flex-start;
+  }
+
+  .schedule-grid,
+  .month-grid {
+    grid-template-columns: 1fr;
   }
 
   table,
