@@ -9,6 +9,7 @@
   "schedule_time": "02:00",
   "schedule_weekday": "0",
   "schedule_monthday": "1",
+  "root_permission_ack": false,
   "pre_backup_hook": "",
   "post_backup_hook": ""
 }

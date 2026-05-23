@@ -62,6 +62,11 @@ sub json_response {
   exit;
 }
 
+sub root_permission_acknowledged {
+  my ($config) = @_;
+  return ($config && $config->{root_permission_ack}) ? 1 : 0;
+}
+
 if ($q->request_method eq 'POST') {
   if ($action eq 'backup') {
     my ($status, $out) = run_shell(backend_cmd('start'));
@@ -118,9 +123,14 @@ if ($q->request_method eq 'POST') {
     my $schedule_monthday = $q->param('schedule_monthday') || '1';
     my $pre_hook = $q->param('pre_backup_hook') || '';
     my $post_hook = $q->param('post_backup_hook') || '';
-    my ($status, $out) = run_shell(backend_cmd('save-config', $backup_root, $excludes, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $pre_hook, $post_hook));
-    if ($status == 0) { $message = "Einstellungen gespeichert."; }
-    else { $error = escapeHTML($out); }
+    my $root_permission_ack = $q->param('root_permission_ack') ? 'true' : 'false';
+    if ($root_permission_ack ne 'true') {
+      $error = "Bitte die Root-Freigabe bestaetigen. Ohne diese Freigabe kann das Plugin keine vollstaendigen Host-Backups oder Restores ausfuehren.";
+    } else {
+      my ($status, $out) = run_shell(backend_cmd('save-config', $backup_root, $excludes, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $pre_hook, $post_hook, $root_permission_ack));
+      if ($status == 0) { $message = "Einstellungen gespeichert."; }
+      else { $error = escapeHTML($out); }
+    }
   } elsif ($action eq 'import') {
     my $upload = $q->upload('backup_archive');
     if ($upload) {
@@ -230,29 +240,37 @@ if ($action eq 'browse' && valid_backup_id($backup_id) && valid_rel_path($browse
 my $restore_plan = '';
 my $restore_check = undef;
 if ($action eq 'prepare-restore' && valid_backup_id($backup_id)) {
-  my ($check_status, $check_out) = run_shell(backend_cmd('preflight-restore', $backup_id));
-  if ($check_status == 0) {
-    $restore_check = eval { decode_json($check_out) };
-    $error ||= escapeHTML($@) if $@;
+  if (!root_permission_acknowledged($config)) {
+    $error ||= "Bitte zuerst in den Einstellungen die Root-Freigabe bestaetigen.";
   } else {
-    $error ||= escapeHTML($check_out);
-  }
-  my ($status, $out) = run_shell(backend_cmd('restore-plan', $backup_id));
-  if ($status == 0) {
-    $restore_plan = $out;
-  } else {
-    $error ||= escapeHTML($out);
+    my ($check_status, $check_out) = run_shell(backend_cmd('preflight-restore', $backup_id));
+    if ($check_status == 0) {
+      $restore_check = eval { decode_json($check_out) };
+      $error ||= escapeHTML($@) if $@;
+    } else {
+      $error ||= escapeHTML($check_out);
+    }
+    my ($status, $out) = run_shell(backend_cmd('restore-plan', $backup_id));
+    if ($status == 0) {
+      $restore_plan = $out;
+    } else {
+      $error ||= escapeHTML($out);
+    }
   }
 }
 
 my $backup_check = undef;
 if ($action eq 'prepare-backup') {
-  my ($status, $out) = run_shell(backend_cmd('preflight-backup'));
-  if ($status == 0) {
-    $backup_check = eval { decode_json($out) };
-    $error ||= escapeHTML($@) if $@;
+  if (!root_permission_acknowledged($config)) {
+    $error ||= "Bitte zuerst in den Einstellungen die Root-Freigabe bestaetigen.";
   } else {
-    $error ||= escapeHTML($out);
+    my ($status, $out) = run_shell(backend_cmd('preflight-backup'));
+    if ($status == 0) {
+      $backup_check = eval { decode_json($out) };
+      $error ||= escapeHTML($@) if $@;
+    } else {
+      $error ||= escapeHTML($out);
+    }
   }
 }
 
@@ -322,6 +340,7 @@ my $cfg_excludes = escapeHTML(join "\n", @{$config->{rsync_extra_excludes} || []
 my $cfg_stop_docker = checked_attr($config->{stop_docker_before_backup});
 my $cfg_create_export = checked_attr($config->{create_export_after_backup});
 my $cfg_schedule_enabled = checked_attr($config->{schedule_enabled});
+my $cfg_root_permission_ack = checked_attr($config->{root_permission_ack});
 my $cfg_schedule_time = escapeHTML($config->{schedule_time} || '02:00');
 my $cfg_schedule_weekday = escapeHTML(defined $config->{schedule_weekday} ? $config->{schedule_weekday} : '0');
 my $cfg_schedule_monthday = escapeHTML(defined $config->{schedule_monthday} ? $config->{schedule_monthday} : '1');
@@ -395,6 +414,10 @@ print <<HTML;
         <label class="checkline">
           <input type="checkbox" name="schedule_enabled" value="1"$cfg_schedule_enabled>
           <span>Automatische Backups per Cron aktivieren</span>
+        </label>
+        <label class="checkline root-confirm">
+          <input type="checkbox" name="root_permission_ack" value="1"$cfg_root_permission_ack required>
+          <span>Ich bestaetige, dass dieses Plugin fuer vollstaendige Host-Backups und Restores kontrollierte Root-Rechte benoetigt. Die Freigabe erlaubt dem LoxBerry-Webuser ausschliesslich das Backend-Skript dieses Plugins ohne Passwort zu starten; es werden keine Passwoerter gespeichert.</span>
         </label>
         <div class="form-actions">
           <button type="submit">Einstellungen speichern</button>

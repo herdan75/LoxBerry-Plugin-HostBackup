@@ -33,6 +33,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
   "schedule_time": "02:00",
   "schedule_weekday": "0",
   "schedule_monthday": "1",
+  "root_permission_ack": false,
   "pre_backup_hook": "",
   "post_backup_hook": ""
 }
@@ -110,6 +111,7 @@ show_config() {
     $cfg->{schedule_time} = $cfg->{schedule_time} || "02:00";
     $cfg->{schedule_weekday} = defined $cfg->{schedule_weekday} ? "$cfg->{schedule_weekday}" : "0";
     $cfg->{schedule_monthday} = defined $cfg->{schedule_monthday} ? "$cfg->{schedule_monthday}" : "1";
+    $cfg->{root_permission_ack} = $cfg->{root_permission_ack} ? JSON::PP::true : JSON::PP::false;
     $cfg->{pre_backup_hook} //= "";
     $cfg->{post_backup_hook} //= "";
     print JSON::PP->new->ascii->pretty->canonical->encode($cfg);
@@ -130,9 +132,10 @@ save_config() {
   local schedule_monthday="${10}"
   local pre_hook="${11}"
   local post_hook="${12}"
+  local root_permission_ack="${13:-false}"
 
   perl -MJSON::PP -e '
-    my ($file, $backup_root, $excludes_text, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $pre_hook, $post_hook) = @ARGV;
+    my ($file, $backup_root, $excludes_text, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $pre_hook, $post_hook, $root_permission_ack) = @ARGV;
     my @excludes;
     for my $line (split /\r?\n/, $excludes_text) {
       $line =~ s/^\s+|\s+$//g;
@@ -164,12 +167,13 @@ save_config() {
       schedule_time => $schedule_time,
       schedule_weekday => $schedule_weekday,
       schedule_monthday => $schedule_monthday,
+      root_permission_ack => ($root_permission_ack eq "true" ? JSON::PP::true : JSON::PP::false),
       pre_backup_hook => $pre_hook,
       post_backup_hook => $post_hook,
     };
     open my $fh, ">", $file or die "Cannot write config: $!";
     print $fh JSON::PP->new->ascii->pretty->canonical->encode($cfg);
-  ' "$CONFIG_FILE" "$backup_root" "$excludes_text" "$stop_docker" "$create_export" "$keep_backups" "$schedule_enabled" "$schedule_mode" "$schedule_time" "$schedule_weekday" "$schedule_monthday" "$pre_hook" "$post_hook"
+  ' "$CONFIG_FILE" "$backup_root" "$excludes_text" "$stop_docker" "$create_export" "$keep_backups" "$schedule_enabled" "$schedule_mode" "$schedule_time" "$schedule_weekday" "$schedule_monthday" "$pre_hook" "$post_hook" "$root_permission_ack"
   install_schedule
 }
 
@@ -243,6 +247,13 @@ require_root_for_write() {
   if [ "$(id -u)" -ne 0 ]; then
     echo "This action needs root privileges. Use sudo." >&2
     exit 2
+  fi
+}
+
+require_root_permission_ack() {
+  if [ "$(json_get_bool root_permission_ack)" != "true" ]; then
+    echo "Root-Freigabe wurde in den Plugin-Einstellungen noch nicht bestaetigt." >&2
+    exit 15
   fi
 }
 
@@ -428,6 +439,7 @@ calculate_files() {
 
 preflight_backup() {
   local root available_mb docker_available docker_running excludes_count status warnings_json checks_json rsync_available target_writable
+  require_root_permission_ack
   root="$(backup_root)"
   mkdir -p "$root"
   available_mb="$(df -Pm "$root" 2>/dev/null | awk 'NR==2 {print $4}')"
@@ -480,6 +492,7 @@ EOF
 preflight_restore() {
   local backup_id="$1"
   local root target status warnings_json backup_arch host_arch_value backup_status rsync_available
+  require_root_permission_ack
   require_backup_id "$backup_id"
   root="$(backup_root)"
   target="$root/$backup_id"
@@ -520,6 +533,7 @@ EOF
 
 create_backup() {
   require_root_for_write
+  require_root_permission_ack
   command -v rsync >/dev/null 2>&1 || { echo "rsync is required." >&2; exit 3; }
 
   local root backup_id target rootfs log_file started finished size files exclude_file
@@ -585,6 +599,7 @@ create_backup() {
 
 start_backup() {
   require_root_for_write
+  require_root_permission_ack
   local backup_id log_file
   backup_id="${1:-$(date '+%Y%m%d-%H%M%S')}"
   backup_id="$(printf '%s' "$backup_id" | tr -cd 'A-Za-z0-9._-')"
@@ -867,6 +882,7 @@ EOF
 
 restore_backup() {
   require_root_for_write
+  require_root_permission_ack
   local backup_id="$1"
   local root target exclude_file
   require_backup_id "$backup_id"
@@ -893,6 +909,7 @@ restore_backup() {
 
 start_restore() {
   require_root_for_write
+  require_root_permission_ack
   local backup_id="$1"
   local log_file
   require_backup_id "$backup_id"
@@ -948,7 +965,7 @@ case "$action" in
   preflight-backup) preflight_backup ;;
   preflight-restore) shift; preflight_restore "${1:?BACKUP_ID required}" ;;
   config) show_config ;;
-  save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-0}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11:-}" "${12:-}" ;;
+  save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-0}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11:-}" "${12:-}" "${13:-false}" ;;
   install-schedule) install_schedule ;;
   tasks) list_tasks ;;
   task-log) shift; show_task_log "${1:?TASK required}" "${2:-300}" ;;

@@ -115,6 +115,19 @@ table {
   width: auto;
 }
 
+.settings-form .root-confirm {
+  align-items: flex-start;
+  background: #eef7f5;
+  border: 1px solid #93c5bd;
+  border-radius: 6px;
+  color: #173f3a;
+  padding: 10px;
+}
+
+.settings-form .root-confirm input {
+  margin-top: 3px;
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-start;
@@ -305,6 +318,10 @@ button.danger {
 
   .settings-form {
     grid-template-columns: 1fr;
+  }
+
+  .settings-form .root-confirm {
+    align-items: flex-start;
   }
 
   table,

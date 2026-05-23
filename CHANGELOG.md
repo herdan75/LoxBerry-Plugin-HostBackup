@@ -39,6 +39,8 @@ noch keine freigegebene produktive Version.
 
 ### Weboberflaeche
 
+- Sicherheitsbestaetigung fuer Root-Freigaben ergaenzt, inklusive kurzer Erklaerung in den Einstellungen.
+- Backup- und Restore-Start pruefen, ob die Root-Freigabe zuvor bestaetigt wurde.
 - Einstellungen-Seite ergaenzt.
 - Backup-Ziel, Excludes, Docker-Verhalten, automatische Exporte, Retention und Hooks konfigurierbar gemacht.
 - Backup-Start fuehrt zuerst zum Preflight-Check.

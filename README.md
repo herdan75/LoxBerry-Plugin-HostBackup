@@ -74,7 +74,7 @@ Noch nicht validiert:
 1. ZIP-Paket aus dem GitHub-Pre-Release herunterladen oder lokal bauen.
 2. In LoxBerry unter **Plugins > Plugin installieren** hochladen.
 3. Nach der Installation die Plugin-Oberflaeche oeffnen.
-4. Einstellungen speichern, damit sudoers und Zeitplan geprueft werden koennen.
+4. Root-Freigabe in den Einstellungen bewusst bestaetigen und Einstellungen speichern.
 5. Zuerst nur ein kleines Testbackup auf einem externen oder separaten Pfad ausfuehren.
 
 Pre-Release-Paket:
@@ -124,6 +124,18 @@ Empfohlene Reihenfolge:
 ## Einstellungen
 
 Die Weboberflaeche enthaelt eine Einstellungen-Sektion.
+
+**Root-Freigabe**
+
+Das Plugin benoetigt kontrollierte Root-Rechte, weil ein vollstaendiges
+Host-Backup und ein Restore Systemdateien, Berechtigungen, Docker-Daten,
+Cronjobs und Dienste betreffen. In der Weboberflaeche muss diese Freigabe
+bewusst bestaetigt werden. Ohne diese Bestaetigung starten Backup- und
+Restore-Aktionen nicht.
+
+Es werden keine Passwoerter gespeichert. Die LoxBerry-sudoers-Regel erlaubt
+dem LoxBerry-Webuser nur den Start des Backend-Skripts dieses Plugins ohne
+Passwort.
 
 **Backup-Ziel**
 
