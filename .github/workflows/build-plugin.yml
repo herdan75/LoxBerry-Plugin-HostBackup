@@ -26,7 +26,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zip libcgi-pm-perl
 
       - name: Validate shell syntax
-        run: bash -n bin/hostbackup.sh postinstall/postinstall.sh sbin/restore-hostbackup.sh uninstall/uninstall.sh
+        run: bash -n bin/hostbackup.sh bin/restore-hostbackup.sh postinstall.sh uninstall/uninstall.sh
 
       - name: Validate CGI syntax
         run: perl -c webfrontend/htmlauth/index.cgi

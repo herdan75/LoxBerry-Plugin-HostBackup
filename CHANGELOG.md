@@ -17,6 +17,9 @@ noch keine freigegebene produktive Version.
 
 ### LoxBerry-Kompatibilitaet
 
+- `postinstall.sh` in den ZIP-Root verschoben, damit LoxBerry das Skript korrekt ausfuehrt.
+- Restore-Helper von `sbin/` nach `bin/` verschoben, da LoxBerry `sbin/` beim Test nicht installiert hat.
+- Plugin-Icons ergaenzt, damit LoxBerry keine Default-Icon-Warnung ausgeben muss.
 - Offizielle LoxBerry-Plugin-Pfadvariablen beruecksichtigt.
 - Skriptpfad-basierte Erkennung des tatsaechlichen Pluginordners ergaenzt.
 - Default-Konfiguration in das Plugin-Verzeichnis `config/` verschoben.

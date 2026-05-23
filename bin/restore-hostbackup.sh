@@ -4,8 +4,8 @@ set -euo pipefail
 PLUGIN_NAME="loxberryhostbackup"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_FOLDER="$(basename "$SCRIPT_DIR")"
-if [[ "$SCRIPT_DIR" == */sbin/plugins/* ]]; then
-  DETECTED_LBHOMEDIR="${SCRIPT_DIR%/sbin/plugins/$PLUGIN_FOLDER}"
+if [[ "$SCRIPT_DIR" == */bin/plugins/* ]]; then
+  DETECTED_LBHOMEDIR="${SCRIPT_DIR%/bin/plugins/$PLUGIN_FOLDER}"
 else
   DETECTED_LBHOMEDIR="/opt/loxberry"
   PLUGIN_FOLDER="$PLUGIN_NAME"

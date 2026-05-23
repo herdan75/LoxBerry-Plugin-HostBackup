@@ -271,6 +271,7 @@ sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh tasks
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh task-log backup-BACKUP_ID.log
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh task-status backup-BACKUP_ID.log
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh install-schedule
+sudo /opt/loxberry/bin/plugins/loxberryhostbackup/restore-hostbackup.sh BACKUP_ID
 ```
 
 Der direkte Restore ist zusaetzlich gesperrt und braucht `ALLOW_RESTORE=1`:
@@ -286,7 +287,6 @@ Typische LoxBerry-Zielpfade:
 ```text
 /opt/loxberry/webfrontend/htmlauth/plugins/loxberryhostbackup/
 /opt/loxberry/bin/plugins/loxberryhostbackup/
-/opt/loxberry/sbin/plugins/loxberryhostbackup/
 /opt/loxberry/config/plugins/loxberryhostbackup/
 /opt/loxberry/data/plugins/loxberryhostbackup/
 /opt/loxberry/log/plugins/loxberryhostbackup/

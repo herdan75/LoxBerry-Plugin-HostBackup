@@ -25,11 +25,11 @@ cd "$ROOT"
 zip -r "$ZIP_PATH" \
   bin \
   config \
-  postinstall \
-  sbin \
   uninstall \
   webfrontend \
+  icons \
   plugin.cfg \
+  postinstall.sh \
   release.cfg \
   prerelease.cfg \
   README.md \
