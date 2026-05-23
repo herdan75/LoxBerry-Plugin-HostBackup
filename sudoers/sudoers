@@ -1,3 +1,3 @@
 # Managed by LoxBerry Host Backup.
-loxberry ALL=(root) NOPASSWD: /bin/true
-www-data ALL=(root) NOPASSWD: /bin/true
+loxberry ALL=(root) NOPASSWD: /*/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh *
+www-data ALL=(root) NOPASSWD: /*/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh *
