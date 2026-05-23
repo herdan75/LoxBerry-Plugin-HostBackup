@@ -9,7 +9,7 @@ if (Test-Path $zip) {
 
 $items = @(
   "bin",
-  "data",
+  "config",
   "postinstall",
   "sbin",
   "uninstall",

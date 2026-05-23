@@ -2,6 +2,9 @@
 
 ## 0.1.0
 
+- Hardened LoxBerry installation compatibility with official plugin directory variables and script-path based folder detection.
+- Moved default config into the plugin `config/` directory.
+- Added `sudo -n` for web backend calls so missing sudoers rules fail fast.
 - Initial prototype for full host backups.
 - Added rsync-based backup and restore backend.
 - Added backup manifest, package inventory, service inventory, mount inventory, and Docker inventory.

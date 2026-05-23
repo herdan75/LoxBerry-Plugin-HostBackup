@@ -24,7 +24,7 @@ sub shell_quote {
 }
 
 sub backend_cmd {
-  return 'sudo ' . shell_quote($backend) . ' ' . join(' ', map { shell_quote($_) } @_);
+  return 'sudo -n ' . shell_quote($backend) . ' ' . join(' ', map { shell_quote($_) } @_);
 }
 
 sub run_shell {
@@ -300,13 +300,9 @@ print <<'HTML';
         <h1>LoxBerry Host Backup</h1>
         <p>Vollbackup fuer LoxBerry, Docker, DietPi und native Dienste.</p>
       </div>
-      <form method="post">
-        <input type="hidden" name="action" value="backup">
-        <button class="primary" type="submit">Backup starten</button>
-      </form>
       <form method="get">
         <input type="hidden" name="action" value="prepare-backup">
-        <button type="submit">Backup-Check</button>
+        <button class="primary" type="submit">Backup starten</button>
       </form>
     </header>
 HTML
