@@ -31,6 +31,9 @@ noch keine freigegebene produktive Version.
 
 ### Planung und Aufbewahrung
 
+- Woechentlicher Zeitplan kann mehrere Wochentage speichern und als Cron-Liste ausgeben.
+- Monatlicher Zeitplan kann mehrere Monatstage sowie einzelne Monate speichern und als Cron-Liste ausgeben.
+- Info-Texte zum Zeitplan erklaeren detailliert, welche Felder bei taeglich, woechentlich und monatlich relevant sind.
 - Zeitplan-Oberflaeche klarer strukturiert: taeglich zeigt nur Uhrzeit, woechentlich Wochentag und Uhrzeit, monatlich Monatstag, Monate und Uhrzeit.
 - Monatsauswahl fuer monatliche Backups ergaenzt.
 - Aufbewahrung auf 1 bis 10 Backups begrenzt.

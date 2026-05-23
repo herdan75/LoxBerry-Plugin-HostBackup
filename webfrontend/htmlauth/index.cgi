@@ -57,6 +57,15 @@ if ($q->request_method eq 'POST') {
     my $schedule_enabled = $q->param('schedule_enabled') ? 'true' : 'false';
     my $schedule_mode = $q->param('schedule_mode') || 'daily';
     my $schedule_time = $q->param('schedule_time') || '02:00';
+    my @schedule_weekdays = $q->param('schedule_weekdays');
+    @schedule_weekdays = ('0') unless @schedule_weekdays;
+    my $schedule_weekdays = join(',', @schedule_weekdays);
+    my @schedule_monthdays = $q->param('schedule_monthdays');
+    @schedule_monthdays = ('1') unless @schedule_monthdays;
+    my $schedule_monthdays = join(',', @schedule_monthdays);
+    my @schedule_months = $q->param('schedule_months');
+    @schedule_months = ('*') unless @schedule_months;
+    my $schedule_months = join(',', @schedule_months);
 
     my $pre_hook = $q->param('pre_backup_hook') || '';
     my $post_hook = $q->param('post_backup_hook') || '';
@@ -78,9 +87,11 @@ if ($q->request_method eq 'POST') {
         $schedule_enabled,
         $schedule_mode,
         $schedule_time,
-        '0',
-        '1',
-        '*',
+        $schedule_weekdays[0] || '0',
+        $schedule_monthdays[0] || '1',
+        $schedule_months,
+        $schedule_weekdays,
+        $schedule_monthdays,
         $pre_hook,
         $post_hook,
         $root_permission_ack
@@ -140,20 +151,33 @@ my $cfg_mode = $config->{schedule_mode} || 'daily';
 my $daily_checked = $cfg_mode eq 'daily' ? ' checked' : '';
 my $weekly_checked = $cfg_mode eq 'weekly' ? ' checked' : '';
 my $monthly_checked = $cfg_mode eq 'monthly' ? ' checked' : '';
+my @cfg_weekdays = ref($config->{schedule_weekdays}) eq 'ARRAY' ? @{$config->{schedule_weekdays}} : ($config->{schedule_weekday} || '0');
+my %cfg_weekdays = map { $_ => 1 } @cfg_weekdays;
+my @weekday_checked = map { checked_attr($cfg_weekdays{"$_"}) } 0..6;
+my @cfg_monthdays = ref($config->{schedule_monthdays}) eq 'ARRAY' ? @{$config->{schedule_monthdays}} : ($config->{schedule_monthday} || '1');
+my %cfg_monthdays = map { $_ => 1 } @cfg_monthdays;
+my @monthday_checked = map { checked_attr($cfg_monthdays{"$_"}) } 0..31;
+my @cfg_months = ref($config->{schedule_months}) eq 'ARRAY' ? @{$config->{schedule_months}} : ('*');
+my %cfg_months = map { $_ => 1 } @cfg_months;
+my $all_months_checked = checked_attr($cfg_months{'*'});
+my @month_checked = map { checked_attr($cfg_months{'*'} || $cfg_months{"$_"}) } 0..12;
 
-my $info_backup_root = info_button('Ablageort fuer die Backups.');
-my $info_retention = info_button('1 bis 10 Backups.');
-my $info_schedule = info_button('Automatische Backups.');
-my $info_time = info_button('Startzeit.');
-my $info_pre_hook = info_button('Skript vor dem Backup.');
-my $info_post_hook = info_button('Skript nach dem Backup.');
-my $info_excludes = info_button('Pfade ausschliessen.');
-my $info_docker = info_button('Docker stoppen.');
-my $info_export = info_button('Export erstellen.');
-my $info_root = info_button('Root-Freigabe.');
-my $info_table = info_button('Backupliste.');
-my $info_import = info_button('Backup importieren.');
-my $info_backup_start = info_button('Backup vorbereiten.');
+my $info_backup_root = info_button('Hier legst du fest, wohin die Backups geschrieben werden. Fuer ein echtes Host-Backup sollte das ein externer Datentraeger, ein separates Mount oder ein grosser zweiter Datenspeicher sein. Wenn die Systemkarte selbst ausfaellt, hilft ein Backup auf derselben Karte nicht.');
+my $info_retention = info_button('Legt fest, wie viele fertige Backups behalten werden. Erlaubt sind 1 bis 10. Sobald nach einem erfolgreichen Backup mehr Backups vorhanden sind als erlaubt, entfernt das Plugin automatisch das aelteste Backup und das passende Export-Archiv.');
+my $info_schedule = info_button('Der Zeitplan erstellt Backups automatisch per Cron. Taeglich bedeutet jeden Tag zur Startzeit. Woechentlich bedeutet an den gewaehlen Wochentagen zur Startzeit. Monatlich bedeutet an den gewaehlen Tagen in den gewaehlen Monaten zur Startzeit.');
+my $info_time = info_button('Diese Uhrzeit gilt fuer alle Zeitplanarten. Bei taeglich ist sie die einzige zeitliche Einstellung. Bei woechentlich und monatlich wird sie mit den gewaehlen Tagen kombiniert.');
+my $info_weekdays = info_button('Nur bei woechentlichen Backups relevant. Du kannst einen oder mehrere Wochentage auswaehlen, zum Beispiel Montag und Freitag. An jedem gewaehlten Tag startet ein Backup zur angegebenen Startzeit.');
+my $info_monthdays = info_button('Nur bei monatlichen Backups relevant. Du kannst einen oder mehrere Kalendertage auswaehlen, zum Beispiel 1 und 15. Gibt es diesen Tag in einem Monat nicht, etwa den 31. im Februar, startet dort kein Backup.');
+my $info_months = info_button('Nur bei monatlichen Backups relevant. Mit Alle Monate laeuft der Monatsplan jeden Monat. Alternativ kannst du einzelne Monate waehlen, zum Beispiel Jan, Apr, Jul und Okt fuer Quartalsbackups.');
+my $info_pre_hook = info_button('Optionales Skript, das direkt vor dem Backup ausgefuehrt wird. Sinnvoll fuer Datenbank-Dumps oder das Vorbereiten von Diensten. Das Skript muss absolut angegeben werden und wird aus Sicherheitsgruenden nur ausgefuehrt, wenn es Root gehoert und nicht durch andere Benutzer beschreibbar ist.');
+my $info_post_hook = info_button('Optionales Skript, das nach dem Backup ausgefuehrt wird. Sinnvoll zum Aufraeumen, Dienste wieder in einen gewuenschten Zustand zu bringen oder Benachrichtigungen auszufuehren. Es gelten dieselben Sicherheitsregeln wie beim Skript vor dem Backup.');
+my $info_excludes = info_button('Hier kannst du Pfade vom rsync-Backup ausschliessen, je ein Pfad pro Zeile. Das ist sinnvoll fuer grosse Medienarchive, Netzwerkshares oder Daten, die separat gesichert werden. Zu viele Ausschluesse koennen aber die Wiederherstellung unvollstaendig machen.');
+my $info_docker = info_button('Wenn aktiv, stoppt das Plugin laufende Docker-Container vor dem Backup und startet sie danach wieder. Das verbessert die Konsistenz von Datenbanken und Volumes, verursacht aber eine Unterbrechung der Container-Dienste waehrend des Backups.');
+my $info_export = info_button('Erstellt nach jedem Backup zusaetzlich ein komprimiertes tar.gz-Archiv. Das ist praktisch zum Download, Kopieren oder Archivieren, benoetigt aber zusaetzlichen Speicherplatz und Zeit.');
+my $info_root = info_button('Diese Bestaetigung ist noetig, weil Vollbackup und Restore Systemdateien, Berechtigungen, Docker-Daten und Cronjobs betreffen. Es werden keine Passwoerter gespeichert; erlaubt wird nur der Start des Backend-Skripts dieses Plugins.');
+my $info_table = info_button('Diese Liste zeigt vorhandene Backups mit Status, Host, Groesse und Fertigstellungszeit. Ein vollstaendiges Backup sollte den Status complete haben, bevor du es fuer Restore-Tests verwendest.');
+my $info_import = info_button('Importiert ein zuvor exportiertes Backup-Archiv zurueck in die lokale Backup-Liste. Das Archiv wird vor dem Entpacken auf sichere Pfade und die erwartete Backup-Struktur geprueft.');
+my $info_backup_start = info_button('Startet den Backup-Vorgang. Vor dem eigentlichen Backup prueft das Plugin wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und Docker-Hinweise.');
 
 print header(-type => 'text/html', -charset => 'utf-8');
 
@@ -231,6 +255,75 @@ print <<HTML;
 <span>Startzeit $info_time</span>
 <input name="schedule_time" type="time" value="$cfg_schedule_time">
 </label>
+
+<div class="schedule-detail" data-schedule-panel="weekly">
+<span class="field-title">Wochentage $info_weekdays</span>
+<div class="choice-grid">
+<label><input type="checkbox" name="schedule_weekdays" value="1"$weekday_checked[1]> Montag</label>
+<label><input type="checkbox" name="schedule_weekdays" value="2"$weekday_checked[2]> Dienstag</label>
+<label><input type="checkbox" name="schedule_weekdays" value="3"$weekday_checked[3]> Mittwoch</label>
+<label><input type="checkbox" name="schedule_weekdays" value="4"$weekday_checked[4]> Donnerstag</label>
+<label><input type="checkbox" name="schedule_weekdays" value="5"$weekday_checked[5]> Freitag</label>
+<label><input type="checkbox" name="schedule_weekdays" value="6"$weekday_checked[6]> Samstag</label>
+<label><input type="checkbox" name="schedule_weekdays" value="0"$weekday_checked[0]> Sonntag</label>
+</div>
+</div>
+
+<div class="schedule-detail" data-schedule-panel="monthly">
+<span class="field-title">Tage im Monat $info_monthdays</span>
+<div class="day-grid">
+<label><input type="checkbox" name="schedule_monthdays" value="1"$monthday_checked[1]> 1</label>
+<label><input type="checkbox" name="schedule_monthdays" value="2"$monthday_checked[2]> 2</label>
+<label><input type="checkbox" name="schedule_monthdays" value="3"$monthday_checked[3]> 3</label>
+<label><input type="checkbox" name="schedule_monthdays" value="4"$monthday_checked[4]> 4</label>
+<label><input type="checkbox" name="schedule_monthdays" value="5"$monthday_checked[5]> 5</label>
+<label><input type="checkbox" name="schedule_monthdays" value="6"$monthday_checked[6]> 6</label>
+<label><input type="checkbox" name="schedule_monthdays" value="7"$monthday_checked[7]> 7</label>
+<label><input type="checkbox" name="schedule_monthdays" value="8"$monthday_checked[8]> 8</label>
+<label><input type="checkbox" name="schedule_monthdays" value="9"$monthday_checked[9]> 9</label>
+<label><input type="checkbox" name="schedule_monthdays" value="10"$monthday_checked[10]> 10</label>
+<label><input type="checkbox" name="schedule_monthdays" value="11"$monthday_checked[11]> 11</label>
+<label><input type="checkbox" name="schedule_monthdays" value="12"$monthday_checked[12]> 12</label>
+<label><input type="checkbox" name="schedule_monthdays" value="13"$monthday_checked[13]> 13</label>
+<label><input type="checkbox" name="schedule_monthdays" value="14"$monthday_checked[14]> 14</label>
+<label><input type="checkbox" name="schedule_monthdays" value="15"$monthday_checked[15]> 15</label>
+<label><input type="checkbox" name="schedule_monthdays" value="16"$monthday_checked[16]> 16</label>
+<label><input type="checkbox" name="schedule_monthdays" value="17"$monthday_checked[17]> 17</label>
+<label><input type="checkbox" name="schedule_monthdays" value="18"$monthday_checked[18]> 18</label>
+<label><input type="checkbox" name="schedule_monthdays" value="19"$monthday_checked[19]> 19</label>
+<label><input type="checkbox" name="schedule_monthdays" value="20"$monthday_checked[20]> 20</label>
+<label><input type="checkbox" name="schedule_monthdays" value="21"$monthday_checked[21]> 21</label>
+<label><input type="checkbox" name="schedule_monthdays" value="22"$monthday_checked[22]> 22</label>
+<label><input type="checkbox" name="schedule_monthdays" value="23"$monthday_checked[23]> 23</label>
+<label><input type="checkbox" name="schedule_monthdays" value="24"$monthday_checked[24]> 24</label>
+<label><input type="checkbox" name="schedule_monthdays" value="25"$monthday_checked[25]> 25</label>
+<label><input type="checkbox" name="schedule_monthdays" value="26"$monthday_checked[26]> 26</label>
+<label><input type="checkbox" name="schedule_monthdays" value="27"$monthday_checked[27]> 27</label>
+<label><input type="checkbox" name="schedule_monthdays" value="28"$monthday_checked[28]> 28</label>
+<label><input type="checkbox" name="schedule_monthdays" value="29"$monthday_checked[29]> 29</label>
+<label><input type="checkbox" name="schedule_monthdays" value="30"$monthday_checked[30]> 30</label>
+<label><input type="checkbox" name="schedule_monthdays" value="31"$monthday_checked[31]> 31</label>
+</div>
+</div>
+
+<div class="schedule-detail" data-schedule-panel="monthly">
+<span class="field-title">Monate $info_months</span>
+<div class="choice-grid month-grid">
+<label><input type="checkbox" name="schedule_months" value="*"$all_months_checked> Alle Monate</label>
+<label><input type="checkbox" name="schedule_months" value="1"$month_checked[1]> Jan</label>
+<label><input type="checkbox" name="schedule_months" value="2"$month_checked[2]> Feb</label>
+<label><input type="checkbox" name="schedule_months" value="3"$month_checked[3]> Maerz</label>
+<label><input type="checkbox" name="schedule_months" value="4"$month_checked[4]> Apr</label>
+<label><input type="checkbox" name="schedule_months" value="5"$month_checked[5]> Mai</label>
+<label><input type="checkbox" name="schedule_months" value="6"$month_checked[6]> Jun</label>
+<label><input type="checkbox" name="schedule_months" value="7"$month_checked[7]> Jul</label>
+<label><input type="checkbox" name="schedule_months" value="8"$month_checked[8]> Aug</label>
+<label><input type="checkbox" name="schedule_months" value="9"$month_checked[9]> Sep</label>
+<label><input type="checkbox" name="schedule_months" value="10"$month_checked[10]> Okt</label>
+<label><input type="checkbox" name="schedule_months" value="11"$month_checked[11]> Nov</label>
+<label><input type="checkbox" name="schedule_months" value="12"$month_checked[12]> Dez</label>
+</div>
+</div>
 
 </fieldset>
 
@@ -341,6 +434,53 @@ print <<HTML;
 </section>
 
 </main>
+
+<script>
+(function () {
+  var modeInputs = document.querySelectorAll('input[name="schedule_mode"]');
+  var panels = document.querySelectorAll('[data-schedule-panel]');
+  var allMonths = document.querySelector('input[name="schedule_months"][value="*"]');
+  var monthInputs = document.querySelectorAll('input[name="schedule_months"]:not([value="*"])');
+
+  function selectedMode() {
+    var checked = document.querySelector('input[name="schedule_mode"]:checked');
+    return checked ? checked.value : 'daily';
+  }
+
+  function updateSchedulePanels() {
+    var mode = selectedMode();
+    panels.forEach(function (panel) {
+      panel.classList.toggle('schedule-hidden', panel.getAttribute('data-schedule-panel') !== mode);
+    });
+  }
+
+  function updateMonthSelection() {
+    if (!allMonths) return;
+    monthInputs.forEach(function (input) {
+      input.disabled = allMonths.checked;
+      if (allMonths.checked) input.checked = false;
+    });
+  }
+
+  modeInputs.forEach(function (input) {
+    input.addEventListener('change', updateSchedulePanels);
+  });
+  if (allMonths) {
+    allMonths.addEventListener('change', updateMonthSelection);
+  }
+  monthInputs.forEach(function (input) {
+    input.addEventListener('change', function () {
+      if (input.checked && allMonths) {
+        allMonths.checked = false;
+        updateMonthSelection();
+      }
+    });
+  });
+
+  updateSchedulePanels();
+  updateMonthSelection();
+}());
+</script>
 
 </body>
 </html>

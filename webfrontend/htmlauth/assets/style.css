@@ -206,7 +206,8 @@ table {
 }
 
 .schedule-modes label,
-.month-grid label {
+.choice-grid label,
+.day-grid label {
   align-items: center;
   border: 1px solid #d8dee8;
   border-radius: 6px;
@@ -219,30 +220,31 @@ table {
 }
 
 .schedule-modes input,
-.month-grid input {
+.choice-grid input,
+.day-grid input {
   min-height: auto;
 }
 
-.schedule-grid {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(3, minmax(160px, 1fr));
-}
-
-.month-picker {
+.schedule-detail {
   margin-top: 14px;
 }
 
-.month-picker > span {
+.field-title {
   display: block;
   font-weight: 700;
   margin-bottom: 7px;
 }
 
-.month-grid {
+.choice-grid {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(4, minmax(100px, 1fr));
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+}
+
+.day-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(8, minmax(56px, 1fr));
 }
 
 .schedule-hidden {
@@ -445,8 +447,8 @@ button.danger {
     align-items: flex-start;
   }
 
-  .schedule-grid,
-  .month-grid {
+  .choice-grid,
+  .day-grid {
     grid-template-columns: 1fr;
   }
 

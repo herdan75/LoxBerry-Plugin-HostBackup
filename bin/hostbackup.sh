@@ -32,7 +32,9 @@ if [ ! -f "$CONFIG_FILE" ]; then
   "schedule_mode": "daily",
   "schedule_time": "02:00",
   "schedule_weekday": "0",
+  "schedule_weekdays": ["0"],
   "schedule_monthday": "1",
+  "schedule_monthdays": ["1"],
   "schedule_months": ["*"],
   "root_permission_ack": false,
   "pre_backup_hook": "",
@@ -113,7 +115,13 @@ show_config() {
     $cfg->{schedule_mode} = $cfg->{schedule_mode} || "daily";
     $cfg->{schedule_time} = $cfg->{schedule_time} || "02:00";
     $cfg->{schedule_weekday} = defined $cfg->{schedule_weekday} ? "$cfg->{schedule_weekday}" : "0";
+    if (ref($cfg->{schedule_weekdays}) ne "ARRAY" || !@{$cfg->{schedule_weekdays}}) {
+      $cfg->{schedule_weekdays} = [ $cfg->{schedule_weekday} ];
+    }
     $cfg->{schedule_monthday} = defined $cfg->{schedule_monthday} ? "$cfg->{schedule_monthday}" : "1";
+    if (ref($cfg->{schedule_monthdays}) ne "ARRAY" || !@{$cfg->{schedule_monthdays}}) {
+      $cfg->{schedule_monthdays} = [ $cfg->{schedule_monthday} ];
+    }
     $cfg->{schedule_months} = ["*"] unless ref($cfg->{schedule_months}) eq "ARRAY" && @{$cfg->{schedule_months}};
     $cfg->{root_permission_ack} = $cfg->{root_permission_ack} ? JSON::PP::true : JSON::PP::false;
     $cfg->{pre_backup_hook} //= "";
@@ -135,12 +143,14 @@ save_config() {
   local schedule_weekday="$9"
   local schedule_monthday="${10}"
   local schedule_months="${11:-*}"
-  local pre_hook="${12}"
-  local post_hook="${13}"
-  local root_permission_ack="${14:-false}"
+  local schedule_weekdays="${12:-$schedule_weekday}"
+  local schedule_monthdays="${13:-$schedule_monthday}"
+  local pre_hook="${14}"
+  local post_hook="${15}"
+  local root_permission_ack="${16:-false}"
 
   perl -MJSON::PP -e '
-    my ($file, $backup_root, $excludes_text, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $schedule_months, $pre_hook, $post_hook, $root_permission_ack) = @ARGV;
+    my ($file, $backup_root, $excludes_text, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $schedule_months, $schedule_weekdays, $schedule_monthdays, $pre_hook, $post_hook, $root_permission_ack) = @ARGV;
     my @excludes;
     for my $line (split /\r?\n/, $excludes_text) {
       $line =~ s/^\s+|\s+$//g;
@@ -163,6 +173,24 @@ save_config() {
     $schedule_time = "02:00" unless $schedule_time =~ /^([01]\d|2[0-3]):[0-5]\d$/;
     $schedule_weekday = "0" unless $schedule_weekday =~ /^[0-6]$/;
     $schedule_monthday = "1" unless $schedule_monthday =~ /^([1-9]|[12]\d|3[01])$/;
+    my %seen_weekday;
+    my @weekdays;
+    for my $weekday (split /,/, $schedule_weekdays) {
+      $weekday =~ s/^\s+|\s+$//g;
+      next unless $weekday =~ /^[0-6]$/;
+      next if $seen_weekday{$weekday}++;
+      push @weekdays, $weekday;
+    }
+    @weekdays = ($schedule_weekday) unless @weekdays;
+    my %seen_monthday;
+    my @monthdays;
+    for my $day (split /,/, $schedule_monthdays) {
+      $day =~ s/^\s+|\s+$//g;
+      next unless $day =~ /^([1-9]|[12]\d|3[01])$/;
+      next if $seen_monthday{$day}++;
+      push @monthdays, $day;
+    }
+    @monthdays = ($schedule_monthday) unless @monthdays;
     my %seen;
     my @months;
     for my $month (split /,/, $schedule_months) {
@@ -186,7 +214,9 @@ save_config() {
       schedule_mode => $schedule_mode,
       schedule_time => $schedule_time,
       schedule_weekday => $schedule_weekday,
+      schedule_weekdays => \@weekdays,
       schedule_monthday => $schedule_monthday,
+      schedule_monthdays => \@monthdays,
       schedule_months => \@months,
       root_permission_ack => ($root_permission_ack eq "true" ? JSON::PP::true : JSON::PP::false),
       pre_backup_hook => $pre_hook,
@@ -194,7 +224,7 @@ save_config() {
     };
     open my $fh, ">", $file or die "Cannot write config: $!";
     print $fh JSON::PP->new->ascii->pretty->canonical->encode($cfg);
-  ' "$CONFIG_FILE" "$backup_root" "$excludes_text" "$stop_docker" "$create_export" "$keep_backups" "$schedule_enabled" "$schedule_mode" "$schedule_time" "$schedule_weekday" "$schedule_monthday" "$schedule_months" "$pre_hook" "$post_hook" "$root_permission_ack"
+  ' "$CONFIG_FILE" "$backup_root" "$excludes_text" "$stop_docker" "$create_export" "$keep_backups" "$schedule_enabled" "$schedule_mode" "$schedule_time" "$schedule_weekday" "$schedule_monthday" "$schedule_months" "$schedule_weekdays" "$schedule_monthdays" "$pre_hook" "$post_hook" "$root_permission_ack"
   install_schedule
 }
 
@@ -215,7 +245,7 @@ backup_root() {
 install_schedule() {
   require_root_for_write
   local cron_file="/etc/cron.d/loxberryhostbackup"
-  local enabled mode time_value weekday monthday months month_field hour minute dom dow command_line
+  local enabled mode time_value weekday weekdays monthday monthdays months month_field hour minute dom dow command_line
   enabled="$(json_get_bool schedule_enabled)"
   if [ "$enabled" != "true" ]; then
     rm -f "$cron_file"
@@ -225,7 +255,9 @@ install_schedule() {
   mode="$(json_get_string schedule_mode)"
   time_value="$(json_get_string schedule_time)"
   weekday="$(json_get_string schedule_weekday)"
+  weekdays="$(json_get_array_lines schedule_weekdays | paste -sd, -)"
   monthday="$(json_get_string schedule_monthday)"
+  monthdays="$(json_get_array_lines schedule_monthdays | paste -sd, -)"
   months="$(json_get_array_lines schedule_months | paste -sd, -)"
   case "$mode" in daily|weekly|monthly) ;; *) mode="daily" ;; esac
   case "$time_value" in
@@ -237,9 +269,15 @@ install_schedule() {
   hour="$((10#$hour))"
   minute="$((10#$minute))"
   case "$weekday" in [0-6]) ;; *) weekday="0" ;; esac
+  case "$weekdays" in
+    ""|*[!0-6,]*) weekdays="$weekday" ;;
+  esac
   case "$monthday" in
     [1-9]|[12][0-9]|3[01]) ;;
     *) monthday="1" ;;
+  esac
+  case "$monthdays" in
+    ""|*[!0-9,]*) monthdays="$monthday" ;;
   esac
   case "$months" in
     ""|"*") month_field="*" ;;
@@ -250,10 +288,10 @@ install_schedule() {
   dom="*"
   dow="*"
   if [ "$mode" = "weekly" ]; then
-    dow="$weekday"
+    dow="$weekdays"
     month_field="*"
   elif [ "$mode" = "monthly" ]; then
-    dom="$monthday"
+    dom="$monthdays"
   else
     month_field="*"
   fi
@@ -995,7 +1033,7 @@ case "$action" in
   preflight-backup) preflight_backup ;;
   preflight-restore) shift; preflight_restore "${1:?BACKUP_ID required}" ;;
   config) show_config ;;
-  save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11:-*}" "${12:-}" "${13:-}" "${14:-false}" ;;
+  save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11:-*}" "${12:-0}" "${13:-1}" "${14:-}" "${15:-}" "${16:-false}" ;;
   install-schedule) install_schedule ;;
   tasks) list_tasks ;;
   task-log) shift; show_task_log "${1:?TASK required}" "${2:-300}" ;;

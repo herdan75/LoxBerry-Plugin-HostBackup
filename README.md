@@ -277,9 +277,9 @@ Wenn aktiviert, wird nach jedem Backup automatisch ein `.tar.gz`-Export erstellt
 
 Automatische Backups koennen taeglich, woechentlich oder monatlich laufen.
 
-- Taeglich: Nur die Uhrzeit ist relevant
-- Woechentlich: Wochentag und Uhrzeit sind relevant
-- Monatlich: Monatstag, Monate und Uhrzeit sind relevant
+- Taeglich: Nur die Uhrzeit ist relevant.
+- Woechentlich: Ein oder mehrere Wochentage und die Uhrzeit sind relevant.
+- Monatlich: Ein oder mehrere Monatstage, ein oder mehrere Monate und die Uhrzeit sind relevant.
 
 ### Aufbewahrung
 
