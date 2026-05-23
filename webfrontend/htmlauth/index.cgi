@@ -20,6 +20,26 @@ my $message = '';
 my $error = '';
 my $active_task = '';
 
+sub url_escape {
+  my ($value) = @_;
+  $value //= '';
+  $value =~ s/([^A-Za-z0-9_.~-])/sprintf("%%%02X", ord($1))/ge;
+  return $value;
+}
+
+sub redirect_with {
+  my (%params) = @_;
+  my @parts;
+  for my $key (sort keys %params) {
+    next unless defined $params{$key} && length $params{$key};
+    push @parts, url_escape($key) . '=' . url_escape($params{$key});
+  }
+  my $uri = $q->url(-relative => 1);
+  $uri .= '?' . join('&', @parts) if @parts;
+  print redirect(-uri => $uri);
+  exit;
+}
+
 sub shell_quote {
   my ($value) = @_;
   $value =~ s/'/'"'"'/g;
@@ -46,6 +66,18 @@ sub info_button {
   my ($text) = @_;
   my $safe = escapeHTML($text || '');
   return qq{<span class="info-help"><button type="button" class="info-button">i</button><span class="info-bubble">$safe</span></span>};
+}
+
+my $notice = $q->param('msg') || '';
+if ($notice eq 'saved') {
+  $message = 'Einstellungen gespeichert.';
+} elsif ($notice eq 'backup_started') {
+  $message = 'Backup gestartet. Der Live-Status wird unten automatisch aktualisiert.';
+}
+
+my $requested_active_task = $q->param('active_task') || '';
+if ($requested_active_task =~ /^backup-[A-Za-z0-9._-]+\.log$/) {
+  $active_task = $requested_active_task;
 }
 
 if ($action eq 'task-status') {
@@ -115,7 +147,7 @@ if ($q->request_method eq 'POST') {
     );
 
     if ($status == 0) {
-      $message = 'Einstellungen gespeichert.';
+      redirect_with(msg => 'saved');
     } else {
       $error = escapeHTML($out);
     }
@@ -129,8 +161,9 @@ if ($q->request_method eq 'POST') {
       my ($started_id) = $out =~ /([A-Za-z0-9._-]+)/;
       if ($started_id) {
         $active_task = "backup-$started_id.log";
+        redirect_with(msg => 'backup_started', active_task => $active_task);
       }
-      $message = 'Backup gestartet. Der Live-Status wird unten automatisch aktualisiert.';
+      redirect_with(msg => 'backup_started');
     } else {
       $error = escapeHTML($out);
     }
