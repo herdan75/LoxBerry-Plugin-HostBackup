@@ -246,6 +246,42 @@ require_root_for_write() {
   fi
 }
 
+valid_backup_id() {
+  local value="$1"
+  case "$value" in
+    ""|.*|*..*|*/*|*[!A-Za-z0-9._-]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+require_backup_id() {
+  local value="$1"
+  if ! valid_backup_id "$value"; then
+    echo "Unsafe backup id: $value" >&2
+    exit 11
+  fi
+}
+
+validate_hook() {
+  local hook="$1"
+  local owner mode
+  [ -n "$hook" ] || return 1
+  case "$hook" in
+    /*) ;;
+    *) log "Skipping hook with non-absolute path: $hook"; return 1 ;;
+  esac
+  [ -f "$hook" ] && [ -x "$hook" ] || { log "Skipping hook that is not executable: $hook"; return 1; }
+  owner="$(stat -c '%u' "$hook" 2>/dev/null || echo '')"
+  mode="$(stat -c '%a' "$hook" 2>/dev/null || echo '')"
+  [ "$owner" = "0" ] || { log "Skipping hook not owned by root: $hook"; return 1; }
+  [ -n "$mode" ] || return 1
+  if (( (8#$mode & 022) != 0 )); then
+    log "Skipping hook writable by group/others: $hook"
+    return 1
+  fi
+  return 0
+}
+
 host_arch() {
   uname -m 2>/dev/null || printf 'unknown'
 }
@@ -359,7 +395,7 @@ EOF
 
 run_hook() {
   local hook="$1"
-  if [ -n "$hook" ] && [ -x "$hook" ]; then
+  if validate_hook "$hook"; then
     "$hook"
   fi
 }
@@ -444,6 +480,7 @@ EOF
 preflight_restore() {
   local backup_id="$1"
   local root target status warnings_json backup_arch host_arch_value backup_status rsync_available
+  require_backup_id "$backup_id"
   root="$(backup_root)"
   target="$root/$backup_id"
   [ -d "$target/rootfs" ] || { echo "Backup rootfs not found: $backup_id" >&2; exit 6; }
@@ -490,6 +527,7 @@ create_backup() {
   mkdir -p "$root"
   backup_id="${1:-$(date '+%Y%m%d-%H%M%S')}"
   backup_id="$(printf '%s' "$backup_id" | tr -cd 'A-Za-z0-9._-')"
+  require_backup_id "$backup_id"
   target="$root/$backup_id"
   rootfs="$target/rootfs"
   log_file="$LBP_LOGDIR/backup-$backup_id.log"
@@ -550,6 +588,7 @@ start_backup() {
   local backup_id log_file
   backup_id="${1:-$(date '+%Y%m%d-%H%M%S')}"
   backup_id="$(printf '%s' "$backup_id" | tr -cd 'A-Za-z0-9._-')"
+  require_backup_id "$backup_id"
   log_file="$LBP_LOGDIR/backup-$backup_id.launch.log"
   nohup "$0" backup "$backup_id" > "$log_file" 2>&1 &
   printf '%s\n' "$backup_id"
@@ -651,11 +690,12 @@ list_backups() {
 export_backup() {
   local backup_id="$1"
   local root target archive
+  require_backup_id "$backup_id"
   root="$(backup_root)"
   target="$root/$backup_id"
   archive="$root/$backup_id.tar.gz"
   [ -d "$target" ] || { echo "Backup not found: $backup_id" >&2; exit 6; }
-  tar -C "$root" -czf "$archive" "$backup_id"
+  tar -C "$root" -czf "$archive" -- "$backup_id"
   printf '%s\n' "$archive"
 }
 
@@ -671,7 +711,14 @@ import_backup() {
   case "$top" in
     *[!A-Za-z0-9._-]*|.*|*..*) echo "Unsafe backup id in archive: $top" >&2; exit 11 ;;
   esac
-  if tar -tzf "$archive" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+  if tar -tzf "$archive" | awk -v top="$top" '
+    $0 ~ /^/ {
+      if ($0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/) exit 1;
+      if ($0 != top && index($0, top "/") != 1) exit 1;
+    }
+  '; then
+    :
+  else
     echo "Archive contains unsafe paths." >&2
     exit 11
   fi
@@ -679,7 +726,7 @@ import_backup() {
     echo "Backup already exists: $top" >&2
     exit 4
   fi
-  tar -C "$root" -xzf "$archive"
+  tar -C "$root" --no-same-owner --no-same-permissions -xzf "$archive"
   [ -d "$root/$top/rootfs" ] || { echo "Imported archive does not contain a rootfs directory." >&2; exit 12; }
   printf '%s\n' "$top"
 }
@@ -689,12 +736,10 @@ move_backup() {
   local backup_id="$1"
   local destination_root="$2"
   local root target archive destination
+  require_backup_id "$backup_id"
   root="$(backup_root)"
   target="$root/$backup_id"
   archive="$root/$backup_id.tar.gz"
-  case "$backup_id" in
-    *[!A-Za-z0-9._-]*|.*|*..*) echo "Unsafe backup id: $backup_id" >&2; exit 11 ;;
-  esac
   case "$destination_root" in
     /*) ;;
     *) echo "Destination must be an absolute path." >&2; exit 13 ;;
@@ -714,11 +759,9 @@ browse_backup() {
   local backup_id="$1"
   local rel_path="${2:-}"
   local root base
+  require_backup_id "$backup_id"
   root="$(backup_root)"
   base="$root/$backup_id/rootfs"
-  case "$backup_id" in
-    *[!A-Za-z0-9._-]*|.*|*..*) echo "Unsafe backup id: $backup_id" >&2; exit 11 ;;
-  esac
   [ -d "$base" ] || { echo "Backup rootfs not found: $backup_id" >&2; exit 6; }
   perl -MJSON::PP -MCwd=abs_path -MFile::Spec -e '
     my ($base, $rel) = @ARGV;
@@ -757,11 +800,9 @@ cat_backup_file() {
   local backup_id="$1"
   local rel_path="$2"
   local root base
+  require_backup_id "$backup_id"
   root="$(backup_root)"
   base="$root/$backup_id/rootfs"
-  case "$backup_id" in
-    *[!A-Za-z0-9._-]*|.*|*..*) echo "Unsafe backup id: $backup_id" >&2; exit 11 ;;
-  esac
   [ -d "$base" ] || { echo "Backup rootfs not found: $backup_id" >&2; exit 6; }
   perl -MCwd=abs_path -MFile::Spec -e '
     my ($base, $rel) = @ARGV;
@@ -784,6 +825,7 @@ delete_backup() {
   require_root_for_write
   local backup_id="$1"
   local root target archive
+  require_backup_id "$backup_id"
   root="$(backup_root)"
   target="$root/$backup_id"
   archive="$root/$backup_id.tar.gz"
@@ -799,6 +841,7 @@ delete_backup() {
 restore_plan() {
   local backup_id="$1"
   local root target
+  require_backup_id "$backup_id"
   root="$(backup_root)"
   target="$root/$backup_id"
   [ -d "$target/rootfs" ] || { echo "Backup rootfs not found: $backup_id" >&2; exit 6; }
@@ -826,6 +869,7 @@ restore_backup() {
   require_root_for_write
   local backup_id="$1"
   local root target exclude_file
+  require_backup_id "$backup_id"
   [ "${ALLOW_RESTORE:-}" = "1" ] || { echo "Set ALLOW_RESTORE=1 to run restore." >&2; exit 8; }
   command -v rsync >/dev/null 2>&1 || { echo "rsync is required." >&2; exit 3; }
   root="$(backup_root)"
@@ -851,9 +895,7 @@ start_restore() {
   require_root_for_write
   local backup_id="$1"
   local log_file
-  case "$backup_id" in
-    *[!A-Za-z0-9._-]*|.*|*..*) echo "Unsafe backup id: $backup_id" >&2; exit 11 ;;
-  esac
+  require_backup_id "$backup_id"
   log_file="$LBP_LOGDIR/restore-$backup_id.launch.log"
   ALLOW_RESTORE=1 nohup "$0" restore "$backup_id" > "$log_file" 2>&1 &
   printf '%s\n' "$backup_id"

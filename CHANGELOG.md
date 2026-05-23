@@ -49,6 +49,10 @@ noch keine freigegebene produktive Version.
 
 ### Backend
 
+- Sicherheitspruefungen fuer Backup-IDs zentralisiert und auf Export, Import, Move, Explorer, Delete und Restore angewendet.
+- Importierte Tar-Archive werden enger geprueft: nur ein sicherer Top-Level-Backupordner, keine absoluten Pfade und keine `..`-Pfade.
+- Tar-Aufrufe fuer Export/Import gehaertet.
+- Pre-/Post-Backup-Hooks werden nur noch ausgefuehrt, wenn sie Root gehoeren, ausfuehrbar sind und nicht von Gruppe/anderen beschreibbar sind.
 - `rsync`-basiertes Host-Backup ergaenzt.
 - Restore-Backend ergaenzt.
 - Manifest pro Backup ergaenzt.
