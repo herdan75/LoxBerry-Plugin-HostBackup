@@ -709,30 +709,63 @@ start_backup() {
   printf '%s\n' "$backup_id"
 }
 
+log_dirs() {
+  local dir
+  for dir in \
+    "$LBP_LOGDIR" \
+    "$LBHOMEDIR/log/plugins" \
+    "$LBHOMEDIR/log/plugins/$PLUGIN_FOLDER" \
+    "$LBHOMEDIR/log/ramlog/log/plugins" \
+    "$LBHOMEDIR/log/ramlog/log/plugins/$PLUGIN_FOLDER"
+  do
+    [ -n "$dir" ] || continue
+    printf '%s\n' "$dir"
+  done | awk '!seen[$0]++'
+}
+
 task_log_path() {
   local task="$1"
+  local dir path
   case "$task" in
     *[!A-Za-z0-9._-]*|.*|*..*|*/*) echo "Unsafe task id." >&2; exit 11 ;;
     backup-*.log|restore-*.log) ;;
     *) echo "Unsafe task id." >&2; exit 11 ;;
   esac
+  while IFS= read -r dir; do
+    path="$dir/$task"
+    if [ -r "$path" ]; then
+      printf '%s\n' "$path"
+      return 0
+    fi
+  done < <(log_dirs)
   printf '%s/%s\n' "$LBP_LOGDIR" "$task"
 }
 
 list_tasks() {
+  local dirs=()
+  local dir
   mkdir -p "$LBP_LOGDIR"
+  while IFS= read -r dir; do
+    dirs+=("$dir")
+  done < <(log_dirs)
   perl -MJSON::PP -e '
-    my ($dir) = @ARGV;
-    opendir(my $dh, $dir) or do { print "[]"; exit 0; };
+    my @dirs = @ARGV;
     my @items;
-    for my $name (sort grep { /^(backup|restore)-.*\.log$/ || /\.(launch)\.log$/ } readdir($dh)) {
-      my $path = "$dir/$name";
-      my @st = stat($path);
-      next unless @st;
-      push @items, { task => $name, size => 0 + $st[7], mtime => 0 + $st[9] };
+    my %seen;
+    for my $dir (@dirs) {
+      next if !$dir || $seen{"dir:$dir"}++;
+      opendir(my $dh, $dir) or next;
+      for my $name (sort grep { /^(backup|restore)-.*\.log$/ || /\.(launch)\.log$/ } readdir($dh)) {
+        my $path = "$dir/$name";
+        my @st = stat($path);
+        next unless @st;
+        my $key = "$name:$st[7]:$st[9]";
+        next if $seen{$key}++;
+        push @items, { task => $name, size => 0 + $st[7], mtime => 0 + $st[9], path => $path };
+      }
     }
     print JSON::PP->new->ascii->canonical->pretty->encode(\@items);
-  ' "$LBP_LOGDIR"
+  ' "${dirs[@]}"
 }
 
 show_task_log() {

@@ -60,6 +60,7 @@ noch keine freigegebene produktive Version.
 
 ### Backend
 
+- Task-Log-Suche auf mehrere LoxBerry-Logpfade erweitert, damit Live-Status auch dann aktualisiert, wenn LoxBerry Logs direkt unter `log/plugins` statt im Plugin-Unterordner ablegt.
 - Backup- und Restore-Logs geben mehr Live-Fortschritt aus: Phasenmeldungen, rsync-Datei-/Fortschrittsausgabe, Export- und Retention-Schritte.
 - Sicherheitspruefungen fuer Backup-IDs zentralisiert und auf Export, Import, Move, Explorer, Delete und Restore angewendet.
 - Importierte Tar-Archive werden enger geprueft: nur ein sicherer Top-Level-Backupordner, keine absoluten Pfade und keine `..`-Pfade.
