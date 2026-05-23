@@ -24,7 +24,11 @@ Typische Beispiele:
 - Benutzer- und Anwendungsdaten unter `/opt`, `/home`, `/var/lib` usw.
 
 Das Plugin basiert bewusst nicht auf Raspberry-Pi-spezifischen Tools wie
-`raspiBackup`. Der Kern ist ein `rsync`-basiertes Host-Snapshot-Backup.
+`raspiBackup`.
+
+Der Kern ist ein `rsync`-basiertes Host-Snapshot-Backup mit Fokus auf
+eine moeglichst vollstaendige Wiederherstellung von Diensten, Daten,
+Konfigurationen und Systemumgebung.
 
 ## Plattform-Kompatibilitaet
 
@@ -53,18 +57,35 @@ Bootloader und Docker-Images koennen aber manuelle Nacharbeit erfordern.
 
 Dieses Plugin erstellt:
 
-- KEIN bootfaehiges Systemabbild
-- KEIN 1:1-Image der Systemplatte
-- KEIN Bare-Metal-Disaster-Recovery-Backup
+- KEIN sektorbasiertes Blockdevice-/Disk-Image
+- KEIN garantiert hardwareunabhaengiges Bare-Metal-Komplettimage
 
-Das Plugin sichert primaer:
+Das Plugin erstellt stattdessen ein hostnahes dateibasiertes Systembackup
+auf Basis von `rsync`.
+
+Je nach Plattform, Hardware und Linux-Basis kann ein Restore einem nahezu
+vollstaendigen 1:1-System sehr nahe kommen.
+
+Das Plugin sichert unter anderem:
 
 - LoxBerry-Konfigurationen
 - Plugin-Daten
 - Docker-Daten und Volumes
 - Compose-Konfigurationen
-- ausgewaehlte Systemdateien
-- Benutzerdaten und Skripte
+- systemnahe Dateien
+- Benutzer- und Anwendungsdaten
+- ausgewaehlte Linux-Systembereiche
+
+Dazu gehoeren typischerweise auch:
+
+- `/etc`
+- `/opt`
+- `/home`
+- `/var/lib`
+- systemd-Units
+- Cronjobs
+- Docker-Daten
+- native Dienste und deren Daten
 
 Ein Restore funktioniert am zuverlässigsten bei:
 
@@ -377,7 +398,8 @@ Systemdateien:
 - Plattformmigration kann manuelle Nacharbeit erfordern
 - Bootloader-, Kernel- und Partitionslayout-Themen werden nicht geloest
 - Sehr grosse Backups und Exporte muessen auf Speicherplatz und Laufzeit getestet werden
-- Kein Ersatz fuer regelmaessige komplette SD-/eMMC-/SSD-Images
+- Kein sektorbasiertes Raw-Disk-/Blockdevice-Image wie z. B. `dd` oder Clonezilla
+- Bootloader-, Partitions- und Dateisystembesonderheiten koennen manuelle Nacharbeit erfordern
 
 ## Entwicklung
 
