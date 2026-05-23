@@ -1,107 +1,193 @@
 # LoxBerry Host Backup
 
-## Project status
+**Status:** Frueher Entwicklungsstand, noch nicht freigegeben.
 
-This repository contains an early, not yet released development version.
-It has not been validated on a real LoxBerry/DietPi host yet and must not be
-used as the only backup for productive systems.
+Dieses Plugin ist noch nicht produktiv validiert. Es wurde lokal syntaktisch und
+funktional in Teilen geprueft, aber noch nicht vollstaendig auf einem echten
+LoxBerry/DietPi-System installiert, gesichert und wiederhergestellt. Verwende es
+derzeit nicht als einziges Backup fuer produktive Systeme.
 
-Before relying on this plugin, test the full cycle on a non-critical system:
+## Zweck
 
-- Install the plugin ZIP in LoxBerry.
-- Run preflight checks.
-- Create a backup.
-- Browse and export the backup.
-- Restore to a fresh test system.
-- Verify LoxBerry, Docker containers, native services, permissions, and data.
+LoxBerry Host Backup ist ein Disaster-Recovery-Plugin fuer ein vollstaendiges
+Host-Backup. Es soll nicht nur LoxBerry selbst sichern, sondern auch Programme,
+Dienste und Daten, die parallel auf demselben Rechner laufen.
 
-## Current validation status
+Typische Beispiele:
 
-Checked locally:
+- LoxBerry-Konfiguration und Plugin-Daten
+- Docker-Container, Docker-Volumes und Bind-Mounts
+- DietPi-/Debian-Dienste und deren Daten
+- systemd-Units, Cronjobs, Skripte und native Programme
+- Benutzer- und Anwendungsdaten unter `/opt`, `/home`, `/var/lib` usw.
 
-- Bash syntax for backend, postinstall, restore helper, and uninstall scripts.
-- Backend `list` command with isolated test directories.
-- Backend `preflight-backup` command with isolated test directories.
-- Backend `config` command with isolated test directories.
-- Backend `task-status` command with a synthetic log file.
-- Plugin ZIP packaging.
+Das Plugin basiert bewusst nicht auf Raspberry-Pi-spezifischen Tools wie
+`raspiBackup`. Der Kern ist ein `rsync`-basiertes Host-Snapshot-Backup.
 
-Not yet validated:
+## Plattform-Kompatibilitaet
 
-- Installation through the LoxBerry plugin manager.
-- Web UI execution with the LoxBerry webserver user and sudoers rule.
-- Web UI config save flow through sudoers.
-- Real backup on LoxBerry/DietPi hardware.
-- Real restore on a fresh target system.
-- Docker/database consistency with active containers.
-- Platform migration between different CPU architectures.
+Ziel ist eine moeglichst plattformneutrale Nutzung auf Linux-basierten
+LoxBerry-/DietPi-/Debian-Systemen, z. B. Raspberry Pi, Odroid, VM oder x86.
 
-## Platform compatibility
+Voraussetzungen:
 
-The plugin is intended to be platform-neutral across LoxBerry/DietPi/Debian
-hosts on Raspberry Pi, Odroid, VM, and x86 hardware. It does not depend on
-Raspberry Pi specific tools such as `raspiBackup`.
-
-Required base components:
-
-- Linux with Bash
-- Perl with `JSON::PP`
-- Perl CGI support for the web UI
+- Linux mit Bash
+- Perl mit `JSON::PP`
+- Perl-CGI-Unterstuetzung fuer die Weboberflaeche
 - `rsync`
 - `tar`, `find`, `awk`, `sed`, `tail`, `base64`, `stat`
-- `cron` for scheduled backups
-- `sudo` for privileged web actions
+- `cron` fuer automatische Backups
+- `sudo` fuer privilegierte Aktionen aus der Weboberflaeche
 
-Docker is optional. If Docker is present, the plugin can inventory containers
-and optionally stop/start them during backup.
+Docker ist optional. Wenn Docker vorhanden ist, kann das Plugin Container
+inventarisieren und optional vor dem Backup stoppen sowie danach wieder starten.
 
-LoxBerry Host Backup is a disaster-recovery plugin for a complete host backup.
-It is intended for LoxBerry systems that also run Docker containers, DietPi
-software, native services, scripts, and other data outside LoxBerry itself.
+Wichtig: Plattformwechsel, z. B. Odroid zu Raspberry Pi oder ARM zu x86, sind
+nicht automatisch garantiert. Daten und portable Dienste lassen sich oft
+wiederherstellen, hardware- oder architekturspezifische Pakete, Kernelmodule,
+Bootloader und Docker-Images koennen aber manuelle Nacharbeit erfordern.
 
-The plugin is deliberately not based on the older Raspberry Pi specific
-LoxBerry backup plugin. Its primary backup mode is an `rsync` snapshot of the
-whole host filesystem with runtime-only paths excluded.
+## Aktueller Validierungsstand
 
-## Goals
+Lokal geprueft:
 
-- Full host backup comparable to DietPi-Backup.
-- Restore a freshly installed LoxBerry/DietPi/Debian host from backup.
-- Include LoxBerry, Docker data, native services, package state, and user data.
-- Show existing backup files in the LoxBerry web UI.
-- Browse the content of a backup snapshot from the web UI.
-- Download individual files from a backup snapshot.
-- Start backups in the background from the web UI.
-- Export a backup as a `.tar.gz` archive.
-- Move a full backup set to another absolute storage path.
-- Restore a selected backup from the web UI after explicit confirmation.
-- Run preflight checks before backup and restore.
-- Show running backup/restore tasks as terminal-like live log output in the web UI.
-- Configure backup target, retention, additional excludes, Docker handling, automatic exports, and hooks from the web UI.
-- Schedule automatic backups daily, weekly, or monthly using `/etc/cron.d`.
-- Keep a manifest next to every backup for restore checks and migration review.
+- Bash-Syntax fuer Backend, Postinstall, Restore-Helper und Uninstall
+- Perl/CGI-Syntax mit lokalem `CGI.pm`-Stub
+- Backend-Kommando `list` mit isolierten Testverzeichnissen
+- Backend-Kommando `preflight-backup` mit isolierten Testverzeichnissen
+- Backend-Kommando `config` mit isolierten Testverzeichnissen
+- Backend-Kommando `task-status` mit synthetischem Logfile
+- Plugin-ZIP-Paketierung
 
-## Configuration
+Noch nicht validiert:
 
-The web UI provides a settings section for the main backup behavior:
+- Installation ueber den LoxBerry Plugin Manager
+- Weboberflaeche mit echtem LoxBerry-Webserver-User
+- Speichern der Einstellungen ueber sudoers
+- Echtes Backup auf LoxBerry-/DietPi-Hardware
+- Echter Restore auf ein frisch installiertes Zielsystem
+- Docker-/Datenbank-Konsistenz bei laufenden Containern
+- Migration zwischen unterschiedlichen CPU-Architekturen
 
-- **Backup target**: empty uses the plugin data directory; absolute paths such as `/mnt/backupdisk/loxberry-hostbackup` are recommended for real backups.
-- **Additional rsync excludes**: one path or pattern per line, for example large media folders or mounted network shares.
-- **Docker handling**: optionally stop running containers before backup and start them again afterwards.
-- **Automatic export**: optionally create a `.tar.gz` export after every backup.
-- **Schedule**: optionally run automatic backups daily, weekly, or monthly at the configured time.
-- **Retention**: keep the newest `n` backups; `0` disables automatic pruning. When the limit is reached, the oldest backup is removed after a new backup completes.
-- **Hooks**: optional executable pre/post backup scripts with absolute paths.
+## Installation
 
-The schedule is installed as `/etc/cron.d/loxberryhostbackup` and calls the
-backend `start` action. This keeps the scheduler compatible with LoxBerry,
-DietPi, and Debian-style systems that provide cron.
+1. ZIP-Paket bauen oder aus dem Arbeitsverzeichnis verwenden.
+2. In LoxBerry unter **Plugins > Plugin installieren** hochladen.
+3. Nach der Installation die Plugin-Oberflaeche oeffnen.
+4. Einstellungen speichern, damit sudoers und Zeitplan geprueft werden koennen.
+5. Zuerst nur ein kleines Testbackup auf einem externen oder separaten Pfad ausfuehren.
 
-## Backup content
+Lokales Paket:
 
-The default backup source is `/`.
+```text
+LoxBerryHostBackup_0.1.0.zip
+```
 
-Default excludes:
+## Erste Tests auf LoxBerry
+
+Empfohlene Reihenfolge:
+
+1. Plugin installieren.
+2. Weboberflaeche oeffnen.
+3. Backup-Ziel auf einen externen oder separaten Pfad setzen, z. B. `/mnt/backupdisk/loxberry-hostbackup`.
+4. Backup-Check ausfuehren.
+5. Kleines manuelles Backup starten.
+6. Live-Log beobachten.
+7. Backup im Explorer oeffnen.
+8. Einzelne Datei herunterladen.
+9. Export erstellen und herunterladen.
+10. Restore nur auf einem Testsystem pruefen.
+
+## Funktionen
+
+- Vollstaendiges Host-Backup per `rsync`
+- Restore eines ausgewaehlten Backups
+- Backup- und Restore-Preflight-Checks
+- Live-Loganzeige fuer laufende Backup-/Restore-Jobs
+- Backup-Explorer in der Weboberflaeche
+- Download einzelner Dateien aus einem Backup
+- Import und Export von Backup-Archiven
+- Verschieben kompletter Backup-Saetze
+- Docker-Inventarisierung
+- Optionales Stoppen/Starten laufender Docker-Container
+- Zeitgesteuerte Backups per Cron
+- Aufbewahrungsregel fuer die Anzahl zu behaltender Backups
+- Pre-/Post-Backup-Hooks
+- Manifest pro Backup mit Host-, LoxBerry- und Inventardaten
+
+## Einstellungen
+
+Die Weboberflaeche enthaelt eine Einstellungen-Sektion.
+
+**Backup-Ziel**
+
+Leer bedeutet: Das Plugin verwendet das eigene Datenverzeichnis. Fuer echte
+Backups sollte ein absoluter Pfad auf einem externen oder separaten Datentraeger
+verwendet werden.
+
+Beispiel:
+
+```text
+/mnt/backupdisk/loxberry-hostbackup
+```
+
+**Zusaetzliche rsync-Excludes**
+
+Ein Eintrag pro Zeile. Sinnvoll fuer sehr grosse Datenpfade, Netzwerkshares oder
+Verzeichnisse, die nicht Teil des Disaster-Recovery-Backups sein sollen.
+
+Beispiel:
+
+```text
+/mnt/nas
+/media/archive
+/var/cache/apt
+```
+
+**Docker behandeln**
+
+Wenn aktiviert, werden laufende Docker-Container vor dem Backup gestoppt und
+danach wieder gestartet. Das verbessert die Konsistenz von Container-Daten,
+kann aber Dienste waehrend des Backups kurz unterbrechen.
+
+**Automatischer Export**
+
+Wenn aktiviert, wird nach jedem Backup automatisch ein `.tar.gz`-Export erstellt.
+
+**Aufbewahrung**
+
+Definiert, wie viele Backups behalten werden. `0` deaktiviert automatisches
+Aufraeumen. Wenn ein Wert groesser `0` gesetzt ist, wird nach einem erfolgreichen
+neuen Backup das aelteste Backup entfernt, sobald die Anzahl ueberschritten ist.
+
+**Zeitplan**
+
+Automatische Backups koennen aktiviert werden als:
+
+- Taeglich
+- Woechentlich
+- Monatlich
+
+Die Uhrzeit ist frei waehlbar. Bei woechentlichen Backups wird zusaetzlich der
+Wochentag verwendet, bei monatlichen Backups der Monatstag.
+
+Der Zeitplan wird als Datei installiert:
+
+```text
+/etc/cron.d/loxberryhostbackup
+```
+
+**Hooks**
+
+Pre- und Post-Backup-Hooks sind optionale ausfuehrbare Skripte mit absolutem
+Pfad. Sie koennen genutzt werden, um Datenbanken zu dumpen, Dienste vorzubereiten
+oder nach dem Backup aufzuraeumen.
+
+## Backup-Inhalt
+
+Standardquelle ist `/`.
+
+Standardmaessig ausgeschlossen:
 
 - `/proc`
 - `/sys`
@@ -110,61 +196,127 @@ Default excludes:
 - `/tmp`
 - `/lost+found`
 - `/var/cache`
-- The configured backup directory itself
+- das konfigurierte Backup-Ziel selbst
 
-The snapshot includes `/etc`, `/opt`, `/home`, `/var/lib`, mounted data paths
-such as DietPi userdata, Docker volumes and bind mounts, systemd units, cron
-jobs, scripts, LoxBerry configuration, and native application data. Add network
-shares or very large media paths to `rsync_extra_excludes` if they should not be
-part of disaster recovery.
+Enthalten sind unter anderem:
 
-## Important notes
+- `/etc`
+- `/opt`
+- `/home`
+- `/var/lib`
+- gemountete Datenpfade, sofern nicht ausgeschlossen
+- Docker-Daten, sofern sie im gesicherten Dateisystem liegen
+- systemd-Units
+- Cronjobs
+- LoxBerry-Konfiguration
+- Plugin-Daten
+- native Anwendungsdaten
 
-This plugin is currently experimental and not approved for production use.
-The restore workflow writes back to `/` and can overwrite the target system.
-Use it only after verifying the backup on test hardware.
+## Restore
 
-For consistent Docker and database backups, stop affected containers or add
-pre/post hooks before the backup. A live filesystem backup can otherwise contain
-inconsistent database files.
+Ein Restore schreibt das Backup zurueck nach `/` und kann das Zielsystem
+ueberschreiben. Deshalb ist der Restore absichtlich mit mehreren Schritten
+abgesichert:
 
-For a true full restore, prefer a rescue/offline environment or a fresh target
-installation where this plugin is installed first. Then run the restore from
-the web UI or from the command line.
+1. Backup auswaehlen.
+2. Restore-Check ausfuehren.
+3. Restore-Plan anzeigen.
+4. Backup-ID zur Bestaetigung eingeben.
+5. Restore starten.
 
-## Command line
+Fuer einen vollstaendigen Restore ist ein frisch installiertes Zielsystem oder
+eine Rescue-/Offline-Umgebung vorzuziehen. Ein Online-Restore auf einem laufenden
+System kann funktionieren, ist aber riskanter, weil Dienste und Dateien parallel
+aktiv sein koennen.
 
-After installation, the backend is available at:
+## Docker und Datenbanken
+
+Laufende Container und Datenbanken koennen waehrend eines Live-Backups
+inkonsistente Dateien erzeugen. Fuer wichtige Dienste sollten daher entweder:
+
+- Docker-Container vor dem Backup gestoppt werden,
+- Pre-/Post-Hooks fuer Datenbank-Dumps verwendet werden,
+- oder applikationsspezifische Backup-Mechanismen genutzt werden.
+
+## Kommandozeile
+
+Nach der Installation liegt das Backend typischerweise hier:
 
 ```sh
 /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh
 ```
 
-Examples:
+Beispiele:
 
 ```sh
-sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh backup
-sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh start
-sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh preflight-backup
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh config
-sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh install-schedule
+sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh preflight-backup
+sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh start
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh list
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh export BACKUP_ID
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh import BACKUP_ID.tar.gz
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh browse BACKUP_ID opt/loxberry
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh cat-file BACKUP_ID etc/hosts
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh move BACKUP_ID /mnt/backupdisk
-sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh restore-plan BACKUP_ID
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh preflight-restore BACKUP_ID
-sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh restore BACKUP_ID
+sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh restore-plan BACKUP_ID
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh start-restore BACKUP_ID
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh tasks
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh task-log backup-BACKUP_ID.log
 sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh task-status backup-BACKUP_ID.log
+sudo /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh install-schedule
 ```
 
-Restore is intentionally guarded and requires `ALLOW_RESTORE=1`:
+Der direkte Restore ist zusaetzlich gesperrt und braucht `ALLOW_RESTORE=1`:
 
 ```sh
 sudo ALLOW_RESTORE=1 /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh restore BACKUP_ID
+```
+
+## Dateien und Verzeichnisse
+
+Typische LoxBerry-Zielpfade:
+
+```text
+/opt/loxberry/webfrontend/htmlauth/plugins/loxberryhostbackup/
+/opt/loxberry/bin/plugins/loxberryhostbackup/
+/opt/loxberry/sbin/plugins/loxberryhostbackup/
+/opt/loxberry/config/plugins/loxberryhostbackup/
+/opt/loxberry/data/plugins/loxberryhostbackup/
+/opt/loxberry/log/plugins/loxberryhostbackup/
+```
+
+Systemdateien:
+
+```text
+/etc/sudoers.d/loxberryhostbackup
+/etc/cron.d/loxberryhostbackup
+```
+
+## Bekannte Grenzen
+
+- Noch nicht produktiv freigegeben.
+- Noch kein echter Ende-zu-Ende-Restore auf LoxBerry/DietPi validiert.
+- Kein Ersatz fuer applikationsspezifische Datenbank-Backups.
+- Plattformmigration kann manuelle Nacharbeit erfordern.
+- Bootloader-, Kernel- und Partitionslayout-Themen werden nicht geloest.
+- Sehr grosse Backups und Exporte muessen auf Speicherplatz und Laufzeit getestet werden.
+
+## Entwicklung
+
+Repository:
+
+```text
+https://github.com/herdan75/LoxBerry-Plugin-HostBackup
+```
+
+Branches:
+
+- `main`: stabilerer Stand
+- `develop`: laufende Weiterentwicklung
+
+Paket lokal bauen:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\package.ps1
 ```
