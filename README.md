@@ -125,6 +125,10 @@ Empfohlene Reihenfolge:
 
 Die Weboberflaeche enthaelt eine Einstellungen-Sektion.
 
+Neben wichtigen Feldern und Aktionen zeigt ein Info-Button eine kurze
+Erklaerung. Die Information erscheint beim Ueberfahren oder Fokussieren des
+Buttons und verschwindet wieder, sobald der Button verlassen wird.
+
 **Root-Freigabe**
 
 Das Plugin benoetigt kontrollierte Root-Rechte, weil ein vollstaendiges

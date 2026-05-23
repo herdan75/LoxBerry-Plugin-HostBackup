@@ -39,6 +39,53 @@ h2 {
   font-size: 19px;
 }
 
+.info-help {
+  display: inline-flex;
+  margin-left: 5px;
+  position: relative;
+  vertical-align: middle;
+}
+
+.info-button {
+  align-items: center;
+  border: 1px solid #8ea4ba;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #176a8a;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  height: 20px;
+  justify-content: center;
+  min-height: 20px;
+  padding: 0;
+  width: 20px;
+}
+
+.info-bubble {
+  background: #17212c;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(23, 33, 44, 0.18);
+  color: #ffffff;
+  display: none;
+  font-size: 13px;
+  font-weight: 400;
+  left: 50%;
+  line-height: 1.35;
+  max-width: min(340px, 80vw);
+  padding: 9px 10px;
+  position: absolute;
+  top: calc(100% + 8px);
+  transform: translateX(-50%);
+  width: max-content;
+  z-index: 20;
+}
+
+.info-help:hover .info-bubble,
+.info-help:focus-within .info-bubble {
+  display: block;
+}
+
 .panel,
 .notice {
   background: #ffffff;

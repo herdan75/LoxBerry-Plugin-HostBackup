@@ -42,6 +42,8 @@ noch keine freigegebene produktive Version.
 
 ### Weboberflaeche
 
+- Info-Buttons mit Hover-/Fokus-Hinweisen fuer Einstellungen und Backup-Aktionen ergaenzt.
+- Beschriftungen in den Einstellungen klarer benannt, z. B. Backup-Verzeichnis, Backups behalten, Skript vor/nach dem Backup und Vom Backup ausschliessen.
 - Sicherheitsbestaetigung fuer Root-Freigaben ergaenzt, inklusive kurzer Erklaerung in den Einstellungen.
 - Backup- und Restore-Start pruefen, ob die Root-Freigabe zuvor bestaetigt wurde.
 - Einstellungen-Seite ergaenzt.

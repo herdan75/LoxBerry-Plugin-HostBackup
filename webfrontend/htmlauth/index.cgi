@@ -67,6 +67,12 @@ sub root_permission_acknowledged {
   return ($config && $config->{root_permission_ack}) ? 1 : 0;
 }
 
+sub info_button {
+  my ($text) = @_;
+  my $safe = escapeHTML($text || '');
+  return qq{<span class="info-help"><button type="button" class="info-button" aria-label="Information">i</button><span class="info-bubble">$safe</span></span>};
+}
+
 if ($q->request_method eq 'POST') {
   if ($action eq 'backup') {
     my ($status, $out) = run_shell(backend_cmd('start'));
@@ -304,8 +310,10 @@ sub checked_attr {
   return $value ? ' checked' : '';
 }
 
+my $info_backup_start = info_button('Startet zuerst einen Backup-Check. Das eigentliche Backup beginnt erst nach der Pruefung und deiner Bestaetigung.');
+
 print header(-type => 'text/html', -charset => 'utf-8');
-print <<'HTML';
+print <<HTML;
 <!doctype html>
 <html lang="de">
 <head>
@@ -323,7 +331,7 @@ print <<'HTML';
       </div>
       <form method="get">
         <input type="hidden" name="action" value="prepare-backup">
-        <button class="primary" type="submit">Backup starten</button>
+        <button class="primary" type="submit">Backup vorbereiten</button>$info_backup_start
       </form>
     </header>
 HTML
@@ -359,6 +367,27 @@ my @cfg_months = ref($config->{schedule_months}) eq 'ARRAY' ? @{$config->{schedu
 my %cfg_months = map { $_ => 1 } @cfg_months;
 my $all_months_checked = checked_attr($cfg_months{'*'});
 my @month_checked = map { checked_attr($cfg_months{'*'} || $cfg_months{"$_"}) } 0..12;
+my $info_backup_root = info_button('Ablageort fuer die Backups. Empfohlen ist ein externer Datentraeger oder ein separates Mount, nicht die interne Systemkarte.');
+my $info_retention = info_button('Anzahl Backups, die behalten werden. Erlaubt sind 1 bis 10. Nach einem erfolgreichen neuen Backup entfernt das Plugin das aelteste Backup, wenn das Limit ueberschritten ist.');
+my $info_schedule = info_button('Automatisiert Backups per Cron. Taeglich braucht nur die Uhrzeit, woechentlich Wochentag und Uhrzeit, monatlich Monatstag, Monate und Uhrzeit.');
+my $info_time = info_button('Startzeit des automatischen Backups im 24-Stunden-Format.');
+my $info_weekday = info_button('Nur bei woechentlichen Backups relevant. Das Backup startet am ausgewaehlten Wochentag zur angegebenen Uhrzeit.');
+my $info_monthday = info_button('Nur bei monatlichen Backups relevant. Das Backup startet am angegebenen Tag des Monats. In Monaten ohne diesen Tag laeuft kein Backup.');
+my $info_months = info_button('Nur bei monatlichen Backups relevant. Waehle alle Monate oder einzelne Monate, in denen ein Backup erstellt werden soll.');
+my $info_pre_hook = info_button('Optionales Root-Skript, das vor dem Backup ausgefuehrt wird. Es muss absolut angegeben, ausfuehrbar, Root-gehoerig und nicht durch Gruppe oder andere beschreibbar sein.');
+my $info_post_hook = info_button('Optionales Root-Skript, das nach dem Backup ausgefuehrt wird. Es unterliegt denselben Sicherheitsregeln wie der Pre-Backup-Hook.');
+my $info_excludes = info_button('Pfade, die rsync beim Backup auslassen soll. Ein Pfad pro Zeile. Sinnvoll fuer grosse Medienarchive, Netzwerkshares oder Daten, die separat gesichert werden.');
+my $info_docker = info_button('Stoppt laufende Docker-Container vor dem Backup und startet sie danach wieder. Das verbessert Konsistenz, unterbricht aber die Dienste waehrend des Backups.');
+my $info_auto_export = info_button('Erstellt nach jedem Backup zusaetzlich ein tar.gz-Archiv, das heruntergeladen oder extern abgelegt werden kann.');
+my $info_root_ack = info_button('Bestaetigt bewusst die noetigen Root-Rechte. Es werden keine Passwoerter gespeichert; erlaubt wird nur das Backend-Skript dieses Plugins.');
+my $info_import = info_button('Importiert ein zuvor exportiertes Backup-Archiv in die lokale Backup-Liste.');
+my $info_table = info_button('Liste der vorhandenen Backups mit Status, Groesse, Export und Aktionen.');
+my $info_restore = info_button('Ein Restore schreibt Systemdateien zurueck. Er sollte bevorzugt auf einem Testsystem, frisch installierten Zielsystem oder aus einer Rescue-Umgebung erfolgen.');
+my $info_export_action = info_button('Erstellt ein herunterladbares tar.gz-Archiv aus diesem Backup.');
+my $info_explorer_action = info_button('Oeffnet den Backup-Explorer, um Dateien im Backup anzusehen und einzelne Dateien herunterzuladen.');
+my $info_restore_action = info_button('Bereitet einen Restore vor und zeigt vorher Pruefung und Restore-Plan.');
+my $info_move_action = info_button('Verschiebt dieses Backup inklusive Export-Archiv in einen anderen absoluten Zielordner.');
+my $info_delete_action = info_button('Loescht dieses Backup und das zugehoerige Export-Archiv dauerhaft.');
 
 print <<HTML;
     <section class="panel settings-panel">
@@ -366,19 +395,19 @@ print <<HTML;
       <form method="post" class="settings-form">
         <input type="hidden" name="action" value="save-config">
         <label>
-          <span>Backup-Ziel</span>
+          <span>Backup-Verzeichnis $info_backup_root</span>
           <input name="backup_root" value="$cfg_backup_root" placeholder="/mnt/backupdisk/loxberry-hostbackup">
         </label>
         <label>
-          <span>Aufbewahrung</span>
+          <span>Backups behalten $info_retention</span>
           <input name="keep_backups" type="number" min="1" max="10" step="1" value="$cfg_keep">
-          <small>Es werden maximal 10 Backups behalten; danach wird das aelteste Backup entfernt.</small>
+          <small>1 bis 10 Backups. Danach wird das aelteste Backup entfernt.</small>
         </label>
         <fieldset class="schedule-card wide">
-          <legend>Zeitplan</legend>
+          <legend>Automatische Backups $info_schedule</legend>
           <label class="checkline schedule-enable">
             <input type="checkbox" name="schedule_enabled" value="1"$cfg_schedule_enabled>
-            <span>Automatische Backups aktivieren</span>
+            <span>Zeitplan aktivieren</span>
           </label>
           <div class="schedule-modes">
             <label><input type="radio" name="schedule_mode" value="daily"$daily_checked> Taeglich</label>
@@ -387,11 +416,11 @@ print <<HTML;
           </div>
           <div class="schedule-grid">
             <label class="schedule-time">
-              <span>Uhrzeit</span>
+              <span>Startzeit $info_time</span>
               <input name="schedule_time" type="time" value="$cfg_schedule_time">
             </label>
             <label class="schedule-weekly" data-schedule-panel="weekly">
-              <span>Wochentag</span>
+              <span>Wochentag $info_weekday</span>
               <select name="schedule_weekday">
                 <option value="1"$weekday_selected[1]>Montag</option>
                 <option value="2"$weekday_selected[2]>Dienstag</option>
@@ -403,12 +432,12 @@ print <<HTML;
               </select>
             </label>
             <label class="schedule-monthly" data-schedule-panel="monthly">
-              <span>Monatstag</span>
+              <span>Tag im Monat $info_monthday</span>
               <input name="schedule_monthday" type="number" min="1" max="31" step="1" value="$cfg_schedule_monthday">
             </label>
           </div>
           <div class="month-picker schedule-monthly" data-schedule-panel="monthly">
-            <span>Monate</span>
+            <span>Monate $info_months</span>
             <div class="month-grid">
               <label><input type="checkbox" name="schedule_months" value="*"$all_months_checked> Alle Monate</label>
               <label><input type="checkbox" name="schedule_months" value="1"$month_checked[1]> Jan</label>
@@ -427,28 +456,28 @@ print <<HTML;
           </div>
         </fieldset>
         <label>
-          <span>Pre-Backup-Hook</span>
+          <span>Skript vor dem Backup $info_pre_hook</span>
           <input name="pre_backup_hook" value="$cfg_pre_hook" placeholder="/opt/scripts/before-backup.sh">
         </label>
         <label>
-          <span>Post-Backup-Hook</span>
+          <span>Skript nach dem Backup $info_post_hook</span>
           <input name="post_backup_hook" value="$cfg_post_hook" placeholder="/opt/scripts/after-backup.sh">
         </label>
         <label class="wide">
-          <span>Zusaetzliche rsync-Excludes</span>
+          <span>Vom Backup ausschliessen $info_excludes</span>
           <textarea name="rsync_extra_excludes" rows="5" placeholder="/mnt/nas&#10;/media/bigdata">$cfg_excludes</textarea>
         </label>
         <label class="checkline">
           <input type="checkbox" name="stop_docker_before_backup" value="1"$cfg_stop_docker>
-          <span>Docker-Container vor dem Backup stoppen und danach wieder starten</span>
+          <span>Docker-Container waehrend des Backups anhalten $info_docker</span>
         </label>
         <label class="checkline">
           <input type="checkbox" name="create_export_after_backup" value="1"$cfg_create_export>
-          <span>Nach jedem Backup automatisch ein Export-Archiv erstellen</span>
+          <span>Nach jedem Backup ein Export-Archiv erstellen $info_auto_export</span>
         </label>
         <label class="checkline root-confirm">
           <input type="checkbox" name="root_permission_ack" value="1"$cfg_root_permission_ack required>
-          <span>Ich bestaetige, dass dieses Plugin fuer vollstaendige Host-Backups und Restores kontrollierte Root-Rechte benoetigt. Die Freigabe erlaubt dem LoxBerry-Webuser ausschliesslich das Backend-Skript dieses Plugins ohne Passwort zu starten; es werden keine Passwoerter gespeichert.</span>
+          <span>Root-Freigabe bestaetigen $info_root_ack<br><small>Dieses Plugin benoetigt fuer vollstaendige Host-Backups und Restores kontrollierte Root-Rechte. Die Freigabe erlaubt dem LoxBerry-Webuser ausschliesslich das Backend-Skript dieses Plugins ohne Passwort zu starten; es werden keine Passwoerter gespeichert.</small></span>
         </label>
         <div class="form-actions">
           <button type="submit">Einstellungen speichern</button>
@@ -459,11 +488,11 @@ HTML
 
 print <<'HTML';
     <section class="panel">
-      <h2>Backup-Dateien</h2>
+      <h2>Backups $info_table</h2>
       <form class="import" method="post" enctype="multipart/form-data">
         <input type="hidden" name="action" value="import">
         <input type="file" name="backup_archive" accept=".gz,.tgz,application/gzip">
-        <button type="submit">Backup laden</button>
+        <button type="submit">Backup importieren</button>$info_import
       </form>
       <table>
         <thead>
@@ -500,11 +529,11 @@ for my $backup (@$backups) {
   print "<td>$finished</td>";
   print "<td>$export</td>";
   print '<td class="actions">';
-  print qq{<form method="post"><input type="hidden" name="backup_id" value="$id"><input type="hidden" name="action" value="export"><button type="submit">Export</button></form>};
-  print qq{<form method="get"><input type="hidden" name="backup_id" value="$id"><input type="hidden" name="action" value="browse"><button type="submit">Explorer</button></form>};
-  print qq{<form method="get"><input type="hidden" name="backup_id" value="$id"><input type="hidden" name="action" value="prepare-restore"><button type="submit">Restore</button></form>};
-  print qq{<form class="move-form" method="post"><input type="hidden" name="backup_id" value="$id"><input type="hidden" name="action" value="move"><input name="destination" placeholder="/mnt/backupziel"><button type="submit">Verschieben</button></form>};
-  print qq{<form method="post" onsubmit="return confirm('Backup wirklich loeschen?');"><input type="hidden" name="backup_id" value="$id"><input type="hidden" name="action" value="delete"><button class="danger" type="submit">Loeschen</button></form>};
+  print qq{<form method="post"><input type="hidden" name="backup_id" value="$id"><input type="hidden" name="action" value="export"><button type="submit">Export erstellen</button>$info_export_action</form>};
+  print qq{<form method="get"><input type="hidden" name="backup_id" value="$id"><input type="hidden" name="action" value="browse"><button type="submit">Dateien ansehen</button>$info_explorer_action</form>};
+  print qq{<form method="get"><input type="hidden" name="backup_id" value="$id"><input type="hidden" name="action" value="prepare-restore"><button type="submit">Restore vorbereiten</button>$info_restore_action</form>};
+  print qq{<form class="move-form" method="post"><input type="hidden" name="backup_id" value="$id"><input type="hidden" name="action" value="move"><input name="destination" placeholder="/mnt/backupziel"><button type="submit">Verschieben</button>$info_move_action</form>};
+  print qq{<form method="post" onsubmit="return confirm('Backup wirklich loeschen?');"><input type="hidden" name="backup_id" value="$id"><input type="hidden" name="action" value="delete"><button class="danger" type="submit">Loeschen</button>$info_delete_action</form>};
   print '</td>';
   print "</tr>";
 }
@@ -516,13 +545,13 @@ if ($backup_check) {
     </section>
 
     <section class="panel restore-panel">
-      <h2>Backup-Check</h2>
+      <h2>Backup-Check $info_backup_start</h2>
 HTML
   render_check($backup_check);
   print <<'HTML';
       <form method="post">
         <input type="hidden" name="action" value="backup">
-        <button class="primary" type="submit">Backup jetzt starten</button>
+        <button class="primary" type="submit">Backup jetzt starten</button>$info_backup_start
       </form>
     </section>
 HTML
@@ -599,7 +628,7 @@ HTML
     </section>
 
     <section class="panel restore-panel">
-      <h2>Restore vorbereiten: <code>$restore_id</code></h2>
+      <h2>Restore vorbereiten: <code>$restore_id</code> $info_restore</h2>
 HTML
   render_check($restore_check);
   print <<HTML;
@@ -607,9 +636,9 @@ HTML
       <form method="post" onsubmit="return confirm('Restore jetzt starten? Das Zielsystem wird ueberschrieben.');">
         <input type="hidden" name="backup_id" value="$restore_id">
         <input type="hidden" name="action" value="start-restore">
-        <label>Backup-ID zur Bestaetigung eingeben</label>
+        <label>Backup-ID zur Sicherheitsbestaetigung eingeben $info_restore</label>
         <input name="confirm_restore" autocomplete="off" placeholder="$restore_id">
-        <button class="danger" type="submit">Restore starten</button>
+        <button class="danger" type="submit">Restore starten</button>$info_restore
       </form>
     </section>
 HTML
@@ -623,7 +652,7 @@ HTML
     </section>
 
     <section class="panel">
-      <h2>Explorer: <code>$browser_id</code></h2>
+      <h2>Backup-Explorer: <code>$browser_id</code> $info_explorer_action</h2>
       <p><code>/$current</code></p>
       <table>
         <thead>
@@ -653,10 +682,10 @@ HTML
     my $mtime = $item->{mtime} ? scalar localtime($item->{mtime}) : '';
     my $action_html = '';
     if (($item->{type} || '') eq 'directory') {
-      $action_html = qq{<a href="?action=browse&amp;backup_id=$browser_id_url&amp;path=$path_url">Oeffnen</a>};
+      $action_html = qq{<a href="?action=browse&amp;backup_id=$browser_id_url&amp;path=$path_url">Oeffnen</a> $info_explorer_action};
       print "<tr><td><a href=\"?action=browse&amp;backup_id=$browser_id_url&amp;path=$path_url\">$name</a></td>";
     } elsif (($item->{type} || '') eq 'file') {
-      $action_html = qq{<a href="?action=download-file&amp;backup_id=$browser_id_url&amp;path=$path_url">Download</a>};
+      $action_html = qq{<a href="?action=download-file&amp;backup_id=$browser_id_url&amp;path=$path_url">Datei herunterladen</a> $info_explorer_action};
       print "<tr><td>$name</td>";
     } else {
       print "<tr><td>$name</td>";
@@ -676,9 +705,9 @@ print <<'HTML';
 HTML
 }
 
-print <<'HTML';
+print <<HTML;
     <section class="panel">
-      <h2>Restore</h2>
+      <h2>Restore $info_restore</h2>
       <p>Ein Restore sollte bevorzugt auf einem frisch installierten Zielsystem oder aus einer Rescue-Umgebung erfolgen. Der Restore-Befehl ist absichtlich gesperrt und benoetigt <code>ALLOW_RESTORE=1</code>.</p>
     </section>
   </main>
