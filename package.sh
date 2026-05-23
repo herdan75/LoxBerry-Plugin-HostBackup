@@ -28,6 +28,7 @@ zip -r "$ZIP_PATH" \
   uninstall \
   webfrontend \
   icons \
+  sudoers \
   plugin.cfg \
   postinstall.sh \
   release.cfg \

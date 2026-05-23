@@ -295,7 +295,7 @@ Typische LoxBerry-Zielpfade:
 Systemdateien:
 
 ```text
-/etc/sudoers.d/loxberryhostbackup
+/opt/loxberry/system/sudoers/loxberryhostbackup
 /etc/cron.d/loxberryhostbackup
 ```
 

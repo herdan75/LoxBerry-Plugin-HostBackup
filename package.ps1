@@ -13,6 +13,7 @@ $items = @(
   "uninstall",
   "webfrontend",
   "icons",
+  "sudoers",
   "plugin.cfg",
   "postinstall.sh",
   "release.cfg",

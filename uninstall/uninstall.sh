@@ -1,6 +1,5 @@
 #!/bin/bash
 set -e
 
-sudo rm -f /etc/sudoers.d/loxberryhostbackup
-sudo rm -f /etc/cron.d/loxberryhostbackup
+sudo -n rm -f /etc/cron.d/loxberryhostbackup 2>/dev/null || rm -f /etc/cron.d/loxberryhostbackup 2>/dev/null || true
 exit 0

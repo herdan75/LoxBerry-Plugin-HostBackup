@@ -17,8 +17,9 @@ noch keine freigegebene produktive Version.
 
 ### LoxBerry-Kompatibilitaet
 
-- `postinstall.sh` schreibt die sudoers-Regel jetzt ueber `sudo install`, damit die Installation auch dann funktioniert, wenn das Postinstall-Skript nicht direkt als Root laeuft.
-- `uninstall.sh` entfernt sudoers- und Cron-Dateien ebenfalls ueber `sudo`.
+- Sudoers-Regel in den LoxBerry-Standardordner `sudoers/sudoers` verschoben, damit LoxBerry sie waehrend der Plugin-Installation selbst installiert.
+- `postinstall.sh` schreibt nicht mehr direkt nach `/etc/sudoers.d`, da das Postinstall-Skript auf LoxBerry ohne Root-Rechte laufen kann.
+- `uninstall.sh` entfernt nur noch den Cron-Eintrag defensiv; die sudoers-Datei wird von LoxBerry verwaltet.
 - `postinstall.sh` in den ZIP-Root verschoben, damit LoxBerry das Skript korrekt ausfuehrt.
 - Restore-Helper von `sbin/` nach `bin/` verschoben, da LoxBerry `sbin/` beim Test nicht installiert hat.
 - Plugin-Icons ergaenzt, damit LoxBerry keine Default-Icon-Warnung ausgeben muss.
