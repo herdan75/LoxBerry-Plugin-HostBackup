@@ -73,6 +73,8 @@ if ($notice eq 'saved') {
   $message = 'Einstellungen gespeichert.';
 } elsif ($notice eq 'backup_started') {
   $message = 'Backup gestartet. Der Live-Status wird unten automatisch aktualisiert.';
+} elsif ($notice eq 'backup_stop_requested') {
+  $message = 'Backup-Stopp wurde angefordert. Zuvor gestoppte Docker-Container werden wieder gestartet, falls moeglich.';
 }
 
 my $requested_active_task = $q->param('active_task') || '';
@@ -168,6 +170,24 @@ if ($q->request_method eq 'POST') {
       $error = escapeHTML($out);
     }
   }
+
+  elsif ($action eq 'stop-backup') {
+
+    my $stop_task = $q->param('task') || '';
+    my ($stop_id) = $stop_task =~ /^backup-([A-Za-z0-9._-]+)\.log$/;
+
+    if (!$stop_id) {
+      $error = 'Ungueltiger Backup-Task.';
+    } else {
+      my ($status, $out) = run_shell(backend_cmd('stop', $stop_id));
+
+      if ($status == 0) {
+        redirect_with(msg => 'backup_stop_requested', active_task => $stop_task);
+      } else {
+        $error = escapeHTML($out);
+      }
+    }
+  }
 }
 
 my ($config_status, $config_json) = run_shell(backend_cmd('config'));
@@ -257,7 +277,7 @@ print <<HTML;
 
 <form method="post">
 <input type="hidden" name="action" value="backup">
-<button class="primary" type="submit">Backup vorbereiten</button>$info_backup_start
+<button class="primary" type="submit">Backup starten</button>$info_backup_start
 </form>
 </header>
 HTML
@@ -277,6 +297,11 @@ print <<HTML;
 <div class="task-actions">
 <span class="task-state state-running" id="task-state">Kein laufender Task ausgewaehlt</span>
 <span class="task-heartbeat" id="task-heartbeat">Nach einem gestarteten Backup werden hier Status und Log angezeigt.</span>
+<form method="post" class="stop-task-form" id="stop-task-form">
+<input type="hidden" name="action" value="stop-backup">
+<input type="hidden" name="task" value="$active_task_attr">
+<button class="danger" type="submit">Backup stoppen</button>
+</form>
 </div>
 <pre class="terminal" id="task-log">Noch keine Live-Ausgabe vorhanden.</pre>
 </section>
@@ -552,6 +577,7 @@ print <<HTML;
   var stateEl = document.getElementById('task-state');
   var heartbeatEl = document.getElementById('task-heartbeat');
   var logEl = document.getElementById('task-log');
+  var stopForm = document.getElementById('stop-task-form');
   var timer = null;
 
   function setState(state, text) {
@@ -600,8 +626,17 @@ print <<HTML;
     logEl.scrollTop = logEl.scrollHeight;
 
     if (state === 'finished' || state === 'failed') {
+      if (stopForm) stopForm.classList.add('task-monitor-idle');
       window.clearInterval(timer);
     }
+  }
+
+  if (stopForm) {
+    stopForm.addEventListener('submit', function (event) {
+      if (!window.confirm('Backup wirklich stoppen? Docker-Container, die dieses Backup gestoppt hat, werden anschliessend wieder gestartet.')) {
+        event.preventDefault();
+      }
+    });
   }
 
   function poll() {
@@ -616,6 +651,7 @@ print <<HTML;
 
   if (!task) {
     monitor.classList.add('task-monitor-idle');
+    if (stopForm) stopForm.classList.add('task-monitor-idle');
     return;
   }
 

@@ -709,6 +709,44 @@ start_backup() {
   printf '%s\n' "$backup_id"
 }
 
+stop_backup() {
+  require_root_for_write
+  require_root_permission_ack
+  local backup_id="$1"
+  local root target log_file pids child_pids all_pids
+  require_backup_id "$backup_id"
+  root="$(backup_root)"
+  target="$root/$backup_id"
+  log_file="$LBP_LOGDIR/backup-$backup_id.log"
+
+  log "Stop requested for backup $backup_id" | tee -a "$log_file"
+
+  pids="$(pgrep -f "$0 backup $backup_id" 2>/dev/null || true)"
+  child_pids=""
+  if [ -n "$pids" ]; then
+    child_pids="$(for pid in $pids; do pgrep -P "$pid" 2>/dev/null || true; done | sort -u)"
+  fi
+  all_pids="$(printf '%s\n%s\n' "$child_pids" "$pids" | awk 'NF && !seen[$0]++')"
+
+  if [ -n "$all_pids" ]; then
+    log "Stopping backup processes: $(printf '%s' "$all_pids" | tr '\n' ' ')" | tee -a "$log_file"
+    printf '%s\n' "$all_pids" | xargs -r kill -TERM
+    sleep 3
+    printf '%s\n' "$all_pids" | while IFS= read -r pid; do
+      [ -n "$pid" ] || continue
+      if kill -0 "$pid" 2>/dev/null; then
+        kill -KILL "$pid" 2>/dev/null || true
+      fi
+    done
+  else
+    log "No running backup process found for $backup_id" | tee -a "$log_file"
+  fi
+
+  log "Restarting Docker containers stopped by this backup if needed" | tee -a "$log_file"
+  start_docker_if_needed "$target" | tee -a "$log_file" || true
+  log "Backup $backup_id stopped by user" | tee -a "$log_file"
+}
+
 log_dirs() {
   local dir
   for dir in \
@@ -1086,6 +1124,7 @@ Actions:
   tasks                  List task logs as JSON
   task-log TASK [LINES]  Print recent task log lines
   task-status TASK [N]   Print task status and recent log as JSON
+  stop BACKUP_ID         Stop a running backup and restart stopped Docker containers
   list                   List backups as JSON
   export BACKUP_ID       Create/export BACKUP_ID.tar.gz
   import ARCHIVE.tar.gz   Import an exported backup archive
@@ -1111,6 +1150,7 @@ case "$action" in
   tasks) list_tasks ;;
   task-log) shift; show_task_log "${1:?TASK required}" "${2:-300}" ;;
   task-status) shift; task_status "${1:?TASK required}" "${2:-400}" ;;
+  stop) shift; stop_backup "${1:?BACKUP_ID required}" ;;
   list) list_backups ;;
   export) shift; export_backup "${1:?BACKUP_ID required}" ;;
   import) shift; import_backup "${1:?ARCHIVE required}" ;;

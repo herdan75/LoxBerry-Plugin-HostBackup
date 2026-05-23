@@ -45,6 +45,8 @@ noch keine freigegebene produktive Version.
 
 ### Weboberflaeche
 
+- Startbutton von `Backup vorbereiten` auf `Backup starten` umbenannt.
+- Stop-Button im Live-Status ergaenzt, um laufende Backups abbrechen zu koennen.
 - Formularaktionen leiten nach erfolgreichem Speichern oder Backup-Start auf eine normale Seite weiter, damit der Browser beim Aktualisieren keine erneute Formularuebermittlung anbietet.
 - Info-Buttons mit Hover-/Fokus-Hinweisen fuer Einstellungen und Backup-Aktionen ergaenzt.
 - Beschriftungen in den Einstellungen klarer benannt, z. B. Backup-Verzeichnis, Backups behalten, Skript vor/nach dem Backup und Vom Backup ausschliessen.
@@ -60,6 +62,7 @@ noch keine freigegebene produktive Version.
 
 ### Backend
 
+- Backend-Kommando zum Stoppen laufender Backups ergaenzt; zuvor durch das Backup gestoppte Docker-Container werden danach wieder gestartet.
 - Task-Log-Suche auf mehrere LoxBerry-Logpfade erweitert, damit Live-Status auch dann aktualisiert, wenn LoxBerry Logs direkt unter `log/plugins` statt im Plugin-Unterordner ablegt.
 - Backup- und Restore-Logs geben mehr Live-Fortschritt aus: Phasenmeldungen, rsync-Datei-/Fortschrittsausgabe, Export- und Retention-Schritte.
 - Sicherheitspruefungen fuer Backup-IDs zentralisiert und auf Export, Import, Move, Explorer, Delete und Restore angewendet.
