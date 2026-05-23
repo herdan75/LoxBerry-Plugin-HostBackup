@@ -71,13 +71,19 @@ Noch nicht validiert:
 
 ## Installation
 
-1. ZIP-Paket bauen oder aus dem Arbeitsverzeichnis verwenden.
+1. ZIP-Paket aus dem GitHub-Pre-Release herunterladen oder lokal bauen.
 2. In LoxBerry unter **Plugins > Plugin installieren** hochladen.
 3. Nach der Installation die Plugin-Oberflaeche oeffnen.
 4. Einstellungen speichern, damit sudoers und Zeitplan geprueft werden koennen.
 5. Zuerst nur ein kleines Testbackup auf einem externen oder separaten Pfad ausfuehren.
 
-Lokales Paket:
+Pre-Release-Paket:
+
+```text
+https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.1.0-dev/LoxBerryHostBackup_0.1.0.zip
+```
+
+Lokales Paket nach dem Build:
 
 ```text
 LoxBerryHostBackup_0.1.0.zip
@@ -314,6 +320,14 @@ Branches:
 
 - `main`: stabilerer Stand
 - `develop`: laufende Weiterentwicklung
+
+Update-Dateien:
+
+- `release.cfg`: Stable-Kanal, derzeit ohne freigegebenes ZIP
+- `prerelease.cfg`: Pre-Release-Kanal mit ZIP-Download
+
+Das installierbare ZIP soll bis zur Freigabe nur ueber den Pre-Release-Kanal
+bereitgestellt werden.
 
 Paket lokal bauen:
 

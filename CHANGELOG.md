@@ -56,6 +56,8 @@ noch keine freigegebene produktive Version.
 ### Paketierung
 
 - Plugin-ZIP-Build per `package.ps1` ergaenzt.
+- `release.cfg` und `prerelease.cfg` fuer LoxBerry-Updates ergaenzt.
+- Installierbares ZIP zunaechst nur ueber den Pre-Release-Kanal vorgesehen.
 - `.gitattributes` fuer passende Zeilenenden ergaenzt.
 - `.gitignore` fuer lokale Test- und Build-Artefakte ergaenzt.
 

@@ -15,6 +15,8 @@ $items = @(
   "uninstall",
   "webfrontend",
   "plugin.cfg",
+  "release.cfg",
+  "prerelease.cfg",
   "README.md",
   "CHANGELOG.md",
   "LICENSE"
