@@ -32,7 +32,7 @@ jobs:
         run: perl -c webfrontend/htmlauth/index.cgi
 
       - name: Build plugin ZIP
-        run: ./package.sh
+        run: bash ./package.sh
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
