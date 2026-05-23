@@ -18,6 +18,7 @@ my $task = $q->param('task') || '';
 
 my $message = '';
 my $error = '';
+my $active_task = '';
 
 sub shell_quote {
   my ($value) = @_;
@@ -45,6 +46,21 @@ sub info_button {
   my ($text) = @_;
   my $safe = escapeHTML($text || '');
   return qq{<span class="info-help"><button type="button" class="info-button">i</button><span class="info-bubble">$safe</span></span>};
+}
+
+if ($action eq 'task-status') {
+  my ($status, $out) = run_shell(backend_cmd('task-status', $task, '180'));
+  if ($status != 0 && $task =~ /^backup-([A-Za-z0-9._-]+)\.log$/) {
+    ($status, $out) = run_shell(backend_cmd('task-status', "backup-$1.launch.log", '80'));
+  }
+  print header(-type => 'application/json', -charset => 'utf-8', -status => ($status == 0 ? '200 OK' : '500 Internal Server Error'));
+  if ($status == 0) {
+    print $out;
+  } else {
+    my $safe_error = encode_json({ task => $task, state => 'error', error => $out });
+    print $safe_error;
+  }
+  exit;
 }
 
 if ($q->request_method eq 'POST') {
@@ -110,7 +126,11 @@ if ($q->request_method eq 'POST') {
     my ($status, $out) = run_shell(backend_cmd('start'));
 
     if ($status == 0) {
-      $message = 'Backup gestartet.';
+      my ($started_id) = $out =~ /([A-Za-z0-9._-]+)/;
+      if ($started_id) {
+        $active_task = "backup-$started_id.log";
+      }
+      $message = 'Backup gestartet. Der Live-Status wird unten automatisch aktualisiert.';
     } else {
       $error = escapeHTML($out);
     }
@@ -145,6 +165,7 @@ my $cfg_schedule_enabled = checked_attr($config->{schedule_enabled});
 my $cfg_root_permission_ack = checked_attr($config->{root_permission_ack});
 
 my $cfg_schedule_time = escapeHTML($config->{schedule_time} || '02:00');
+my $active_task_attr = escapeHTML($active_task);
 
 my $cfg_mode = $config->{schedule_mode} || 'daily';
 
@@ -217,6 +238,15 @@ if ($error) {
 }
 
 print <<HTML;
+
+<section class="panel task-monitor" id="task-monitor" data-active-task="$active_task_attr">
+<h2>Live-Status</h2>
+<div class="task-actions">
+<span class="task-state state-running" id="task-state">Kein laufender Task ausgewaehlt</span>
+<span class="task-heartbeat" id="task-heartbeat">Nach einem gestarteten Backup werden hier Status und Log angezeigt.</span>
+</div>
+<pre class="terminal" id="task-log">Noch keine Live-Ausgabe vorhanden.</pre>
+</section>
 
 <section class="panel settings-panel">
 
@@ -479,6 +509,89 @@ print <<HTML;
 
   updateSchedulePanels();
   updateMonthSelection();
+}());
+
+(function () {
+  var monitor = document.getElementById('task-monitor');
+  if (!monitor) return;
+
+  var task = monitor.getAttribute('data-active-task');
+  var stateEl = document.getElementById('task-state');
+  var heartbeatEl = document.getElementById('task-heartbeat');
+  var logEl = document.getElementById('task-log');
+  var timer = null;
+
+  function setState(state, text) {
+    stateEl.className = 'task-state state-' + state;
+    stateEl.textContent = text;
+  }
+
+  function decodeLog(value) {
+    if (!value) return '';
+    try {
+      return decodeURIComponent(escape(window.atob(value)));
+    } catch (e) {
+      try {
+        return window.atob(value);
+      } catch (ignored) {
+        return '';
+      }
+    }
+  }
+
+  function renderStatus(data) {
+    var state = data.state || 'running';
+    var labels = {
+      running: 'Backup laeuft',
+      finished: 'Backup abgeschlossen',
+      failed: 'Backup fehlgeschlagen',
+      stale: 'Keine neue Logausgabe',
+      error: 'Status nicht verfuegbar'
+    };
+
+    setState(state, labels[state] || state);
+
+    if (data.now && data.mtime) {
+      var age = Math.max(0, Number(data.now) - Number(data.mtime));
+      heartbeatEl.textContent = 'Letzte Log-Aktualisierung vor ' + age + ' Sekunden.';
+    } else {
+      heartbeatEl.textContent = 'Warte auf Logausgabe des Backups.';
+    }
+
+    if (data.error) {
+      logEl.textContent = data.error;
+    } else {
+      logEl.textContent = decodeLog(data.content_b64) || 'Backup wurde gestartet. Die Logdatei wird vorbereitet...';
+    }
+
+    logEl.scrollTop = logEl.scrollHeight;
+
+    if (state === 'finished' || state === 'failed') {
+      window.clearInterval(timer);
+    }
+  }
+
+  function poll() {
+    fetch('?action=task-status&task=' + encodeURIComponent(task), { cache: 'no-store' })
+      .then(function (response) { return response.json(); })
+      .then(renderStatus)
+      .catch(function () {
+        setState('error', 'Status nicht verfuegbar');
+        heartbeatEl.textContent = 'Der Live-Status konnte gerade nicht gelesen werden. Es wird erneut versucht.';
+      });
+  }
+
+  if (!task) {
+    monitor.classList.add('task-monitor-idle');
+    return;
+  }
+
+  monitor.classList.remove('task-monitor-idle');
+  setState('running', 'Backup laeuft');
+  heartbeatEl.textContent = 'Live-Status wird geladen...';
+  logEl.textContent = 'Backup wurde gestartet. Warte auf erste Logausgabe...';
+  poll();
+  timer = window.setInterval(poll, 3000);
 }());
 </script>
 

@@ -417,6 +417,10 @@ button.danger {
   margin-bottom: 10px;
 }
 
+.task-monitor-idle {
+  display: none;
+}
+
 .task-state {
   border-radius: 6px;
   font-weight: 700;
