@@ -229,10 +229,14 @@ table {
   margin-top: 14px;
 }
 
-.field-title {
-  display: block;
+.schedule-detail summary {
+  cursor: pointer;
   font-weight: 700;
   margin-bottom: 7px;
+}
+
+.schedule-detail[open] summary {
+  margin-bottom: 10px;
 }
 
 .choice-grid {
@@ -244,7 +248,36 @@ table {
 .day-grid {
   display: grid;
   gap: 6px;
-  grid-template-columns: repeat(8, minmax(56px, 1fr));
+  grid-template-columns: repeat(10, minmax(44px, 1fr));
+}
+
+.schedule-card .choice-grid label,
+.schedule-card .day-grid label,
+.schedule-card .schedule-modes label {
+  align-items: center;
+  display: inline-flex;
+  flex-direction: row;
+  gap: 6px;
+  justify-content: flex-start;
+  line-height: 1.2;
+  min-height: 30px;
+  padding: 5px 8px;
+}
+
+.schedule-card .day-grid label {
+  justify-content: center;
+  padding: 5px 4px;
+}
+
+.schedule-card .choice-grid input,
+.schedule-card .day-grid input,
+.schedule-card .schedule-modes input {
+  flex: 0 0 auto;
+  height: 16px;
+  margin: 0;
+  min-height: 0;
+  padding: 0;
+  width: 16px;
 }
 
 .schedule-hidden {
@@ -447,9 +480,16 @@ button.danger {
     align-items: flex-start;
   }
 
-  .choice-grid,
+  .choice-grid {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+
   .day-grid {
     grid-template-columns: 1fr;
+  }
+
+  .day-grid {
+    grid-template-columns: repeat(5, minmax(44px, 1fr));
   }
 
   table,

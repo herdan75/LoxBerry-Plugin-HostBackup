@@ -256,8 +256,8 @@ print <<HTML;
 <input name="schedule_time" type="time" value="$cfg_schedule_time">
 </label>
 
-<div class="schedule-detail" data-schedule-panel="weekly">
-<span class="field-title">Wochentage $info_weekdays</span>
+<details class="schedule-detail" data-schedule-panel="weekly" open>
+<summary>Wochentage $info_weekdays</summary>
 <div class="choice-grid">
 <label><input type="checkbox" name="schedule_weekdays" value="1"$weekday_checked[1]> Montag</label>
 <label><input type="checkbox" name="schedule_weekdays" value="2"$weekday_checked[2]> Dienstag</label>
@@ -267,10 +267,10 @@ print <<HTML;
 <label><input type="checkbox" name="schedule_weekdays" value="6"$weekday_checked[6]> Samstag</label>
 <label><input type="checkbox" name="schedule_weekdays" value="0"$weekday_checked[0]> Sonntag</label>
 </div>
-</div>
+</details>
 
-<div class="schedule-detail" data-schedule-panel="monthly">
-<span class="field-title">Tage im Monat $info_monthdays</span>
+<details class="schedule-detail" data-schedule-panel="monthly" open>
+<summary>Tage im Monat $info_monthdays</summary>
 <div class="day-grid">
 <label><input type="checkbox" name="schedule_monthdays" value="1"$monthday_checked[1]> 1</label>
 <label><input type="checkbox" name="schedule_monthdays" value="2"$monthday_checked[2]> 2</label>
@@ -304,10 +304,10 @@ print <<HTML;
 <label><input type="checkbox" name="schedule_monthdays" value="30"$monthday_checked[30]> 30</label>
 <label><input type="checkbox" name="schedule_monthdays" value="31"$monthday_checked[31]> 31</label>
 </div>
-</div>
+</details>
 
-<div class="schedule-detail" data-schedule-panel="monthly">
-<span class="field-title">Monate $info_months</span>
+<details class="schedule-detail" data-schedule-panel="monthly" open>
+<summary>Monate $info_months</summary>
 <div class="choice-grid month-grid">
 <label><input type="checkbox" name="schedule_months" value="*"$all_months_checked> Alle Monate</label>
 <label><input type="checkbox" name="schedule_months" value="1"$month_checked[1]> Jan</label>
@@ -323,7 +323,7 @@ print <<HTML;
 <label><input type="checkbox" name="schedule_months" value="11"$month_checked[11]> Nov</label>
 <label><input type="checkbox" name="schedule_months" value="12"$month_checked[12]> Dez</label>
 </div>
-</div>
+</details>
 
 </fieldset>
 
