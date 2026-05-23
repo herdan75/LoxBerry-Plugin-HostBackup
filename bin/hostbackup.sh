@@ -311,6 +311,20 @@ log() {
   printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$msg"
 }
 
+rsync_supports_info() {
+  rsync --help 2>/dev/null | grep -q -- '--info='
+}
+
+rsync_live_options() {
+  if rsync_supports_info; then
+    printf '%s\n' '--info=name1,progress2,stats2'
+    printf '%s\n' '--human-readable'
+  else
+    printf '%s\n' '--verbose'
+    printf '%s\n' '--progress'
+  fi
+}
+
 require_root_for_write() {
   if [ "$(id -u)" -ne 0 ]; then
     echo "This action needs root privileges. Use sudo." >&2
@@ -633,17 +647,33 @@ create_backup() {
   post_hook="$(json_get_string post_backup_hook)"
 
   log "Starting backup $backup_id" | tee -a "$log_file"
+  log "Backup target: $target" | tee -a "$log_file"
+  log "Root filesystem copy target: $rootfs" | tee -a "$log_file"
+  log "Exclude rules written to: $exclude_file" | tee -a "$log_file"
+  log "Running pre-backup hook if configured" | tee -a "$log_file"
   run_hook "$pre_hook" | tee -a "$log_file" || true
+  log "Stopping Docker containers if configured" | tee -a "$log_file"
   stop_docker_if_requested "$target" | tee -a "$log_file" || true
 
+  local rsync_opts=()
+  while IFS= read -r opt; do
+    rsync_opts+=("$opt")
+  done < <(rsync_live_options)
+
+  log "Starting rsync copy from / to $rootfs" | tee -a "$log_file"
+  log "rsync live output follows. Large files or slow USB storage can keep one line active for a while." | tee -a "$log_file"
   set +e
-  rsync -aAXH --numeric-ids --delete --exclude-from="$exclude_file" / "$rootfs/" 2>&1 | tee -a "$log_file"
+  rsync -aAXH --numeric-ids --delete "${rsync_opts[@]}" --exclude-from="$exclude_file" / "$rootfs/" 2>&1 | tee -a "$log_file"
   local rsync_status=${PIPESTATUS[0]}
   set -e
+  log "rsync finished with status $rsync_status" | tee -a "$log_file"
 
+  log "Starting Docker containers again if they were stopped" | tee -a "$log_file"
   start_docker_if_needed "$target" | tee -a "$log_file" || true
+  log "Running post-backup hook if configured" | tee -a "$log_file"
   run_hook "$post_hook" | tee -a "$log_file" || true
 
+  log "Calculating backup size and file count" | tee -a "$log_file"
   finished="$(date -Iseconds)"
   size="$(calculate_size "$target")"
   files="$(calculate_files "$target")"
@@ -658,9 +688,11 @@ create_backup() {
   fi
 
   if [ "$(json_get_bool create_export_after_backup)" = "true" ]; then
-    export_backup "$backup_id" >/dev/null
+    log "Creating export archive for $backup_id" | tee -a "$log_file"
+    export_backup "$backup_id" 2>&1 | tee -a "$log_file"
   fi
 
+  log "Applying backup retention policy" | tee -a "$log_file"
   prune_old_backups
   printf '%s\n' "$backup_id"
 }
@@ -963,10 +995,18 @@ restore_backup() {
   [ -f "$exclude_file" ] || backup_excludes "$root" > "$exclude_file"
   local log_file="$LBP_LOGDIR/restore-$backup_id.log"
   log "Starting restore $backup_id" | tee -a "$log_file"
+  log "Restoring from $target/rootfs/ to /" | tee -a "$log_file"
+  log "Exclude rules: $exclude_file" | tee -a "$log_file"
+  local rsync_opts=()
+  while IFS= read -r opt; do
+    rsync_opts+=("$opt")
+  done < <(rsync_live_options)
+  log "rsync restore live output follows" | tee -a "$log_file"
   set +e
-  rsync -aAXH --numeric-ids --delete --exclude-from="$exclude_file" "$target/rootfs/" / 2>&1 | tee -a "$log_file"
+  rsync -aAXH --numeric-ids --delete "${rsync_opts[@]}" --exclude-from="$exclude_file" "$target/rootfs/" / 2>&1 | tee -a "$log_file"
   local rsync_status=${PIPESTATUS[0]}
   set -e
+  log "rsync restore finished with status $rsync_status" | tee -a "$log_file"
   if [ "$rsync_status" -eq 0 ] || [ "$rsync_status" -eq 24 ]; then
     log "Restore $backup_id finished" | tee -a "$log_file"
   else

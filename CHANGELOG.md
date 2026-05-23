@@ -45,6 +45,7 @@ noch keine freigegebene produktive Version.
 
 ### Weboberflaeche
 
+- Formularaktionen leiten nach erfolgreichem Speichern oder Backup-Start auf eine normale Seite weiter, damit der Browser beim Aktualisieren keine erneute Formularuebermittlung anbietet.
 - Info-Buttons mit Hover-/Fokus-Hinweisen fuer Einstellungen und Backup-Aktionen ergaenzt.
 - Beschriftungen in den Einstellungen klarer benannt, z. B. Backup-Verzeichnis, Backups behalten, Skript vor/nach dem Backup und Vom Backup ausschliessen.
 - Sicherheitsbestaetigung fuer Root-Freigaben ergaenzt, inklusive kurzer Erklaerung in den Einstellungen.
@@ -59,6 +60,7 @@ noch keine freigegebene produktive Version.
 
 ### Backend
 
+- Backup- und Restore-Logs geben mehr Live-Fortschritt aus: Phasenmeldungen, rsync-Datei-/Fortschrittsausgabe, Export- und Retention-Schritte.
 - Sicherheitspruefungen fuer Backup-IDs zentralisiert und auf Export, Import, Move, Explorer, Delete und Restore angewendet.
 - Importierte Tar-Archive werden enger geprueft: nur ein sicherer Top-Level-Backupordner, keine absoluten Pfade und keine `..`-Pfade.
 - Tar-Aufrufe fuer Export/Import gehaertet.
