@@ -1,0 +1,47 @@
+name: Build plugin ZIP
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+  release:
+    types:
+      - published
+      - prereleased
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install zip
+        run: sudo apt-get update && sudo apt-get install -y zip libcgi-pm-perl
+
+      - name: Validate shell syntax
+        run: bash -n bin/hostbackup.sh postinstall/postinstall.sh sbin/restore-hostbackup.sh uninstall/uninstall.sh
+
+      - name: Validate CGI syntax
+        run: perl -c webfrontend/htmlauth/index.cgi
+
+      - name: Build plugin ZIP
+        run: ./package.sh
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoxBerryHostBackup
+          path: LoxBerryHostBackup_*.zip
+
+      - name: Upload release asset
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: LoxBerryHostBackup_*.zip

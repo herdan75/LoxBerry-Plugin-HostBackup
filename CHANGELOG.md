@@ -56,8 +56,10 @@ noch keine freigegebene produktive Version.
 ### Paketierung
 
 - Plugin-ZIP-Build per `package.ps1` ergaenzt.
+- Plugin-ZIP-Build per `package.sh` fuer Linux/GitHub Actions ergaenzt.
+- GitHub Actions Workflow fuer automatischen ZIP-Build und Release-Asset-Upload ergaenzt.
 - `release.cfg` und `prerelease.cfg` fuer LoxBerry-Updates ergaenzt.
-- Installierbares ZIP zunaechst nur ueber den Pre-Release-Kanal in `develop/dist/` vorgesehen.
+- Installierbares ZIP zunaechst nur ueber den GitHub-Pre-Release-Kanal vorgesehen.
 - `.gitattributes` fuer passende Zeilenenden ergaenzt.
 - `.gitignore` fuer lokale Test- und Build-Artefakte ergaenzt.
 

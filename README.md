@@ -80,7 +80,7 @@ Noch nicht validiert:
 Pre-Release-Paket:
 
 ```text
-https://raw.githubusercontent.com/herdan75/LoxBerry-Plugin-HostBackup/develop/dist/LoxBerryHostBackup_0.1.0.zip
+https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.1.0-dev/LoxBerryHostBackup_0.1.0.zip
 ```
 
 Lokales Paket nach dem Build:
@@ -324,13 +324,20 @@ Branches:
 Update-Dateien:
 
 - `release.cfg`: Stable-Kanal, derzeit ohne freigegebenes ZIP
-- `prerelease.cfg`: Pre-Release-Kanal mit ZIP-Download aus `develop/dist/`
+- `prerelease.cfg`: Pre-Release-Kanal mit ZIP-Download aus dem GitHub-Pre-Release
 
 Das installierbare ZIP soll bis zur Freigabe nur ueber den Pre-Release-Kanal
-bereitgestellt werden.
+bereitgestellt werden. GitHub Actions erzeugt das Plugin-ZIP automatisch und
+haengt es bei GitHub-Releases als Asset an.
 
 Paket lokal bauen:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\package.ps1
+```
+
+Alternativ unter Linux/GitHub Actions:
+
+```sh
+./package.sh
 ```

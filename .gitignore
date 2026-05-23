@@ -1,5 +1,4 @@
 *.zip
-!dist/*.zip
 *.tar
 *.tar.gz
 *.tgz
