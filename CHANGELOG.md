@@ -8,6 +8,14 @@ freigegebene stabile Produktivversion.
 
 ## [Unreleased]
 
+### Weboberfläche
+
+- Weboberfläche auf die LoxBerry-Standard-Einbettung mit
+  `LoxBerry::Web::lbheader` und `lbfooter` umgestellt. Dadurch bleiben die
+  LoxBerry-Navigation, das Haus-Symbol und die Kopfzeile sichtbar.
+- Separaten Button `Zurück zu LoxBerry` entfernt, da die Navigation nun wieder
+  über die LoxBerry-Kopfzeile erfolgt.
+
 ## [0.2.0] - 2026-05-24
 
 ### Hinweis

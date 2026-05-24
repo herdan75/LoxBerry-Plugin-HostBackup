@@ -7,6 +7,26 @@ use File::Copy qw(copy);
 use File::Basename qw(basename);
 use JSON::PP;
 
+BEGIN {
+  eval {
+    require LoxBerry::Web;
+    LoxBerry::Web->import();
+    1;
+  } or do {
+    package LoxBerry::Web;
+    sub lbheader {
+      my ($title) = @_;
+      my $head = $main::htmlhead || '';
+      $title ||= 'LoxBerry Host Backup';
+      print "Content-Type: text/html; charset=utf-8\r\n\r\n";
+      print "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>$title</title>$head</head><body>";
+    }
+    sub lbfooter {
+      print "</body></html>";
+    }
+  };
+}
+
 my $plugin = 'loxberryhostbackup';
 my $lbhome = $ENV{LBHOMEDIR} || '/opt/loxberry';
 my $bindir = $ENV{LBPBINDIR} || "$lbhome/bin/plugins/$plugin";
@@ -573,19 +593,17 @@ if ($target_info && %{$target_info}) {
   $target_notice = qq{<section class="inline-notice $target_state"><strong>Dateisystem-PrÃ¼fung:</strong> $target_message<br><span>Erkannt: <code>$target_fs</code> auf <code>$target_source</code>, geprÃ¼fter Pfad <code>$target_probe</code>, frei ca. $target_free MB.</span></section>};
 }
 
-print header(-type => 'text/html', -charset => 'utf-8');
+our $htmlhead = qq{
+<link rel="stylesheet" href="assets/style.css">
+};
+
+LoxBerry::Web::lbheader(
+  "LoxBerry Host Backup",
+  undef,
+  undef
+);
 
 print <<HTML;
-<!doctype html>
-<html lang="de">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LoxBerry Host Backup</title>
-<link rel="stylesheet" href="assets/style.css">
-</head>
-
-<body>
 
 <div class="loading-overlay" id="loading-overlay" aria-live="polite" aria-hidden="true">
 <div class="loading-box">
@@ -606,7 +624,6 @@ print <<HTML;
 </div>
 
 <div class="topbar-actions">
-<a class="secondary-button" href="/admin/">Zurück zu LoxBerry</a>
 <form method="post">
 <input type="hidden" name="action" value="backup">
 <button class="primary" type="submit">Backup starten</button>$info_backup_start
@@ -1275,6 +1292,6 @@ print <<HTML;
 }());
 </script>
 
-</body>
-</html>
 HTML
+
+LoxBerry::Web::lbfooter();

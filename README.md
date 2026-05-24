@@ -155,6 +155,10 @@ Noch nicht produktiv validiert:
 7. Zuerst ein manuelles Testbackup auf einem externen oder separaten Datenträger
    ausführen.
 
+Die Weboberfläche ist in die normale LoxBerry-Oberfläche eingebettet. Die
+LoxBerry-Kopfzeile mit Haus-Symbol und Menü bleibt sichtbar, sodass jederzeit
+zur LoxBerry-Administration gewechselt werden kann.
+
 Pre-Release-Paket:
 
 ```text
