@@ -225,6 +225,7 @@ if ($q->request_method eq 'POST') {
         my $pre_hook = $imported->{pre_backup_hook} || '';
         my $post_hook = $imported->{post_backup_hook} || '';
         my $root_permission_ack = bool_arg($imported->{root_permission_ack});
+        my $backup_mode = $imported->{backup_mode} || 'full';
 
         my ($status, $out) = run_shell(
           backend_cmd(
@@ -244,7 +245,8 @@ if ($q->request_method eq 'POST') {
             $schedule_monthdays,
             $pre_hook,
             $post_hook,
-            $root_permission_ack
+            $root_permission_ack,
+            $backup_mode
           )
         );
 
@@ -260,6 +262,7 @@ if ($q->request_method eq 'POST') {
   elsif ($action eq 'save-config') {
 
     my $backup_root = $q->param('backup_root') || '';
+    my $backup_mode = $q->param('backup_mode') || 'full';
     my $keep_backups = $q->param('keep_backups') || '10';
 
     my $schedule_enabled = $q->param('schedule_enabled') ? 'true' : 'false';
@@ -302,7 +305,8 @@ if ($q->request_method eq 'POST') {
         $schedule_monthdays,
         $pre_hook,
         $post_hook,
-        $root_permission_ack
+        $root_permission_ack,
+        $backup_mode
       )
     );
 
@@ -476,6 +480,7 @@ if ($browse_id) {
 }
 
 my $cfg_backup_root = escapeHTML($config->{backup_root} || '');
+my $cfg_backup_mode = $config->{backup_mode} || 'full';
 my $cfg_keep = escapeHTML($config->{keep_backups} || '10');
 my $cfg_pre_hook = escapeHTML($config->{pre_backup_hook} || '');
 my $cfg_post_hook = escapeHTML($config->{post_backup_hook} || '');
@@ -494,6 +499,8 @@ my $cfg_mode = $config->{schedule_mode} || 'daily';
 my $daily_checked = $cfg_mode eq 'daily' ? ' checked' : '';
 my $weekly_checked = $cfg_mode eq 'weekly' ? ' checked' : '';
 my $monthly_checked = $cfg_mode eq 'monthly' ? ' checked' : '';
+my $full_mode_checked = $cfg_backup_mode eq 'snapshot' ? '' : ' checked';
+my $snapshot_mode_checked = $cfg_backup_mode eq 'snapshot' ? ' checked' : '';
 my @cfg_weekdays = ref($config->{schedule_weekdays}) eq 'ARRAY' ? @{$config->{schedule_weekdays}} : ($config->{schedule_weekday} || '0');
 my %cfg_weekdays = map { $_ => 1 } @cfg_weekdays;
 my @weekday_checked = map { checked_attr($cfg_weekdays{"$_"}) } 0..6;
@@ -506,6 +513,7 @@ my $all_months_checked = checked_attr($cfg_months{'*'});
 my @month_checked = map { checked_attr($cfg_months{'*'} || $cfg_months{"$_"}) } 0..12;
 
 my $info_backup_root = info_button('Hier legst du fest, wohin die Backups geschrieben werden. Für ein echtes Host-Backup sollte das ein externer Datenträger, ein separates Mount oder ein großer zweiter Datenspeicher sein. Wenn die Systemkarte selbst ausfällt, hilft ein Backup auf derselben Karte nicht.');
+my $info_backup_mode = info_button('Vollbackup kopiert jeden Stand vollständig. Inkrementeller Snapshot nutzt rsync mit Hardlinks auf das vorherige vollständige Backup: jedes Backup bleibt einzeln wiederherstellbar, unveränderte Dateien benötigen aber kaum zusätzlichen Speicher. Für zuverlässige Speicherersparnis wird ein Linux-Dateisystem wie ext4 empfohlen.');
 my $info_retention = info_button('Legt fest, wie viele fertige Backups behalten werden. Erlaubt sind 1 bis 10. Sobald nach einem erfolgreichen Backup mehr Backups vorhanden sind als erlaubt, entfernt das Plugin automatisch das älteste Backup und das passende Export-Archiv.');
 my $info_schedule = info_button('Der Zeitplan erstellt Backups automatisch per Cron. Täglich bedeutet jeden Tag zur Startzeit. Wöchentlich bedeutet an den gewählten Wochentagen zur Startzeit. Monatlich bedeutet an den gewählten Tagen in den gewählten Monaten zur Startzeit.');
 my $info_time = info_button('Diese Uhrzeit gilt für alle Zeitplanarten. Bei täglich ist sie die einzige zeitliche Einstellung. Bei wöchentlich und monatlich wird sie mit den gewählten Tagen kombiniert.');
@@ -601,6 +609,14 @@ print <<HTML;
 <span>Backups behalten $info_retention</span>
 <input name="keep_backups" type="number" min="1" max="10" value="$cfg_keep">
 </label>
+
+<fieldset class="schedule-card wide">
+<legend>Backup-Modus $info_backup_mode</legend>
+<div class="schedule-modes">
+<label><input type="radio" name="backup_mode" value="full"$full_mode_checked> Vollbackup</label>
+<label><input type="radio" name="backup_mode" value="snapshot"$snapshot_mode_checked> Inkrementeller Snapshot</label>
+</div>
+</fieldset>
 
 <fieldset class="schedule-card wide">
 
@@ -900,18 +916,15 @@ if ($browse_id) {
   print qq{</div>};
 }
 
-print <<HTML;
-</section>
-
-<section class="panel">
-<h2>Restore</h2>
-<p>Restore nur in Rescue-/Testumgebung verwenden. Wähle ein Backup über die Aktion <strong>Restore</strong> in der Backup-Liste aus.</p>
-HTML
+print qq{</section>};
 
 if ($restore_id) {
   my $safe_restore_id = escapeHTML($restore_id);
 
   print qq{
+<section class="panel">
+<h2>Restore</h2>
+<p>Restore nur in Rescue-/Testumgebung verwenden.</p>
 <div class="subpanel">
 <h3>Ausgewähltes Backup: <code>$safe_restore_id</code></h3>
 };
@@ -959,11 +972,11 @@ if ($restore_id) {
 <button class="danger" type="submit">Restore starten</button>
 </form>
 </div>
+</section>
 };
 }
 
 print <<HTML;
-</section>
 
 </main>
 

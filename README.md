@@ -246,6 +246,21 @@ Beispiel:
 /mnt/backupdisk/loxberry-hostbackup
 ```
 
+### Backup-Modus
+
+Das Plugin kann Backups in zwei Modi erstellen:
+
+- `Vollbackup`: Jeder Backup-Ordner enthaelt eine vollstaendige Kopie.
+- `Inkrementeller Snapshot`: Das Backup nutzt `rsync --link-dest` und Hardlinks
+  auf das vorherige vollstaendige Backup. Jeder Snapshot sieht weiterhin wie ein
+  vollstaendiges Backup aus und kann direkt fuer Restore gewaehlt werden.
+
+Der inkrementelle Snapshot spart Speicherplatz, wenn sich viele Dateien nicht
+geaendert haben. Fuer zuverlaessige Hardlinks, Rechte und Linux-Metadaten wird
+ein Linux-Dateisystem wie `ext4`, `xfs` oder `btrfs` als Backup-Ziel empfohlen.
+Auf NTFS/FUSE-Zielen kann die Speicherersparnis oder Metadatenunterstuetzung
+eingeschraenkt sein.
+
 ### Zusaetzliche rsync-Excludes
 
 Ein Eintrag pro Zeile.
@@ -398,6 +413,8 @@ Systemdateien:
 - Plattformmigration kann manuelle Nacharbeit erfordern
 - Bootloader-, Kernel- und Partitionslayout-Themen werden nicht geloest
 - Sehr grosse Backups und Exporte muessen auf Speicherplatz und Laufzeit getestet werden
+- Inkrementelle Snapshots setzen fuer optimale Speicherersparnis ein Dateisystem
+  mit zuverlaessiger Hardlink-Unterstuetzung voraus, z. B. `ext4`
 - Kein sektorbasiertes Raw-Disk-/Blockdevice-Image wie z. B. `dd` oder Clonezilla
 - Bootloader-, Partitions- und Dateisystembesonderheiten koennen manuelle Nacharbeit erfordern
 

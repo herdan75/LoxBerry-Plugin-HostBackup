@@ -24,6 +24,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
   cat > "$CONFIG_FILE" <<'JSON'
 {
   "backup_root": "",
+  "backup_mode": "full",
   "rsync_extra_excludes": [],
   "stop_docker_before_backup": false,
   "create_export_after_backup": false,
@@ -105,6 +106,7 @@ show_config() {
     local $/;
     my $cfg = eval { decode_json(<$fh>) } || {};
     $cfg->{backup_root} //= "";
+    $cfg->{backup_mode} = "full" unless ($cfg->{backup_mode} || "") =~ /^(full|snapshot)$/;
     $cfg->{rsync_extra_excludes} = [] unless ref($cfg->{rsync_extra_excludes}) eq "ARRAY";
     $cfg->{stop_docker_before_backup} = $cfg->{stop_docker_before_backup} ? JSON::PP::true : JSON::PP::false;
     $cfg->{create_export_after_backup} = $cfg->{create_export_after_backup} ? JSON::PP::true : JSON::PP::false;
@@ -148,9 +150,10 @@ save_config() {
   local pre_hook="${14}"
   local post_hook="${15}"
   local root_permission_ack="${16:-false}"
+  local backup_mode="${17:-full}"
 
   perl -MJSON::PP -e '
-    my ($file, $backup_root, $excludes_text, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $schedule_months, $schedule_weekdays, $schedule_monthdays, $pre_hook, $post_hook, $root_permission_ack) = @ARGV;
+    my ($file, $backup_root, $excludes_text, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $schedule_months, $schedule_weekdays, $schedule_monthdays, $pre_hook, $post_hook, $root_permission_ack, $backup_mode) = @ARGV;
     my @excludes;
     for my $line (split /\r?\n/, $excludes_text) {
       $line =~ s/^\s+|\s+$//g;
@@ -169,6 +172,7 @@ save_config() {
     $keep_backups = ($keep_backups =~ /^\d+$/) ? 0 + $keep_backups : 10;
     $keep_backups = 1 if $keep_backups < 1;
     $keep_backups = 10 if $keep_backups > 10;
+    $backup_mode = "full" unless $backup_mode =~ /^(full|snapshot)$/;
     $schedule_mode = "daily" unless $schedule_mode =~ /^(daily|weekly|monthly)$/;
     $schedule_time = "02:00" unless $schedule_time =~ /^([01]\d|2[0-3]):[0-5]\d$/;
     $schedule_weekday = "0" unless $schedule_weekday =~ /^[0-6]$/;
@@ -206,6 +210,7 @@ save_config() {
     @months = ("*") unless @months;
     my $cfg = {
       backup_root => $backup_root,
+      backup_mode => $backup_mode,
       rsync_extra_excludes => \@excludes,
       stop_docker_before_backup => ($stop_docker eq "true" ? JSON::PP::true : JSON::PP::false),
       create_export_after_backup => ($create_export eq "true" ? JSON::PP::true : JSON::PP::false),
@@ -224,7 +229,7 @@ save_config() {
     };
     open my $fh, ">", $file or die "Cannot write config: $!";
     print $fh JSON::PP->new->ascii->pretty->canonical->encode($cfg);
-  ' "$CONFIG_FILE" "$backup_root" "$excludes_text" "$stop_docker" "$create_export" "$keep_backups" "$schedule_enabled" "$schedule_mode" "$schedule_time" "$schedule_weekday" "$schedule_monthday" "$schedule_months" "$schedule_weekdays" "$schedule_monthdays" "$pre_hook" "$post_hook" "$root_permission_ack"
+  ' "$CONFIG_FILE" "$backup_root" "$excludes_text" "$stop_docker" "$create_export" "$keep_backups" "$schedule_enabled" "$schedule_mode" "$schedule_time" "$schedule_weekday" "$schedule_monthday" "$schedule_months" "$schedule_weekdays" "$schedule_monthdays" "$pre_hook" "$post_hook" "$root_permission_ack" "$backup_mode"
   install_schedule
 }
 
@@ -504,7 +509,7 @@ write_manifest() {
   mount > "$mounts_file" 2>/dev/null || true
 
   perl -MJSON::PP -e '
-    my ($manifest, $backup_id, $status, $started_at, $finished_at, $size, $files, $os, $arch, $lbver) = @ARGV;
+    my ($manifest, $backup_id, $status, $started_at, $finished_at, $size, $files, $os, $arch, $lbver, $backup_mode) = @ARGV;
     my $data = {
       schema_version => 1,
       backup_id => $backup_id,
@@ -513,6 +518,9 @@ write_manifest() {
       finished_at => $finished_at,
       size_bytes => 0 + $size,
       files_count => 0 + $files,
+      backup => {
+        mode => $backup_mode,
+      },
       host => {
         hostname => scalar(`hostname 2>/dev/null`) || "unknown",
         os => $os,
@@ -526,7 +534,7 @@ write_manifest() {
     chomp $data->{host}->{hostname};
     open my $fh, ">", $manifest or die "Cannot write $manifest: $!";
     print $fh JSON::PP->new->ascii->pretty->canonical->encode($data);
-  ' "$manifest" "$backup_id" "$status" "$started_at" "$finished_at" "$size_bytes" "$files_count" "$(host_os_pretty)" "$(host_arch)" "$(loxberry_version)"
+  ' "$manifest" "$backup_id" "$status" "$started_at" "$finished_at" "$size_bytes" "$files_count" "$(host_os_pretty)" "$(host_arch)" "$(loxberry_version)" "$(json_get_string backup_mode)"
 
   {
     printf '{\n'
@@ -623,7 +631,7 @@ start_docker_if_needed() {
 
 calculate_size() {
   local path="$1"
-  du -sb "$path" 2>/dev/null | awk '{print $1}' || printf '0'
+  du -sB1 "$path" 2>/dev/null | awk '{print $1}' || printf '0'
 }
 
 calculate_files() {
@@ -631,12 +639,36 @@ calculate_files() {
   find "$path/rootfs" -xdev -type f 2>/dev/null | wc -l | tr -d ' '
 }
 
+latest_complete_backup() {
+  local root="$1"
+  local current_id="${2:-}"
+  find "$root" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %f %p\n' 2>/dev/null \
+    | sort -rn \
+    | while read -r _time id path; do
+      [ "$id" != "$current_id" ] || continue
+      [ -d "$path/rootfs" ] || continue
+      if [ -r "$path/manifest.json" ]; then
+        perl -MJSON::PP -e '
+          local $/;
+          open my $fh, "<", $ARGV[0] or exit 1;
+          my $data = eval { decode_json(<$fh>) } || {};
+          exit(($data->{status} || "") eq "complete" ? 0 : 1);
+        ' "$path/manifest.json" || continue
+      fi
+      printf '%s\n' "$path"
+      break
+    done
+}
+
 preflight_backup() {
-  local root available_mb docker_available docker_running excludes_count status warnings_json checks_json rsync_available target_writable
+  local root available_mb docker_available docker_running excludes_count status warnings_json checks_json rsync_available target_writable backup_mode fs_type
   require_root_permission_ack
   root="$(backup_root)"
+  backup_mode="$(json_get_string backup_mode)"
+  [ "$backup_mode" = "snapshot" ] || backup_mode="full"
   mkdir -p "$root"
   available_mb="$(df -Pm "$root" 2>/dev/null | awk 'NR==2 {print $4}')"
+  fs_type="$(findmnt -no FSTYPE -T "$root" 2>/dev/null | head -n 1)"
   [ -n "$available_mb" ] || available_mb=0
   rsync_available=false
   command -v rsync >/dev/null 2>&1 && rsync_available=true
@@ -657,6 +689,9 @@ preflight_backup() {
   elif [ "$available_mb" -lt 1024 ]; then
     status="warning"
     warnings_json='["Backup-Ziel hat weniger als 1 GB freien Speicher."]'
+  elif [ "$backup_mode" = "snapshot" ] && ! printf '%s\n' "$fs_type" | grep -Eq '^(ext2|ext3|ext4|xfs|btrfs)$'; then
+    status="warning"
+    warnings_json='["Snapshot-Backups verwenden Hardlinks. Fuer zuverlaessige Speicherersparnis wird ein Linux-Dateisystem wie ext4 empfohlen."]'
   elif [ "$docker_running" -gt 0 ] && [ "$(json_get_bool stop_docker_before_backup)" != "true" ]; then
     status="warning"
     warnings_json='["Docker-Container laufen. Fuer konsistente Datenbanken ggf. Container stoppen oder Hooks konfigurieren."]'
@@ -665,6 +700,8 @@ preflight_backup() {
 [
   {"name":"rsync verfuegbar","ok":$rsync_available},
   {"name":"Backup-Ziel beschreibbar","ok":$target_writable},
+  {"name":"Backup-Modus","ok":true,"value":"$backup_mode"},
+  {"name":"Dateisystem","ok":true,"value":"$fs_type"},
   {"name":"Freier Speicher MB","ok":$([ "$available_mb" -ge 1024 ] && echo true || echo false),"value":"$available_mb"},
   {"name":"Docker verfuegbar","ok":$docker_available,"value":"running=$docker_running"},
   {"name":"Exclude-Regeln","ok":true,"value":"$excludes_count"}
@@ -730,8 +767,10 @@ create_backup() {
   require_root_permission_ack
   command -v rsync >/dev/null 2>&1 || { echo "rsync is required." >&2; exit 3; }
 
-  local root backup_id target rootfs log_file started finished size files exclude_file
+  local root backup_id target rootfs log_file started finished size files exclude_file backup_mode previous_backup
   root="$(backup_root)"
+  backup_mode="$(json_get_string backup_mode)"
+  [ "$backup_mode" = "snapshot" ] || backup_mode="full"
   mkdir -p "$root"
   backup_id="${1:-$(date '+%Y%m%d-%H%M%S')}"
   backup_id="$(printf '%s' "$backup_id" | tr -cd 'A-Za-z0-9._-')"
@@ -759,6 +798,7 @@ create_backup() {
   post_hook="$(json_get_string post_backup_hook)"
 
   log "Starting backup $backup_id" | tee -a "$log_file"
+  log "Backup mode: $backup_mode" | tee -a "$log_file"
   log "Backup target: $target" | tee -a "$log_file"
   log "Root filesystem copy target: $rootfs" | tee -a "$log_file"
   log "Exclude rules written to: $exclude_file" | tee -a "$log_file"
@@ -771,6 +811,16 @@ create_backup() {
   while IFS= read -r opt; do
     rsync_opts+=("$opt")
   done < <(rsync_live_options)
+
+  if [ "$backup_mode" = "snapshot" ]; then
+    previous_backup="$(latest_complete_backup "$root" "$backup_id")"
+    if [ -n "$previous_backup" ] && [ -d "$previous_backup/rootfs" ]; then
+      rsync_opts+=(--link-dest="$previous_backup/rootfs")
+      log "Snapshot reference: $previous_backup/rootfs" | tee -a "$log_file"
+    else
+      log "No complete previous backup found. Creating first snapshot as full copy." | tee -a "$log_file"
+    fi
+  fi
 
   log "Starting rsync copy from / to $rootfs" | tee -a "$log_file"
   log "rsync live output follows. Large files or slow USB storage can keep one line active for a while." | tee -a "$log_file"
@@ -1009,7 +1059,7 @@ list_backups() {
     }
     sub dir_size {
       my ($dir) = @_;
-      open my $du, "-|", "du", "-sb", "--", $dir or return 0;
+      open my $du, "-|", "du", "-sB1", "--", $dir or return 0;
       my $out = <$du> // "";
       close $du;
       return 0 unless $out =~ /^(\d+)/;
@@ -1333,7 +1383,7 @@ case "$action" in
   preflight-backup) preflight_backup ;;
   preflight-restore) shift; preflight_restore "${1:?BACKUP_ID required}" ;;
   config) show_config ;;
-  save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11:-*}" "${12:-0}" "${13:-1}" "${14:-}" "${15:-}" "${16:-false}" ;;
+  save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11:-*}" "${12:-0}" "${13:-1}" "${14:-}" "${15:-}" "${16:-false}" "${17:-full}" ;;
   install-schedule) install_schedule ;;
   schedule-run) schedule_run ;;
   tasks) list_tasks ;;

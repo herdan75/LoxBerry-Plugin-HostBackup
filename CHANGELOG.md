@@ -46,6 +46,8 @@ noch keine freigegebene produktive Version.
 
 ### Weboberflaeche
 
+- Restore-Bereich wird nur noch angezeigt, wenn ein Backup fuer Restore ausgewaehlt wurde.
+- Backup-Modus kann zwischen Vollbackup und inkrementellem Snapshot gewaehlt werden.
 - Einstellungen koennen als JSON-Datei exportiert und nach einer Neuinstallation wieder importiert werden.
 - Sichtbare deutsche Texte in der Weboberfläche auf echte Umlaute vereinheitlicht.
 - Kopfbereich der Weboberfläche mit Plugin-Icon und kompakterer Titelgestaltung überarbeitet.
@@ -73,6 +75,8 @@ noch keine freigegebene produktive Version.
 
 ### Backend
 
+- Inkrementeller Snapshot-Modus mit `rsync --link-dest` ergaenzt; jeder Snapshot bleibt direkt restore-faehig.
+- Preflight-Check warnt bei Snapshot-Modus, wenn das Backup-Ziel kein typisches Linux-Dateisystem fuer Hardlinks ist.
 - Backup-Liste kann Status, Abschlusszeit, Groesse und Dateianzahl aus Logdateien und Backup-Ordnern ableiten, wenn `manifest.json` fehlt oder veraltet ist.
 - Docker-Stop/Start protokolliert Container-Namen und IDs, arbeitet containerweise und nutzt Timeouts, wenn verfügbar.
 - Abschlussmeldung und `complete`-Manifest werden erst nach Export-Archiv und Aufbewahrungsregel geschrieben.
