@@ -64,6 +64,9 @@ noch keine freigegebene produktive Version.
 - Aufbewahrung auf 1 bis 10 Backups begrenzt.
 - Retention-Regel ergänzt: Bei gesetztem Limit werden nach erfolgreichem Backup
   alte Backups entfernt.
+- Retention berücksichtigt nur vollständig abgeschlossene Backups mit
+  `manifest.json`-Status `complete`, damit laufende oder unvollständige
+  Backups nicht versehentlich in die normale Rotation fallen.
 - Cron-Eintrag wird bei Deinstallation entfernt.
 
 ### Weboberfläche

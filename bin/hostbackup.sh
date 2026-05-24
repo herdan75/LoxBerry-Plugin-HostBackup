@@ -993,17 +993,18 @@ show_task_log() {
 task_status() {
   local task="$1"
   local lines="${2:-400}"
-  local path size mtime state content_b64
+  local path size mtime state content_b64 recent_log
   path="$(task_log_path "$task")"
   [ -r "$path" ] || { echo "Task log not found: $task" >&2; exit 14; }
   size="$(stat -c '%s' "$path" 2>/dev/null || echo 0)"
   mtime="$(stat -c '%Y' "$path" 2>/dev/null || echo 0)"
   state="running"
-  if grep -qE ' (Backup|Restore) .* finished$' "$path" 2>/dev/null; then
+  recent_log="$(tail -n 300 "$path" 2>/dev/null || true)"
+  if printf '%s\n' "$recent_log" | grep -qE ' (Backup|Restore) .* finished$'; then
     state="finished"
-  elif grep -qE ' (Backup|Restore) .* failed ' "$path" 2>/dev/null; then
+  elif printf '%s\n' "$recent_log" | grep -qE ' (Backup|Restore) .* failed '; then
     state="failed"
-  elif grep -qE ' Backup .* stopped by user$' "$path" 2>/dev/null; then
+  elif printf '%s\n' "$recent_log" | grep -qE ' Backup .* stopped by user$'; then
     state="stopped"
   elif [ "$(( $(date +%s) - mtime ))" -gt 300 ]; then
     state="stale"
@@ -1340,7 +1341,31 @@ prune_old_backups() {
   [ -n "$keep" ] || keep=0
   [ "$keep" -gt 0 ] || return 0
   root="$(backup_root)"
-  find "$root" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -rn | awk -v keep="$keep" 'NR > keep {print $2}' | while IFS= read -r path; do
+  [ -d "$root" ] || return 0
+  perl -MJSON::PP -e '
+    my ($root, $keep) = @ARGV;
+    opendir(my $dh, $root) or exit 0;
+    my @items;
+    while (defined(my $name = readdir($dh))) {
+      next if $name =~ /^\./;
+      next if $name !~ /^[A-Za-z0-9._-]+$/;
+      my $path = "$root/$name";
+      next if !-d $path;
+      my $manifest = "$path/manifest.json";
+      next if !-r $manifest;
+      open(my $fh, "<", $manifest) or next;
+      local $/;
+      my $data = eval { decode_json(<$fh>) } || {};
+      next if ($data->{status} || "") ne "complete";
+      my @st = stat($path);
+      next if !@st;
+      push @items, [0 + $st[9], $path];
+    }
+    @items = sort { $b->[0] <=> $a->[0] } @items;
+    for my $idx ($keep .. $#items) {
+      print $items[$idx]->[1], "\0";
+    }
+  ' "$root" "$keep" | while IFS= read -r -d '' path; do
     rm -rf --one-file-system "$path"
     rm -f "$path.tar.gz"
   done

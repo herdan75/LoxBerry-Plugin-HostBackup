@@ -309,7 +309,11 @@ Der Cron-Eintrag wird bei der Deinstallation wieder entfernt.
 
 Die Anzahl zu behaltender Backups ist auf 1 bis 10 begrenzt. Sobald das Limit
 überschritten wird, entfernt das Plugin nach einem erfolgreichen Backup das
-älteste Backup.
+älteste vollständig abgeschlossene Backup.
+
+Laufende, fehlgeschlagene oder unvollständige Backup-Verzeichnisse werden dabei
+nicht als reguläre Backups gezählt. Sie müssen bei Bedarf manuell geprüft und
+gelöscht werden.
 
 ### Vom Backup Ausschließen
 

@@ -128,7 +128,7 @@ if ($requested_active_task =~ /^(backup|restore)-[A-Za-z0-9._-]+\.log$/) {
 }
 
 if ($action eq 'task-status') {
-  my ($status, $out) = run_shell(backend_cmd('task-status', $task, '180'));
+  my ($status, $out) = run_shell(backend_cmd('task-status', $task, '90'));
   if ($status != 0 && $task =~ /^backup-([A-Za-z0-9._-]+)\.log$/) {
     ($status, $out) = run_shell(backend_cmd('task-status', "backup-$1.launch.log", '80'));
   } elsif ($status != 0 && $task =~ /^restore-([A-Za-z0-9._-]+)\.log$/) {
@@ -1118,6 +1118,8 @@ print <<HTML;
   var stopForm = document.getElementById('stop-task-form');
   var timer = null;
   var refreshScheduled = false;
+  var inFlight = false;
+  var pollFailures = 0;
 
   function setState(state, text) {
     stateEl.className = 'task-state state-' + state;
@@ -1138,6 +1140,8 @@ print <<HTML;
   }
 
   function renderStatus(data) {
+    pollFailures = 0;
+    inFlight = false;
     var state = data.state || 'running';
     var labels = {
       running: task.indexOf('restore-') === 0 ? 'Restore läuft' : 'Backup läuft',
@@ -1220,12 +1224,18 @@ print <<HTML;
   });
 
   function poll() {
-    fetch('?action=task-status&task=' + encodeURIComponent(task), { cache: 'no-store' })
-      .then(function (response) { return response.json(); })
-      .then(renderStatus)
+    if (inFlight) return;
+    inFlight = true;
+    fetch('?action=task-status&task=' + encodeURIComponent(task) + '&_=' + Date.now(), { cache: 'no-store' })
+      .then(function (response) { return response.text(); })
+      .then(function (text) {
+        renderStatus(JSON.parse(text));
+      })
       .catch(function () {
-        setState('error', 'Status nicht verfügbar');
-        heartbeatEl.textContent = 'Der Live-Status konnte gerade nicht gelesen werden. Es wird erneut versucht.';
+        inFlight = false;
+        pollFailures += 1;
+        setState(pollFailures >= 3 ? 'error' : 'stale', pollFailures >= 3 ? 'Status nicht verfügbar' : 'Status wird erneut gelesen');
+        heartbeatEl.textContent = 'Der Live-Status konnte gerade nicht gelesen werden. Das Backup kann trotzdem weiterlaufen; es wird automatisch erneut versucht.';
       });
   }
 
@@ -1240,7 +1250,7 @@ print <<HTML;
   heartbeatEl.textContent = 'Live-Status wird geladen...';
   logEl.textContent = 'Backup wurde gestartet. Warte auf erste Logausgabe...';
   poll();
-  timer = window.setInterval(poll, 3000);
+  timer = window.setInterval(poll, 5000);
 }());
 </script>
 
