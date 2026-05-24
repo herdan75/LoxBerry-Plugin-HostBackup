@@ -349,6 +349,11 @@ body.is-loading .loading-overlay {
   margin-top: 18px;
 }
 
+.settings-form + .config-card,
+.config-card.settings-group {
+  margin-top: 26px;
+}
+
 .schedule-card legend {
   align-items: center;
   background: #ffffff;
@@ -600,11 +605,30 @@ body.is-loading .loading-overlay {
 #hostbackup-app .config-card .config-actions button {
   font-size: 13px;
   min-height: 32px;
-  padding: 6px 12px;
+  min-width: 158px;
+  padding: 6px 14px;
+  justify-content: center;
 }
 
 .config-card .config-file {
-  max-width: 260px;
+  font-size: 13px;
+  max-width: 310px;
+  min-height: 32px;
+}
+
+.config-card .info-help {
+  margin-left: 2px;
+}
+
+.config-card .info-bubble {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.config-card .inline-form:last-child .info-bubble {
+  left: 0;
+  right: auto;
 }
 
 #hostbackup-app button:hover,
