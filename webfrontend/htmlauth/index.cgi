@@ -780,7 +780,7 @@ print <<HTML;
 
 <label>
 <span>Startzeit $info_time</span>
-<input data-role="none" name="schedule_time" type="time" value="$cfg_schedule_time">
+<input data-role="none" class="schedule-time-input" name="schedule_time" type="time" value="$cfg_schedule_time">
 </label>
 
 <details class="schedule-detail" data-schedule-panel="weekly" open>
@@ -863,12 +863,12 @@ print <<HTML;
 
 <label>
 <span>Skript vor dem Backup $info_pre_hook</span>
-<input data-role="none" name="pre_backup_hook" value="$cfg_pre_hook">
+<input data-role="none" class="hook-input" name="pre_backup_hook" value="$cfg_pre_hook">
 </label>
 
 <label>
 <span>Skript nach dem Backup $info_post_hook</span>
-<input data-role="none" name="post_backup_hook" value="$cfg_post_hook">
+<input data-role="none" class="hook-input" name="post_backup_hook" value="$cfg_post_hook">
 </label>
 
 <label class="wide">

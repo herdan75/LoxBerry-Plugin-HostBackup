@@ -245,13 +245,15 @@ body.is-loading .loading-overlay {
 }
 
 .inline-notice.ok {
-  background: #f2f6f2;
-  border-color: #9fbd9f;
+  background: #edf8ef;
+  border-color: #83b889;
+  color: #1f4c28;
 }
 
 .inline-notice.warning {
-  background: #fff8e5;
-  border-color: #d4b35d;
+  background: #fff4df;
+  border-color: #d69a35;
+  color: #604000;
 }
 
 .inline-notice.loading {
@@ -335,10 +337,10 @@ body.is-loading .loading-overlay {
 
 .settings-form .root-confirm {
   align-items: flex-start;
-  background: #f3f3f3;
-  border: 1px solid #c8c8c8;
+  background: #edf7f4;
+  border: 1px solid #6fb2a3;
   border-radius: 6px;
-  color: #1f2a33;
+  color: #143b36;
   padding: 10px;
 }
 
@@ -456,6 +458,14 @@ body.is-loading .loading-overlay {
   border-top: 1px solid #dddddd;
   margin-top: 13px;
   padding-top: 10px;
+}
+
+.schedule-time-input {
+  max-width: 260px;
+}
+
+.hook-input {
+  max-width: 92%;
 }
 
 .schedule-detail summary {
