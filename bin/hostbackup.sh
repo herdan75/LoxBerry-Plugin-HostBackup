@@ -438,10 +438,9 @@ rsync_supports_info() {
 
 rsync_live_options() {
   if rsync_supports_info; then
-    printf '%s\n' '--info=name1,progress2,stats2'
+    printf '%s\n' '--info=progress2,stats2'
     printf '%s\n' '--human-readable'
   else
-    printf '%s\n' '--verbose'
     printf '%s\n' '--progress'
   fi
 }
@@ -1042,13 +1041,14 @@ show_task_log() {
 task_status() {
   local task="$1"
   local lines="${2:-400}"
-  local path size mtime state content_b64 recent_log
+  local max_bytes path size mtime state content_b64 recent_log
   path="$(task_log_path "$task")"
   [ -r "$path" ] || { echo "Task log not found: $task" >&2; exit 14; }
+  max_bytes=32768
   size="$(stat -c '%s' "$path" 2>/dev/null || echo 0)"
   mtime="$(stat -c '%Y' "$path" 2>/dev/null || echo 0)"
   state="running"
-  recent_log="$(tail -n 300 "$path" 2>/dev/null || true)"
+  recent_log="$(tail -c 65536 "$path" 2>/dev/null || true)"
   if printf '%s\n' "$recent_log" | grep -qE ' (Backup|Restore) .* finished$'; then
     state="finished"
   elif printf '%s\n' "$recent_log" | grep -qE ' (Backup|Restore) .* failed '; then
@@ -1058,7 +1058,7 @@ task_status() {
   elif [ "$(( $(date +%s) - mtime ))" -gt 300 ]; then
     state="stale"
   fi
-  content_b64="$(tail -n "$lines" "$path" | base64 -w 0)"
+  content_b64="$(tail -c "$max_bytes" "$path" | tail -n "$lines" | base64 -w 0)"
   cat <<EOF
 {
   "task": $(json_escape "$task"),

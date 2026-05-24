@@ -324,6 +324,13 @@ Die Anzahl zu behaltender Backups ist auf 1 bis 10 begrenzt. Sobald das Limit
 überschritten wird, entfernt das Plugin nach einem erfolgreichen Backup das
 älteste vollständig abgeschlossene Backup.
 
+Bei inkrementellen Snapshots ist das sicher, weil jeder Snapshot als eigener
+Backup-Ordner sichtbar bleibt. Unveränderte Dateien sind per Hardlink mehrfach
+referenziert. Wird ein alter Snapshot gelöscht, verschwinden nur dessen
+Verzeichniseinträge; Datei-Inhalte bleiben erhalten, solange sie noch von einem
+jüngeren Snapshot referenziert werden. Erst wenn kein verbleibender Snapshot
+mehr auf einen Datei-Inhalt zeigt, wird der Speicher freigegeben.
+
 Laufende, fehlgeschlagene oder unvollständige Backup-Verzeichnisse werden dabei
 nicht als reguläre Backups gezählt. Sie müssen bei Bedarf manuell geprüft und
 gelöscht werden.

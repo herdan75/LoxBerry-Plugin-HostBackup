@@ -25,6 +25,11 @@ validiert werden.
 - Stable- und Pre-Release-Updatekanal zeigen auf das freigegebene Paket.
 - Plugin-Metadaten bereinigt und doppelte Auto-Update-Einträge entfernt.
 - Lokale Build- und Testaltlasten aus dem Arbeitsstand entfernt.
+- Live-Log für schnelle inkrementelle Backups entschärft: rsync sendet weniger
+  Dateinamen und die Weboberfläche liest pro Statusabfrage nur einen begrenzten
+  Log-Ausschnitt.
+- Aufbewahrung bei inkrementellen Snapshots in Oberfläche und README genauer
+  erklärt.
 
 ## [0.2.0] - 2026-05-24
 
