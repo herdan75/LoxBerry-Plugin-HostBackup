@@ -29,7 +29,17 @@ jobs:
         run: bash -n bin/hostbackup.sh bin/restore-hostbackup.sh postinstall.sh uninstall/uninstall.sh
 
       - name: Validate CGI syntax
-        run: perl -c webfrontend/htmlauth/index.cgi
+        run: |
+          mkdir -p .ci-perl/LoxBerry
+          printf '%s\n' \
+            'package LoxBerry::Web;' \
+            'use strict;' \
+            'use warnings;' \
+            'sub import {}' \
+            'sub lbheader { return 1; }' \
+            'sub lbfooter { return 1; }' \
+            '1;' > .ci-perl/LoxBerry/Web.pm
+          PERL5LIB="$PWD/.ci-perl" perl -c webfrontend/htmlauth/index.cgi
 
       - name: Build plugin ZIP
         run: bash ./package.sh

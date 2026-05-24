@@ -6,26 +6,7 @@ use File::Temp qw(tempfile);
 use File::Copy qw(copy);
 use File::Basename qw(basename);
 use JSON::PP;
-
-BEGIN {
-  eval {
-    require LoxBerry::Web;
-    LoxBerry::Web->import();
-    1;
-  } or do {
-    package LoxBerry::Web;
-    sub lbheader {
-      my ($title) = @_;
-      my $head = $main::htmlhead || '';
-      $title ||= 'LoxBerry Host Backup';
-      print "Content-Type: text/html; charset=utf-8\r\n\r\n";
-      print "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>$title</title>$head</head><body>";
-    }
-    sub lbfooter {
-      print "</body></html>";
-    }
-  };
-}
+use LoxBerry::Web;
 
 my $plugin = 'loxberryhostbackup';
 my $lbhome = $ENV{LBHOMEDIR} || '/opt/loxberry';
