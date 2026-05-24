@@ -780,7 +780,7 @@ print <<HTML;
 
 <label>
 <span>Startzeit $info_time</span>
-<input data-role="none" name="schedule_time" type="time" value="$cfg_schedule_time">
+<input data-role="none" class="schedule-time-input" name="schedule_time" type="time" value="$cfg_schedule_time">
 </label>
 
 <details class="schedule-detail" data-schedule-panel="weekly" open>

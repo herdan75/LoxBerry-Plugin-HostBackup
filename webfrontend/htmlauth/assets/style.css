@@ -357,7 +357,7 @@ body.is-loading .loading-overlay {
   border: 1px solid #d3d3d3;
   border-radius: 8px;
   margin: 18px 0 0;
-  padding: 16px 14px 14px;
+  padding: 16px 22px 18px;
 }
 
 .settings-group {
@@ -373,6 +373,7 @@ body.is-loading .loading-overlay {
   display: inline-flex;
   font-size: 14px;
   font-weight: 700;
+  margin-left: -8px;
   margin-bottom: 12px;
   min-height: 28px;
   padding: 4px 11px;
@@ -456,6 +457,10 @@ body.is-loading .loading-overlay {
   border-top: 1px solid #dddddd;
   margin-top: 13px;
   padding-top: 10px;
+}
+
+.schedule-time-input {
+  max-width: 260px;
 }
 
 .schedule-detail summary {
