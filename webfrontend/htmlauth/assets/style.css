@@ -358,8 +358,8 @@ body.is-loading .loading-overlay {
   background: #f7f7f7;
   border: 1px solid #d3d3d3;
   border-radius: 8px;
-  margin: 18px -8px 0;
-  padding: 16px 22px 14px;
+  margin: 18px 0 0;
+  padding: 16px 14px 14px;
 }
 
 .settings-group {
@@ -919,12 +919,6 @@ body.is-loading .loading-overlay {
 
   .settings-form {
     grid-template-columns: 1fr;
-  }
-
-  .schedule-card {
-    margin-left: 0;
-    margin-right: 0;
-    padding: 16px 14px 14px;
   }
 
   .settings-form .root-confirm {
