@@ -4,6 +4,7 @@ use warnings;
 use CGI qw(:standard escapeHTML);
 use File::Temp qw(tempfile);
 use File::Copy qw(copy);
+use File::Basename qw(basename);
 use JSON::PP;
 
 my $plugin = 'loxberryhostbackup';
@@ -109,6 +110,54 @@ if ($action eq 'task-status') {
     my $safe_error = encode_json({ task => $task, state => 'error', error => $out });
     print $safe_error;
   }
+  exit;
+}
+
+if ($action eq 'download-export') {
+  my $download_id = $q->param('backup_id') || '';
+
+  if ($download_id !~ /^[A-Za-z0-9._-]+$/) {
+    print header(-type => 'text/plain', -charset => 'utf-8', -status => '400 Bad Request');
+    print "Ungültige Backup-ID.\n";
+    exit;
+  }
+
+  my ($status, $out) = run_shell(backend_cmd('export', $download_id));
+
+  if ($status != 0) {
+    print header(-type => 'text/plain', -charset => 'utf-8', -status => '500 Internal Server Error');
+    print $out;
+    exit;
+  }
+
+  my ($archive) = $out =~ m{^(/[^\r\n]+\.tar\.gz)\s*$}m;
+
+  if (!$archive || !-r $archive || !-f $archive) {
+    print header(-type => 'text/plain', -charset => 'utf-8', -status => '404 Not Found');
+    print "Export-Archiv konnte nicht gelesen werden.\n";
+    exit;
+  }
+
+  my $filename = basename($archive);
+  my $size = -s $archive;
+
+  print header(
+    -type => 'application/gzip',
+    -attachment => $filename,
+    -Content_length => $size,
+  );
+
+  open my $fh, '<', $archive or do {
+    print "Export-Archiv konnte nicht geöffnet werden.\n";
+    exit;
+  };
+  binmode $fh;
+  binmode STDOUT;
+  my $buffer;
+  while (read($fh, $buffer, 65536)) {
+    print $buffer;
+  }
+  close $fh;
   exit;
 }
 
@@ -380,6 +429,7 @@ my $info_import = info_button('Importiert ein extern gespeichertes Backup-Archiv
 my $info_delete = info_button('Löscht den Backup-Ordner und ein eventuell vorhandenes Export-Archiv dieses Backups. Das kann nicht rückgängig gemacht werden.');
 my $info_restore = info_button('Wählt dieses Backup für eine Wiederherstellung aus. Danach zeigt der Restore-Bereich die Prüfungen und den Startbutton für genau dieses Backup.');
 my $info_browse = info_button('Öffnet den Datei-Explorer für dieses Backup. Damit kannst du prüfen, welche Dateien im Backup enthalten sind.');
+my $info_download = info_button('Erstellt bei Bedarf ein Export-Archiv und lädt dieses Backup als tar.gz-Datei auf deinen Rechner herunter. Das kann bei großen Backups einige Zeit dauern.');
 my $info_backup_start = info_button('Startet den Backup-Vorgang. Vor dem eigentlichen Backup prüft das Plugin wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und Docker-Hinweise.');
 
 print header(-type => 'text/html', -charset => 'utf-8');
@@ -650,6 +700,11 @@ if (!@$backups) {
 <form method="get" class="inline-form">
 <input type="hidden" name="restore_id" value="$id">
 <button type="submit">Restore</button>$info_restore
+</form>
+<form method="get" class="inline-form">
+<input type="hidden" name="action" value="download-export">
+<input type="hidden" name="backup_id" value="$id">
+<button type="submit">Export</button>$info_download
 </form>
 <form method="post" class="inline-form delete-backup-form">
 <input type="hidden" name="action" value="delete-backup">
