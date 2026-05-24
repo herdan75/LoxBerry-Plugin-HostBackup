@@ -51,11 +51,24 @@ body.is-loading .loading-overlay {
 
 .page {
   color: #1d2733;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
   font-size: 15px;
+  letter-spacing: normal;
+  line-height: 1.4;
   max-width: 1180px;
   margin: 0 auto;
   padding: 24px;
+}
+
+#hostbackup-app,
+#hostbackup-app label,
+#hostbackup-app legend,
+#hostbackup-app summary,
+#hostbackup-app input,
+#hostbackup-app textarea,
+#hostbackup-app button {
+  letter-spacing: normal;
+  text-shadow: none;
 }
 
 .topbar {
@@ -107,7 +120,7 @@ body.is-loading .loading-overlay {
 
 #hostbackup-app h1 {
   margin-bottom: 6px;
-  font-size: 30px;
+  font-size: 28px;
   line-height: 1.1;
 }
 
@@ -187,10 +200,12 @@ body.is-loading .loading-overlay {
 }
 
 .inline-notice {
+  align-self: end;
   border: 1px solid #d8dee8;
   border-radius: 6px;
   font-size: 13px;
   line-height: 1.45;
+  margin-top: 24px;
   padding: 10px 12px;
 }
 
@@ -223,7 +238,7 @@ body.is-loading .loading-overlay {
 .settings-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
-  gap: 14px;
+  gap: 14px 18px;
 }
 
 .settings-form label {
@@ -289,10 +304,11 @@ body.is-loading .loading-overlay {
   border: 1px solid #c8d3df;
   border-radius: 8px;
   margin: 0;
-  padding: 14px;
+  padding: 12px 14px 14px;
 }
 
 .schedule-card legend {
+  font-size: 15px;
   font-weight: 700;
   padding: 0 6px;
 }
@@ -305,7 +321,7 @@ body.is-loading .loading-overlay {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .schedule-modes label,
@@ -329,17 +345,19 @@ body.is-loading .loading-overlay {
 }
 
 .schedule-detail {
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .schedule-detail summary {
   cursor: pointer;
+  font-size: 16px;
   font-weight: 700;
-  margin-bottom: 7px;
+  line-height: 1.25;
+  margin-bottom: 6px;
 }
 
 .schedule-detail[open] summary {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .choice-grid {
@@ -363,13 +381,13 @@ body.is-loading .loading-overlay {
   gap: 6px;
   justify-content: flex-start;
   line-height: 1.2;
-  min-height: 30px;
+  min-height: 28px;
   padding: 5px 8px;
 }
 
 .schedule-card .day-grid label {
   justify-content: center;
-  padding: 5px 4px;
+  padding: 4px;
 }
 
 .schedule-card .choice-grid input,
