@@ -789,6 +789,114 @@ button.danger {
   text-align: center;
 }
 
+#hostbackup-app .settings-form {
+  gap: 10px 14px !important;
+}
+
+#hostbackup-app .panel,
+#hostbackup-app .notice {
+  padding: 16px !important;
+}
+
+#hostbackup-app .inline-notice {
+  font-size: 14px !important;
+  line-height: 1.35 !important;
+  padding: 9px 11px !important;
+}
+
+#hostbackup-app .schedule-card {
+  padding: 10px 12px !important;
+}
+
+#hostbackup-app .schedule-modes {
+  gap: 7px !important;
+  margin-bottom: 10px !important;
+}
+
+#hostbackup-app .choice-grid {
+  gap: 6px !important;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)) !important;
+}
+
+#hostbackup-app .day-grid {
+  gap: 5px !important;
+  grid-template-columns: repeat(auto-fit, minmax(54px, 1fr)) !important;
+}
+
+#hostbackup-app .month-grid {
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)) !important;
+}
+
+#hostbackup-app .schedule-modes label,
+#hostbackup-app .choice-grid label,
+#hostbackup-app .day-grid label,
+#hostbackup-app .checkline {
+  background: #ffffff !important;
+  border: 1px solid #d3dbe6 !important;
+  border-radius: 5px !important;
+  gap: 7px !important;
+  min-height: 28px !important;
+  padding: 4px 8px !important;
+}
+
+#hostbackup-app .day-grid label {
+  justify-content: flex-start !important;
+}
+
+#hostbackup-app input[type="checkbox"],
+#hostbackup-app input[type="radio"] {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background: #ffffff !important;
+  border: 1px solid #8fa1b5 !important;
+  border-radius: 3px !important;
+  clip: auto !important;
+  display: inline-block !important;
+  flex: 0 0 15px !important;
+  height: 15px !important;
+  margin: 0 !important;
+  opacity: 1 !important;
+  padding: 0 !important;
+  position: static !important;
+  transform: none !important;
+  vertical-align: middle !important;
+  width: 15px !important;
+  z-index: auto !important;
+}
+
+#hostbackup-app input[type="checkbox"]:checked,
+#hostbackup-app input[type="radio"]:checked {
+  background: #69b42e !important;
+  border-color: #4f931d !important;
+  box-shadow: inset 0 0 0 3px #69b42e, inset 0 0 0 5px #ffffff !important;
+}
+
+#hostbackup-app input[type="checkbox"]:disabled,
+#hostbackup-app input[type="radio"]:disabled {
+  background: #edf0f3 !important;
+  border-color: #ccd3da !important;
+  box-shadow: none !important;
+}
+
+#hostbackup-app button,
+#hostbackup-app .secondary-button,
+#hostbackup-app input[type="file"]::file-selector-button {
+  align-items: center !important;
+  display: inline-flex !important;
+  justify-content: center !important;
+  width: auto !important;
+}
+
+#hostbackup-app .form-actions button {
+  min-width: 180px !important;
+}
+
+#hostbackup-app .config-actions,
+#hostbackup-app .import {
+  align-items: center !important;
+  gap: 8px !important;
+}
+
 @media (max-width: 780px) {
   .page {
     padding: 14px;

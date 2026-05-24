@@ -566,12 +566,12 @@ my $target_notice = '';
 
 if ($target_info && %{$target_info}) {
   my $target_state = ($target_info->{status} || 'ok') eq 'ok' ? 'ok' : 'warning';
-  my $target_message = escapeHTML($target_info->{message} || '');
+  my $target_message = $target_state eq 'ok'
+    ? 'Backup-Ziel verwendet das empfohlene Dateisystem ext4.'
+    : 'Empfehlung: Backup-Ziel auf ext4 umstellen. ext4 ist deutlich schneller und f&uuml;r inkrementelle Snapshots mit Hardlinks am zuverl&auml;ssigsten.';
   my $target_fs = escapeHTML($target_info->{fs_type} || 'unbekannt');
-  my $target_source = escapeHTML($target_info->{source} || 'unbekannt');
-  my $target_probe = escapeHTML($target_info->{probe_path} || '');
   my $target_free = escapeHTML($target_info->{available_mb} || 0);
-  $target_notice = qq{<section class="inline-notice $target_state"><strong>Dateisystem-PrÃ¼fung:</strong> $target_message<br><span>Erkannt: <code>$target_fs</code> auf <code>$target_source</code>, geprÃ¼fter Pfad <code>$target_probe</code>, frei ca. $target_free MB.</span></section>};
+  $target_notice = qq{<section class="inline-notice $target_state"><strong>Dateisystem-Pr&uuml;fung:</strong> $target_message<br><span>Erkannt: <code>$target_fs</code>, frei ca. $target_free MB.</span></section>};
 }
 
 our $htmlhead = qq{
