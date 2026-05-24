@@ -1,118 +1,162 @@
 # Changelog
 
-Alle nennenswerten Aenderungen an diesem Projekt werden in dieser Datei
+Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
-Dieses Projekt befindet sich noch in einem fruehen Entwicklungsstand. Es gibt
+Dieses Projekt befindet sich noch in einem frühen Entwicklungsstand. Es gibt
 noch keine freigegebene produktive Version.
 
 ## [Unreleased]
 
 ### Dokumentation
 
-- README vollstaendig auf Deutsch neu strukturiert.
-- Zweck, Plattform-Kompatibilitaet, Voraussetzungen und bekannte Grenzen ergaenzt.
-- Installations- und erster Testablauf fuer LoxBerry beschrieben.
-- Restore-Risiken, Docker-/Datenbank-Hinweise und Branch-Modell dokumentiert.
+- README vollständig auf den aktuellen Funktionsstand gebracht.
+- Installations-, Ersttest- und Bedienablauf so ergänzt, dass eine fremde Person
+  das Plugin installieren, konfigurieren und testen kann.
+- Status klarer beschrieben: Installation, Konfiguration und echte Backups sind
+  getestet; ein produktiver Ende-zu-Ende-Restore ist noch offen.
+- USB-Beispiel für Backup-Ziel und Ausschlüsse ergänzt.
+- Vollbackup, inkrementeller Snapshot, erster Snapshot als Basiskopie und
+  Hardlink-Voraussetzungen dokumentiert.
+- Live-Status, Backup-Liste, Explorer, Export, Löschen, Import externer
+  Archive und Restore-Auswahl beschrieben.
+- Verhalten laufender oder unvollständiger Backups dokumentiert.
+- Einstellungen-Export/-Import und Grenzen von Export-Archiven beschrieben.
+- Deinstallation und verbleibende externe Backup-Daten dokumentiert.
 
-### LoxBerry-Kompatibilitaet
+### LoxBerry-Kompatibilität
 
-- Sudoers-Regel in den LoxBerry-Standardordner `sudoers/sudoers` verschoben, damit LoxBerry sie waehrend der Plugin-Installation selbst installiert.
-- `postinstall.sh` schreibt nicht mehr direkt nach `/etc/sudoers.d`, da das Postinstall-Skript auf LoxBerry ohne Root-Rechte laufen kann.
-- `uninstall.sh` entfernt nur noch den Cron-Eintrag defensiv; die sudoers-Datei wird von LoxBerry verwaltet.
-- `postinstall.sh` in den ZIP-Root verschoben, damit LoxBerry das Skript korrekt ausfuehrt.
-- Restore-Helper von `sbin/` nach `bin/` verschoben, da LoxBerry `sbin/` beim Test nicht installiert hat.
-- Plugin-Icons ergaenzt, damit LoxBerry keine Default-Icon-Warnung ausgeben muss.
-- Offizielle LoxBerry-Plugin-Pfadvariablen beruecksichtigt.
-- Skriptpfad-basierte Erkennung des tatsaechlichen Pluginordners ergaenzt.
+- Sudoers-Regel in den LoxBerry-Standardordner `sudoers/sudoers` verschoben,
+  damit LoxBerry sie während der Plugin-Installation selbst installiert.
+- `postinstall.sh` schreibt nicht mehr direkt nach `/etc/sudoers.d`, da das
+  Postinstall-Skript auf LoxBerry ohne Root-Rechte laufen kann.
+- `uninstall.sh` entfernt den Cron-Eintrag defensiv; die sudoers-Datei wird von
+  LoxBerry verwaltet.
+- `postinstall.sh` in den ZIP-Root verschoben, damit LoxBerry das Skript korrekt
+  ausführt.
+- Restore-Helper von `sbin/` nach `bin/` verschoben, da LoxBerry `sbin/` beim
+  Test nicht installiert hat.
+- Plugin-Icons ergänzt, damit LoxBerry keine Default-Icon-Warnung ausgeben muss.
+- Offizielle LoxBerry-Plugin-Pfadvariablen berücksichtigt.
+- Skriptpfad-basierte Erkennung des tatsächlichen Pluginordners ergänzt.
 - Default-Konfiguration in das Plugin-Verzeichnis `config/` verschoben.
-- `postinstall.sh` nutzt LoxBerry-Installationsargumente fuer Pluginordner und Basisverzeichnis.
-- Web-Backend-Aufrufe verwenden `sudo -n`, damit fehlende sudoers-Regeln nicht haengen bleiben.
+- `postinstall.sh` nutzt LoxBerry-Installationsargumente für Pluginordner und
+  Basisverzeichnis.
+- Web-Backend-Aufrufe verwenden `sudo -n`, damit fehlende sudoers-Regeln nicht
+  hängen bleiben.
 
-### Planung und Aufbewahrung
+### Planung Und Aufbewahrung
 
-- Monatliche Backups erhalten einen Fallback auf den letzten Tag des Monats, wenn ein gewählter Monatstag wie 29, 30 oder 31 im jeweiligen Monat nicht existiert; der Cron-Aufruf bleibt dabei auf die relevanten Monatsend-Tage begrenzt.
-- Woechentlicher Zeitplan kann mehrere Wochentage speichern und als Cron-Liste ausgeben.
-- Monatlicher Zeitplan kann mehrere Monatstage sowie einzelne Monate speichern und als Cron-Liste ausgeben.
-- Info-Texte zum Zeitplan erklaeren detailliert, welche Felder bei taeglich, woechentlich und monatlich relevant sind.
-- Zeitplan-Oberflaeche klarer strukturiert: taeglich zeigt nur Uhrzeit, woechentlich Wochentag und Uhrzeit, monatlich Monatstag, Monate und Uhrzeit.
-- Monatsauswahl fuer monatliche Backups ergaenzt.
+- Zeitgesteuerte Backups per `/etc/cron.d/loxberryhostbackup` ergänzt.
+- Auswahl für tägliche, wöchentliche und monatliche Backups ergänzt.
+- Wöchentlicher Zeitplan kann mehrere Wochentage speichern und als Cron-Liste
+  ausgeben.
+- Monatlicher Zeitplan kann mehrere Monatstage sowie einzelne Monate speichern
+  und als Cron-Liste ausgeben.
+- Monatliche Backups erhalten einen Fallback auf den letzten Tag des Monats,
+  wenn ein gewählter Monatstag wie 29, 30 oder 31 im jeweiligen Monat nicht
+  existiert.
+- Der Cron-Aufruf bleibt beim Monatsende-Fallback auf die relevanten
+  Monatsend-Tage begrenzt.
+- Info-Texte zum Zeitplan erklären detailliert, welche Felder bei täglich,
+  wöchentlich und monatlich relevant sind.
+- Zeitplan-Oberfläche klarer strukturiert.
 - Aufbewahrung auf 1 bis 10 Backups begrenzt.
-- Zeitgesteuerte Backups per `/etc/cron.d/loxberryhostbackup` ergaenzt.
-- Auswahl fuer taegliche, woechentliche und monatliche Backups ergaenzt.
-- Uhrzeit, Wochentag und Monatstag konfigurierbar gemacht.
-- Retention-Regel ergaenzt: Bei gesetztem Limit werden nach erfolgreichem Backup alte Backups entfernt.
+- Retention-Regel ergänzt: Bei gesetztem Limit werden nach erfolgreichem Backup
+  alte Backups entfernt.
 - Cron-Eintrag wird bei Deinstallation entfernt.
 
-### Weboberflaeche
+### Weboberfläche
 
-- Restore-Bereich wird nur noch angezeigt, wenn ein Backup fuer Restore ausgewaehlt wurde.
-- Backup-Modus kann zwischen Vollbackup und inkrementellem Snapshot gewaehlt werden.
-- Einstellungen koennen als JSON-Datei exportiert und nach einer Neuinstallation wieder importiert werden.
+- Kopfbereich mit Plugin-Icon, kompakter Titelgestaltung und Link zurück zur
+  LoxBerry-Administration überarbeitet.
 - Sichtbare deutsche Texte in der Weboberfläche auf echte Umlaute vereinheitlicht.
-- Kopfbereich der Weboberfläche mit Plugin-Icon und kompakterer Titelgestaltung überarbeitet.
-- Restore-Bereich mit Backup-Auswahl, Restore-Check, Restore-Plan und Startbestätigung aus der Backup-Liste ergänzt.
-- Backup-Liste um direkte Aktionen für Dateien anzeigen, Restore auswählen, Export herunterladen und Löschen erweitert.
-- Live-Status stoppt die Aktualisierungsanzeige nach Abschluss und lädt die Backup-Liste danach neu.
-- Live-Status unterscheidet laufende, abgeschlossene, fehlgeschlagene und gestoppte Backups klarer.
-- Backup-Liste um Loesch-Button pro Backup mit Bestaetigungsdialog ergaenzt.
+- Einstellungen-Seite ergänzt.
+- Backup-Verzeichnis, Backup-Modus, Ausschlüsse, Docker-Verhalten, automatische
+  Exporte, Retention, Zeitplan und Hooks konfigurierbar gemacht.
+- Backup-Modus kann zwischen Vollbackup und inkrementellem Snapshot gewählt
+  werden.
+- Einstellungen können als JSON-Datei exportiert und nach einer Neuinstallation
+  wieder importiert werden.
+- Info-Buttons mit Hover-/Fokus-Hinweisen für Einstellungen und Backup-Aktionen
+  ergänzt.
+- Sicherheitsbestätigung für Root-Freigaben ergänzt.
+- Backup- und Restore-Start prüfen, ob die Root-Freigabe zuvor bestätigt wurde.
+- Live-Loganzeige für laufende Backup- und Restore-Jobs ergänzt.
+- Live-Status unterscheidet laufende, abgeschlossene, fehlgeschlagene und
+  gestoppte Jobs klarer.
+- Live-Status stoppt die Aktualisierungsanzeige nach Abschluss und lädt die
+  Backup-Liste danach neu.
+- Live-Status bleibt erhalten, wenn während eines laufenden Backups ein anderes
+  vollständiges Backup im Explorer geöffnet wird.
+- Stop-Button im Live-Status ergänzt, um laufende Backups abbrechen zu können.
+- Backup-Liste zeigt Status, Host, Größe, Dateianzahl, Abschlusszeit,
+  Exportstatus und Aktionen.
+- Aktionen für laufende oder unvollständige Backups werden gesperrt, bis das
+  Backup vollständig abgeschlossen ist.
+- Backup-Liste um Aktionen für Dateien anzeigen, Restore auswählen, Export
+  herunterladen und Löschen erweitert.
+- Backup-Liste um Lösch-Button pro Backup mit Bestätigungsdialog ergänzt.
 - Import-Bereich klarer als Import externer `tar.gz`-Backup-Archive benannt.
-- Backup-Tabelle zeigt Dateianzahl und Exportstatus an und nutzt Backend-Fallbacks, wenn Manifestdaten fehlen oder noch `running` anzeigen.
-- Startbutton von `Backup vorbereiten` auf `Backup starten` umbenannt.
-- Stop-Button im Live-Status ergaenzt, um laufende Backups abbrechen zu koennen.
-- Formularaktionen leiten nach erfolgreichem Speichern oder Backup-Start auf eine normale Seite weiter, damit der Browser beim Aktualisieren keine erneute Formularuebermittlung anbietet.
-- Info-Buttons mit Hover-/Fokus-Hinweisen fuer Einstellungen und Backup-Aktionen ergaenzt.
-- Beschriftungen in den Einstellungen klarer benannt, z. B. Backup-Verzeichnis, Backups behalten, Skript vor/nach dem Backup und Vom Backup ausschliessen.
-- Sicherheitsbestaetigung fuer Root-Freigaben ergaenzt, inklusive kurzer Erklaerung in den Einstellungen.
-- Backup- und Restore-Start pruefen, ob die Root-Freigabe zuvor bestaetigt wurde.
-- Einstellungen-Seite ergaenzt.
-- Backup-Ziel, Excludes, Docker-Verhalten, automatische Exporte, Retention und Hooks konfigurierbar gemacht.
-- Backup-Start fuehrt zuerst zum Preflight-Check.
-- Live-Loganzeige fuer laufende Backup- und Restore-Jobs ergaenzt.
-- Backup-Explorer mit Download einzelner Dateien ergaenzt.
-- Import, Export, Verschieben und Loeschen von Backups ergaenzt.
-- Restore-Workflow mit Backup-Auswahl, Restore-Check, Restore-Plan und expliziter Bestaetigung ergaenzt.
+- Restore-Bereich wird nur noch angezeigt, wenn ein Backup für Restore
+  ausgewählt wurde.
+- Restore-Bereich mit Backup-Auswahl, Restore-Check, Restore-Plan und
+  Startbestätigung aus der Backup-Liste ergänzt.
+- Sichtbare Ladeanzeige für längere Formularaktionen ergänzt.
+- Formularaktionen leiten nach erfolgreichem Speichern oder Backup-Start auf
+  eine normale Seite weiter, damit der Browser beim Aktualisieren keine erneute
+  Formularübermittlung anbietet.
 
 ### Backend
 
-- Inkrementeller Snapshot-Modus mit `rsync --link-dest` ergaenzt; jeder Snapshot bleibt direkt restore-faehig.
-- Preflight-Check warnt bei Snapshot-Modus, wenn das Backup-Ziel kein typisches Linux-Dateisystem fuer Hardlinks ist.
-- Backup-Liste kann Status, Abschlusszeit, Groesse und Dateianzahl aus Logdateien und Backup-Ordnern ableiten, wenn `manifest.json` fehlt oder veraltet ist.
-- Docker-Stop/Start protokolliert Container-Namen und IDs, arbeitet containerweise und nutzt Timeouts, wenn verfügbar.
-- Abschlussmeldung und `complete`-Manifest werden erst nach Export-Archiv und Aufbewahrungsregel geschrieben.
-- Backend-Kommando zum Stoppen laufender Backups ergaenzt; zuvor durch das Backup gestoppte Docker-Container werden danach wieder gestartet.
-- Task-Log-Suche auf mehrere LoxBerry-Logpfade erweitert, damit Live-Status auch dann aktualisiert, wenn LoxBerry Logs direkt unter `log/plugins` statt im Plugin-Unterordner ablegt.
-- Backup- und Restore-Logs geben mehr Live-Fortschritt aus: Phasenmeldungen, rsync-Datei-/Fortschrittsausgabe, Export- und Retention-Schritte.
-- Sicherheitspruefungen fuer Backup-IDs zentralisiert und auf Export, Import, Move, Explorer, Delete und Restore angewendet.
-- Importierte Tar-Archive werden enger geprueft: nur ein sicherer Top-Level-Backupordner, keine absoluten Pfade und keine `..`-Pfade.
-- Tar-Aufrufe fuer Export/Import gehaertet.
-- Pre-/Post-Backup-Hooks werden nur noch ausgefuehrt, wenn sie Root gehoeren, ausfuehrbar sind und nicht von Gruppe/anderen beschreibbar sind.
-- `rsync`-basiertes Host-Backup ergaenzt.
-- Restore-Backend ergaenzt.
-- Manifest pro Backup ergaenzt.
-- Paketliste, systemd-Service-Liste, Mount-Liste und Docker-Inventar ergaenzt.
-- Preflight-Checks fuer Backup und Restore ergaenzt.
-- Task-Status- und Task-Log-Kommandos ergaenzt.
-- Backup-Import und -Export ergaenzt.
-- Sichere Pfadpruefungen fuer Backup-Explorer, Datei-Download und Task-Logs ergaenzt.
-- Pre-/Post-Backup-Hooks ergaenzt.
+- `rsync`-basiertes Host-Backup ergänzt.
+- Inkrementeller Snapshot-Modus mit `rsync --link-dest` ergänzt; jeder Snapshot
+  bleibt direkt restore-fähig.
+- Wenn noch kein vorheriges vollständiges Backup existiert, wird der erste
+  Snapshot automatisch als vollständige Basiskopie erstellt.
+- Preflight-Check warnt bei Snapshot-Modus, wenn das Backup-Ziel kein typisches
+  Linux-Dateisystem für Hardlinks ist.
+- Restore-Backend ergänzt.
+- Manifest pro Backup ergänzt.
+- Paketliste, systemd-Service-Liste, Mount-Liste und Docker-Inventar ergänzt.
+- Backup- und Restore-Logs geben mehr Live-Fortschritt aus:
+  Phasenmeldungen, rsync-Datei-/Fortschrittsausgabe, Export- und
+  Retention-Schritte.
+- Abschlussmeldung und `complete`-Manifest werden erst nach Export-Archiv und
+  Aufbewahrungsregel geschrieben.
+- Backup-Liste kann Status, Abschlusszeit, Größe und Dateianzahl aus Logdateien
+  und Backup-Ordnern ableiten, wenn `manifest.json` fehlt oder veraltet ist.
+- Docker-Stop/Start protokolliert Container-Namen und IDs, arbeitet
+  containerweise und nutzt Timeouts, wenn verfügbar.
+- Backend-Kommando zum Stoppen laufender Backups ergänzt; zuvor durch das Backup
+  gestoppte Docker-Container werden danach wieder gestartet.
+- Task-Log-Suche auf mehrere LoxBerry-Logpfade erweitert.
+- Sicherheitsprüfungen für Backup-IDs zentralisiert und auf Export, Import,
+  Move, Explorer, Delete und Restore angewendet.
+- Importierte Tar-Archive werden enger geprüft: nur ein sicherer
+  Top-Level-Backupordner, keine absoluten Pfade und keine `..`-Pfade.
+- Tar-Aufrufe für Export/Import gehärtet.
+- Pre-/Post-Backup-Hooks werden nur ausgeführt, wenn sie Root gehören,
+  ausführbar sind und nicht von Gruppe/anderen beschreibbar sind.
 
 ### Paketierung
 
-- Plugin-ZIP-Build per `package.ps1` ergaenzt.
-- Plugin-ZIP-Build per `package.sh` fuer Linux/GitHub Actions ergaenzt.
-- GitHub Actions Workflow fuer automatischen ZIP-Build und Release-Asset-Upload ergaenzt.
-- `release.cfg` und `prerelease.cfg` fuer LoxBerry-Updates ergaenzt.
-- Installierbares ZIP zunaechst nur ueber den GitHub-Pre-Release-Kanal vorgesehen.
-- `.gitattributes` fuer passende Zeilenenden ergaenzt.
-- `.gitignore` fuer lokale Test- und Build-Artefakte ergaenzt.
+- Plugin-ZIP-Build per `package.ps1` ergänzt.
+- Plugin-ZIP-Build per `package.sh` für Linux/GitHub Actions ergänzt.
+- GitHub Actions Workflow für automatischen ZIP-Build und Release-Asset-Upload
+  ergänzt.
+- `release.cfg` und `prerelease.cfg` für LoxBerry-Updates ergänzt.
+- Installierbares ZIP zunächst nur über den GitHub-Pre-Release-Kanal vorgesehen.
+- `.gitattributes` für passende Zeilenenden ergänzt.
+- `.gitignore` für lokale Test- und Build-Artefakte ergänzt.
 
 ## [0.1.0] - Entwicklungsversion
 
 ### Hinweis
 
 - Noch nicht produktiv freigegeben.
-- Noch nicht vollstaendig auf echter LoxBerry-/DietPi-Hardware validiert.
-- Nur fuer Tests auf nicht-kritischen Systemen verwenden.
+- Installation, Konfiguration und echte Backups wurden auf Testsystemen geprüft.
+- Ein produktiver Ende-zu-Ende-Restore steht noch aus.
+- Nur für Tests auf nicht-kritischen Systemen verwenden.
 
 [Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/main...develop
