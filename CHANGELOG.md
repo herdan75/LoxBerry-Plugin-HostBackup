@@ -45,6 +45,11 @@ noch keine freigegebene produktive Version.
 
 ### Weboberflaeche
 
+- Sichtbare deutsche Texte in der Weboberfläche auf echte Umlaute vereinheitlicht.
+- Restore-Bereich mit Backup-Auswahl, Restore-Check, Restore-Plan und Startbestätigung aus der Backup-Liste ergänzt.
+- Backup-Liste um direkte Aktionen für Dateien anzeigen, Restore auswählen und Löschen erweitert.
+- Live-Status stoppt die Aktualisierungsanzeige nach Abschluss und lädt die Backup-Liste danach neu.
+- Live-Status unterscheidet laufende, abgeschlossene, fehlgeschlagene und gestoppte Backups klarer.
 - Backup-Liste um Loesch-Button pro Backup mit Bestaetigungsdialog ergaenzt.
 - Import-Bereich klarer als Import externer `tar.gz`-Backup-Archive benannt.
 - Backup-Tabelle zeigt Dateianzahl und Exportstatus an und nutzt Backend-Fallbacks, wenn Manifestdaten fehlen oder noch `running` anzeigen.
@@ -66,7 +71,8 @@ noch keine freigegebene produktive Version.
 ### Backend
 
 - Backup-Liste kann Status, Abschlusszeit, Groesse und Dateianzahl aus Logdateien und Backup-Ordnern ableiten, wenn `manifest.json` fehlt oder veraltet ist.
-- Docker-Stop/Start protokolliert Container-Namen und IDs, arbeitet containerweise und nutzt Timeouts, wenn verfuegbar.
+- Docker-Stop/Start protokolliert Container-Namen und IDs, arbeitet containerweise und nutzt Timeouts, wenn verfügbar.
+- Abschlussmeldung und `complete`-Manifest werden erst nach Export-Archiv und Aufbewahrungsregel geschrieben.
 - Backend-Kommando zum Stoppen laufender Backups ergaenzt; zuvor durch das Backup gestoppte Docker-Container werden danach wieder gestartet.
 - Task-Log-Suche auf mehrere LoxBerry-Logpfade erweitert, damit Live-Status auch dann aktualisiert, wenn LoxBerry Logs direkt unter `log/plugins` statt im Plugin-Unterordner ablegt.
 - Backup- und Restore-Logs geben mehr Live-Fortschritt aus: Phasenmeldungen, rsync-Datei-/Fortschrittsausgabe, Export- und Retention-Schritte.

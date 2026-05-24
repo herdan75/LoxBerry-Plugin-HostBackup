@@ -724,8 +724,7 @@ create_backup() {
   files="$(calculate_files "$target")"
 
   if [ "$rsync_status" -eq 0 ] || [ "$rsync_status" -eq 24 ]; then
-    write_manifest "$target" "$backup_id" "complete" "$started" "$finished" "$size" "$files"
-    log "Backup $backup_id finished" | tee -a "$log_file"
+    log "Root filesystem copy for backup $backup_id finished" | tee -a "$log_file"
   else
     write_manifest "$target" "$backup_id" "failed" "$started" "$finished" "$size" "$files"
     log "Backup $backup_id failed with rsync status $rsync_status" | tee -a "$log_file"
@@ -734,11 +733,25 @@ create_backup() {
 
   if [ "$(json_get_bool create_export_after_backup)" = "true" ]; then
     log "Creating export archive for $backup_id" | tee -a "$log_file"
+    set +e
     export_backup "$backup_id" 2>&1 | tee -a "$log_file"
+    local export_status=${PIPESTATUS[0]}
+    set -e
+    if [ "$export_status" -ne 0 ]; then
+      finished="$(date -Iseconds)"
+      write_manifest "$target" "$backup_id" "failed" "$started" "$finished" "$size" "$files"
+      log "Backup $backup_id failed while creating export archive" | tee -a "$log_file"
+      exit "$export_status"
+    fi
   fi
 
   log "Applying backup retention policy" | tee -a "$log_file"
   prune_old_backups
+  finished="$(date -Iseconds)"
+  size="$(calculate_size "$target")"
+  files="$(calculate_files "$target")"
+  write_manifest "$target" "$backup_id" "complete" "$started" "$finished" "$size" "$files"
+  log "Backup $backup_id finished" | tee -a "$log_file"
   printf '%s\n' "$backup_id"
 }
 
@@ -873,6 +886,8 @@ task_status() {
     state="finished"
   elif grep -qE ' (Backup|Restore) .* failed ' "$path" 2>/dev/null; then
     state="failed"
+  elif grep -qE ' Backup .* stopped by user$' "$path" 2>/dev/null; then
+    state="stopped"
   elif [ "$(( $(date +%s) - mtime ))" -gt 300 ]; then
     state="stale"
   fi

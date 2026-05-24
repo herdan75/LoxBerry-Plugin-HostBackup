@@ -16,6 +16,8 @@ my $action = $q->param('action') || '';
 my $backup_id = $q->param('backup_id') || '';
 my $browse_path = $q->param('path') || '';
 my $task = $q->param('task') || '';
+my $restore_id = $q->param('restore_id') || '';
+my $browse_id = $q->param('browse_id') || '';
 
 my $message = '';
 my $error = '';
@@ -75,15 +77,21 @@ if ($notice eq 'saved') {
 } elsif ($notice eq 'backup_started') {
   $message = 'Backup gestartet. Der Live-Status wird unten automatisch aktualisiert.';
 } elsif ($notice eq 'backup_stop_requested') {
-  $message = 'Backup-Stopp wurde angefordert. Zuvor gestoppte Docker-Container werden wieder gestartet, falls moeglich.';
+  $message = 'Backup-Stopp wurde angefordert. Zuvor gestoppte Docker-Container werden wieder gestartet, falls möglich.';
 } elsif ($notice eq 'backup_deleted') {
-  $message = 'Backup geloescht.';
+  $message = 'Backup gelöscht.';
 } elsif ($notice eq 'backup_imported') {
   $message = 'Backup importiert.';
+} elsif ($notice eq 'restore_started') {
+  $message = 'Restore gestartet. Der Live-Status wird unten automatisch aktualisiert.';
+} elsif ($notice eq 'backup_finished') {
+  $message = 'Backup abgeschlossen. Die Backup-Liste wurde aktualisiert.';
+} elsif ($notice eq 'restore_finished') {
+  $message = 'Restore abgeschlossen.';
 }
 
 my $requested_active_task = $q->param('active_task') || '';
-if ($requested_active_task =~ /^backup-[A-Za-z0-9._-]+\.log$/) {
+if ($requested_active_task =~ /^(backup|restore)-[A-Za-z0-9._-]+\.log$/) {
   $active_task = $requested_active_task;
 }
 
@@ -91,6 +99,8 @@ if ($action eq 'task-status') {
   my ($status, $out) = run_shell(backend_cmd('task-status', $task, '180'));
   if ($status != 0 && $task =~ /^backup-([A-Za-z0-9._-]+)\.log$/) {
     ($status, $out) = run_shell(backend_cmd('task-status', "backup-$1.launch.log", '80'));
+  } elsif ($status != 0 && $task =~ /^restore-([A-Za-z0-9._-]+)\.log$/) {
+    ($status, $out) = run_shell(backend_cmd('task-status', "restore-$1.launch.log", '80'));
   }
   print header(-type => 'application/json', -charset => 'utf-8', -status => ($status == 0 ? '200 OK' : '500 Internal Server Error'));
   if ($status == 0) {
@@ -182,7 +192,7 @@ if ($q->request_method eq 'POST') {
     my ($stop_id) = $stop_task =~ /^backup-([A-Za-z0-9._-]+)\.log$/;
 
     if (!$stop_id) {
-      $error = 'Ungueltiger Backup-Task.';
+      $error = 'Ungültiger Backup-Task.';
     } else {
       my ($status, $out) = run_shell(backend_cmd('stop', $stop_id));
 
@@ -199,7 +209,7 @@ if ($q->request_method eq 'POST') {
     my $delete_id = $q->param('backup_id') || '';
 
     if ($delete_id !~ /^[A-Za-z0-9._-]+$/) {
-      $error = 'Ungueltige Backup-ID.';
+      $error = 'Ungültige Backup-ID.';
     } else {
       my ($status, $out) = run_shell(backend_cmd('delete', $delete_id));
 
@@ -216,7 +226,7 @@ if ($q->request_method eq 'POST') {
     my $upload = $q->upload('backup_archive');
 
     if (!$upload) {
-      $error = 'Keine Backup-Datei ausgewaehlt.';
+      $error = 'Keine Backup-Datei ausgewählt.';
     } else {
       my ($fh, $tmpfile) = tempfile('hostbackup-import-XXXXXX', SUFFIX => '.tar.gz', TMPDIR => 1, UNLINK => 1);
       binmode $fh;
@@ -230,6 +240,33 @@ if ($q->request_method eq 'POST') {
         redirect_with(msg => 'backup_imported');
       } else {
         $error = escapeHTML($out);
+      }
+    }
+  }
+
+  elsif ($action eq 'restore-backup') {
+
+    my $restore_backup_id = $q->param('backup_id') || '';
+    my $confirm_restore = $q->param('confirm_restore') ? 1 : 0;
+
+    if ($restore_backup_id !~ /^[A-Za-z0-9._-]+$/) {
+      $error = 'Ungültige Backup-ID.';
+    } elsif (!$confirm_restore) {
+      $error = 'Restore muss ausdrücklich bestätigt werden.';
+    } else {
+      my ($check_status, $check_out) = run_shell(backend_cmd('preflight-restore', $restore_backup_id));
+      my $check = $check_status == 0 ? eval { decode_json($check_out) } : undef;
+
+      if ($check_status != 0 || !$check || (($check->{status} || '') eq 'error')) {
+        $error = escapeHTML($check_out || 'Restore-Check fehlgeschlagen.');
+      } else {
+        my ($status, $out) = run_shell(backend_cmd('start-restore', $restore_backup_id));
+
+        if ($status == 0) {
+          redirect_with(msg => 'restore_started', active_task => "restore-$restore_backup_id.log");
+        } else {
+          $error = escapeHTML($out);
+        }
       }
     }
   }
@@ -249,6 +286,50 @@ my $backups = [];
 
 if ($list_status == 0) {
   $backups = eval { decode_json($list_json) } || [];
+}
+
+if ($restore_id !~ /^[A-Za-z0-9._-]+$/) {
+  $restore_id = '';
+}
+
+if ($browse_id !~ /^[A-Za-z0-9._-]+$/) {
+  $browse_id = '';
+}
+
+if ($browse_path =~ m{(^/|(^|/)\.\.(/|$))}) {
+  $browse_path = '';
+}
+
+my $restore_check = undef;
+my $restore_plan = '';
+my $restore_error = '';
+
+if ($restore_id) {
+  my ($check_status, $check_json) = run_shell(backend_cmd('preflight-restore', $restore_id));
+  if ($check_status == 0) {
+    $restore_check = eval { decode_json($check_json) };
+  } else {
+    $restore_error = escapeHTML($check_json);
+  }
+
+  my ($plan_status, $plan_text) = run_shell(backend_cmd('restore-plan', $restore_id));
+  if ($plan_status == 0) {
+    $restore_plan = escapeHTML($plan_text);
+  } elsif (!$restore_error) {
+    $restore_error = escapeHTML($plan_text);
+  }
+}
+
+my $browse_data = undef;
+my $browse_error = '';
+
+if ($browse_id) {
+  my ($browse_status, $browse_json) = run_shell(backend_cmd('browse', $browse_id, $browse_path));
+  if ($browse_status == 0) {
+    $browse_data = eval { decode_json($browse_json) };
+  } else {
+    $browse_error = escapeHTML($browse_json);
+  }
 }
 
 my $cfg_backup_root = escapeHTML($config->{backup_root} || '');
@@ -281,23 +362,25 @@ my %cfg_months = map { $_ => 1 } @cfg_months;
 my $all_months_checked = checked_attr($cfg_months{'*'});
 my @month_checked = map { checked_attr($cfg_months{'*'} || $cfg_months{"$_"}) } 0..12;
 
-my $info_backup_root = info_button('Hier legst du fest, wohin die Backups geschrieben werden. Fuer ein echtes Host-Backup sollte das ein externer Datentraeger, ein separates Mount oder ein grosser zweiter Datenspeicher sein. Wenn die Systemkarte selbst ausfaellt, hilft ein Backup auf derselben Karte nicht.');
-my $info_retention = info_button('Legt fest, wie viele fertige Backups behalten werden. Erlaubt sind 1 bis 10. Sobald nach einem erfolgreichen Backup mehr Backups vorhanden sind als erlaubt, entfernt das Plugin automatisch das aelteste Backup und das passende Export-Archiv.');
-my $info_schedule = info_button('Der Zeitplan erstellt Backups automatisch per Cron. Taeglich bedeutet jeden Tag zur Startzeit. Woechentlich bedeutet an den gewaehlen Wochentagen zur Startzeit. Monatlich bedeutet an den gewaehlen Tagen in den gewaehlen Monaten zur Startzeit.');
-my $info_time = info_button('Diese Uhrzeit gilt fuer alle Zeitplanarten. Bei taeglich ist sie die einzige zeitliche Einstellung. Bei woechentlich und monatlich wird sie mit den gewaehlen Tagen kombiniert.');
-my $info_weekdays = info_button('Nur bei woechentlichen Backups relevant. Du kannst einen oder mehrere Wochentage auswaehlen, zum Beispiel Montag und Freitag. An jedem gewaehlten Tag startet ein Backup zur angegebenen Startzeit.');
-my $info_monthdays = info_button('Nur bei monatlichen Backups relevant. Du kannst einen oder mehrere Kalendertage auswaehlen, zum Beispiel 1 und 15. Gibt es diesen Tag in einem Monat nicht, etwa den 31. im Februar, startet dort kein Backup.');
-my $info_months = info_button('Nur bei monatlichen Backups relevant. Mit Alle Monate laeuft der Monatsplan jeden Monat. Alternativ kannst du einzelne Monate waehlen, zum Beispiel Jan, Apr, Jul und Okt fuer Quartalsbackups.');
-my $info_pre_hook = info_button('Optionales Skript, das direkt vor dem Backup ausgefuehrt wird. Sinnvoll fuer Datenbank-Dumps oder das Vorbereiten von Diensten. Das Skript muss absolut angegeben werden und wird aus Sicherheitsgruenden nur ausgefuehrt, wenn es Root gehoert und nicht durch andere Benutzer beschreibbar ist.');
-my $info_post_hook = info_button('Optionales Skript, das nach dem Backup ausgefuehrt wird. Sinnvoll zum Aufraeumen, Dienste wieder in einen gewuenschten Zustand zu bringen oder Benachrichtigungen auszufuehren. Es gelten dieselben Sicherheitsregeln wie beim Skript vor dem Backup.');
-my $info_excludes = info_button('Hier kannst du Pfade vom rsync-Backup ausschliessen, je ein Pfad pro Zeile. Das ist sinnvoll fuer grosse Medienarchive, Netzwerkshares oder Daten, die separat gesichert werden. Zu viele Ausschluesse koennen aber die Wiederherstellung unvollstaendig machen.');
-my $info_docker = info_button('Wenn aktiv, stoppt das Plugin laufende Docker-Container vor dem Backup und startet sie danach wieder. Das verbessert die Konsistenz von Datenbanken und Volumes, verursacht aber eine Unterbrechung der Container-Dienste waehrend des Backups.');
-my $info_export = info_button('Erstellt nach jedem Backup zusaetzlich ein komprimiertes tar.gz-Archiv. Das ist praktisch zum Download, Kopieren oder Archivieren, benoetigt aber zusaetzlichen Speicherplatz und Zeit.');
-my $info_root = info_button('Diese Bestaetigung ist noetig, weil Vollbackup und Restore Systemdateien, Berechtigungen, Docker-Daten und Cronjobs betreffen. Es werden keine Passwoerter gespeichert; erlaubt wird nur der Start des Backend-Skripts dieses Plugins.');
-my $info_table = info_button('Diese Liste zeigt vorhandene Backups mit Status, Host, Groesse und Fertigstellungszeit. Ein vollstaendiges Backup sollte den Status complete haben, bevor du es fuer Restore-Tests verwendest.');
-my $info_import = info_button('Importiert ein extern gespeichertes Backup-Archiv im Format tar.gz, zum Beispiel von deinem PC, NAS oder einem anderen Datentraeger. Fuer Restore eines bereits unten gelisteten Backups brauchst du diese Datei-Auswahl nicht.');
-my $info_delete = info_button('Loescht den Backup-Ordner und ein eventuell vorhandenes Export-Archiv dieses Backups. Das kann nicht rueckgaengig gemacht werden.');
-my $info_backup_start = info_button('Startet den Backup-Vorgang. Vor dem eigentlichen Backup prueft das Plugin wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und Docker-Hinweise.');
+my $info_backup_root = info_button('Hier legst du fest, wohin die Backups geschrieben werden. Für ein echtes Host-Backup sollte das ein externer Datenträger, ein separates Mount oder ein großer zweiter Datenspeicher sein. Wenn die Systemkarte selbst ausfällt, hilft ein Backup auf derselben Karte nicht.');
+my $info_retention = info_button('Legt fest, wie viele fertige Backups behalten werden. Erlaubt sind 1 bis 10. Sobald nach einem erfolgreichen Backup mehr Backups vorhanden sind als erlaubt, entfernt das Plugin automatisch das älteste Backup und das passende Export-Archiv.');
+my $info_schedule = info_button('Der Zeitplan erstellt Backups automatisch per Cron. Täglich bedeutet jeden Tag zur Startzeit. Wöchentlich bedeutet an den gewählten Wochentagen zur Startzeit. Monatlich bedeutet an den gewählten Tagen in den gewählten Monaten zur Startzeit.');
+my $info_time = info_button('Diese Uhrzeit gilt für alle Zeitplanarten. Bei täglich ist sie die einzige zeitliche Einstellung. Bei wöchentlich und monatlich wird sie mit den gewählten Tagen kombiniert.');
+my $info_weekdays = info_button('Nur bei wöchentlichen Backups relevant. Du kannst einen oder mehrere Wochentage auswählen, zum Beispiel Montag und Freitag. An jedem gewählten Tag startet ein Backup zur angegebenen Startzeit.');
+my $info_monthdays = info_button('Nur bei monatlichen Backups relevant. Du kannst einen oder mehrere Kalendertage auswählen, zum Beispiel 1 und 15. Gibt es diesen Tag in einem Monat nicht, etwa den 31. im Februar, startet dort kein Backup.');
+my $info_months = info_button('Nur bei monatlichen Backups relevant. Mit Alle Monate läuft der Monatsplan jeden Monat. Alternativ kannst du einzelne Monate wählen, zum Beispiel Jan, Apr, Jul und Okt für Quartalsbackups.');
+my $info_pre_hook = info_button('Optionales Skript, das direkt vor dem Backup ausgeführt wird. Sinnvoll für Datenbank-Dumps oder das Vorbereiten von Diensten. Das Skript muss absolut angegeben werden und wird aus Sicherheitsgründen nur ausgeführt, wenn es Root gehört und nicht durch andere Benutzer beschreibbar ist.');
+my $info_post_hook = info_button('Optionales Skript, das nach dem Backup ausgeführt wird. Sinnvoll zum Aufräumen, Dienste wieder in einen gewünschten Zustand zu bringen oder Benachrichtigungen auszuführen. Es gelten dieselben Sicherheitsregeln wie beim Skript vor dem Backup.');
+my $info_excludes = info_button('Hier kannst du Pfade vom rsync-Backup ausschließen, je ein Pfad pro Zeile. Das ist sinnvoll für große Medienarchive, Netzwerkshares oder Daten, die separat gesichert werden. Zu viele Ausschlüsse können aber die Wiederherstellung unvollständig machen.');
+my $info_docker = info_button('Wenn aktiv, stoppt das Plugin laufende Docker-Container vor dem Backup und startet sie danach wieder. Das verbessert die Konsistenz von Datenbanken und Volumes, verursacht aber eine Unterbrechung der Container-Dienste während des Backups.');
+my $info_export = info_button('Erstellt nach jedem Backup zusätzlich ein komprimiertes tar.gz-Archiv. Das ist praktisch zum Download, Kopieren oder Archivieren, benötigt aber zusätzlichen Speicherplatz und Zeit.');
+my $info_root = info_button('Diese Bestätigung ist nötig, weil Vollbackup und Restore Systemdateien, Berechtigungen, Docker-Daten und Cronjobs betreffen. Es werden keine Passwörter gespeichert; erlaubt wird nur der Start des Backend-Skripts dieses Plugins.');
+my $info_table = info_button('Diese Liste zeigt vorhandene Backups mit Status, Host, Größe und Fertigstellungszeit. Ein vollständiges Backup sollte den Status complete haben, bevor du es für Restore-Tests verwendest.');
+my $info_import = info_button('Importiert ein extern gespeichertes Backup-Archiv im Format tar.gz, zum Beispiel von deinem PC, NAS oder einem anderen Datenträger. Für Restore eines bereits unten gelisteten Backups brauchst du diese Datei-Auswahl nicht.');
+my $info_delete = info_button('Löscht den Backup-Ordner und ein eventuell vorhandenes Export-Archiv dieses Backups. Das kann nicht rückgängig gemacht werden.');
+my $info_restore = info_button('Wählt dieses Backup für eine Wiederherstellung aus. Danach zeigt der Restore-Bereich die Prüfungen und den Startbutton für genau dieses Backup.');
+my $info_browse = info_button('Öffnet den Datei-Explorer für dieses Backup. Damit kannst du prüfen, welche Dateien im Backup enthalten sind.');
+my $info_backup_start = info_button('Startet den Backup-Vorgang. Vor dem eigentlichen Backup prüft das Plugin wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und Docker-Hinweise.');
 
 print header(-type => 'text/html', -charset => 'utf-8');
 
@@ -318,7 +401,7 @@ print <<HTML;
 <header class="topbar">
 <div>
 <h1>LoxBerry Host Backup</h1>
-<p>Vollbackup fuer LoxBerry, Docker, DietPi und native Dienste.</p>
+<p>Vollbackup für LoxBerry, Docker, DietPi und native Dienste.</p>
 </div>
 
 <form method="post">
@@ -341,7 +424,7 @@ print <<HTML;
 <section class="panel task-monitor" id="task-monitor" data-active-task="$active_task_attr">
 <h2>Live-Status</h2>
 <div class="task-actions">
-<span class="task-state state-running" id="task-state">Kein laufender Task ausgewaehlt</span>
+<span class="task-state state-running" id="task-state">Kein laufender Task ausgewählt</span>
 <span class="task-heartbeat" id="task-heartbeat">Nach einem gestarteten Backup werden hier Status und Log angezeigt.</span>
 <form method="post" class="stop-task-form" id="stop-task-form">
 <input type="hidden" name="action" value="stop-backup">
@@ -380,8 +463,8 @@ print <<HTML;
 </label>
 
 <div class="schedule-modes">
-<label><input type="radio" name="schedule_mode" value="daily"$daily_checked> Taeglich</label>
-<label><input type="radio" name="schedule_mode" value="weekly"$weekly_checked> Woechentlich</label>
+<label><input type="radio" name="schedule_mode" value="daily"$daily_checked> Täglich</label>
+<label><input type="radio" name="schedule_mode" value="weekly"$weekly_checked> Wöchentlich</label>
 <label><input type="radio" name="schedule_mode" value="monthly"$monthly_checked> Monatlich</label>
 </div>
 
@@ -446,7 +529,7 @@ print <<HTML;
 <label><input type="checkbox" name="schedule_months" value="*"$all_months_checked> Alle Monate</label>
 <label><input type="checkbox" name="schedule_months" value="1"$month_checked[1]> Jan</label>
 <label><input type="checkbox" name="schedule_months" value="2"$month_checked[2]> Feb</label>
-<label><input type="checkbox" name="schedule_months" value="3"$month_checked[3]> Maerz</label>
+<label><input type="checkbox" name="schedule_months" value="3"$month_checked[3]> März</label>
 <label><input type="checkbox" name="schedule_months" value="4"$month_checked[4]> Apr</label>
 <label><input type="checkbox" name="schedule_months" value="5"$month_checked[5]> Mai</label>
 <label><input type="checkbox" name="schedule_months" value="6"$month_checked[6]> Jun</label>
@@ -472,13 +555,13 @@ print <<HTML;
 </label>
 
 <label class="wide">
-<span>Vom Backup ausschliessen $info_excludes</span>
+<span>Vom Backup ausschließen $info_excludes</span>
 <textarea name="rsync_extra_excludes" rows="5">$cfg_excludes</textarea>
 </label>
 
 <label class="checkline">
 <input type="checkbox" name="stop_docker_before_backup" value="1"$cfg_stop_docker>
-<span>Docker-Container waehrend des Backups anhalten $info_docker</span>
+<span>Docker-Container während des Backups anhalten $info_docker</span>
 </label>
 
 <label class="checkline">
@@ -488,7 +571,7 @@ print <<HTML;
 
 <label class="checkline root-confirm">
 <input type="checkbox" name="root_permission_ack" value="1"$cfg_root_permission_ack required>
-<span>Root-Freigabe bestaetigen $info_root</span>
+<span>Root-Freigabe bestätigen $info_root</span>
 </label>
 
 <div class="form-actions">
@@ -520,11 +603,11 @@ print <<HTML;
 <th>ID</th>
 <th>Status</th>
 <th>Host</th>
-<th>Groesse</th>
+<th>Größe</th>
 <th>Dateien</th>
 <th>Fertiggestellt</th>
 <th>Export</th>
-<th>Aktion</th>
+<th>Aktionen</th>
 </tr>
 </thead>
 
@@ -539,7 +622,8 @@ if (!@$backups) {
 
   for my $backup (@$backups) {
 
-    my $id = escapeHTML($backup->{backup_id} || '');
+    my $raw_id = $backup->{backup_id} || '';
+    my $id = escapeHTML($raw_id);
     my $status = escapeHTML($backup->{status} || 'unbekannt');
     my $host = escapeHTML(($backup->{host} || {})->{hostname} || '');
     my $finished = escapeHTML($backup->{finished_at} || '');
@@ -558,11 +642,21 @@ if (!@$backups) {
 <td>$finished</td>
 <td>$export</td>
 <td>
+<div class="row-actions">
+<form method="get" class="inline-form">
+<input type="hidden" name="browse_id" value="$id">
+<button type="submit">Dateien</button>$info_browse
+</form>
+<form method="get" class="inline-form">
+<input type="hidden" name="restore_id" value="$id">
+<button type="submit">Restore</button>$info_restore
+</form>
 <form method="post" class="inline-form delete-backup-form">
 <input type="hidden" name="action" value="delete-backup">
 <input type="hidden" name="backup_id" value="$id">
-<button class="danger" type="submit">Loeschen</button>$info_delete
+<button class="danger" type="submit">Löschen</button>$info_delete
 </form>
+</div>
 </td>
 </tr>
 };
@@ -572,11 +666,136 @@ if (!@$backups) {
 print <<HTML;
 </tbody>
 </table>
+HTML
+
+if ($browse_id) {
+  my $safe_browse_id = escapeHTML($browse_id);
+  my $safe_browse_path = escapeHTML($browse_path || '/');
+
+  print qq{
+<div class="subpanel">
+<h3>Dateien in Backup <code>$safe_browse_id</code></h3>
+<p>Pfad: <code>$safe_browse_path</code></p>
+};
+
+  if ($browse_error) {
+    print qq{<section class="notice error"><pre>$browse_error</pre></section>};
+  } elsif ($browse_data && ref($browse_data->{items}) eq 'ARRAY') {
+    if (length $browse_path) {
+      my @parts = split m{/+}, $browse_path;
+      pop @parts;
+      my $parent = join '/', @parts;
+      my $parent_url = '?browse_id=' . url_escape($browse_id) . '&path=' . url_escape($parent);
+      print qq{<p><a href="$parent_url">Eine Ebene höher</a></p>};
+    }
+
+    print qq{
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Typ</th>
+<th>Größe</th>
+<th>Aktion</th>
+</tr>
+</thead>
+<tbody>
+};
+
+    for my $item (@{$browse_data->{items}}) {
+      my $name = escapeHTML($item->{name} || '');
+      my $type = escapeHTML($item->{type} || '');
+      my $path = $item->{path} || '';
+      my $size = int(($item->{size} || 0) / 1024);
+      my $open = '-';
+
+      if (($item->{type} || '') eq 'directory') {
+        my $url = '?browse_id=' . url_escape($browse_id) . '&path=' . url_escape($path);
+        $open = qq{<a href="$url">Öffnen</a>};
+      }
+
+      print qq{
+<tr>
+<td>$name</td>
+<td>$type</td>
+<td>${size} KB</td>
+<td>$open</td>
+</tr>
+};
+    }
+
+    print qq{
+</tbody>
+</table>
+};
+  }
+
+  print qq{</div>};
+}
+
+print <<HTML;
 </section>
 
 <section class="panel">
 <h2>Restore</h2>
-<p>Restore nur in Rescue-/Testumgebung verwenden.</p>
+<p>Restore nur in Rescue-/Testumgebung verwenden. Wähle ein Backup über die Aktion <strong>Restore</strong> in der Backup-Liste aus.</p>
+HTML
+
+if ($restore_id) {
+  my $safe_restore_id = escapeHTML($restore_id);
+
+  print qq{
+<div class="subpanel">
+<h3>Ausgewähltes Backup: <code>$safe_restore_id</code></h3>
+};
+
+  if ($restore_error) {
+    print qq{<section class="notice error"><pre>$restore_error</pre></section>};
+  }
+
+  if ($restore_check) {
+    my $check_status = escapeHTML($restore_check->{status} || 'unbekannt');
+    print qq{<p><strong>Restore-Check:</strong> $check_status</p>};
+
+    if (ref($restore_check->{warnings}) eq 'ARRAY' && @{$restore_check->{warnings}}) {
+      print '<ul class="warnings">';
+      for my $warning (@{$restore_check->{warnings}}) {
+        print '<li>' . escapeHTML($warning) . '</li>';
+      }
+      print '</ul>';
+    }
+
+    if (ref($restore_check->{checks}) eq 'ARRAY') {
+      print '<table class="check-table"><thead><tr><th>Prüfung</th><th>Status</th><th>Wert</th></tr></thead><tbody>';
+      for my $check (@{$restore_check->{checks}}) {
+        my $name = escapeHTML($check->{name} || '');
+        my $ok = $check->{ok} ? 'ok' : 'nicht ok';
+        my $value = escapeHTML($check->{value} || '');
+        print qq{<tr><td>$name</td><td>$ok</td><td>$value</td></tr>};
+      }
+      print '</tbody></table>';
+    }
+  }
+
+  if ($restore_plan) {
+    print qq{<pre>$restore_plan</pre>};
+  }
+
+  print qq{
+<form method="post" class="restore-start-form">
+<input type="hidden" name="action" value="restore-backup">
+<input type="hidden" name="backup_id" value="$safe_restore_id">
+<label class="checkline root-confirm">
+<input type="checkbox" name="confirm_restore" value="1" required>
+<span>Ich bestätige, dass dieses Backup auf das System zurückgeschrieben werden soll.</span>
+</label>
+<button class="danger" type="submit">Restore starten</button>
+</form>
+</div>
+};
+}
+
+print <<HTML;
 </section>
 
 </main>
@@ -637,6 +856,7 @@ print <<HTML;
   var logEl = document.getElementById('task-log');
   var stopForm = document.getElementById('stop-task-form');
   var timer = null;
+  var refreshScheduled = false;
 
   function setState(state, text) {
     stateEl.className = 'task-state state-' + state;
@@ -659,16 +879,28 @@ print <<HTML;
   function renderStatus(data) {
     var state = data.state || 'running';
     var labels = {
-      running: 'Backup laeuft',
+      running: task.indexOf('restore-') === 0 ? 'Restore läuft' : 'Backup läuft',
       finished: 'Backup abgeschlossen',
       failed: 'Backup fehlgeschlagen',
+      stopped: 'Backup gestoppt',
       stale: 'Keine neue Logausgabe',
-      error: 'Status nicht verfuegbar'
+      error: 'Status nicht verfügbar'
     };
+
+    if (task.indexOf('restore-') === 0) {
+      labels.finished = 'Restore abgeschlossen';
+      labels.failed = 'Restore fehlgeschlagen';
+    }
 
     setState(state, labels[state] || state);
 
-    if (data.now && data.mtime) {
+    if (state === 'finished') {
+      heartbeatEl.textContent = 'Abgeschlossen. Die Backup-Liste wird aktualisiert.';
+    } else if (state === 'failed') {
+      heartbeatEl.textContent = 'Fehlgeschlagen. Bitte Logausgabe prüfen.';
+    } else if (state === 'stopped') {
+      heartbeatEl.textContent = 'Gestoppt. Die Backup-Liste wird aktualisiert.';
+    } else if (data.now && data.mtime) {
       var age = Math.max(0, Number(data.now) - Number(data.mtime));
       heartbeatEl.textContent = 'Letzte Log-Aktualisierung vor ' + age + ' Sekunden.';
     } else {
@@ -683,15 +915,24 @@ print <<HTML;
 
     logEl.scrollTop = logEl.scrollHeight;
 
-    if (state === 'finished' || state === 'failed') {
+    if (state === 'finished' || state === 'failed' || state === 'stopped') {
       if (stopForm) stopForm.classList.add('task-monitor-idle');
       window.clearInterval(timer);
+      if (!refreshScheduled) {
+        refreshScheduled = true;
+        if (state === 'finished' || state === 'stopped') {
+          window.setTimeout(function () {
+            var msg = state === 'stopped' ? 'backup_stop_requested' : (task.indexOf('restore-') === 0 ? 'restore_finished' : 'backup_finished');
+            window.location.href = window.location.pathname + '?msg=' + encodeURIComponent(msg);
+          }, 2500);
+        }
+      }
     }
   }
 
   if (stopForm) {
     stopForm.addEventListener('submit', function (event) {
-      if (!window.confirm('Backup wirklich stoppen? Docker-Container, die dieses Backup gestoppt hat, werden anschliessend wieder gestartet.')) {
+      if (!window.confirm('Backup wirklich stoppen? Docker-Container, die dieses Backup gestoppt hat, werden anschließend wieder gestartet.')) {
         event.preventDefault();
       }
     });
@@ -701,7 +942,17 @@ print <<HTML;
     form.addEventListener('submit', function (event) {
       var idInput = form.querySelector('input[name="backup_id"]');
       var backupId = idInput ? idInput.value : 'dieses Backup';
-      if (!window.confirm('Backup ' + backupId + ' wirklich dauerhaft loeschen?')) {
+      if (!window.confirm('Backup ' + backupId + ' wirklich dauerhaft löschen?')) {
+        event.preventDefault();
+      }
+    });
+  });
+
+  document.querySelectorAll('.restore-start-form').forEach(function (form) {
+    form.addEventListener('submit', function (event) {
+      var idInput = form.querySelector('input[name="backup_id"]');
+      var backupId = idInput ? idInput.value : 'dieses Backup';
+      if (!window.confirm('Restore von Backup ' + backupId + ' wirklich starten? Das schreibt Systemdateien zurück.')) {
         event.preventDefault();
       }
     });
@@ -712,7 +963,7 @@ print <<HTML;
       .then(function (response) { return response.json(); })
       .then(renderStatus)
       .catch(function () {
-        setState('error', 'Status nicht verfuegbar');
+        setState('error', 'Status nicht verfügbar');
         heartbeatEl.textContent = 'Der Live-Status konnte gerade nicht gelesen werden. Es wird erneut versucht.';
       });
   }
@@ -724,7 +975,7 @@ print <<HTML;
   }
 
   monitor.classList.remove('task-monitor-idle');
-  setState('running', 'Backup laeuft');
+  setState('running', task.indexOf('restore-') === 0 ? 'Restore läuft' : 'Backup läuft');
   heartbeatEl.textContent = 'Live-Status wird geladen...';
   logEl.textContent = 'Backup wurde gestartet. Warte auf erste Logausgabe...';
   poll();

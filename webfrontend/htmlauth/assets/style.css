@@ -352,6 +352,31 @@ button.danger {
   margin: 0;
 }
 
+.row-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.subpanel {
+  border-top: 1px solid #e2e7ef;
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.subpanel h3 {
+  font-size: 16px;
+  margin-top: 0;
+}
+
+.restore-start-form {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .move-form {
   align-items: center;
   display: flex;
@@ -451,6 +476,11 @@ button.danger {
 }
 
 .state-stale {
+  background: #fff6df;
+  color: #805900;
+}
+
+.state-stopped {
   background: #fff6df;
   color: #805900;
 }
