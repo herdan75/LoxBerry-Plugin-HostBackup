@@ -561,8 +561,8 @@ body.is-loading .loading-overlay {
 }
 
 .row-actions button,
-.inline-form button,
-.config-actions button {
+.inline-form button:not(.info-button),
+.config-actions button:not(.info-button) {
   font-size: 13px;
   line-height: 1.3;
   min-height: 31px;
@@ -584,6 +584,10 @@ body.is-loading .loading-overlay {
   padding: 4px 6px;
 }
 
+.settings-panel > .config-card {
+  margin-top: 22px;
+}
+
 .config-card .config-actions {
   align-items: center;
   display: flex;
@@ -597,7 +601,7 @@ body.is-loading .loading-overlay {
   gap: 6px;
 }
 
-#hostbackup-app .config-card .config-actions button {
+#hostbackup-app .config-card .config-actions button:not(.info-button) {
   font-size: 13px;
   min-height: 32px;
   min-width: 158px;
@@ -609,6 +613,13 @@ body.is-loading .loading-overlay {
   font-size: 13px;
   max-width: 310px;
   min-height: 32px;
+}
+
+.config-card .config-file::file-selector-button {
+  font: inherit;
+  font-size: 13px;
+  margin-right: 8px;
+  padding: 5px 10px;
 }
 
 #hostbackup-app button:hover,
