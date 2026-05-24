@@ -200,8 +200,8 @@ body.is-loading .loading-overlay {
   word-spacing: normal;
 }
 
-.info-help:hover .info-bubble,
-.info-help:focus-within .info-bubble {
+#hostbackup-app .info-help:hover .info-bubble,
+#hostbackup-app .info-help:focus-within .info-bubble {
   display: block;
 }
 
