@@ -593,7 +593,7 @@ print <<HTML;
 </div>
 </div>
 
-<main class="page" id="hostbackup-app">
+<main class="page" id="hostbackup-app" data-enhance="false">
 
 <header class="topbar">
 <div class="brand">
@@ -1046,6 +1046,10 @@ print <<HTML;
 
 <script>
 (function () {
+  document.querySelectorAll('#hostbackup-app input, #hostbackup-app textarea, #hostbackup-app select, #hostbackup-app button').forEach(function (control) {
+    control.setAttribute('data-role', 'none');
+  });
+
   var overlay = document.getElementById('loading-overlay');
   var loadingText = document.getElementById('loading-text');
 
