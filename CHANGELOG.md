@@ -9,6 +9,10 @@ validiert werden.
 
 ## [Unreleased]
 
+Derzeit keine Einträge.
+
+## [0.3.1] - 2026-05-25
+
 ### Weboberfläche
 
 - Weboberfläche auf die LoxBerry-Standard-Einbettung mit
@@ -22,6 +26,9 @@ validiert werden.
   Grautöne angeglichen.
 - Backup-Liste und Dateisystem-Prüfung werden nach dem Seitenaufbau per
   AJAX nachgeladen, damit die Weboberfläche schneller sichtbar ist.
+- Info-Buttons, Restore-Bereich, Konfigurationsaktionen und die
+  Dateisystem-Hinweise konsistent nachgezogen und alte zu breite
+  Eingabe-/Button-Regeln entschärft.
 
 ## [0.3.0] - 2026-05-24
 
@@ -206,6 +213,7 @@ validiert werden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.3.0...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.3.1...develop
+[0.3.1]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.3.1
 [0.3.0]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.3.0
 [0.2.0]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.2.0-beta

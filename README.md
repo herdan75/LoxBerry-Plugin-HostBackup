@@ -1,6 +1,6 @@
 # LoxBerry Host Backup
 
-**Status:** Version 0.3.0, erste vorsichtig freigegebene Version.
+**Status:** Version 0.3.1, erste vorsichtig freigegebene Version.
 
 Dieses Plugin wurde bereits auf einem LoxBerry-/DietPi-Testsystem installiert,
 konfiguriert und für echte Vollbackups sowie inkrementelle Snapshot-Backups
@@ -162,13 +162,13 @@ zur LoxBerry-Administration gewechselt werden kann.
 Release-Paket:
 
 ```text
-https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.3.0/LoxBerryHostBackup_0.3.0.zip
+https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.3.1/LoxBerryHostBackup_0.3.1.zip
 ```
 
 Lokales Paket nach dem Build:
 
 ```text
-LoxBerryHostBackup_0.3.0.zip
+LoxBerryHostBackup_0.3.1.zip
 ```
 
 ## Erste Tests Auf LoxBerry
@@ -549,7 +549,7 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 
 Branches:
 
-- `main`: aktueller freigegebener Stand 0.3.0
+- `main`: aktueller freigegebener Stand 0.3.1
 - `develop`: laufende Weiterentwicklung
 
 Update-Dateien:
