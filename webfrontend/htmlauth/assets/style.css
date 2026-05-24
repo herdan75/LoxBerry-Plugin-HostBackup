@@ -166,23 +166,38 @@ body.is-loading .loading-overlay {
   width: 16px;
 }
 
-.info-bubble {
+#hostbackup-app .info-bubble {
   background: #17212c;
   border-radius: 6px;
   box-shadow: 0 8px 24px rgba(23, 33, 44, 0.18);
   color: #ffffff;
   display: none;
+  font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
   font-size: 13px;
   font-weight: 400;
+  letter-spacing: normal;
   left: 50%;
   line-height: 1.35;
   max-width: min(340px, 80vw);
   padding: 9px 10px;
   position: absolute;
+  text-shadow: none;
+  text-transform: none;
   top: calc(100% + 8px);
   transform: translateX(-50%);
   width: max-content;
+  word-spacing: normal;
   z-index: 20;
+}
+
+#hostbackup-app .info-bubble * {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: normal;
+  text-shadow: none;
+  text-transform: none;
+  word-spacing: normal;
 }
 
 .info-help:hover .info-bubble,
