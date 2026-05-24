@@ -335,12 +335,12 @@ body.is-loading .loading-overlay {
   background: #fbfdff;
   border: 1px solid #c8d3df;
   border-radius: 8px;
-  margin: 0;
+  margin: 10px 0 0;
   padding: 16px 14px 14px;
 }
 
 .settings-group {
-  margin-top: 4px;
+  margin-top: 12px;
 }
 
 .schedule-card legend {
@@ -368,10 +368,10 @@ body.is-loading .loading-overlay {
 
 .settings-subtitle {
   color: #526173;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   letter-spacing: normal;
-  margin: 3px 0 12px;
+  margin: 4px 0 13px;
   text-transform: none;
 }
 
