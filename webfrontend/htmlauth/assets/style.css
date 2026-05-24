@@ -89,6 +89,21 @@ body.is-loading .loading-overlay {
   width: 58px;
 }
 
+.topbar-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.topbar-actions form {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  margin: 0;
+}
+
 h1,
 h2,
 p {
@@ -403,6 +418,24 @@ button {
   padding: 6px 11px;
 }
 
+.secondary-button {
+  align-items: center;
+  border: 1px solid #bcc8d6;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1d2733;
+  display: inline-flex;
+  min-height: 34px;
+  padding: 6px 11px;
+  text-decoration: none;
+}
+
+.secondary-button:hover,
+.secondary-button:focus {
+  border-color: #8ea4ba;
+  color: #0e5a76;
+}
+
 button.primary {
   background: #176a8a;
   border-color: #176a8a;
@@ -603,6 +636,11 @@ button.danger {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .topbar-actions {
+    justify-content: flex-start;
+    width: 100%;
   }
 
   .brand {

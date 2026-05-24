@@ -586,10 +586,13 @@ print <<HTML;
 </div>
 </div>
 
+<div class="topbar-actions">
+<a class="secondary-button" href="/admin/">Zurück zu LoxBerry</a>
 <form method="post">
 <input type="hidden" name="action" value="backup">
 <button class="primary" type="submit">Backup starten</button>$info_backup_start
 </form>
+</div>
 </header>
 HTML
 
