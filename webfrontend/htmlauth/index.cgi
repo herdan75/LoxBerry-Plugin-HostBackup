@@ -646,7 +646,7 @@ print <<HTML;
 <input data-role="none" type="hidden" name="action" value="save-config">
 
 <fieldset class="schedule-card wide">
-<legend>Pfad und Anzahl Backups</legend>
+<legend>Grundeinstellungen</legend>
 
 <div class="settings-subtitle">Speicherort und Aufbewahrung</div>
 

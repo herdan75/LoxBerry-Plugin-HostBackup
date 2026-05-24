@@ -211,9 +211,18 @@ body.is-loading .loading-overlay {
   border: 1px solid #d8dee8;
   border-radius: 6px;
   font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
   line-height: 1.45;
   margin-top: 14px;
   padding: 10px 12px;
+  text-transform: none;
+}
+
+.inline-notice strong,
+.inline-notice code {
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .inline-notice.ok {
@@ -342,9 +351,11 @@ body.is-loading .loading-overlay {
 
 .settings-subtitle {
   color: #526173;
-  font-size: 13px;
-  font-weight: 700;
-  margin: 2px 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: normal;
+  margin: 0 0 10px;
+  text-transform: none;
 }
 
 .nested-settings {
