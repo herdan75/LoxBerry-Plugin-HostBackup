@@ -153,13 +153,13 @@ body.is-loading .loading-overlay {
   background: #ffffff;
   color: #176a8a;
   display: inline-flex;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
-  height: 20px;
+  height: 16px;
   justify-content: center;
-  min-height: 20px;
+  min-height: 16px;
   padding: 0;
-  width: 20px;
+  width: 16px;
 }
 
 .info-bubble {
@@ -348,13 +348,14 @@ body.is-loading .loading-overlay {
   display: inline-flex;
   font-size: 14px;
   font-weight: 700;
+  margin-bottom: 9px;
   min-height: 28px;
   padding: 4px 11px;
   position: relative;
 }
 
 .schedule-card legend .info-help {
-  left: calc(100% + 6px);
+  left: calc(100% + 8px);
   margin-left: 0;
   position: absolute;
   top: 50%;
@@ -366,7 +367,7 @@ body.is-loading .loading-overlay {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: normal;
-  margin: 0 0 10px;
+  margin: 3px 0 12px;
   text-transform: none;
 }
 
