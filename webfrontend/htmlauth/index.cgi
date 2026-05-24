@@ -44,6 +44,23 @@ sub redirect_with {
   exit;
 }
 
+sub hidden_active_task {
+  return '' unless $active_task;
+  my $safe = escapeHTML($active_task);
+  return qq{<input type="hidden" name="active_task" value="$safe">};
+}
+
+sub url_with_active_task {
+  my (%params) = @_;
+  $params{active_task} = $active_task if $active_task;
+  my @parts;
+  for my $key (sort keys %params) {
+    next unless defined $params{$key} && length $params{$key};
+    push @parts, url_escape($key) . '=' . url_escape($params{$key});
+  }
+  return '?' . join('&', @parts);
+}
+
 sub shell_quote {
   my ($value) = @_;
   $value =~ s/'/'"'"'/g;
@@ -533,6 +550,7 @@ my $info_import = info_button('Importiert ein extern gespeichertes Backup-Archiv
 my $info_delete = info_button('Löscht den Backup-Ordner und ein eventuell vorhandenes Export-Archiv dieses Backups. Das kann nicht rückgängig gemacht werden.');
 my $info_restore = info_button('Wählt dieses Backup für eine Wiederherstellung aus. Danach zeigt der Restore-Bereich die Prüfungen und den Startbutton für genau dieses Backup.');
 my $info_browse = info_button('Öffnet den Datei-Explorer für dieses Backup. Damit kannst du prüfen, welche Dateien im Backup enthalten sind.');
+my $info_browse_pending = info_button('Dieses Backup ist noch nicht vollständig abgeschlossen. Dateien, Restore und Export werden erst freigegeben, wenn Status, Manifest und rootfs vollständig sind.');
 my $info_download = info_button('Erstellt bei Bedarf ein Export-Archiv und lädt dieses Backup als tar.gz-Datei auf deinen Rechner herunter. Das kann bei großen Backups einige Zeit dauern.');
 my $info_backup_start = info_button('Startet den Backup-Vorgang. Vor dem eigentlichen Backup prüft das Plugin wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und Docker-Hinweise.');
 
@@ -809,6 +827,34 @@ if (!@$backups) {
     my $size = int(($backup->{size_bytes} || 0) / 1024 / 1024);
     my $files = escapeHTML($backup->{files_count} || '0');
     my $export = $backup->{export_file} ? 'vorhanden' : '-';
+    my $is_complete = (($backup->{status} || '') eq 'complete') && (($backup->{files_count} || 0) > 0);
+    my $active_task_hidden = hidden_active_task();
+    my $backup_actions;
+
+    if ($is_complete) {
+      $backup_actions = qq{
+<form method="get" class="inline-form">
+<input type="hidden" name="browse_id" value="$id">
+$active_task_hidden
+<button type="submit">Dateien</button>$info_browse
+</form>
+<form method="get" class="inline-form">
+<input type="hidden" name="restore_id" value="$id">
+$active_task_hidden
+<button type="submit">Restore</button>$info_restore
+</form>
+<form method="get" class="inline-form">
+<input type="hidden" name="action" value="download-export">
+<input type="hidden" name="backup_id" value="$id">
+$active_task_hidden
+<button type="submit">Export</button>$info_download
+</form>
+};
+    } else {
+      $backup_actions = qq{
+<span class="pending-action">Noch nicht vollständig</span>$info_browse_pending
+};
+    }
 
     print qq{
 <tr>
@@ -821,22 +867,11 @@ if (!@$backups) {
 <td>$export</td>
 <td>
 <div class="row-actions">
-<form method="get" class="inline-form">
-<input type="hidden" name="browse_id" value="$id">
-<button type="submit">Dateien</button>$info_browse
-</form>
-<form method="get" class="inline-form">
-<input type="hidden" name="restore_id" value="$id">
-<button type="submit">Restore</button>$info_restore
-</form>
-<form method="get" class="inline-form">
-<input type="hidden" name="action" value="download-export">
-<input type="hidden" name="backup_id" value="$id">
-<button type="submit">Export</button>$info_download
-</form>
+$backup_actions
 <form method="post" class="inline-form delete-backup-form">
 <input type="hidden" name="action" value="delete-backup">
 <input type="hidden" name="backup_id" value="$id">
+$active_task_hidden
 <button class="danger" type="submit">Löschen</button>$info_delete
 </form>
 </div>
@@ -868,7 +903,7 @@ if ($browse_id) {
       my @parts = split m{/+}, $browse_path;
       pop @parts;
       my $parent = join '/', @parts;
-      my $parent_url = '?browse_id=' . url_escape($browse_id) . '&path=' . url_escape($parent);
+      my $parent_url = url_with_active_task(browse_id => $browse_id, path => $parent);
       print qq{<p><a href="$parent_url">Eine Ebene höher</a></p>};
     }
 
@@ -893,7 +928,7 @@ if ($browse_id) {
       my $open = '-';
 
       if (($item->{type} || '') eq 'directory') {
-        my $url = '?browse_id=' . url_escape($browse_id) . '&path=' . url_escape($path);
+        my $url = url_with_active_task(browse_id => $browse_id, path => $path);
         $open = qq{<a href="$url">Öffnen</a>};
       }
 

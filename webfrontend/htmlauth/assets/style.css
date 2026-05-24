@@ -392,6 +392,18 @@ button.danger {
   gap: 8px;
 }
 
+.pending-action {
+  background: #fff6df;
+  border: 1px solid #e5c66f;
+  border-radius: 6px;
+  color: #805900;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  min-height: 34px;
+  padding: 8px 10px;
+}
+
 .subpanel {
   border-top: 1px solid #e2e7ef;
   margin-top: 16px;
