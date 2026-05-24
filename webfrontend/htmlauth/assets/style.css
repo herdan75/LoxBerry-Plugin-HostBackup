@@ -49,6 +49,55 @@ body.is-loading .loading-overlay {
   }
 }
 
+#hostbackup-app,
+#hostbackup-app * {
+  box-sizing: border-box;
+  letter-spacing: normal !important;
+  text-shadow: none !important;
+  text-transform: none !important;
+}
+
+#hostbackup-app {
+  color: #1d2733;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+#hostbackup-app h1,
+#hostbackup-app h2,
+#hostbackup-app h3,
+#hostbackup-app legend,
+#hostbackup-app summary,
+#hostbackup-app label,
+#hostbackup-app button,
+#hostbackup-app input,
+#hostbackup-app select,
+#hostbackup-app textarea,
+#hostbackup-app table {
+  font-family: Arial, Helvetica, sans-serif !important;
+  letter-spacing: normal !important;
+}
+
+#hostbackup-app label,
+#hostbackup-app legend,
+#hostbackup-app summary {
+  color: #1d2733;
+  font-size: 15px !important;
+  line-height: 1.35 !important;
+}
+
+#hostbackup-app input,
+#hostbackup-app select,
+#hostbackup-app textarea,
+#hostbackup-app button {
+  box-shadow: none !important;
+  font-size: 15px !important;
+  line-height: 1.25 !important;
+  outline-offset: 2px;
+  text-decoration: none !important;
+}
+
 .page {
   color: #1d2733;
   font-family: Arial, Helvetica, sans-serif;
@@ -463,6 +512,101 @@ button.primary {
 button.danger {
   border-color: #c76565;
   color: #9e2f2f;
+}
+
+#hostbackup-app h1 {
+  font-size: 30px !important;
+  font-weight: 700 !important;
+  line-height: 1.1 !important;
+  margin: 0 0 6px !important;
+}
+
+#hostbackup-app h2 {
+  font-size: 19px !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  margin: 0 0 14px !important;
+}
+
+#hostbackup-app .settings-form label {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  margin: 0 !important;
+}
+
+#hostbackup-app .settings-form .checkline,
+#hostbackup-app .schedule-modes label,
+#hostbackup-app .choice-grid label,
+#hostbackup-app .day-grid label {
+  align-items: center !important;
+  flex-direction: row !important;
+}
+
+#hostbackup-app .schedule-card {
+  border: 1px solid #c8d3df !important;
+  border-radius: 8px !important;
+  margin: 0 !important;
+  padding: 14px !important;
+}
+
+#hostbackup-app .schedule-card legend {
+  background: #ffffff !important;
+  display: inline-block !important;
+  float: none !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  margin: 0 !important;
+  padding: 0 6px !important;
+  width: auto !important;
+}
+
+#hostbackup-app .schedule-detail summary {
+  display: list-item !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+  margin: 0 0 7px !important;
+}
+
+#hostbackup-app .settings-form input,
+#hostbackup-app .settings-form select,
+#hostbackup-app .settings-form textarea {
+  border: 1px solid #bcc8d6 !important;
+  border-radius: 6px !important;
+  min-height: 36px !important;
+  padding: 7px 9px !important;
+  width: 100% !important;
+}
+
+#hostbackup-app input[type="checkbox"],
+#hostbackup-app input[type="radio"] {
+  height: 16px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  width: 16px !important;
+}
+
+#hostbackup-app button,
+#hostbackup-app .secondary-button {
+  border-radius: 6px !important;
+  min-height: 34px !important;
+  padding: 6px 11px !important;
+}
+
+#hostbackup-app .info-button {
+  align-items: center !important;
+  border-radius: 50% !important;
+  display: inline-flex !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  height: 20px !important;
+  justify-content: center !important;
+  line-height: 18px !important;
+  min-height: 20px !important;
+  padding: 0 !important;
+  width: 20px !important;
 }
 
 .actions {

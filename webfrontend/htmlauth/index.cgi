@@ -593,7 +593,7 @@ print <<HTML;
 </div>
 </div>
 
-<main class="page">
+<main class="page" id="hostbackup-app">
 
 <header class="topbar">
 <div class="brand">
