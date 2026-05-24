@@ -66,6 +66,18 @@ sub checked_attr {
   return $value ? ' checked' : '';
 }
 
+sub bool_arg {
+  my ($value) = @_;
+  return $value ? 'true' : 'false';
+}
+
+sub array_csv {
+  my ($value, $default) = @_;
+  return $default unless ref($value) eq 'ARRAY' && @$value;
+  my @clean = grep { defined $_ && !ref($_) && length $_ } @$value;
+  return @clean ? join(',', @clean) : $default;
+}
+
 sub info_button {
   my ($text) = @_;
   my $safe = escapeHTML($text || '');
@@ -83,6 +95,8 @@ if ($notice eq 'saved') {
   $message = 'Backup gelöscht.';
 } elsif ($notice eq 'backup_imported') {
   $message = 'Backup importiert.';
+} elsif ($notice eq 'config_imported') {
+  $message = 'Einstellungen importiert.';
 } elsif ($notice eq 'restore_started') {
   $message = 'Restore gestartet. Der Live-Status wird unten automatisch aktualisiert.';
 } elsif ($notice eq 'backup_finished') {
@@ -110,6 +124,23 @@ if ($action eq 'task-status') {
     my $safe_error = encode_json({ task => $task, state => 'error', error => $out });
     print $safe_error;
   }
+  exit;
+}
+
+if ($action eq 'download-config') {
+  my ($status, $out) = run_shell(backend_cmd('config'));
+
+  if ($status != 0) {
+    print header(-type => 'text/plain', -charset => 'utf-8', -status => '500 Internal Server Error');
+    print $out;
+    exit;
+  }
+
+  print header(
+    -type => 'application/json',
+    -attachment => 'loxberryhostbackup-settings.json',
+  );
+  print $out;
   exit;
 }
 
@@ -163,7 +194,70 @@ if ($action eq 'download-export') {
 
 if ($q->request_method eq 'POST') {
 
-  if ($action eq 'save-config') {
+  if ($action eq 'import-config') {
+
+    my $upload = $q->upload('settings_file');
+
+    if (!$upload) {
+      $error = 'Keine Einstellungsdatei ausgewählt.';
+    } else {
+      binmode $upload;
+      local $/;
+      my $settings_json = <$upload>;
+      my $imported = eval { decode_json($settings_json) };
+
+      if (!$imported || ref($imported) ne 'HASH') {
+        $error = 'Einstellungsdatei konnte nicht gelesen werden. Erwartet wird eine JSON-Datei aus diesem Plugin.';
+      } else {
+        my $backup_root = $imported->{backup_root} || '';
+        my $excludes = ref($imported->{rsync_extra_excludes}) eq 'ARRAY' ? join("\n", @{$imported->{rsync_extra_excludes}}) : '';
+        my $stop_docker = bool_arg($imported->{stop_docker_before_backup});
+        my $create_export = bool_arg($imported->{create_export_after_backup});
+        my $keep_backups = $imported->{keep_backups} || '10';
+        my $schedule_enabled = bool_arg($imported->{schedule_enabled});
+        my $schedule_mode = $imported->{schedule_mode} || 'daily';
+        my $schedule_time = $imported->{schedule_time} || '02:00';
+        my $schedule_weekdays = array_csv($imported->{schedule_weekdays}, $imported->{schedule_weekday} || '0');
+        my $schedule_monthdays = array_csv($imported->{schedule_monthdays}, $imported->{schedule_monthday} || '1');
+        my $schedule_months = array_csv($imported->{schedule_months}, '*');
+        my @weekdays = split /,/, $schedule_weekdays;
+        my @monthdays = split /,/, $schedule_monthdays;
+        my $pre_hook = $imported->{pre_backup_hook} || '';
+        my $post_hook = $imported->{post_backup_hook} || '';
+        my $root_permission_ack = bool_arg($imported->{root_permission_ack});
+
+        my ($status, $out) = run_shell(
+          backend_cmd(
+            'save-config',
+            $backup_root,
+            $excludes,
+            $stop_docker,
+            $create_export,
+            $keep_backups,
+            $schedule_enabled,
+            $schedule_mode,
+            $schedule_time,
+            $weekdays[0] || '0',
+            $monthdays[0] || '1',
+            $schedule_months,
+            $schedule_weekdays,
+            $schedule_monthdays,
+            $pre_hook,
+            $post_hook,
+            $root_permission_ack
+          )
+        );
+
+        if ($status == 0) {
+          redirect_with(msg => 'config_imported');
+        } else {
+          $error = escapeHTML($out);
+        }
+      }
+    }
+  }
+
+  elsif ($action eq 'save-config') {
 
     my $backup_root = $q->param('backup_root') || '';
     my $keep_backups = $q->param('keep_backups') || '10';
@@ -424,6 +518,8 @@ my $info_excludes = info_button('Hier kannst du Pfade vom rsync-Backup ausschlie
 my $info_docker = info_button('Wenn aktiv, stoppt das Plugin laufende Docker-Container vor dem Backup und startet sie danach wieder. Das verbessert die Konsistenz von Datenbanken und Volumes, verursacht aber eine Unterbrechung der Container-Dienste während des Backups.');
 my $info_export = info_button('Erstellt nach jedem Backup zusätzlich ein komprimiertes tar.gz-Archiv. Das ist praktisch zum Download, Kopieren oder Archivieren, benötigt aber zusätzlichen Speicherplatz und Zeit.');
 my $info_root = info_button('Diese Bestätigung ist nötig, weil Vollbackup und Restore Systemdateien, Berechtigungen, Docker-Daten und Cronjobs betreffen. Es werden keine Passwörter gespeichert; erlaubt wird nur der Start des Backend-Skripts dieses Plugins.');
+my $info_config_export = info_button('Lädt nur die Einstellungen dieses Plugins als kleine JSON-Datei herunter. Enthalten sind zum Beispiel Backup-Verzeichnis, Ausschlüsse, Zeitplan und Docker-Optionen, aber keine Backup-Daten und keine Passwörter.');
+my $info_config_import = info_button('Liest eine zuvor exportierte Einstellungsdatei wieder ein. Das ist praktisch nach einer Neuinstallation des Plugins. Danach bitte Pfade und Root-Freigabe kurz prüfen und speichern, falls sich Laufwerke geändert haben.');
 my $info_table = info_button('Diese Liste zeigt vorhandene Backups mit Status, Host, Größe und Fertigstellungszeit. Ein vollständiges Backup sollte den Status complete haben, bevor du es für Restore-Tests verwendest.');
 my $info_import = info_button('Importiert ein extern gespeichertes Backup-Archiv im Format tar.gz, zum Beispiel von deinem PC, NAS oder einem anderen Datenträger. Für Restore eines bereits unten gelisteten Backups brauchst du diese Datei-Auswahl nicht.');
 my $info_delete = info_button('Löscht den Backup-Ordner und ein eventuell vorhandenes Export-Archiv dieses Backups. Das kann nicht rückgängig gemacht werden.');
@@ -632,6 +728,19 @@ print <<HTML;
 </div>
 
 </form>
+
+<div class="config-actions">
+<form method="get" class="inline-form">
+<input type="hidden" name="action" value="download-config">
+<button type="submit">Einstellungen exportieren</button>$info_config_export
+</form>
+
+<form method="post" enctype="multipart/form-data" class="inline-form">
+<input type="hidden" name="action" value="import-config">
+<input type="file" name="settings_file" accept="application/json,.json">
+<button type="submit">Einstellungen importieren</button>$info_config_import
+</form>
+</div>
 
 </section>
 

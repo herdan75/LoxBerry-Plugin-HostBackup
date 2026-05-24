@@ -46,6 +46,7 @@ noch keine freigegebene produktive Version.
 
 ### Weboberflaeche
 
+- Einstellungen koennen als JSON-Datei exportiert und nach einer Neuinstallation wieder importiert werden.
 - Sichtbare deutsche Texte in der Weboberfläche auf echte Umlaute vereinheitlicht.
 - Kopfbereich der Weboberfläche mit Plugin-Icon und kompakterer Titelgestaltung überarbeitet.
 - Restore-Bereich mit Backup-Auswahl, Restore-Check, Restore-Plan und Startbestätigung aus der Backup-Liste ergänzt.
