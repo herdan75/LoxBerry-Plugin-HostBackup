@@ -287,19 +287,6 @@ body.is-loading .loading-overlay {
   grid-column: 1 / -1;
 }
 
-.settings-section-title {
-  align-items: center;
-  background: linear-gradient(90deg, rgba(23, 106, 138, 0.08), rgba(248, 251, 253, 0.65));
-  border-left: 4px solid #176a8a;
-  border-radius: 6px;
-  color: #17364a;
-  display: flex;
-  font-size: 14px;
-  font-weight: 700;
-  min-height: 32px;
-  padding: 7px 10px;
-}
-
 .settings-form .checkline {
   align-items: center;
   flex-direction: row;
@@ -336,7 +323,7 @@ body.is-loading .loading-overlay {
   border: 1px solid #c8d3df;
   border-radius: 8px;
   margin: 0;
-  padding: 13px 14px 14px;
+  padding: 16px 14px 14px;
 }
 
 .settings-group {
@@ -353,6 +340,13 @@ body.is-loading .loading-overlay {
   padding: 4px 10px;
 }
 
+.settings-subtitle {
+  color: #526173;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 2px 0 10px;
+}
+
 .nested-settings {
   gap: 12px 18px;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
@@ -363,14 +357,14 @@ body.is-loading .loading-overlay {
 }
 
 .schedule-enable {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .schedule-modes {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .schedule-modes label,

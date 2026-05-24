@@ -645,7 +645,12 @@ print <<HTML;
 
 <input data-role="none" type="hidden" name="action" value="save-config">
 
-<div class="settings-section-title wide">Grunddaten</div>
+<fieldset class="schedule-card wide">
+<legend>Pfad und Anzahl Backups</legend>
+
+<div class="settings-subtitle">Speicherort und Aufbewahrung</div>
+
+<div class="settings-form nested-settings">
 
 <label>
 <span>Backup-Verzeichnis $info_backup_root</span>
@@ -655,14 +660,19 @@ print <<HTML;
 $target_notice
 
 <label>
-<span>Backups behalten $info_retention</span>
+<span>Anzahl Backups behalten $info_retention</span>
 <input data-role="none" name="keep_backups" type="number" min="1" max="10" value="$cfg_keep">
 </label>
 
+</div>
+
+</fieldset>
+
 <fieldset class="schedule-card wide">
 <legend>Backup-Modus $info_backup_mode</legend>
+<div class="settings-subtitle">Auswahl Backup-Modus</div>
 <div class="schedule-modes">
-<label><input data-role="none" type="radio" name="backup_mode" value="full"$full_mode_checked> Vollbackup</label>
+<label><input data-role="none" type="radio" name="backup_mode" value="full"$full_mode_checked> Volles Backup</label>
 <label><input data-role="none" type="radio" name="backup_mode" value="snapshot"$snapshot_mode_checked> Inkrementeller Snapshot</label>
 </div>
 </fieldset>
@@ -670,6 +680,8 @@ $target_notice
 <fieldset class="schedule-card wide">
 
 <legend>Automatische Backups $info_schedule</legend>
+
+<div class="settings-subtitle">Definition automatische Backups</div>
 
 <label class="checkline schedule-enable">
 <input data-role="none" type="checkbox" name="schedule_enabled" value="1"$cfg_schedule_enabled>
@@ -761,6 +773,8 @@ $target_notice
 <fieldset class="schedule-card wide settings-group">
 <legend>Skripte und Ausschlüsse</legend>
 
+<div class="settings-subtitle">Vor- und Nachbearbeitung</div>
+
 <div class="settings-form nested-settings">
 
 <label>
@@ -784,6 +798,8 @@ $target_notice
 
 <fieldset class="schedule-card wide settings-group">
 <legend>Optionen und Freigaben</legend>
+
+<div class="settings-subtitle">Ausführung und Sicherheit</div>
 
 <label class="checkline">
 <input data-role="none" type="checkbox" name="stop_docker_before_backup" value="1"$cfg_stop_docker>
