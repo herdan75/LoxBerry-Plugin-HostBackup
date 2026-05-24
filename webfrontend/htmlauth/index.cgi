@@ -568,6 +568,13 @@ print <<HTML;
 
 <body>
 
+<div class="loading-overlay" id="loading-overlay" aria-live="polite" aria-hidden="true">
+<div class="loading-box">
+<span class="loading-spinner" aria-hidden="true"></span>
+<span id="loading-text">Aktion wird ausgeführt...</span>
+</div>
+</div>
+
 <main class="page">
 
 <header class="topbar">
@@ -1016,6 +1023,42 @@ print <<HTML;
 </main>
 
 <script>
+(function () {
+  var overlay = document.getElementById('loading-overlay');
+  var loadingText = document.getElementById('loading-text');
+
+  function showLoading(text) {
+    if (loadingText) loadingText.textContent = text || 'Aktion wird ausgeführt...';
+    if (overlay) overlay.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('is-loading');
+  }
+
+  document.querySelectorAll('form').forEach(function (form) {
+    form.addEventListener('submit', function (event) {
+      if (form.hasAttribute('data-skip-loading')) return;
+      if ((form.getAttribute('method') || 'get').toLowerCase() !== 'post') return;
+      var actionInput = form.querySelector('input[name="action"]');
+      var action = actionInput ? actionInput.value : '';
+      var messages = {
+        'save-config': 'Einstellungen werden gespeichert...',
+        'import-config': 'Einstellungen werden importiert...',
+        'import': 'Backup wird importiert...',
+        'delete-backup': 'Backup wird gelöscht...',
+        'download-export': 'Export wird vorbereitet...',
+        'restore-backup': 'Restore wird vorbereitet...',
+        'stop-backup': 'Backup wird gestoppt...',
+        'download-config': 'Einstellungen werden exportiert...'
+      };
+      if (action === 'backup') return;
+      window.setTimeout(function () {
+        if (!event.defaultPrevented) {
+          showLoading(messages[action] || 'Aktion wird ausgeführt...');
+        }
+      }, 0);
+    });
+  });
+}());
+
 (function () {
   var modeInputs = document.querySelectorAll('input[name="schedule_mode"]');
   var panels = document.querySelectorAll('[data-schedule-panel]');

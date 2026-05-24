@@ -10,6 +10,53 @@ body {
   font-size: 15px;
 }
 
+.loading-overlay {
+  align-items: flex-start;
+  background: rgba(245, 247, 251, 0.72);
+  bottom: 0;
+  display: none;
+  justify-content: center;
+  left: 0;
+  padding-top: 72px;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+body.is-loading .loading-overlay {
+  display: flex;
+}
+
+.loading-box {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #c8d3df;
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(23, 33, 44, 0.16);
+  color: #1d2733;
+  display: inline-flex;
+  font-weight: 700;
+  gap: 12px;
+  min-width: min(360px, calc(100vw - 48px));
+  padding: 16px 18px;
+}
+
+.loading-spinner {
+  animation: spin 0.8s linear infinite;
+  border: 3px solid #d8e4ee;
+  border-top-color: #176a8a;
+  border-radius: 50%;
+  height: 26px;
+  width: 26px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .page {
   max-width: 1180px;
   margin: 0 auto;
