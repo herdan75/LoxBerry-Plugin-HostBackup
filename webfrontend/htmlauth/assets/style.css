@@ -55,9 +55,9 @@ body.is-loading .loading-overlay {
   font-size: 15px;
   letter-spacing: normal;
   line-height: 1.4;
-  max-width: 1180px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 18px 22px 24px;
 }
 
 #hostbackup-app,
@@ -75,26 +75,26 @@ body.is-loading .loading-overlay {
   background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
   border: 1px solid #d8dee8;
   border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(23, 33, 44, 0.04);
+  box-shadow: 0 1px 3px rgba(23, 33, 44, 0.06);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  margin-bottom: 20px;
-  padding: 18px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
 }
 
 .brand {
   align-items: center;
   display: flex;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 
 .brand-icon {
   flex: 0 0 auto;
-  height: 58px;
-  width: 58px;
+  height: 46px;
+  width: 46px;
 }
 
 .topbar-actions {
@@ -119,17 +119,19 @@ body.is-loading .loading-overlay {
 }
 
 #hostbackup-app h1 {
-  margin-bottom: 6px;
-  font-size: 28px;
+  margin-bottom: 3px;
+  font-size: 24px;
   line-height: 1.1;
 }
 
 #hostbackup-app h2 {
-  font-size: 19px;
+  font-size: 18px;
+  margin-bottom: 14px;
 }
 
 .topbar p {
   color: #526173;
+  font-size: 13px;
   margin-bottom: 0;
 }
 
@@ -185,8 +187,9 @@ body.is-loading .loading-overlay {
   background: #ffffff;
   border: 1px solid #d8dee8;
   border-radius: 8px;
-  padding: 18px;
-  margin-bottom: 18px;
+  box-shadow: 0 1px 2px rgba(23, 33, 44, 0.035);
+  padding: 16px;
+  margin-bottom: 16px;
 }
 
 .notice.ok {
@@ -200,12 +203,12 @@ body.is-loading .loading-overlay {
 }
 
 .inline-notice {
-  align-self: end;
+  align-self: center;
   border: 1px solid #d8dee8;
   border-radius: 6px;
   font-size: 13px;
   line-height: 1.45;
-  margin-top: 24px;
+  margin-top: 14px;
   padding: 10px 12px;
 }
 
@@ -238,13 +241,13 @@ body.is-loading .loading-overlay {
 .settings-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
-  gap: 14px 18px;
+  gap: 12px 18px;
 }
 
 .settings-form label {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   font-weight: 700;
 }
 
@@ -254,8 +257,8 @@ body.is-loading .loading-overlay {
   border: 1px solid #bcc8d6;
   border-radius: 6px;
   font: inherit;
-  min-height: 36px;
-  padding: 7px 9px;
+  min-height: 34px;
+  padding: 6px 9px;
 }
 
 .settings-form textarea {
@@ -301,10 +304,11 @@ body.is-loading .loading-overlay {
 }
 
 .schedule-card {
+  background: #fbfdff;
   border: 1px solid #c8d3df;
   border-radius: 8px;
   margin: 0;
-  padding: 12px 14px 14px;
+  padding: 10px 14px 14px;
 }
 
 .schedule-card legend {
@@ -328,14 +332,16 @@ body.is-loading .loading-overlay {
 .choice-grid label,
 .day-grid label {
   align-items: center;
+  background: #ffffff;
   border: 1px solid #d8dee8;
   border-radius: 6px;
   display: flex;
   flex-direction: row;
+  font-size: 13px;
   font-weight: 400;
   gap: 6px;
-  min-height: 34px;
-  padding: 6px 9px;
+  min-height: 30px;
+  padding: 5px 8px;
 }
 
 .schedule-modes input,
@@ -350,7 +356,7 @@ body.is-loading .loading-overlay {
 
 .schedule-detail summary {
   cursor: pointer;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   line-height: 1.25;
   margin-bottom: 6px;
@@ -362,13 +368,13 @@ body.is-loading .loading-overlay {
 
 .choice-grid {
   display: grid;
-  gap: 8px;
+  gap: 7px;
   grid-template-columns: repeat(4, minmax(130px, 1fr));
 }
 
 .day-grid {
   display: grid;
-  gap: 6px;
+  gap: 5px;
   grid-template-columns: repeat(10, minmax(44px, 1fr));
 }
 
@@ -381,8 +387,8 @@ body.is-loading .loading-overlay {
   gap: 6px;
   justify-content: flex-start;
   line-height: 1.2;
-  min-height: 28px;
-  padding: 5px 8px;
+  min-height: 27px;
+  padding: 4px 8px;
 }
 
 .schedule-card .day-grid label {
@@ -422,7 +428,7 @@ body.is-loading .loading-overlay {
 #hostbackup-app th,
 #hostbackup-app td {
   border-bottom: 1px solid #e2e7ef;
-  padding: 10px;
+  padding: 9px 8px;
   text-align: left;
   vertical-align: top;
 }
@@ -447,10 +453,16 @@ body.is-loading .loading-overlay {
   min-height: 34px;
   border: 1px solid #bcc8d6;
   border-radius: 6px;
-  background: #ffffff;
+  background: linear-gradient(180deg, #ffffff 0%, #f6f8fb 100%);
   color: #1d2733;
   cursor: pointer;
   padding: 6px 11px;
+}
+
+#hostbackup-app button:hover,
+#hostbackup-app button:focus {
+  border-color: #8ea4ba;
+  color: #0e5a76;
 }
 
 #hostbackup-app .secondary-button {
@@ -476,6 +488,13 @@ body.is-loading .loading-overlay {
   border-color: #176a8a;
   color: #ffffff;
   font-weight: 700;
+}
+
+#hostbackup-app button.primary:hover,
+#hostbackup-app button.primary:focus {
+  background: #0f5d7b;
+  border-color: #0f5d7b;
+  color: #ffffff;
 }
 
 #hostbackup-app button.danger {
@@ -504,7 +523,7 @@ body.is-loading .loading-overlay {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .pending-action {
