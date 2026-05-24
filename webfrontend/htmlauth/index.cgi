@@ -919,7 +919,7 @@ print <<HTML;
 
 <form data-ajax="false" method="post" enctype="multipart/form-data" class="inline-form">
 <input data-role="none" type="hidden" name="action" value="import-config">
-<input data-role="none" type="file" name="settings_file" accept="application/json,.json">
+<input data-role="none" class="config-file" type="file" name="settings_file" accept="application/json,.json">
 <button data-role="none" type="submit">Einstellungen importieren</button>$info_config_import
 </form>
 </div>
