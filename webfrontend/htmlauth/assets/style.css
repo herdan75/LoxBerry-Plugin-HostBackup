@@ -435,7 +435,7 @@ body.is-loading .loading-overlay {
   padding: 6px 11px;
 }
 
-.secondary-button {
+#hostbackup-app .secondary-button {
   align-items: center;
   border: 1px solid #bcc8d6;
   border-radius: 6px;
@@ -447,8 +447,8 @@ body.is-loading .loading-overlay {
   text-decoration: none;
 }
 
-.secondary-button:hover,
-.secondary-button:focus {
+#hostbackup-app .secondary-button:hover,
+#hostbackup-app .secondary-button:focus {
   border-color: #8ea4ba;
   color: #0e5a76;
 }
@@ -669,7 +669,7 @@ body.is-loading .loading-overlay {
     width: 48px;
   }
 
-  h1 {
+  #hostbackup-app h1 {
     font-size: 26px;
   }
 
@@ -693,25 +693,25 @@ body.is-loading .loading-overlay {
     grid-template-columns: repeat(5, minmax(44px, 1fr));
   }
 
-  table,
-  thead,
-  tbody,
-  th,
-  td,
-  tr {
+  #hostbackup-app table,
+  #hostbackup-app thead,
+  #hostbackup-app tbody,
+  #hostbackup-app th,
+  #hostbackup-app td,
+  #hostbackup-app tr {
     display: block;
   }
 
-  thead {
+  #hostbackup-app thead {
     display: none;
   }
 
-  td {
+  #hostbackup-app td {
     border-bottom: 0;
     padding: 7px 0;
   }
 
-  tr {
+  #hostbackup-app tr {
     border-bottom: 1px solid #e2e7ef;
     padding: 10px 0;
   }

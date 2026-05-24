@@ -48,7 +48,7 @@ sub redirect_with {
 sub hidden_active_task {
   return '' unless $active_task;
   my $safe = escapeHTML($active_task);
-  return qq{<input type="hidden" name="active_task" value="$safe">};
+  return qq{<input data-role="none" type="hidden" name="active_task" value="$safe">};
 }
 
 sub url_with_active_task {
@@ -99,7 +99,7 @@ sub array_csv {
 sub info_button {
   my ($text) = @_;
   my $safe = escapeHTML($text || '');
-  return qq{<span class="info-help"><button type="button" class="info-button">i</button><span class="info-bubble">$safe</span></span>};
+  return qq{<span class="info-help"><button data-role="none" type="button" class="info-button">i</button><span class="info-bubble">$safe</span></span>};
 }
 
 my $notice = $q->param('msg') || '';
@@ -605,9 +605,9 @@ print <<HTML;
 </div>
 
 <div class="topbar-actions">
-<form method="post">
-<input type="hidden" name="action" value="backup">
-<button class="primary" type="submit">Backup starten</button>$info_backup_start
+<form data-ajax="false" method="post">
+<input data-role="none" type="hidden" name="action" value="backup">
+<button data-role="none" class="primary" type="submit">Backup starten</button>$info_backup_start
 </form>
 </div>
 </header>
@@ -628,10 +628,10 @@ print <<HTML;
 <div class="task-actions">
 <span class="task-state state-running" id="task-state">Kein laufender Task ausgewählt</span>
 <span class="task-heartbeat" id="task-heartbeat">Nach einem gestarteten Backup werden hier Status und Log angezeigt.</span>
-<form method="post" class="stop-task-form" id="stop-task-form">
-<input type="hidden" name="action" value="stop-backup">
-<input type="hidden" name="task" value="$active_task_attr">
-<button class="danger" type="submit">Backup stoppen</button>
+<form data-ajax="false" method="post" class="stop-task-form" id="stop-task-form">
+<input data-role="none" type="hidden" name="action" value="stop-backup">
+<input data-role="none" type="hidden" name="task" value="$active_task_attr">
+<button data-role="none" class="danger" type="submit">Backup stoppen</button>
 </form>
 </div>
 <pre class="terminal" id="task-log">Noch keine Live-Ausgabe vorhanden.</pre>
@@ -641,27 +641,27 @@ print <<HTML;
 
 <h2>Einstellungen</h2>
 
-<form method="post" class="settings-form">
+<form data-ajax="false" method="post" class="settings-form">
 
-<input type="hidden" name="action" value="save-config">
+<input data-role="none" type="hidden" name="action" value="save-config">
 
 <label>
 <span>Backup-Verzeichnis $info_backup_root</span>
-<input name="backup_root" value="$cfg_backup_root">
+<input data-role="none" name="backup_root" value="$cfg_backup_root">
 </label>
 
 $target_notice
 
 <label>
 <span>Backups behalten $info_retention</span>
-<input name="keep_backups" type="number" min="1" max="10" value="$cfg_keep">
+<input data-role="none" name="keep_backups" type="number" min="1" max="10" value="$cfg_keep">
 </label>
 
 <fieldset class="schedule-card wide">
 <legend>Backup-Modus $info_backup_mode</legend>
 <div class="schedule-modes">
-<label><input type="radio" name="backup_mode" value="full"$full_mode_checked> Vollbackup</label>
-<label><input type="radio" name="backup_mode" value="snapshot"$snapshot_mode_checked> Inkrementeller Snapshot</label>
+<label><input data-role="none" type="radio" name="backup_mode" value="full"$full_mode_checked> Vollbackup</label>
+<label><input data-role="none" type="radio" name="backup_mode" value="snapshot"$snapshot_mode_checked> Inkrementeller Snapshot</label>
 </div>
 </fieldset>
 
@@ -670,87 +670,87 @@ $target_notice
 <legend>Automatische Backups $info_schedule</legend>
 
 <label class="checkline schedule-enable">
-<input type="checkbox" name="schedule_enabled" value="1"$cfg_schedule_enabled>
+<input data-role="none" type="checkbox" name="schedule_enabled" value="1"$cfg_schedule_enabled>
 <span>Zeitplan aktivieren</span>
 </label>
 
 <div class="schedule-modes">
-<label><input type="radio" name="schedule_mode" value="daily"$daily_checked> Täglich</label>
-<label><input type="radio" name="schedule_mode" value="weekly"$weekly_checked> Wöchentlich</label>
-<label><input type="radio" name="schedule_mode" value="monthly"$monthly_checked> Monatlich</label>
+<label><input data-role="none" type="radio" name="schedule_mode" value="daily"$daily_checked> Täglich</label>
+<label><input data-role="none" type="radio" name="schedule_mode" value="weekly"$weekly_checked> Wöchentlich</label>
+<label><input data-role="none" type="radio" name="schedule_mode" value="monthly"$monthly_checked> Monatlich</label>
 </div>
 
 <label>
 <span>Startzeit $info_time</span>
-<input name="schedule_time" type="time" value="$cfg_schedule_time">
+<input data-role="none" name="schedule_time" type="time" value="$cfg_schedule_time">
 </label>
 
 <details class="schedule-detail" data-schedule-panel="weekly" open>
 <summary>Wochentage $info_weekdays</summary>
 <div class="choice-grid">
-<label><input type="checkbox" name="schedule_weekdays" value="1"$weekday_checked[1]> Montag</label>
-<label><input type="checkbox" name="schedule_weekdays" value="2"$weekday_checked[2]> Dienstag</label>
-<label><input type="checkbox" name="schedule_weekdays" value="3"$weekday_checked[3]> Mittwoch</label>
-<label><input type="checkbox" name="schedule_weekdays" value="4"$weekday_checked[4]> Donnerstag</label>
-<label><input type="checkbox" name="schedule_weekdays" value="5"$weekday_checked[5]> Freitag</label>
-<label><input type="checkbox" name="schedule_weekdays" value="6"$weekday_checked[6]> Samstag</label>
-<label><input type="checkbox" name="schedule_weekdays" value="0"$weekday_checked[0]> Sonntag</label>
+<label><input data-role="none" type="checkbox" name="schedule_weekdays" value="1"$weekday_checked[1]> Montag</label>
+<label><input data-role="none" type="checkbox" name="schedule_weekdays" value="2"$weekday_checked[2]> Dienstag</label>
+<label><input data-role="none" type="checkbox" name="schedule_weekdays" value="3"$weekday_checked[3]> Mittwoch</label>
+<label><input data-role="none" type="checkbox" name="schedule_weekdays" value="4"$weekday_checked[4]> Donnerstag</label>
+<label><input data-role="none" type="checkbox" name="schedule_weekdays" value="5"$weekday_checked[5]> Freitag</label>
+<label><input data-role="none" type="checkbox" name="schedule_weekdays" value="6"$weekday_checked[6]> Samstag</label>
+<label><input data-role="none" type="checkbox" name="schedule_weekdays" value="0"$weekday_checked[0]> Sonntag</label>
 </div>
 </details>
 
 <details class="schedule-detail" data-schedule-panel="monthly" open>
 <summary>Tage im Monat $info_monthdays</summary>
 <div class="day-grid">
-<label><input type="checkbox" name="schedule_monthdays" value="1"$monthday_checked[1]> 1</label>
-<label><input type="checkbox" name="schedule_monthdays" value="2"$monthday_checked[2]> 2</label>
-<label><input type="checkbox" name="schedule_monthdays" value="3"$monthday_checked[3]> 3</label>
-<label><input type="checkbox" name="schedule_monthdays" value="4"$monthday_checked[4]> 4</label>
-<label><input type="checkbox" name="schedule_monthdays" value="5"$monthday_checked[5]> 5</label>
-<label><input type="checkbox" name="schedule_monthdays" value="6"$monthday_checked[6]> 6</label>
-<label><input type="checkbox" name="schedule_monthdays" value="7"$monthday_checked[7]> 7</label>
-<label><input type="checkbox" name="schedule_monthdays" value="8"$monthday_checked[8]> 8</label>
-<label><input type="checkbox" name="schedule_monthdays" value="9"$monthday_checked[9]> 9</label>
-<label><input type="checkbox" name="schedule_monthdays" value="10"$monthday_checked[10]> 10</label>
-<label><input type="checkbox" name="schedule_monthdays" value="11"$monthday_checked[11]> 11</label>
-<label><input type="checkbox" name="schedule_monthdays" value="12"$monthday_checked[12]> 12</label>
-<label><input type="checkbox" name="schedule_monthdays" value="13"$monthday_checked[13]> 13</label>
-<label><input type="checkbox" name="schedule_monthdays" value="14"$monthday_checked[14]> 14</label>
-<label><input type="checkbox" name="schedule_monthdays" value="15"$monthday_checked[15]> 15</label>
-<label><input type="checkbox" name="schedule_monthdays" value="16"$monthday_checked[16]> 16</label>
-<label><input type="checkbox" name="schedule_monthdays" value="17"$monthday_checked[17]> 17</label>
-<label><input type="checkbox" name="schedule_monthdays" value="18"$monthday_checked[18]> 18</label>
-<label><input type="checkbox" name="schedule_monthdays" value="19"$monthday_checked[19]> 19</label>
-<label><input type="checkbox" name="schedule_monthdays" value="20"$monthday_checked[20]> 20</label>
-<label><input type="checkbox" name="schedule_monthdays" value="21"$monthday_checked[21]> 21</label>
-<label><input type="checkbox" name="schedule_monthdays" value="22"$monthday_checked[22]> 22</label>
-<label><input type="checkbox" name="schedule_monthdays" value="23"$monthday_checked[23]> 23</label>
-<label><input type="checkbox" name="schedule_monthdays" value="24"$monthday_checked[24]> 24</label>
-<label><input type="checkbox" name="schedule_monthdays" value="25"$monthday_checked[25]> 25</label>
-<label><input type="checkbox" name="schedule_monthdays" value="26"$monthday_checked[26]> 26</label>
-<label><input type="checkbox" name="schedule_monthdays" value="27"$monthday_checked[27]> 27</label>
-<label><input type="checkbox" name="schedule_monthdays" value="28"$monthday_checked[28]> 28</label>
-<label><input type="checkbox" name="schedule_monthdays" value="29"$monthday_checked[29]> 29</label>
-<label><input type="checkbox" name="schedule_monthdays" value="30"$monthday_checked[30]> 30</label>
-<label><input type="checkbox" name="schedule_monthdays" value="31"$monthday_checked[31]> 31</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="1"$monthday_checked[1]> 1</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="2"$monthday_checked[2]> 2</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="3"$monthday_checked[3]> 3</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="4"$monthday_checked[4]> 4</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="5"$monthday_checked[5]> 5</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="6"$monthday_checked[6]> 6</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="7"$monthday_checked[7]> 7</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="8"$monthday_checked[8]> 8</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="9"$monthday_checked[9]> 9</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="10"$monthday_checked[10]> 10</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="11"$monthday_checked[11]> 11</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="12"$monthday_checked[12]> 12</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="13"$monthday_checked[13]> 13</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="14"$monthday_checked[14]> 14</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="15"$monthday_checked[15]> 15</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="16"$monthday_checked[16]> 16</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="17"$monthday_checked[17]> 17</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="18"$monthday_checked[18]> 18</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="19"$monthday_checked[19]> 19</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="20"$monthday_checked[20]> 20</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="21"$monthday_checked[21]> 21</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="22"$monthday_checked[22]> 22</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="23"$monthday_checked[23]> 23</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="24"$monthday_checked[24]> 24</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="25"$monthday_checked[25]> 25</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="26"$monthday_checked[26]> 26</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="27"$monthday_checked[27]> 27</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="28"$monthday_checked[28]> 28</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="29"$monthday_checked[29]> 29</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="30"$monthday_checked[30]> 30</label>
+<label><input data-role="none" type="checkbox" name="schedule_monthdays" value="31"$monthday_checked[31]> 31</label>
 </div>
 </details>
 
 <details class="schedule-detail" data-schedule-panel="monthly" open>
 <summary>Monate $info_months</summary>
 <div class="choice-grid month-grid">
-<label><input type="checkbox" name="schedule_months" value="*"$all_months_checked> Alle Monate</label>
-<label><input type="checkbox" name="schedule_months" value="1"$month_checked[1]> Jan</label>
-<label><input type="checkbox" name="schedule_months" value="2"$month_checked[2]> Feb</label>
-<label><input type="checkbox" name="schedule_months" value="3"$month_checked[3]> März</label>
-<label><input type="checkbox" name="schedule_months" value="4"$month_checked[4]> Apr</label>
-<label><input type="checkbox" name="schedule_months" value="5"$month_checked[5]> Mai</label>
-<label><input type="checkbox" name="schedule_months" value="6"$month_checked[6]> Jun</label>
-<label><input type="checkbox" name="schedule_months" value="7"$month_checked[7]> Jul</label>
-<label><input type="checkbox" name="schedule_months" value="8"$month_checked[8]> Aug</label>
-<label><input type="checkbox" name="schedule_months" value="9"$month_checked[9]> Sep</label>
-<label><input type="checkbox" name="schedule_months" value="10"$month_checked[10]> Okt</label>
-<label><input type="checkbox" name="schedule_months" value="11"$month_checked[11]> Nov</label>
-<label><input type="checkbox" name="schedule_months" value="12"$month_checked[12]> Dez</label>
+<label><input data-role="none" type="checkbox" name="schedule_months" value="*"$all_months_checked> Alle Monate</label>
+<label><input data-role="none" type="checkbox" name="schedule_months" value="1"$month_checked[1]> Jan</label>
+<label><input data-role="none" type="checkbox" name="schedule_months" value="2"$month_checked[2]> Feb</label>
+<label><input data-role="none" type="checkbox" name="schedule_months" value="3"$month_checked[3]> März</label>
+<label><input data-role="none" type="checkbox" name="schedule_months" value="4"$month_checked[4]> Apr</label>
+<label><input data-role="none" type="checkbox" name="schedule_months" value="5"$month_checked[5]> Mai</label>
+<label><input data-role="none" type="checkbox" name="schedule_months" value="6"$month_checked[6]> Jun</label>
+<label><input data-role="none" type="checkbox" name="schedule_months" value="7"$month_checked[7]> Jul</label>
+<label><input data-role="none" type="checkbox" name="schedule_months" value="8"$month_checked[8]> Aug</label>
+<label><input data-role="none" type="checkbox" name="schedule_months" value="9"$month_checked[9]> Sep</label>
+<label><input data-role="none" type="checkbox" name="schedule_months" value="10"$month_checked[10]> Okt</label>
+<label><input data-role="none" type="checkbox" name="schedule_months" value="11"$month_checked[11]> Nov</label>
+<label><input data-role="none" type="checkbox" name="schedule_months" value="12"$month_checked[12]> Dez</label>
 </div>
 </details>
 
@@ -758,50 +758,50 @@ $target_notice
 
 <label>
 <span>Skript vor dem Backup $info_pre_hook</span>
-<input name="pre_backup_hook" value="$cfg_pre_hook">
+<input data-role="none" name="pre_backup_hook" value="$cfg_pre_hook">
 </label>
 
 <label>
 <span>Skript nach dem Backup $info_post_hook</span>
-<input name="post_backup_hook" value="$cfg_post_hook">
+<input data-role="none" name="post_backup_hook" value="$cfg_post_hook">
 </label>
 
 <label class="wide">
 <span>Vom Backup ausschließen $info_excludes</span>
-<textarea name="rsync_extra_excludes" rows="5">$cfg_excludes</textarea>
+<textarea data-role="none" name="rsync_extra_excludes" rows="5">$cfg_excludes</textarea>
 </label>
 
 <label class="checkline">
-<input type="checkbox" name="stop_docker_before_backup" value="1"$cfg_stop_docker>
+<input data-role="none" type="checkbox" name="stop_docker_before_backup" value="1"$cfg_stop_docker>
 <span>Docker-Container während des Backups anhalten $info_docker</span>
 </label>
 
 <label class="checkline">
-<input type="checkbox" name="create_export_after_backup" value="1"$cfg_create_export>
+<input data-role="none" type="checkbox" name="create_export_after_backup" value="1"$cfg_create_export>
 <span>Nach jedem Backup ein Export-Archiv erstellen $info_export</span>
 </label>
 
 <label class="checkline root-confirm">
-<input type="checkbox" name="root_permission_ack" value="1"$cfg_root_permission_ack required>
+<input data-role="none" type="checkbox" name="root_permission_ack" value="1"$cfg_root_permission_ack required>
 <span>Root-Freigabe bestätigen $info_root</span>
 </label>
 
 <div class="form-actions">
-<button type="submit">Einstellungen speichern</button>
+<button data-role="none" type="submit">Einstellungen speichern</button>
 </div>
 
 </form>
 
 <div class="config-actions">
-<form method="get" class="inline-form">
-<input type="hidden" name="action" value="download-config">
-<button type="submit">Einstellungen exportieren</button>$info_config_export
+<form data-ajax="false" method="get" class="inline-form">
+<input data-role="none" type="hidden" name="action" value="download-config">
+<button data-role="none" type="submit">Einstellungen exportieren</button>$info_config_export
 </form>
 
-<form method="post" enctype="multipart/form-data" class="inline-form">
-<input type="hidden" name="action" value="import-config">
-<input type="file" name="settings_file" accept="application/json,.json">
-<button type="submit">Einstellungen importieren</button>$info_config_import
+<form data-ajax="false" method="post" enctype="multipart/form-data" class="inline-form">
+<input data-role="none" type="hidden" name="action" value="import-config">
+<input data-role="none" type="file" name="settings_file" accept="application/json,.json">
+<button data-role="none" type="submit">Einstellungen importieren</button>$info_config_import
 </form>
 </div>
 
@@ -811,13 +811,13 @@ $target_notice
 
 <h2>Backups $info_table</h2>
 
-<form class="import" method="post" enctype="multipart/form-data">
+<form data-ajax="false" class="import" method="post" enctype="multipart/form-data">
 
-<input type="hidden" name="action" value="import">
+<input data-role="none" type="hidden" name="action" value="import">
 
-<input type="file" name="backup_archive">
+<input data-role="none" type="file" name="backup_archive">
 
-<button type="submit">Externes Backup importieren</button>$info_import
+<button data-role="none" type="submit">Externes Backup importieren</button>$info_import
 
 </form>
 
@@ -862,21 +862,21 @@ if (!@$backups) {
 
     if ($is_complete) {
       $backup_actions = qq{
-<form method="get" class="inline-form">
-<input type="hidden" name="browse_id" value="$id">
+<form data-ajax="false" method="get" class="inline-form">
+<input data-role="none" type="hidden" name="browse_id" value="$id">
 $active_task_hidden
-<button type="submit">Dateien</button>$info_browse
+<button data-role="none" type="submit">Dateien</button>$info_browse
 </form>
-<form method="get" class="inline-form">
-<input type="hidden" name="restore_id" value="$id">
+<form data-ajax="false" method="get" class="inline-form">
+<input data-role="none" type="hidden" name="restore_id" value="$id">
 $active_task_hidden
-<button type="submit">Restore</button>$info_restore
+<button data-role="none" type="submit">Restore</button>$info_restore
 </form>
-<form method="get" class="inline-form">
-<input type="hidden" name="action" value="download-export">
-<input type="hidden" name="backup_id" value="$id">
+<form data-ajax="false" method="get" class="inline-form">
+<input data-role="none" type="hidden" name="action" value="download-export">
+<input data-role="none" type="hidden" name="backup_id" value="$id">
 $active_task_hidden
-<button type="submit">Export</button>$info_download
+<button data-role="none" type="submit">Export</button>$info_download
 </form>
 };
     } else {
@@ -897,11 +897,11 @@ $active_task_hidden
 <td>
 <div class="row-actions">
 $backup_actions
-<form method="post" class="inline-form delete-backup-form">
-<input type="hidden" name="action" value="delete-backup">
-<input type="hidden" name="backup_id" value="$id">
+<form data-ajax="false" method="post" class="inline-form delete-backup-form">
+<input data-role="none" type="hidden" name="action" value="delete-backup">
+<input data-role="none" type="hidden" name="backup_id" value="$id">
 $active_task_hidden
-<button class="danger" type="submit">Löschen</button>$info_delete
+<button data-role="none" class="danger" type="submit">Löschen</button>$info_delete
 </form>
 </div>
 </td>
@@ -1026,14 +1026,14 @@ if ($restore_id) {
   }
 
   print qq{
-<form method="post" class="restore-start-form">
-<input type="hidden" name="action" value="restore-backup">
-<input type="hidden" name="backup_id" value="$safe_restore_id">
+<form data-ajax="false" method="post" class="restore-start-form">
+<input data-role="none" type="hidden" name="action" value="restore-backup">
+<input data-role="none" type="hidden" name="backup_id" value="$safe_restore_id">
 <label class="checkline root-confirm">
-<input type="checkbox" name="confirm_restore" value="1" required>
+<input data-role="none" type="checkbox" name="confirm_restore" value="1" required>
 <span>Ich bestätige, dass dieses Backup auf das System zurückgeschrieben werden soll.</span>
 </label>
-<button class="danger" type="submit">Restore starten</button>
+<button data-role="none" class="danger" type="submit">Restore starten</button>
 </form>
 </div>
 </section>
@@ -1046,10 +1046,6 @@ print <<HTML;
 
 <script>
 (function () {
-  document.querySelectorAll('#hostbackup-app input, #hostbackup-app textarea, #hostbackup-app select, #hostbackup-app button').forEach(function (control) {
-    control.setAttribute('data-role', 'none');
-  });
-
   var overlay = document.getElementById('loading-overlay');
   var loadingText = document.getElementById('loading-text');
 
