@@ -495,17 +495,62 @@ run_hook() {
 
 stop_docker_if_requested() {
   if [ "$(json_get_bool stop_docker_before_backup)" = "true" ] && command -v docker >/dev/null 2>&1; then
-    docker ps -q > "$1/docker-running-containers.txt" 2>/dev/null || true
-    if [ -s "$1/docker-running-containers.txt" ]; then
-      xargs -r docker stop < "$1/docker-running-containers.txt"
+    local state_dir="$1"
+    local id name
+    docker ps --format '{{.ID}}\t{{.Names}}' > "$state_dir/docker-running-containers.tsv" 2>/dev/null || true
+    awk '{print $1}' "$state_dir/docker-running-containers.tsv" > "$state_dir/docker-running-containers.txt" 2>/dev/null || true
+    if [ -s "$state_dir/docker-running-containers.tsv" ]; then
+      log "Docker containers running before backup:"
+      while IFS="$(printf '\t')" read -r id name; do
+        [ -n "$id" ] || continue
+        log "  $name ($id)"
+      done < "$state_dir/docker-running-containers.tsv"
+      while IFS="$(printf '\t')" read -r id name; do
+        [ -n "$id" ] || continue
+        log "Stopping Docker container $name ($id)"
+        if command -v timeout >/dev/null 2>&1; then
+          timeout 45 docker stop -t 30 "$id" || log "WARNING: Could not stop Docker container $name ($id)"
+        else
+          docker stop -t 30 "$id" || log "WARNING: Could not stop Docker container $name ($id)"
+        fi
+      done < "$state_dir/docker-running-containers.tsv"
+    else
+      log "No running Docker containers found before backup"
     fi
   fi
 }
 
 start_docker_if_needed() {
-  local state_file="$1/docker-running-containers.txt"
-  if [ -s "$state_file" ] && command -v docker >/dev/null 2>&1; then
-    xargs -r docker start < "$state_file" || true
+  local state_dir="$1"
+  local state_tsv="$state_dir/docker-running-containers.tsv"
+  local state_file="$state_dir/docker-running-containers.txt"
+  local id name source_file
+  if command -v docker >/dev/null 2>&1; then
+    if [ -s "$state_tsv" ]; then
+      source_file="$state_tsv"
+      while IFS="$(printf '\t')" read -r id name; do
+        [ -n "$id" ] || continue
+        log "Starting Docker container $name ($id)"
+        if command -v timeout >/dev/null 2>&1; then
+          timeout 45 docker start "$id" || log "WARNING: Could not start Docker container $name ($id)"
+        else
+          docker start "$id" || log "WARNING: Could not start Docker container $name ($id)"
+        fi
+      done < "$source_file"
+    elif [ -s "$state_file" ]; then
+      while IFS= read -r id; do
+        [ -n "$id" ] || continue
+        name="$(docker inspect --format '{{.Name}}' "$id" 2>/dev/null | sed 's#^/##')"
+        log "Starting Docker container ${name:-unknown} ($id)"
+        if command -v timeout >/dev/null 2>&1; then
+          timeout 45 docker start "$id" || log "WARNING: Could not start Docker container ${name:-unknown} ($id)"
+        else
+          docker start "$id" || log "WARNING: Could not start Docker container ${name:-unknown} ($id)"
+        fi
+      done < "$state_file"
+    else
+      log "No Docker container state file found for restart"
+    fi
   fi
 }
 
@@ -846,10 +891,57 @@ EOF
 
 list_backups() {
   local root
+  local dirs=()
+  local dir
   root="$(backup_root)"
   mkdir -p "$root"
+  while IFS= read -r dir; do
+    dirs+=("$dir")
+  done < <(log_dirs)
   perl -MJSON::PP -e '
-    my ($root) = @ARGV;
+    my ($root, @log_dirs) = @ARGV;
+    sub log_summary {
+      my ($id) = @_;
+      my %summary;
+      for my $dir (@log_dirs) {
+        my $path = "$dir/backup-$id.log";
+        next unless -r $path;
+        open my $fh, "<", $path or next;
+        while (my $line = <$fh>) {
+          chomp $line;
+          if ($line =~ /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) Backup \Q$id\E finished$/) {
+            $summary{status} = "complete";
+            $summary{finished_at} = $1;
+          } elsif ($line =~ /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) Backup \Q$id\E failed\b/) {
+            $summary{status} = "failed";
+            $summary{finished_at} = $1;
+          } elsif ($line =~ /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) Backup \Q$id\E stopped by user$/) {
+            $summary{status} = "stopped";
+            $summary{finished_at} = $1;
+          }
+        }
+        close $fh;
+        last if $summary{status};
+      }
+      return \%summary;
+    }
+    sub dir_size {
+      my ($dir) = @_;
+      open my $du, "-|", "du", "-sb", "--", $dir or return 0;
+      my $out = <$du> // "";
+      close $du;
+      return 0 unless $out =~ /^(\d+)/;
+      return 0 + $1;
+    }
+    sub file_count {
+      my ($dir) = @_;
+      my $rootfs = "$dir/rootfs";
+      open my $find, "-|", "find", $rootfs, "-xdev", "-type", "f" or return 0;
+      my $count = 0;
+      $count++ while <$find>;
+      close $find;
+      return $count;
+    }
     opendir(my $dh, $root) or do { print "[]"; exit 0; };
     my @items;
     for my $entry (sort readdir($dh)) {
@@ -864,13 +956,26 @@ list_backups() {
         $data = eval { decode_json(<$fh>) } || {};
       }
       my $archive = "$root/$entry.tar.gz";
+      my $log = log_summary($entry);
+      if (($data->{status} || "") eq "running" && $log->{status}) {
+        $data->{status} = $log->{status};
+      } elsif (!$data->{status} && $log->{status}) {
+        $data->{status} = $log->{status};
+      }
+      $data->{finished_at} ||= $log->{finished_at} if $log->{finished_at};
+      if (!($data->{size_bytes} || 0) && -d $dir) {
+        $data->{size_bytes} = dir_size($dir);
+      }
+      if (!($data->{files_count} || 0) && -d "$dir/rootfs") {
+        $data->{files_count} = file_count($dir);
+      }
       $data->{backup_id} ||= $entry;
       $data->{path} = $dir;
       $data->{export_file} = -f $archive ? $archive : undef;
       push @items, $data;
     }
     print JSON::PP->new->ascii->canonical->pretty->encode(\@items);
-  ' "$root"
+  ' "$root" "${dirs[@]}"
 }
 
 export_backup() {

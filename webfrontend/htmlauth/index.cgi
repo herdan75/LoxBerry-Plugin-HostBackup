@@ -475,6 +475,7 @@ print <<HTML;
 <th>Status</th>
 <th>Host</th>
 <th>Groesse</th>
+<th>Dateien</th>
 <th>Fertiggestellt</th>
 <th>Export</th>
 </tr>
@@ -485,18 +486,20 @@ HTML
 
 if (!@$backups) {
 
-  print '<tr><td colspan="6" class="empty">Noch keine Backups vorhanden.</td></tr>';
+  print '<tr><td colspan="7" class="empty">Noch keine Backups vorhanden.</td></tr>';
 
 } else {
 
   for my $backup (@$backups) {
 
     my $id = escapeHTML($backup->{backup_id} || '');
-    my $status = escapeHTML($backup->{status} || '');
+    my $status = escapeHTML($backup->{status} || 'unbekannt');
     my $host = escapeHTML(($backup->{host} || {})->{hostname} || '');
     my $finished = escapeHTML($backup->{finished_at} || '');
 
     my $size = int(($backup->{size_bytes} || 0) / 1024 / 1024);
+    my $files = escapeHTML($backup->{files_count} || '0');
+    my $export = $backup->{export_file} ? 'vorhanden' : '-';
 
     print qq{
 <tr>
@@ -504,8 +507,9 @@ if (!@$backups) {
 <td>$status</td>
 <td>$host</td>
 <td>${size} MB</td>
+<td>$files</td>
 <td>$finished</td>
-<td>-</td>
+<td>$export</td>
 </tr>
 };
   }
