@@ -45,6 +45,8 @@ noch keine freigegebene produktive Version.
 
 ### Weboberflaeche
 
+- Backup-Liste um Loesch-Button pro Backup mit Bestaetigungsdialog ergaenzt.
+- Import-Bereich klarer als Import externer `tar.gz`-Backup-Archive benannt.
 - Backup-Tabelle zeigt Dateianzahl und Exportstatus an und nutzt Backend-Fallbacks, wenn Manifestdaten fehlen oder noch `running` anzeigen.
 - Startbutton von `Backup vorbereiten` auf `Backup starten` umbenannt.
 - Stop-Button im Live-Status ergaenzt, um laufende Backups abbrechen zu koennen.

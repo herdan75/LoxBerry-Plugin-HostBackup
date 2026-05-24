@@ -345,6 +345,13 @@ button.danger {
   margin: 0;
 }
 
+.inline-form {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  margin: 0;
+}
+
 .move-form {
   align-items: center;
   display: flex;

@@ -3,6 +3,7 @@ use strict;
 use warnings;
 use CGI qw(:standard escapeHTML);
 use File::Temp qw(tempfile);
+use File::Copy qw(copy);
 use JSON::PP;
 
 my $plugin = 'loxberryhostbackup';
@@ -75,6 +76,10 @@ if ($notice eq 'saved') {
   $message = 'Backup gestartet. Der Live-Status wird unten automatisch aktualisiert.';
 } elsif ($notice eq 'backup_stop_requested') {
   $message = 'Backup-Stopp wurde angefordert. Zuvor gestoppte Docker-Container werden wieder gestartet, falls moeglich.';
+} elsif ($notice eq 'backup_deleted') {
+  $message = 'Backup geloescht.';
+} elsif ($notice eq 'backup_imported') {
+  $message = 'Backup importiert.';
 }
 
 my $requested_active_task = $q->param('active_task') || '';
@@ -188,6 +193,46 @@ if ($q->request_method eq 'POST') {
       }
     }
   }
+
+  elsif ($action eq 'delete-backup') {
+
+    my $delete_id = $q->param('backup_id') || '';
+
+    if ($delete_id !~ /^[A-Za-z0-9._-]+$/) {
+      $error = 'Ungueltige Backup-ID.';
+    } else {
+      my ($status, $out) = run_shell(backend_cmd('delete', $delete_id));
+
+      if ($status == 0) {
+        redirect_with(msg => 'backup_deleted');
+      } else {
+        $error = escapeHTML($out);
+      }
+    }
+  }
+
+  elsif ($action eq 'import') {
+
+    my $upload = $q->upload('backup_archive');
+
+    if (!$upload) {
+      $error = 'Keine Backup-Datei ausgewaehlt.';
+    } else {
+      my ($fh, $tmpfile) = tempfile('hostbackup-import-XXXXXX', SUFFIX => '.tar.gz', TMPDIR => 1, UNLINK => 1);
+      binmode $fh;
+      binmode $upload;
+      copy($upload, $fh);
+      close $fh;
+
+      my ($status, $out) = run_shell(backend_cmd('import', $tmpfile));
+
+      if ($status == 0) {
+        redirect_with(msg => 'backup_imported');
+      } else {
+        $error = escapeHTML($out);
+      }
+    }
+  }
 }
 
 my ($config_status, $config_json) = run_shell(backend_cmd('config'));
@@ -250,7 +295,8 @@ my $info_docker = info_button('Wenn aktiv, stoppt das Plugin laufende Docker-Con
 my $info_export = info_button('Erstellt nach jedem Backup zusaetzlich ein komprimiertes tar.gz-Archiv. Das ist praktisch zum Download, Kopieren oder Archivieren, benoetigt aber zusaetzlichen Speicherplatz und Zeit.');
 my $info_root = info_button('Diese Bestaetigung ist noetig, weil Vollbackup und Restore Systemdateien, Berechtigungen, Docker-Daten und Cronjobs betreffen. Es werden keine Passwoerter gespeichert; erlaubt wird nur der Start des Backend-Skripts dieses Plugins.');
 my $info_table = info_button('Diese Liste zeigt vorhandene Backups mit Status, Host, Groesse und Fertigstellungszeit. Ein vollstaendiges Backup sollte den Status complete haben, bevor du es fuer Restore-Tests verwendest.');
-my $info_import = info_button('Importiert ein zuvor exportiertes Backup-Archiv zurueck in die lokale Backup-Liste. Das Archiv wird vor dem Entpacken auf sichere Pfade und die erwartete Backup-Struktur geprueft.');
+my $info_import = info_button('Importiert ein extern gespeichertes Backup-Archiv im Format tar.gz, zum Beispiel von deinem PC, NAS oder einem anderen Datentraeger. Fuer Restore eines bereits unten gelisteten Backups brauchst du diese Datei-Auswahl nicht.');
+my $info_delete = info_button('Loescht den Backup-Ordner und ein eventuell vorhandenes Export-Archiv dieses Backups. Das kann nicht rueckgaengig gemacht werden.');
 my $info_backup_start = info_button('Startet den Backup-Vorgang. Vor dem eigentlichen Backup prueft das Plugin wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und Docker-Hinweise.');
 
 print header(-type => 'text/html', -charset => 'utf-8');
@@ -463,7 +509,7 @@ print <<HTML;
 
 <input type="file" name="backup_archive">
 
-<button type="submit">Backup importieren</button>$info_import
+<button type="submit">Externes Backup importieren</button>$info_import
 
 </form>
 
@@ -478,6 +524,7 @@ print <<HTML;
 <th>Dateien</th>
 <th>Fertiggestellt</th>
 <th>Export</th>
+<th>Aktion</th>
 </tr>
 </thead>
 
@@ -486,7 +533,7 @@ HTML
 
 if (!@$backups) {
 
-  print '<tr><td colspan="7" class="empty">Noch keine Backups vorhanden.</td></tr>';
+  print '<tr><td colspan="8" class="empty">Noch keine Backups vorhanden.</td></tr>';
 
 } else {
 
@@ -510,6 +557,13 @@ if (!@$backups) {
 <td>$files</td>
 <td>$finished</td>
 <td>$export</td>
+<td>
+<form method="post" class="inline-form delete-backup-form">
+<input type="hidden" name="action" value="delete-backup">
+<input type="hidden" name="backup_id" value="$id">
+<button class="danger" type="submit">Loeschen</button>$info_delete
+</form>
+</td>
 </tr>
 };
   }
@@ -642,6 +696,16 @@ print <<HTML;
       }
     });
   }
+
+  document.querySelectorAll('.delete-backup-form').forEach(function (form) {
+    form.addEventListener('submit', function (event) {
+      var idInput = form.querySelector('input[name="backup_id"]');
+      var backupId = idInput ? idInput.value : 'dieses Backup';
+      if (!window.confirm('Backup ' + backupId + ' wirklich dauerhaft loeschen?')) {
+        event.preventDefault();
+      }
+    });
+  });
 
   function poll() {
     fetch('?action=task-status&task=' + encodeURIComponent(task), { cache: 'no-store' })
