@@ -340,13 +340,25 @@ body.is-loading .loading-overlay {
 }
 
 .schedule-card legend {
+  align-items: center;
   background: #ffffff;
   border: 1px solid #d8dee8;
   border-radius: 999px;
   color: #17364a;
+  display: inline-flex;
   font-size: 14px;
   font-weight: 700;
-  padding: 4px 10px;
+  min-height: 28px;
+  padding: 4px 11px;
+  position: relative;
+}
+
+.schedule-card legend .info-help {
+  left: calc(100% + 6px);
+  margin-left: 0;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .settings-subtitle {
