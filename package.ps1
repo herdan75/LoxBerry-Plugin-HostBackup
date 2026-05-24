@@ -1,7 +1,13 @@
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$zip = Join-Path $root "LoxBerryHostBackup_0.1.0.zip"
+$pluginCfg = Get-Content (Join-Path $root "plugin.cfg")
+$versionLine = $pluginCfg | Where-Object { $_ -match '^VERSION=' } | Select-Object -First 1
+if (-not $versionLine) {
+  throw "Cannot read VERSION from plugin.cfg"
+}
+$version = ($versionLine -replace '^VERSION=', '').Trim()
+$zip = Join-Path $root "LoxBerryHostBackup_$version.zip"
 
 if (Test-Path $zip) {
   Remove-Item -LiteralPath $zip

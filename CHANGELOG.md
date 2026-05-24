@@ -3,10 +3,22 @@
 Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
-Dieses Projekt befindet sich noch in einem frühen Entwicklungsstand. Es gibt
-noch keine freigegebene produktive Version.
+Dieses Projekt befindet sich in einer Beta-/Testphase. Es gibt noch keine
+freigegebene stabile Produktivversion.
 
 ## [Unreleased]
+
+## [0.2.0] - 2026-05-24
+
+### Hinweis
+
+- Erste vorsichtige Beta-/Testversion.
+- Installation, Konfiguration, Vollbackup und inkrementelle Snapshot-Backups
+  wurden auf einem LoxBerry-/DietPi-Testsystem geprüft.
+- Inkrementelle Snapshots wurden auf `ext4` mit Hardlinks und deutlicher
+  Speicherersparnis erfolgreich geprüft.
+- Ein produktiver Ende-zu-Ende-Restore auf ein frisch installiertes Zielsystem
+  steht noch aus.
 
 ### Dokumentation
 
@@ -162,9 +174,8 @@ noch keine freigegebene produktive Version.
 
 ### Hinweis
 
-- Noch nicht produktiv freigegeben.
-- Installation, Konfiguration und echte Backups wurden auf Testsystemen geprüft.
-- Ein produktiver Ende-zu-Ende-Restore steht noch aus.
-- Nur für Tests auf nicht-kritischen Systemen verwenden.
+- Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
+- Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/main...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.2.0-beta...develop
+[0.2.0]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.2.0-beta
