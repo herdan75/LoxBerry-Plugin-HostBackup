@@ -291,12 +291,13 @@ install_schedule() {
     dow="$weekdays"
     month_field="*"
   elif [ "$mode" = "monthly" ]; then
-    dom="$monthdays"
+    dom="*"
+    command_line="$LBP_BINDIR/hostbackup.sh schedule-run"
   else
     month_field="*"
   fi
 
-  command_line="$LBP_BINDIR/hostbackup.sh start"
+  command_line="${command_line:-$LBP_BINDIR/hostbackup.sh start}"
   cat > "$cron_file" <<EOF
 # Managed by LoxBerry Host Backup.
 SHELL=/bin/bash
@@ -304,6 +305,49 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 $minute $hour $dom $month_field $dow root $command_line >/dev/null 2>&1
 EOF
   chmod 644 "$cron_file"
+}
+
+schedule_run() {
+  local enabled mode today last_day month selected_days selected_months day should_run
+  enabled="$(json_get_bool schedule_enabled)"
+  [ "$enabled" = "true" ] || exit 0
+  mode="$(json_get_string schedule_mode)"
+
+  if [ "$mode" != "monthly" ]; then
+    start_backup
+    return 0
+  fi
+
+  today="$(date '+%-d')"
+  month="$(date '+%-m')"
+  last_day="$(date -d "$(date '+%Y-%m-01') +1 month -1 day" '+%-d')"
+  selected_days="$(json_get_array_lines schedule_monthdays | paste -sd, -)"
+  selected_months="$(json_get_array_lines schedule_months | paste -sd, -)"
+
+  case "$selected_months" in
+    ""|"*") ;;
+    *) case ",$selected_months," in *",$month,"*) ;; *) exit 0 ;; esac ;;
+  esac
+
+  should_run=false
+  IFS=',' read -r -a days <<< "$selected_days"
+  for day in "${days[@]}"; do
+    case "$day" in
+      [1-9]|[12][0-9]|3[01]) ;;
+      *) continue ;;
+    esac
+    if [ "$day" -eq "$today" ]; then
+      should_run=true
+      break
+    fi
+    if [ "$day" -gt "$last_day" ] && [ "$today" -eq "$last_day" ]; then
+      should_run=true
+      break
+    fi
+  done
+
+  [ "$should_run" = "true" ] || exit 0
+  start_backup
 }
 
 log() {
@@ -1241,6 +1285,7 @@ Actions:
   config                 Print plugin config as JSON
   save-config ARGS       Save plugin config
   install-schedule       Install or remove the configured cron schedule
+  schedule-run           Run configured schedule with monthly fallback logic
   tasks                  List task logs as JSON
   task-log TASK [LINES]  Print recent task log lines
   task-status TASK [N]   Print task status and recent log as JSON
@@ -1267,6 +1312,7 @@ case "$action" in
   config) show_config ;;
   save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11:-*}" "${12:-0}" "${13:-1}" "${14:-}" "${15:-}" "${16:-false}" ;;
   install-schedule) install_schedule ;;
+  schedule-run) schedule_run ;;
   tasks) list_tasks ;;
   task-log) shift; show_task_log "${1:?TASK required}" "${2:-300}" ;;
   task-status) shift; task_status "${1:?TASK required}" "${2:-400}" ;;
