@@ -247,6 +247,55 @@ backup_root() {
   fi
 }
 
+backup_target_info() {
+  local root probe fs_type source available_mb backup_mode status message linux_fs
+  root="$(backup_root)"
+  backup_mode="$(json_get_string backup_mode)"
+  [ "$backup_mode" = "snapshot" ] || backup_mode="full"
+  probe="$root"
+  while [ ! -e "$probe" ] && [ "$probe" != "/" ]; do
+    probe="$(dirname "$probe")"
+  done
+  [ -e "$probe" ] || probe="/"
+
+  fs_type="$(findmnt -no FSTYPE -T "$probe" 2>/dev/null | head -n 1)"
+  source="$(findmnt -no SOURCE -T "$probe" 2>/dev/null | head -n 1)"
+  available_mb="$(df -Pm "$probe" 2>/dev/null | awk 'NR==2 {print $4}')"
+  [ -n "$fs_type" ] || fs_type="unknown"
+  [ -n "$source" ] || source="unknown"
+  [ -n "$available_mb" ] || available_mb=0
+
+  linux_fs=false
+  if printf '%s\n' "$fs_type" | grep -Eq '^(ext2|ext3|ext4|xfs|btrfs)$'; then
+    linux_fs=true
+  fi
+
+  status="ok"
+  message="Backup-Ziel nutzt ein geeignetes Linux-Dateisystem. ext4 ist fuer dieses Plugin in der Praxis meist deutlich schneller als NTFS/FUSE und besonders fuer inkrementelle Snapshots empfohlen."
+  if [ "$backup_mode" = "snapshot" ] && [ "$linux_fs" != "true" ]; then
+    status="warning"
+    message="Inkrementelle Snapshots verwenden Hardlinks. Fuer Geschwindigkeit, zuverlaessige Speicherersparnis und Linux-Rechte wird ext4, xfs oder btrfs empfohlen. NTFS/FUSE ist bei vielen kleinen Dateien oft deutlich langsamer und kann Hardlinks/Metadaten eingeschraenkt abbilden."
+  elif [ "$linux_fs" != "true" ]; then
+    status="warning"
+    message="Das Backup-Ziel ist kein typisches Linux-Dateisystem. Fuer Geschwindigkeit, volle Linux-Rechte, Besitzer, Hardlinks und spaetere inkrementelle Snapshots wird ext4, xfs oder btrfs empfohlen. NTFS/FUSE kann dieses Backup deutlich verlangsamen."
+  fi
+
+  cat <<EOF
+{
+  "kind": "backup-target",
+  "status": $(json_escape "$status"),
+  "backup_root": $(json_escape "$root"),
+  "probe_path": $(json_escape "$probe"),
+  "fs_type": $(json_escape "$fs_type"),
+  "source": $(json_escape "$source"),
+  "available_mb": $available_mb,
+  "linux_filesystem": $linux_fs,
+  "backup_mode": $(json_escape "$backup_mode"),
+  "message": $(json_escape "$message")
+}
+EOF
+}
+
 install_schedule() {
   require_root_for_write
   local cron_file="/etc/cron.d/loxberryhostbackup"
@@ -1381,6 +1430,7 @@ Actions:
   preflight-backup       Check whether backup can start
   preflight-restore ID   Check whether restore can start
   config                 Print plugin config as JSON
+  target-info            Show backup target filesystem information as JSON
   save-config ARGS       Save plugin config
   install-schedule       Install or remove the configured cron schedule
   schedule-run           Run configured schedule with monthly fallback logic
@@ -1408,6 +1458,7 @@ case "$action" in
   preflight-backup) preflight_backup ;;
   preflight-restore) shift; preflight_restore "${1:?BACKUP_ID required}" ;;
   config) show_config ;;
+  target-info) backup_target_info ;;
   save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11:-*}" "${12:-0}" "${13:-1}" "${14:-}" "${15:-}" "${16:-false}" "${17:-full}" ;;
   install-schedule) install_schedule ;;
   schedule-run) schedule_run ;;

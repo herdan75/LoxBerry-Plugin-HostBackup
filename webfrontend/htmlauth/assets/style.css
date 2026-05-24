@@ -191,6 +191,28 @@ h2 {
   background: #fff0f0;
 }
 
+.inline-notice {
+  border: 1px solid #d8dee8;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 10px 12px;
+}
+
+.inline-notice.ok {
+  background: #edf8f0;
+  border-color: #95c7a2;
+}
+
+.inline-notice.warning {
+  background: #fff8e5;
+  border-color: #e0b95d;
+}
+
+.inline-notice span {
+  color: #506071;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

@@ -452,6 +452,13 @@ if ($list_status == 0) {
   $backups = eval { decode_json($list_json) } || [];
 }
 
+my ($target_status, $target_json) = run_shell(backend_cmd('target-info'));
+my $target_info = {};
+
+if ($target_status == 0) {
+  $target_info = eval { decode_json($target_json) } || {};
+}
+
 if ($restore_id !~ /^[A-Za-z0-9._-]+$/) {
   $restore_id = '';
 }
@@ -554,6 +561,18 @@ my $info_browse_pending = info_button('Dieses Backup ist noch nicht vollständig
 my $info_download = info_button('Erstellt bei Bedarf ein Export-Archiv und lädt dieses Backup als tar.gz-Datei auf deinen Rechner herunter. Das kann bei großen Backups einige Zeit dauern.');
 my $info_backup_start = info_button('Startet den Backup-Vorgang. Vor dem eigentlichen Backup prüft das Plugin wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und Docker-Hinweise.');
 
+my $target_notice = '';
+
+if ($target_info && %{$target_info}) {
+  my $target_state = ($target_info->{status} || 'ok') eq 'ok' ? 'ok' : 'warning';
+  my $target_message = escapeHTML($target_info->{message} || '');
+  my $target_fs = escapeHTML($target_info->{fs_type} || 'unbekannt');
+  my $target_source = escapeHTML($target_info->{source} || 'unbekannt');
+  my $target_probe = escapeHTML($target_info->{probe_path} || '');
+  my $target_free = escapeHTML($target_info->{available_mb} || 0);
+  $target_notice = qq{<section class="inline-notice $target_state"><strong>Dateisystem-PrÃ¼fung:</strong> $target_message<br><span>Erkannt: <code>$target_fs</code> auf <code>$target_source</code>, geprÃ¼fter Pfad <code>$target_probe</code>, frei ca. $target_free MB.</span></section>};
+}
+
 print header(-type => 'text/html', -charset => 'utf-8');
 
 print <<HTML;
@@ -632,6 +651,8 @@ print <<HTML;
 <span>Backup-Verzeichnis $info_backup_root</span>
 <input name="backup_root" value="$cfg_backup_root">
 </label>
+
+$target_notice
 
 <label>
 <span>Backups behalten $info_retention</span>

@@ -245,6 +245,14 @@ Beispiel:
 Das konfigurierte Backup-Verzeichnis wird automatisch vom Backup ausgeschlossen,
 damit das Backup sich nicht selbst wieder mitsichert.
 
+Das Plugin prüft den eingestellten Speicherort und zeigt in der Oberfläche den
+erkannten Dateisystemtyp an. Für inkrementelle Snapshots wird ein Linux-
+Dateisystem wie `ext4`, `xfs` oder `btrfs` empfohlen. Unabhängig vom
+Backup-Modus ist `ext4` für dieses Plugin in der Praxis meist deutlich
+schneller als NTFS/FUSE, besonders bei sehr vielen kleinen Dateien. NTFS/FUSE
+kann zusätzlich Hardlinks, Besitzer, Rechte oder Linux-Metadaten nur
+eingeschränkt abbilden.
+
 Wenn der Backup-Datenträger noch andere alte Backups, Images oder Archivdaten
 enthält, sollten diese zusätzlich ausgeschlossen werden.
 

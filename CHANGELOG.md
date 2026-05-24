@@ -71,6 +71,11 @@ noch keine freigegebene produktive Version.
 
 ### Weboberfläche
 
+- Dateisystem-Prüfung für das Backup-Verzeichnis ergänzt. Die Oberfläche zeigt
+  den erkannten Dateisystemtyp, Mount und freien Speicher an und warnt bei
+  NTFS/FUSE bzw. nicht typischen Linux-Dateisystemen, besonders für
+  inkrementelle Snapshots. Der Hinweis nennt zusätzlich, dass `ext4` in der
+  Praxis deutlich schneller als NTFS/FUSE sein kann.
 - Kopfbereich mit Plugin-Icon, kompakter Titelgestaltung und Link zurück zur
   LoxBerry-Administration überarbeitet.
 - Sichtbare deutsche Texte in der Weboberfläche auf echte Umlaute vereinheitlicht.
