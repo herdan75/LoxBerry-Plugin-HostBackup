@@ -1,6 +1,6 @@
 # LoxBerry Host Backup
 
-**Status:** Beta/Testversion 0.2.0, vorsichtig freigegeben für Tests.
+**Status:** Version 0.3.0, erste vorsichtig freigegebene Version.
 
 Dieses Plugin wurde bereits auf einem LoxBerry-/DietPi-Testsystem installiert,
 konfiguriert und für echte Vollbackups sowie inkrementelle Snapshot-Backups
@@ -146,7 +146,7 @@ Noch nicht produktiv validiert:
 
 ## Installation
 
-1. ZIP-Paket aus dem GitHub-Pre-Release herunterladen oder lokal bauen.
+1. ZIP-Paket aus dem GitHub-Release herunterladen oder lokal bauen.
 2. In LoxBerry unter **Plugins > Plugin installieren** hochladen.
 3. Nach der Installation die Plugin-Oberfläche öffnen.
 4. Root-Freigabe in den Einstellungen bewusst bestätigen.
@@ -159,16 +159,16 @@ Die Weboberfläche ist in die normale LoxBerry-Oberfläche eingebettet. Die
 LoxBerry-Kopfzeile mit Haus-Symbol und Menü bleibt sichtbar, sodass jederzeit
 zur LoxBerry-Administration gewechselt werden kann.
 
-Pre-Release-Paket:
+Release-Paket:
 
 ```text
-https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.2.0-beta/LoxBerryHostBackup_0.2.0.zip
+https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.3.0/LoxBerryHostBackup_0.3.0.zip
 ```
 
 Lokales Paket nach dem Build:
 
 ```text
-LoxBerryHostBackup_0.2.0.zip
+LoxBerryHostBackup_0.3.0.zip
 ```
 
 ## Erste Tests Auf LoxBerry
@@ -522,7 +522,7 @@ Prüfung möglich bleibt.
 
 ## Bekannte Grenzen
 
-- Beta/Testversion, noch nicht als stabile Produktivversion freigegeben
+- erste vorsichtig freigegebene Version, produktive Nutzung weiterhin mit eigener Prüfung
 - noch kein echter Ende-zu-Ende-Restore auf LoxBerry/DietPi produktiv validiert
 - kein Ersatz für applikationsspezifische Datenbank-Backups
 - Plattformmigration kann manuelle Nacharbeit erfordern
@@ -542,16 +542,15 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 
 Branches:
 
-- `main`: aktueller Beta-/Teststand 0.2.0
+- `main`: aktueller freigegebener Stand 0.3.0
 - `develop`: laufende Weiterentwicklung
 
 Update-Dateien:
 
-- `release.cfg`: Stable-Kanal, derzeit noch ohne produktive Stable-Freigabe
-- `prerelease.cfg`: Pre-Release-Kanal mit ZIP-Download aus dem GitHub-Pre-Release
+- `release.cfg`: Stable-Kanal mit ZIP-Download aus dem GitHub-Release
+- `prerelease.cfg`: Pre-Release-Kanal, derzeit identisch mit dem freigegebenen Paket
 
-Das installierbare ZIP soll bis zur stabilen Produktivfreigabe über den Pre-Release-Kanal
-bereitgestellt werden.
+Das installierbare ZIP wird über den Release-Kanal bereitgestellt. Der Pre-Release-Kanal zeigt aktuell auf dasselbe Paket.
 
 GitHub Actions erzeugt das Plugin-ZIP automatisch und hängt es bei
 GitHub-Releases als Asset an.

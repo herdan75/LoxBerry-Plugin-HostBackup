@@ -3,8 +3,9 @@
 Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
-Dieses Projekt befindet sich in einer Beta-/Testphase. Es gibt noch keine
-freigegebene stabile Produktivversion.
+Dieses Projekt ist in einer ersten vorsichtig freigegebenen Version verfügbar.
+Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
+validiert werden.
 
 ## [Unreleased]
 
@@ -15,6 +16,15 @@ freigegebene stabile Produktivversion.
   LoxBerry-Navigation, das Haus-Symbol und die Kopfzeile sichtbar.
 - Separaten Button `Zurück zu LoxBerry` entfernt, da die Navigation nun wieder
   über die LoxBerry-Kopfzeile erfolgt.
+
+## [0.3.0] - 2026-05-24
+
+### Geändert
+
+- Version auf die erste vorsichtig freigegebene Fassung angehoben.
+- Stable- und Pre-Release-Updatekanal zeigen auf das freigegebene Paket.
+- Plugin-Metadaten bereinigt und doppelte Auto-Update-Einträge entfernt.
+- Lokale Build- und Testaltlasten aus dem Arbeitsstand entfernt.
 
 ## [0.2.0] - 2026-05-24
 
@@ -185,5 +195,6 @@ freigegebene stabile Produktivversion.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.2.0-beta...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.3.0...develop
+[0.3.0]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.3.0
 [0.2.0]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.2.0-beta
