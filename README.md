@@ -148,15 +148,16 @@ Lokal geprueft:
 - Backend-Kommando `config` mit isolierten Testverzeichnissen
 - Backend-Kommando `task-status` mit synthetischem Logfile
 - Plugin-ZIP-Paketierung
+- Installation und Update ueber den LoxBerry Plugin Manager
+- Weboberflaeche auf einem LoxBerry-Testsystem
+- Speichern der Einstellungen ueber die LoxBerry-sudoers-Regel
+- Echtes Backup auf LoxBerry-/DietPi-Hardware inklusive Live-Log
+- Stoppen und Wiederanlauf von Docker-Containern im Backup-Ablauf
 
 Noch nicht validiert:
 
-- Installation ueber den LoxBerry Plugin Manager
-- Weboberflaeche mit echtem LoxBerry-Webserver-User
-- Speichern der Einstellungen ueber sudoers
-- Echtes Backup auf LoxBerry-/DietPi-Hardware
 - Echter Restore auf ein frisch installiertes Zielsystem
-- Docker-/Datenbank-Konsistenz bei laufenden Containern
+- Docker-/Datenbank-Konsistenz in allen produktiven Anwendungsszenarien
 - Migration zwischen unterschiedlichen CPU-Architekturen
 
 ## Installation
@@ -197,12 +198,14 @@ Empfohlene Reihenfolge:
 ## Funktionen
 
 - Vollstaendiges Host-Backup per `rsync`
+- Inkrementelle Snapshot-Backups per `rsync --link-dest`
 - Restore eines ausgewaehlten Backups
 - Backup- und Restore-Preflight-Checks
 - Live-Loganzeige fuer laufende Backup-/Restore-Jobs
 - Backup-Explorer in der Weboberflaeche
 - Download einzelner Dateien aus einem Backup
 - Import und Export von Backup-Archiven
+- Export und Import der Plugin-Einstellungen als JSON-Datei
 - Verschieben kompletter Backup-Saetze
 - Docker-Inventarisierung
 - Optionales Stoppen/Starten laufender Docker-Container
@@ -288,6 +291,32 @@ waehrend des Backups kurz unterbrechen.
 
 Wenn aktiviert, wird nach jedem Backup automatisch ein `.tar.gz`-Export erstellt.
 
+Dieser Export ist praktisch zum Herunterladen oder Archivieren, ist aber ein
+komprimiertes Archiv des ausgewaehlten Backup-Stands. Er spart nicht automatisch
+denselben Speicherplatz wie ein inkrementeller Snapshot-Ordner mit Hardlinks.
+
+### Einstellungen exportieren und importieren
+
+Die Plugin-Einstellungen koennen als kleine JSON-Datei exportiert und nach einer
+Neuinstallation wieder importiert werden.
+
+Enthalten sind zum Beispiel:
+
+- Backup-Verzeichnis
+- Backup-Modus
+- Ausschluesse
+- Docker-Option
+- Export-Option
+- Zeitplan
+- Aufbewahrung
+- Pre-/Post-Backup-Hooks
+- Root-Freigabe-Bestaetigung
+
+Nicht enthalten sind Backup-Daten oder Passwoerter.
+
+Nach einem Import sollten die Pfade trotzdem kurz geprueft werden, weil sich
+USB-Mounts oder Laufwerksnamen nach einer Neuinstallation aendern koennen.
+
 ### Zeitplan
 
 Automatische Backups koennen taeglich, woechentlich oder monatlich laufen.
@@ -355,11 +384,10 @@ und kann das Zielsystem ueberschreiben.
 
 Deshalb ist der Restore absichtlich mit mehreren Schritten abgesichert:
 
-1. Backup auswaehlen
-2. Restore-Check ausfuehren
-3. Restore-Plan anzeigen
-4. Backup-ID zur Bestaetigung eingeben
-5. Restore starten
+1. In der Backup-Liste die Aktion `Restore` beim gewuenschten Backup waehlen
+2. Restore-Check und Restore-Plan im eingeblendeten Restore-Bereich pruefen
+3. Restore per Checkbox ausdruecklich bestaetigen
+4. Restore starten
 
 Fuer einen vollstaendigen Restore ist ein frisch installiertes Zielsystem
 oder eine Rescue-/Offline-Umgebung vorzuziehen.
