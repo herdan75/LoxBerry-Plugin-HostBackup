@@ -335,12 +335,12 @@ body.is-loading .loading-overlay {
   background: #fbfdff;
   border: 1px solid #c8d3df;
   border-radius: 8px;
-  margin: 10px 0 0;
+  margin: 18px 0 0;
   padding: 16px 14px 14px;
 }
 
 .settings-group {
-  margin-top: 12px;
+  margin-top: 18px;
 }
 
 .schedule-card legend {
@@ -352,7 +352,7 @@ body.is-loading .loading-overlay {
   display: inline-flex;
   font-size: 14px;
   font-weight: 700;
-  margin-bottom: 9px;
+  margin-bottom: 12px;
   min-height: 28px;
   padding: 4px 11px;
   position: relative;
@@ -367,11 +367,12 @@ body.is-loading .loading-overlay {
 }
 
 .settings-subtitle {
-  color: #526173;
-  font-size: 13px;
+  color: #17364a;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: normal;
-  margin: 4px 0 13px;
+  line-height: 1.3;
+  margin: 6px 0 14px;
   text-transform: none;
 }
 
