@@ -46,6 +46,7 @@ noch keine freigegebene produktive Version.
 ### Weboberflaeche
 
 - Sichtbare deutsche Texte in der Weboberfläche auf echte Umlaute vereinheitlicht.
+- Kopfbereich der Weboberfläche mit Plugin-Icon und kompakterer Titelgestaltung überarbeitet.
 - Restore-Bereich mit Backup-Auswahl, Restore-Check, Restore-Plan und Startbestätigung aus der Backup-Liste ergänzt.
 - Backup-Liste um direkte Aktionen für Dateien anzeigen, Restore auswählen, Export herunterladen und Löschen erweitert.
 - Live-Status stoppt die Aktualisierungsanzeige nach Abschluss und lädt die Backup-Liste danach neu.

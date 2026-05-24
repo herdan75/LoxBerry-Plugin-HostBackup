@@ -449,9 +449,12 @@ print <<HTML;
 <main class="page">
 
 <header class="topbar">
+<div class="brand">
+<img class="brand-icon" src="/system/images/icons/loxberryhostbackup/icon_64.png" alt="">
 <div>
 <h1>LoxBerry Host Backup</h1>
 <p>Vollbackup für LoxBerry, Docker, DietPi und native Dienste.</p>
+</div>
 </div>
 
 <form method="post">
