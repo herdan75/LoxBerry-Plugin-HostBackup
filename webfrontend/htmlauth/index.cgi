@@ -645,6 +645,8 @@ print <<HTML;
 
 <input data-role="none" type="hidden" name="action" value="save-config">
 
+<div class="settings-section-title wide">Grunddaten</div>
+
 <label>
 <span>Backup-Verzeichnis $info_backup_root</span>
 <input data-role="none" name="backup_root" value="$cfg_backup_root">
@@ -756,6 +758,11 @@ $target_notice
 
 </fieldset>
 
+<fieldset class="schedule-card wide settings-group">
+<legend>Skripte und Ausschlüsse</legend>
+
+<div class="settings-form nested-settings">
+
 <label>
 <span>Skript vor dem Backup $info_pre_hook</span>
 <input data-role="none" name="pre_backup_hook" value="$cfg_pre_hook">
@@ -771,6 +778,13 @@ $target_notice
 <textarea data-role="none" name="rsync_extra_excludes" rows="5">$cfg_excludes</textarea>
 </label>
 
+</div>
+
+</fieldset>
+
+<fieldset class="schedule-card wide settings-group">
+<legend>Optionen und Freigaben</legend>
+
 <label class="checkline">
 <input data-role="none" type="checkbox" name="stop_docker_before_backup" value="1"$cfg_stop_docker>
 <span>Docker-Container während des Backups anhalten $info_docker</span>
@@ -785,6 +799,8 @@ $target_notice
 <input data-role="none" type="checkbox" name="root_permission_ack" value="1"$cfg_root_permission_ack required>
 <span>Root-Freigabe bestätigen $info_root</span>
 </label>
+
+</fieldset>
 
 <div class="form-actions">
 <button data-role="none" type="submit">Einstellungen speichern</button>

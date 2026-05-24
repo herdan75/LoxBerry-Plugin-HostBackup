@@ -235,10 +235,6 @@ body.is-loading .loading-overlay {
   border-collapse: collapse;
 }
 
-#hostbackup-app tbody tr:hover {
-  background: #f8fbfd;
-}
-
 .import {
   display: flex;
   flex-wrap: wrap;
@@ -291,6 +287,15 @@ body.is-loading .loading-overlay {
   grid-column: 1 / -1;
 }
 
+.settings-section-title {
+  border-bottom: 1px solid #edf1f5;
+  color: #1d2733;
+  font-size: 15px;
+  font-weight: 700;
+  margin: 2px 0 -2px;
+  padding-bottom: 6px;
+}
+
 .settings-form .checkline {
   align-items: center;
   flex-direction: row;
@@ -330,11 +335,23 @@ body.is-loading .loading-overlay {
   padding: 10px 14px 14px;
 }
 
+.settings-group {
+  margin-top: 2px;
+}
+
 .schedule-card legend {
   background: #fbfdff;
   font-size: 15px;
   font-weight: 700;
   padding: 0 6px;
+}
+
+.nested-settings {
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+}
+
+.nested-settings .wide {
+  grid-column: 1 / -1;
 }
 
 .schedule-enable {
@@ -383,7 +400,7 @@ body.is-loading .loading-overlay {
 
 .schedule-detail summary {
   cursor: pointer;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1.25;
   margin-bottom: 6px;
