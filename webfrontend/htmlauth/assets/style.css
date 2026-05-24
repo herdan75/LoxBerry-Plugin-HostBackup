@@ -584,6 +584,50 @@ body.is-loading .loading-overlay {
   padding: 4px 6px;
 }
 
+#hostbackup-app .config-card .config-actions,
+#hostbackup-app .config-card .config-actions form,
+#hostbackup-app .config-card .config-actions .inline-form {
+  align-items: center !important;
+  display: inline-flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  width: auto !important;
+}
+
+#hostbackup-app .config-card .config-actions button,
+#hostbackup-app .config-card .config-actions input[type="file"] {
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  font-family: "Helvetica Neue", Arial, Helvetica, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  height: auto !important;
+  letter-spacing: normal !important;
+  line-height: 1.3 !important;
+  margin: 0 !important;
+  min-height: 31px !important;
+  padding: 5px 10px !important;
+  text-shadow: none !important;
+  text-transform: none !important;
+  white-space: nowrap !important;
+  width: auto !important;
+}
+
+#hostbackup-app .config-card .config-actions input[type="file"] {
+  display: inline-block !important;
+  max-width: 260px !important;
+  padding: 4px 6px !important;
+}
+
+#hostbackup-app .config-card .config-actions input[type="file"]::file-selector-button {
+  font: inherit !important;
+  margin-right: 8px !important;
+  padding: 3px 8px !important;
+}
+
 #hostbackup-app button:hover,
 #hostbackup-app button:focus {
   border-color: #8ea4ba;
