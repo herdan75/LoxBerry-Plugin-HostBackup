@@ -146,7 +146,7 @@ body.is-loading .loading-overlay {
   vertical-align: middle;
 }
 
-.info-button {
+#hostbackup-app .info-button {
   align-items: center;
   border: 1px solid #8ea4ba;
   border-radius: 50%;
@@ -157,7 +157,11 @@ body.is-loading .loading-overlay {
   font-weight: 700;
   height: 16px;
   justify-content: center;
+  line-height: 1;
+  max-height: 16px;
+  max-width: 16px;
   min-height: 16px;
+  min-width: 16px;
   padding: 0;
   width: 16px;
 }
