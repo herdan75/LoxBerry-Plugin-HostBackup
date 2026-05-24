@@ -31,7 +31,7 @@ noch keine freigegebene produktive Version.
 
 ### Planung und Aufbewahrung
 
-- Monatliche Backups erhalten einen Fallback auf den letzten Tag des Monats, wenn ein gewählter Monatstag wie 29, 30 oder 31 im jeweiligen Monat nicht existiert.
+- Monatliche Backups erhalten einen Fallback auf den letzten Tag des Monats, wenn ein gewählter Monatstag wie 29, 30 oder 31 im jeweiligen Monat nicht existiert; der Cron-Aufruf bleibt dabei auf die relevanten Monatsend-Tage begrenzt.
 - Woechentlicher Zeitplan kann mehrere Wochentage speichern und als Cron-Liste ausgeben.
 - Monatlicher Zeitplan kann mehrere Monatstage sowie einzelne Monate speichern und als Cron-Liste ausgeben.
 - Info-Texte zum Zeitplan erklaeren detailliert, welche Felder bei taeglich, woechentlich und monatlich relevant sind.

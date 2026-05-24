@@ -246,6 +246,8 @@ install_schedule() {
   require_root_for_write
   local cron_file="/etc/cron.d/loxberryhostbackup"
   local enabled mode time_value weekday weekdays monthday monthdays months month_field hour minute dom dow command_line
+  local day fallback_start fallback_day normalized_monthdays
+  local -a days
   enabled="$(json_get_bool schedule_enabled)"
   if [ "$enabled" != "true" ]; then
     rm -f "$cron_file"
@@ -291,7 +293,28 @@ install_schedule() {
     dow="$weekdays"
     month_field="*"
   elif [ "$mode" = "monthly" ]; then
-    dom="*"
+    normalized_monthdays=","
+    fallback_start=32
+    IFS=',' read -r -a days <<< "$monthdays"
+    for day in "${days[@]}"; do
+      case "$day" in
+        [1-9]|[12][0-9]|3[01]) ;;
+        *) continue ;;
+      esac
+      case "$normalized_monthdays" in *",$day,"*) ;; *) normalized_monthdays="${normalized_monthdays}${day}," ;; esac
+      if [ "$day" -ge 29 ] && [ "$day" -lt "$fallback_start" ]; then
+        fallback_start="$day"
+      fi
+    done
+    if [ "$fallback_start" -le 31 ]; then
+      fallback_day=28
+      while [ "$fallback_day" -le "$fallback_start" ]; do
+        case "$normalized_monthdays" in *",$fallback_day,"*) ;; *) normalized_monthdays="${normalized_monthdays}${fallback_day}," ;; esac
+        fallback_day=$((fallback_day + 1))
+      done
+    fi
+    dom="$(printf '%s' "$normalized_monthdays" | sed 's/^,//; s/,$//')"
+    [ -n "$dom" ] || dom="$monthday"
     command_line="$LBP_BINDIR/hostbackup.sh schedule-run"
   else
     month_field="*"
