@@ -445,21 +445,6 @@ if ($config_status == 0) {
   $config = eval { decode_json($config_json) } || {};
 }
 
-my ($list_status, $list_json) = run_shell(backend_cmd('list'));
-
-my $backups = [];
-
-if ($list_status == 0) {
-  $backups = eval { decode_json($list_json) } || [];
-}
-
-my ($target_status, $target_json) = run_shell(backend_cmd('target-info'));
-my $target_info = {};
-
-if ($target_status == 0) {
-  $target_info = eval { decode_json($target_json) } || {};
-}
-
 if ($restore_id !~ /^[A-Za-z0-9._-]+$/) {
   $restore_id = '';
 }
@@ -562,17 +547,116 @@ my $info_browse_pending = info_button('Dieses Backup ist noch nicht vollständig
 my $info_download = info_button('Erstellt bei Bedarf ein Export-Archiv und lädt dieses Backup als tar.gz-Datei auf deinen Rechner herunter. Das kann bei großen Backups einige Zeit dauern.');
 my $info_backup_start = info_button('Startet den Backup-Vorgang. Vor dem eigentlichen Backup prüft das Plugin wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und Docker-Hinweise.');
 
-my $target_notice = '';
-
-if ($target_info && %{$target_info}) {
+sub render_target_notice {
+  my ($target_info) = @_;
+  return '<section class="inline-notice loading">Dateisystem-Pr&uuml;fung wird geladen...</section>' unless $target_info && %{$target_info};
   my $target_state = ($target_info->{status} || 'ok') eq 'ok' ? 'ok' : 'warning';
   my $target_message = $target_state eq 'ok'
     ? 'Backup-Ziel verwendet das empfohlene Dateisystem ext4.'
     : 'Empfehlung: Backup-Ziel auf ext4 umstellen. ext4 ist deutlich schneller und f&uuml;r inkrementelle Snapshots mit Hardlinks am zuverl&auml;ssigsten.';
   my $target_fs = escapeHTML($target_info->{fs_type} || 'unbekannt');
   my $target_free = escapeHTML($target_info->{available_mb} || 0);
-  $target_notice = qq{<section class="inline-notice $target_state"><strong>Dateisystem-Pr&uuml;fung:</strong> $target_message<br><span>Erkannt: <code>$target_fs</code>, frei ca. $target_free MB.</span></section>};
+  return qq{<section class="inline-notice $target_state"><strong>Dateisystem-Pr&uuml;fung:</strong> $target_message<br><span>Erkannt: <code>$target_fs</code>, frei ca. $target_free MB.</span></section>};
 }
+
+sub render_backup_rows {
+  my ($backups) = @_;
+
+  if (!$backups || ref($backups) ne 'ARRAY' || !@$backups) {
+    return '<tr><td colspan="8" class="empty">Noch keine Backups vorhanden.</td></tr>';
+  }
+
+  my $html = '';
+
+  for my $backup (@$backups) {
+    my $raw_id = $backup->{backup_id} || '';
+    my $id = escapeHTML($raw_id);
+    my $status = escapeHTML($backup->{status} || 'unbekannt');
+    my $host = escapeHTML(($backup->{host} || {})->{hostname} || '');
+    my $finished = escapeHTML($backup->{finished_at} || '');
+
+    my $size = int(($backup->{size_bytes} || 0) / 1024 / 1024);
+    my $files = escapeHTML($backup->{files_count} || '0');
+    my $export = $backup->{export_file} ? 'vorhanden' : '-';
+    my $is_complete = (($backup->{status} || '') eq 'complete') && (($backup->{files_count} || 0) > 0);
+    my $active_task_hidden = hidden_active_task();
+    my $backup_actions;
+
+    if ($is_complete) {
+      $backup_actions = qq{
+<form data-ajax="false" method="get" class="inline-form">
+<input data-role="none" type="hidden" name="browse_id" value="$id">
+$active_task_hidden
+<button data-role="none" type="submit">Dateien</button>$info_browse
+</form>
+<form data-ajax="false" method="get" class="inline-form">
+<input data-role="none" type="hidden" name="restore_id" value="$id">
+$active_task_hidden
+<button data-role="none" type="submit">Restore</button>$info_restore
+</form>
+<form data-ajax="false" method="get" class="inline-form">
+<input data-role="none" type="hidden" name="action" value="download-export">
+<input data-role="none" type="hidden" name="backup_id" value="$id">
+$active_task_hidden
+<button data-role="none" type="submit">Export</button>$info_download
+</form>
+};
+    } else {
+      $backup_actions = qq{
+<span class="pending-action">Noch nicht vollst&auml;ndig</span>$info_browse_pending
+};
+    }
+
+    $html .= qq{
+<tr>
+<td><code>$id</code></td>
+<td>$status</td>
+<td>$host</td>
+<td>${size} MB</td>
+<td>$files</td>
+<td>$finished</td>
+<td>$export</td>
+<td>
+<div class="row-actions">
+$backup_actions
+<form data-ajax="false" method="post" class="inline-form delete-backup-form">
+<input data-role="none" type="hidden" name="action" value="delete-backup">
+<input data-role="none" type="hidden" name="backup_id" value="$id">
+$active_task_hidden
+<button data-role="none" class="danger" type="submit">L&ouml;schen</button>$info_delete
+</form>
+</div>
+</td>
+</tr>
+};
+  }
+
+  return $html;
+}
+
+if ($action eq 'target-notice') {
+  my ($target_status, $target_json) = run_shell(backend_cmd('target-info'));
+  my $target_info = {};
+  if ($target_status == 0) {
+    $target_info = eval { decode_json($target_json) } || {};
+  }
+  print header(-type => 'text/html', -charset => 'utf-8', -status => ($target_status == 0 ? '200 OK' : '500 Internal Server Error'));
+  print $target_status == 0 ? render_target_notice($target_info) : '<section class="inline-notice warning">Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>';
+  exit;
+}
+
+if ($action eq 'backup-list') {
+  my ($list_status, $list_json) = run_shell(backend_cmd('list'));
+  my $backups = [];
+  if ($list_status == 0) {
+    $backups = eval { decode_json($list_json) } || [];
+  }
+  print header(-type => 'text/html', -charset => 'utf-8', -status => ($list_status == 0 ? '200 OK' : '500 Internal Server Error'));
+  print $list_status == 0 ? render_backup_rows($backups) : '<tr><td colspan="8" class="empty">Backup-Liste konnte nicht geladen werden.</td></tr>';
+  exit;
+}
+
+my $target_notice = render_target_notice(undef);
 
 our $htmlhead = qq{
 <link rel="stylesheet" href="assets/style.css">
@@ -657,7 +741,7 @@ print <<HTML;
 <input data-role="none" name="backup_root" value="$cfg_backup_root">
 </label>
 
-$target_notice
+<div id="target-notice">$target_notice</div>
 
 <label>
 <span>Anzahl Backups behalten $info_retention</span>
@@ -872,79 +956,10 @@ $target_notice
 </tr>
 </thead>
 
-<tbody>
+<tbody id="backup-list-body">
+<tr><td colspan="8" class="empty"><span class="mini-spinner"></span> Backup-Liste wird geladen...</td></tr>
 HTML
 
-if (!@$backups) {
-
-  print '<tr><td colspan="8" class="empty">Noch keine Backups vorhanden.</td></tr>';
-
-} else {
-
-  for my $backup (@$backups) {
-
-    my $raw_id = $backup->{backup_id} || '';
-    my $id = escapeHTML($raw_id);
-    my $status = escapeHTML($backup->{status} || 'unbekannt');
-    my $host = escapeHTML(($backup->{host} || {})->{hostname} || '');
-    my $finished = escapeHTML($backup->{finished_at} || '');
-
-    my $size = int(($backup->{size_bytes} || 0) / 1024 / 1024);
-    my $files = escapeHTML($backup->{files_count} || '0');
-    my $export = $backup->{export_file} ? 'vorhanden' : '-';
-    my $is_complete = (($backup->{status} || '') eq 'complete') && (($backup->{files_count} || 0) > 0);
-    my $active_task_hidden = hidden_active_task();
-    my $backup_actions;
-
-    if ($is_complete) {
-      $backup_actions = qq{
-<form data-ajax="false" method="get" class="inline-form">
-<input data-role="none" type="hidden" name="browse_id" value="$id">
-$active_task_hidden
-<button data-role="none" type="submit">Dateien</button>$info_browse
-</form>
-<form data-ajax="false" method="get" class="inline-form">
-<input data-role="none" type="hidden" name="restore_id" value="$id">
-$active_task_hidden
-<button data-role="none" type="submit">Restore</button>$info_restore
-</form>
-<form data-ajax="false" method="get" class="inline-form">
-<input data-role="none" type="hidden" name="action" value="download-export">
-<input data-role="none" type="hidden" name="backup_id" value="$id">
-$active_task_hidden
-<button data-role="none" type="submit">Export</button>$info_download
-</form>
-};
-    } else {
-      $backup_actions = qq{
-<span class="pending-action">Noch nicht vollständig</span>$info_browse_pending
-};
-    }
-
-    print qq{
-<tr>
-<td><code>$id</code></td>
-<td>$status</td>
-<td>$host</td>
-<td>${size} MB</td>
-<td>$files</td>
-<td>$finished</td>
-<td>$export</td>
-<td>
-<div class="row-actions">
-$backup_actions
-<form data-ajax="false" method="post" class="inline-form delete-backup-form">
-<input data-role="none" type="hidden" name="action" value="delete-backup">
-<input data-role="none" type="hidden" name="backup_id" value="$id">
-$active_task_hidden
-<button data-role="none" class="danger" type="submit">Löschen</button>$info_delete
-</form>
-</div>
-</td>
-</tr>
-};
-  }
-}
 
 print <<HTML;
 </tbody>
@@ -1091,6 +1106,8 @@ print <<HTML;
     document.body.classList.add('is-loading');
   }
 
+  window.hostbackupShowLoading = showLoading;
+
   document.querySelectorAll('form').forEach(function (form) {
     form.addEventListener('submit', function (event) {
       if (form.hasAttribute('data-skip-loading')) return;
@@ -1114,6 +1131,59 @@ print <<HTML;
         }
       }, 0);
     });
+  });
+}());
+
+(function () {
+  var targetNotice = document.getElementById('target-notice');
+  var backupListBody = document.getElementById('backup-list-body');
+  var monitor = document.getElementById('task-monitor');
+  var activeTask = monitor ? monitor.getAttribute('data-active-task') : '';
+  var activeParam = activeTask ? '&active_task=' + encodeURIComponent(activeTask) : '';
+
+  function loadFragment(url, target, fallback) {
+    if (!target) return;
+    fetch(url + '&_=' + Date.now(), { cache: 'no-store' })
+      .then(function (response) {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.text();
+      })
+      .then(function (html) {
+        target.innerHTML = html;
+      })
+      .catch(function () {
+        target.innerHTML = fallback;
+      });
+  }
+
+  loadFragment('?action=target-notice', targetNotice, '<section class="inline-notice warning">Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>');
+  loadFragment('?action=backup-list' + activeParam, backupListBody, '<tr><td colspan="8" class="empty">Backup-Liste konnte nicht geladen werden.</td></tr>');
+}());
+
+(function () {
+  document.addEventListener('submit', function (event) {
+    var deleteForm = event.target.closest ? event.target.closest('.delete-backup-form') : null;
+    if (deleteForm) {
+      var idInput = deleteForm.querySelector('input[name="backup_id"]');
+      var backupId = idInput ? idInput.value : 'dieses Backup';
+      if (!window.confirm('Backup ' + backupId + ' wirklich dauerhaft loeschen?')) {
+        event.preventDefault();
+      } else if (window.hostbackupShowLoading) {
+        window.hostbackupShowLoading('Backup wird geloescht...');
+      }
+      return;
+    }
+
+    var restoreForm = event.target.closest ? event.target.closest('.restore-start-form') : null;
+    if (restoreForm) {
+      var restoreInput = restoreForm.querySelector('input[name="backup_id"]');
+      var restoreId = restoreInput ? restoreInput.value : 'dieses Backup';
+      if (!window.confirm('Restore von Backup ' + restoreId + ' wirklich starten? Das schreibt Systemdateien zurueck.')) {
+        event.preventDefault();
+      } else if (window.hostbackupShowLoading) {
+        window.hostbackupShowLoading('Restore wird vorbereitet...');
+      }
+    }
   });
 }());
 
@@ -1257,26 +1327,6 @@ print <<HTML;
       }
     });
   }
-
-  document.querySelectorAll('.delete-backup-form').forEach(function (form) {
-    form.addEventListener('submit', function (event) {
-      var idInput = form.querySelector('input[name="backup_id"]');
-      var backupId = idInput ? idInput.value : 'dieses Backup';
-      if (!window.confirm('Backup ' + backupId + ' wirklich dauerhaft löschen?')) {
-        event.preventDefault();
-      }
-    });
-  });
-
-  document.querySelectorAll('.restore-start-form').forEach(function (form) {
-    form.addEventListener('submit', function (event) {
-      var idInput = form.querySelector('input[name="backup_id"]');
-      var backupId = idInput ? idInput.value : 'dieses Backup';
-      if (!window.confirm('Restore von Backup ' + backupId + ' wirklich starten? Das schreibt Systemdateien zurück.')) {
-        event.preventDefault();
-      }
-    });
-  });
 
   function poll() {
     if (inFlight) return;

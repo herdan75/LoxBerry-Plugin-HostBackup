@@ -20,6 +20,8 @@ validiert werden.
   verschoben.
 - Bereichsflächen und Backup-Tabelle optisch näher an neutrale LoxBerry-
   Grautöne angeglichen.
+- Backup-Liste und Dateisystem-Prüfung werden nach dem Seitenaufbau per
+  AJAX nachgeladen, damit die Weboberfläche schneller sichtbar ist.
 
 ## [0.3.0] - 2026-05-24
 
