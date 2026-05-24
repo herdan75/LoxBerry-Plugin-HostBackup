@@ -764,23 +764,24 @@ body.is-loading .loading-overlay {
   padding: 6px 8px;
 }
 
-.restore-panel form {
+.restore-panel .restore-start-form {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.restore-panel .move-form {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
 
-.restore-panel label {
-  font-weight: 700;
+.restore-panel .subpanel > h3 {
+  color: #1f2a33;
 }
 
-.restore-panel input {
-  min-height: 36px;
-  min-width: 240px;
-  border: 1px solid #bcc8d6;
-  border-radius: 6px;
-  padding: 7px 9px;
+.restore-panel .restore-start-form label {
+  font-weight: 700;
 }
 
 .check-summary {

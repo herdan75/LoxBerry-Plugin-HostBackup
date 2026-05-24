@@ -1044,7 +1044,7 @@ if ($restore_id) {
   my $safe_restore_id = escapeHTML($restore_id);
 
   print qq{
-<section class="panel">
+<section class="panel restore-panel">
 <h2>Restore</h2>
 <p>Restore nur in Rescue-/Testumgebung verwenden.</p>
 <div class="subpanel">
