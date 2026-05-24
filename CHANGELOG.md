@@ -16,6 +16,10 @@ validiert werden.
   LoxBerry-Navigation, das Haus-Symbol und die Kopfzeile sichtbar.
 - Separaten Button `Zurück zu LoxBerry` entfernt, da die Navigation nun wieder
   über die LoxBerry-Kopfzeile erfolgt.
+- Konfigurationsaktionen in eine eigene Rubrik `Konfiguration verwalten`
+  verschoben.
+- Bereichsflächen und Backup-Tabelle optisch näher an neutrale LoxBerry-
+  Grautöne angeglichen.
 
 ## [0.3.0] - 2026-05-24
 

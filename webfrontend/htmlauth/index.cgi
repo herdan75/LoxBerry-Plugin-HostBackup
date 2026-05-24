@@ -641,7 +641,7 @@ print <<HTML;
 
 <h2>Einstellungen</h2>
 
-<form data-ajax="false" method="post" class="settings-form">
+<form data-ajax="false" method="post" class="settings-form" id="settings-save-form">
 
 <input data-role="none" type="hidden" name="action" value="save-config">
 
@@ -818,13 +818,16 @@ $target_notice
 
 </fieldset>
 
-<div class="form-actions">
-<button data-role="none" type="submit">Einstellungen speichern</button>
-</div>
-
 </form>
 
+<fieldset class="schedule-card wide settings-group config-card">
+<legend>Konfiguration verwalten</legend>
+
+<div class="settings-subtitle">Einstellungen sichern und wiederherstellen</div>
+
 <div class="config-actions">
+<button data-role="none" type="submit" form="settings-save-form">Einstellungen speichern</button>
+
 <form data-ajax="false" method="get" class="inline-form">
 <input data-role="none" type="hidden" name="action" value="download-config">
 <button data-role="none" type="submit">Einstellungen exportieren</button>$info_config_export
@@ -836,6 +839,7 @@ $target_notice
 <button data-role="none" type="submit">Einstellungen importieren</button>$info_config_import
 </form>
 </div>
+</fieldset>
 
 </section>
 

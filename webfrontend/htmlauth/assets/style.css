@@ -212,7 +212,7 @@ body.is-loading .loading-overlay {
 
 .inline-notice {
   align-self: center;
-  border: 1px solid #d8dee8;
+  border: 1px solid #cfcfcf;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 400;
@@ -230,13 +230,13 @@ body.is-loading .loading-overlay {
 }
 
 .inline-notice.ok {
-  background: #edf8f0;
-  border-color: #95c7a2;
+  background: #f2f6f2;
+  border-color: #9fbd9f;
 }
 
 .inline-notice.warning {
   background: #fff8e5;
-  border-color: #e0b95d;
+  border-color: #d4b35d;
 }
 
 .inline-notice span {
@@ -314,10 +314,10 @@ body.is-loading .loading-overlay {
 
 .settings-form .root-confirm {
   align-items: flex-start;
-  background: #eef7f5;
-  border: 1px solid #93c5bd;
+  background: #f3f3f3;
+  border: 1px solid #c8c8c8;
   border-radius: 6px;
-  color: #173f3a;
+  color: #1f2a33;
   padding: 10px;
 }
 
@@ -332,8 +332,8 @@ body.is-loading .loading-overlay {
 }
 
 .schedule-card {
-  background: #fbfdff;
-  border: 1px solid #c8d3df;
+  background: #f7f7f7;
+  border: 1px solid #d3d3d3;
   border-radius: 8px;
   margin: 18px 0 0;
   padding: 16px 14px 14px;
@@ -346,9 +346,9 @@ body.is-loading .loading-overlay {
 .schedule-card legend {
   align-items: center;
   background: #ffffff;
-  border: 1px solid #d8dee8;
+  border: 1px solid #cfcfcf;
   border-radius: 999px;
-  color: #17364a;
+  color: #1f2a33;
   display: inline-flex;
   font-size: 14px;
   font-weight: 700;
@@ -367,7 +367,7 @@ body.is-loading .loading-overlay {
 }
 
 .settings-subtitle {
-  color: #17364a;
+  color: #2f3b45;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: normal;
@@ -401,7 +401,7 @@ body.is-loading .loading-overlay {
 .day-grid label {
   align-items: center;
   background: #ffffff;
-  border: 1px solid #d8dee8;
+  border: 1px solid #d4d4d4;
   border-radius: 6px;
   display: flex;
   flex-direction: row;
@@ -415,8 +415,8 @@ body.is-loading .loading-overlay {
 .schedule-modes label:hover,
 .choice-grid label:hover,
 .day-grid label:hover {
-  border-color: #b7c7d7;
-  background: #f8fbfd;
+  border-color: #b8b8b8;
+  background: #f2f2f2;
 }
 
 .schedule-modes input,
@@ -426,14 +426,14 @@ body.is-loading .loading-overlay {
 }
 
 .schedule-detail {
-  border-top: 1px solid #e7edf4;
+  border-top: 1px solid #dddddd;
   margin-top: 13px;
   padding-top: 10px;
 }
 
 .schedule-detail summary {
   cursor: pointer;
-  color: #17364a;
+  color: #1f2a33;
   font-size: 13px;
   font-weight: 700;
   line-height: 1.25;
@@ -500,27 +500,34 @@ body.is-loading .loading-overlay {
 }
 
 .config-actions {
-  border-top: 1px solid #e2e7ef;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
-  padding-top: 12px;
+  gap: 10px;
+  margin-top: 0;
+  padding-top: 0;
 }
 
 #hostbackup-app th,
 #hostbackup-app td {
-  border-bottom: 1px solid #e2e7ef;
+  border-bottom: 1px solid #d8d8d8;
   padding: 9px 8px;
   text-align: left;
   vertical-align: top;
 }
 
 #hostbackup-app th {
-  background: #f8fafc;
-  color: #526173;
+  background: #d9d9d9;
+  color: #1f2a33;
   font-size: 13px;
   font-weight: 700;
+}
+
+#hostbackup-app tbody tr {
+  background: #f7f7f7;
+}
+
+#hostbackup-app tbody tr:nth-child(even) {
+  background: #ffffff;
 }
 
 #hostbackup-app code,
