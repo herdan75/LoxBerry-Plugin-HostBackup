@@ -382,6 +382,12 @@ body.is-loading .loading-overlay {
   text-transform: none;
 }
 
+.config-subtitle {
+  border-top: 1px solid #dddddd;
+  margin-top: 16px;
+  padding-top: 13px;
+}
+
 .nested-settings {
   gap: 12px 18px;
   grid-template-columns: repeat(2, minmax(220px, 1fr));

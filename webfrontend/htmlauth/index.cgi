@@ -907,20 +907,27 @@ print <<HTML;
 <fieldset class="schedule-card wide settings-group config-card">
 <legend>Konfiguration verwalten</legend>
 
-<div class="settings-subtitle">Einstellungen sichern und wiederherstellen</div>
+<div class="settings-subtitle">Plugin-Konfiguration</div>
 
 <div class="config-actions">
-<button data-role="none" type="submit" form="settings-save-form">Einstellungen speichern</button>
+<button data-role="none" type="submit" form="settings-save-form">Plugineinstellungen speichern</button>
+</div>
+
+<div class="settings-subtitle config-subtitle">Einstellungsdatei sichern und wiederherstellen</div>
+
+<div class="config-actions">
 
 <form data-ajax="false" method="get" class="inline-form">
 <input data-role="none" type="hidden" name="action" value="download-config">
-<button data-role="none" type="submit">Einstellungen exportieren</button>$info_config_export
+<button data-role="none" type="submit">Einstellungen exportieren</button>
+$info_config_export
 </form>
 
 <form data-ajax="false" method="post" enctype="multipart/form-data" class="inline-form">
 <input data-role="none" type="hidden" name="action" value="import-config">
 <input data-role="none" class="config-file" type="file" name="settings_file" accept="application/json,.json">
-<button data-role="none" type="submit">Einstellungen importieren</button>$info_config_import
+<button data-role="none" type="submit">Einstellungen importieren</button>
+$info_config_import
 </form>
 </div>
 </fieldset>
