@@ -1431,23 +1431,6 @@ list_backups() {
       }
       return \%summary;
     }
-    sub dir_size {
-      my ($dir) = @_;
-      open my $du, "-|", "du", "-sB1", "--", $dir or return 0;
-      my $out = <$du> // "";
-      close $du;
-      return 0 unless $out =~ /^(\d+)/;
-      return 0 + $1;
-    }
-    sub file_count {
-      my ($dir) = @_;
-      my $rootfs = "$dir/rootfs";
-      open my $find, "-|", "find", $rootfs, "-xdev", "-type", "f" or return 0;
-      my $count = 0;
-      $count++ while <$find>;
-      close $find;
-      return $count;
-    }
     opendir(my $dh, $root) or do { print "[]"; exit 0; };
     my @items;
     for my $entry (sort readdir($dh)) {
@@ -1469,12 +1452,8 @@ list_backups() {
         $data->{status} = $log->{status};
       }
       $data->{finished_at} ||= $log->{finished_at} if $log->{finished_at};
-      if (!($data->{size_bytes} || 0) && -d $dir) {
-        $data->{size_bytes} = dir_size($dir);
-      }
-      if (!($data->{files_count} || 0) && -d "$dir/rootfs") {
-        $data->{files_count} = file_count($dir);
-      }
+      $data->{size_bytes} = 0 unless defined $data->{size_bytes};
+      $data->{files_count} = 0 unless defined $data->{files_count};
       $data->{backup_id} ||= $entry;
       $data->{path} = $dir;
       $data->{export_file} = -f $archive ? $archive : undef;
