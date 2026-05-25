@@ -1306,14 +1306,16 @@ function hostbackupEach(nodes, callback) {
     };
     request.onerror = showFallback;
     request.ontimeout = showFallback;
-    request.timeout = timeoutMs || 12000;
+    if (timeoutMs && timeoutMs > 0) {
+      request.timeout = timeoutMs;
+    }
     request.open('GET', url + '&_=' + Date.now(), true);
     request.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
     request.send();
   }
 
   loadFragment('?action=target-notice', targetNotice, '<section class="inline-notice warning">Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>', 8000);
-  loadFragment('?action=backup-list' + activeParam, backupListBody, '<tr><td colspan="8" class="empty">Backup-Liste konnte nicht geladen werden.</td></tr>', 12000);
+  loadFragment('?action=backup-list' + activeParam, backupListBody, '<tr><td colspan="8" class="empty">Backup-Liste konnte nicht geladen werden.</td></tr>', 0);
   window.setTimeout(function () {
     loadFragment('?action=stop-targets', stopTargetsList, '<p class="empty">Dienste und Container konnten nicht geladen werden.</p>', 9000);
   }, 250);
