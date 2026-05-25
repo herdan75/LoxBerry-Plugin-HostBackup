@@ -1002,6 +1002,11 @@ print <<HTML;
 <fieldset class="schedule-card wide settings-group">
 <legend>Optionen und Freigaben</legend>
 
+<label class="checkline root-confirm">
+<input data-role="none" type="checkbox" name="root_permission_ack" value="1"$cfg_root_permission_ack required>
+<span>Root-Freigabe bestätigen $info_root</span>
+</label>
+
 <input data-role="none" type="hidden" name="stop_docker_before_backup" value="">
 
 <details class="stop-target-panel">
@@ -1015,11 +1020,6 @@ print <<HTML;
 <label class="checkline">
 <input data-role="none" type="checkbox" name="create_export_after_backup" value="1"$cfg_create_export>
 <span>Nach jedem Backup ein Export-Archiv erstellen $info_export</span>
-</label>
-
-<label class="checkline root-confirm">
-<input data-role="none" type="checkbox" name="root_permission_ack" value="1"$cfg_root_permission_ack required>
-<span>Root-Freigabe bestätigen $info_root</span>
 </label>
 
 </fieldset>
