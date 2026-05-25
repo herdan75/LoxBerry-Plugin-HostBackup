@@ -567,7 +567,7 @@ my $info_months = info_button('Nur bei monatlichen Backups relevant. Mit Alle Mo
 my $info_pre_hook = info_button('Optionales Skript, das direkt vor dem Backup ausgeführt wird. Sinnvoll für Datenbank-Dumps oder das Vorbereiten von Diensten. Das Skript muss absolut angegeben werden und wird aus Sicherheitsgründen nur ausgeführt, wenn es Root gehört und nicht durch andere Benutzer beschreibbar ist.');
 my $info_post_hook = info_button('Optionales Skript, das nach dem Backup ausgeführt wird. Sinnvoll zum Aufräumen, Dienste wieder in einen gewünschten Zustand zu bringen oder Benachrichtigungen auszuführen. Es gelten dieselben Sicherheitsregeln wie beim Skript vor dem Backup.');
 my $info_excludes = info_button('Hier kannst du Pfade vom rsync-Backup ausschliessen, je ein Pfad pro Zeile. Das ist sinnvoll für grosse Medienarchive, Netzwerkshares oder Daten, die separat gesichert werden. Zu viele Ausschlüsse können aber die Wiederherstellung unvollständig machen.');
-my $info_stop_targets = info_button('Wähle gezielt Docker-Container oder Dienste aus, die vor dem Backup angehalten und danach wieder gestartet werden. Das Plugin merkt sich nur Ziele, die vor dem Backup wirklich liefen. Kritische Systemdienste werden nicht angeboten.');
+my $info_stop_targets = info_button('Wähle gezielt Docker-Container oder sicher steuerbare Dienste aus, die vor dem Backup angehalten und danach wieder gestartet werden. Kritische LoxBerry-, Web-, SSH- und Backup-Dienste werden nicht angeboten. LoxBerry-Plugins ohne eigenen Dienst erscheinen hier nicht und werden nicht hart beendet.');
 my $info_export = info_button('Erstellt nach jedem Backup zusätzlich ein komprimiertes tar.gz-Archiv. Das ist praktisch zum Download, Kopieren oder Archivieren, benötigt aber zusätzlichen Speicherplatz und Zeit.');
 my $info_root = info_button('Diese Bestätigung ist nötig, weil Vollbackup und Restore Systemdateien, Berechtigungen, Docker-Daten und Cronjobs betreffen. Es werden keine Passwörter gespeichert; erlaubt wird nur der Start des Backend-Skripts dieses Plugins.');
 my $info_config_export = info_button('Lädt nur die Einstellungen dieses Plugins als kleine JSON-Datei herunter. Enthalten sind zum Beispiel Backup-Verzeichnis, Ausschlüsse, Zeitplan und ausgewählte Stop-Ziele, aber keine Backup-Daten und keine Passwörter.');
@@ -676,8 +676,14 @@ sub render_stop_targets {
     return $hidden . '<p class="empty">Keine ausw&auml;hlbaren Dienste oder Container gefunden.</p>';
   }
 
-  my @group_order = ('Docker-Container', 'LoxBerry-nahe Dienste', 'Systemdienste', 'Weitere Dienste');
+  my @group_order = ('Docker-Container', 'LoxBerry-/Plugin-Dienste', 'Weitere Systemdienste', 'Weitere Dienste');
   my %order = map { $group_order[$_] => $_ } 0..$#group_order;
+  my %group_hint = (
+    'Docker-Container' => 'Container mit eigenen Datenbanken oder Konfigurationsdateien. Diese Auswahl ist meistens sinnvoll.',
+    'LoxBerry-/Plugin-Dienste' => 'Erkannte Dienste mit Bezug zu LoxBerry oder Plugins. Nur ausw&auml;hlen, wenn der Dienst w&auml;hrend des Backups kurz pausieren darf.',
+    'Weitere Systemdienste' => 'Expertenbereich. Nur ausw&auml;hlen, wenn du genau weisst, was dieser Dienst macht.',
+    'Weitere Dienste' => 'Sonstige erkannte Dienste.',
+  );
   my %groups;
 
   for my $target (@$targets) {
@@ -693,7 +699,16 @@ sub render_stop_targets {
 
   for my $group (sort { ($order{$a} // 99) <=> ($order{$b} // 99) || $a cmp $b } keys %groups) {
     my $safe_group = escapeHTML($group);
-    $html .= qq{<div class="stop-target-group"><h4>$safe_group</h4><div class="stop-target-grid">};
+    my $total_count = scalar @{$groups{$group}};
+    my $selected_count = 0;
+    for my $target (@{$groups{$group}}) {
+      $selected_count++ if $target->{selected};
+    }
+    my $count_label = $selected_count ? "$selected_count von $total_count ausgew&auml;hlt" : "$total_count verf&uuml;gbar";
+    my $open = ($selected_count || $group eq 'Docker-Container') ? ' open' : '';
+    my $safe_hint = $group_hint{$group} || '';
+    my $hint_html = length($safe_hint) ? qq{<p class="stop-target-hint">$safe_hint</p>} : '';
+    $html .= qq{<details class="stop-target-group"$open><summary><span>$safe_group</span><small>$count_label</small></summary>$hint_html<div class="stop-target-grid">};
 
     for my $target (sort { ($a->{label} || $a->{name} || '') cmp ($b->{label} || $b->{name} || '') } @{$groups{$group}}) {
       my $type = $target->{type} || '';
@@ -703,13 +718,13 @@ sub render_stop_targets {
       my $status = $target->{status} || '';
       my $details = $target->{details} || '';
       my $checked = checked_attr($target->{selected});
-      my $meta = join(' · ', grep { length $_ } ($status, $details));
+      my $meta = join(' - ', grep { length $_ } ($status, $details));
       my $meta_html = length($meta) ? '<small>' . escapeHTML($meta) . '</small>' : '';
 
       $html .= qq{<label class="stop-target-item"><input data-role="none" type="checkbox" name="stop_targets" value="$value"$checked><span><strong>$label</strong>$meta_html</span></label>};
     }
 
-    $html .= '</div></div>';
+    $html .= '</div></details>';
   }
 
   return $html;

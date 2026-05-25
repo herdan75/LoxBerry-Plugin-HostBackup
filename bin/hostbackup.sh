@@ -655,6 +655,7 @@ selected_stop_targets() {
 protected_systemd_service() {
   local unit="$1"
   case "$unit" in
+    loxberry.service|loxberry*.service|LoxBerryHostBackup.service|loxberryhostbackup.service) return 0 ;;
     ssh.service|sshd.service|dropbear.service|cron.service|crond.service|anacron.service) return 0 ;;
     dbus.service|polkit.service|systemd-*.service|udev.service|systemd-udevd.service) return 0 ;;
     systemd-logind.service|systemd-journald.service|systemd-timesyncd.service) return 0 ;;
@@ -672,11 +673,28 @@ systemd_service_group() {
   local description="${2:-}"
   local metadata
   metadata="$(systemctl show "$unit" -p ExecStart -p FragmentPath -p Description --no-pager 2>/dev/null || true)"
-  if printf '%s\n%s\n%s\n' "$unit" "$description" "$metadata" | grep -Eiq '(/plugins/|/opt/loxberry|loxberry|stats4lox|loxone)'; then
-    printf '%s\n' "LoxBerry-nahe Dienste"
+  if printf '%s\n%s\n%s\n' "$unit" "$description" "$metadata" | grep -Eiq '(/plugins/|/opt/loxberry/(bin|data|config)/plugins|stats4lox|loxone|loxhue|netatmo|zigbee|mqtt|miniserver)'; then
+    printf '%s\n' "LoxBerry-/Plugin-Dienste"
   else
-    printf '%s\n' "Systemdienste"
+    printf '%s\n' "Weitere Systemdienste"
   fi
+}
+
+friendly_systemd_label() {
+  local unit="$1"
+  local description="${2:-}"
+  local label="${description:-$unit}"
+
+  case "$unit $description" in
+    *stats4lox*|*Stats4Lox*) label="Stats4Lox" ;;
+    *netatmo*|*Netatmo*) label="Netatmo" ;;
+    *zigbee*|*Zigbee*|*ZigBee*) label="Zigbee / MQTT" ;;
+    *mqtt*|*MQTT*) label="MQTT / ZigbeeMQTT" ;;
+    *miniserver*|*Miniserver*) label="Miniserver Backup" ;;
+    *loxhue*|*LoxHue*|*hue*) label="LoxHue / Hue Bridge" ;;
+  esac
+
+  printf '%s\n' "$label"
 }
 
 discover_stop_targets() {
@@ -697,7 +715,8 @@ discover_stop_targets() {
         [ -n "$unit" ] || continue
         protected_systemd_service "$unit" && continue
         group="$(systemd_service_group "$unit" "$description")"
-        printf 'systemd\t%s\t%s\t%s\t%s\t%s\n' "$unit" "$description" "$group" "${active}/${sub}" "" >> "$tmp"
+        label="$(friendly_systemd_label "$unit" "$description")"
+        printf 'systemd\t%s\t%s\t%s\t%s\t%s\n' "$unit" "$label" "$group" "${active}/${sub}" "$unit" >> "$tmp"
       done || true
 
     systemctl list-unit-files --type=service --no-legend --no-pager 2>/dev/null |
@@ -706,10 +725,11 @@ discover_stop_targets() {
         protected_systemd_service "$unit" && continue
         grep -F "$(printf 'systemd\t%s\t' "$unit")" "$tmp" >/dev/null 2>&1 && continue
         group="$(systemd_service_group "$unit" "")"
-        [ "$group" = "LoxBerry-nahe Dienste" ] || continue
+        [ "$group" = "LoxBerry-/Plugin-Dienste" ] || continue
         description="$(systemctl show "$unit" -p Description --value --no-pager 2>/dev/null || true)"
         active="$(systemctl is-active "$unit" 2>/dev/null || true)"
-        printf 'systemd\t%s\t%s\t%s\t%s\t%s\n' "$unit" "${description:-$unit}" "$group" "${active:-inactive}" "" >> "$tmp"
+        label="$(friendly_systemd_label "$unit" "$description")"
+        printf 'systemd\t%s\t%s\t%s\t%s\t%s\n' "$unit" "$label" "$group" "${active:-inactive}" "$unit" >> "$tmp"
       done || true
   fi
 

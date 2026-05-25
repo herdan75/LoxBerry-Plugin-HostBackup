@@ -356,13 +356,16 @@ Beispiel:
 
 In den Einstellungen kann gezielt ausgewählt werden, welche Docker-Container
 oder systemd-Dienste vor dem Backup gestoppt und danach wieder gestartet werden.
-Das Plugin liest dazu die vorhandenen Container und Dienste aus und merkt sich
-die Auswahl.
+Das Plugin liest dazu die vorhandenen Container und sicher steuerbare Dienste
+aus, gruppiert sie kompakt und merkt sich die Auswahl.
 
 Das verbessert die Konsistenz von Container-, Datenbank- und Dienst-Daten, kann
 aber diese Dienste während des Backups unterbrechen. Das Plugin startet nur
 Ziele wieder, die vor dem Backup wirklich liefen und durch dieses Backup
-gestoppt wurden. Kritische Systemdienste werden in der Auswahl nicht angeboten.
+gestoppt wurden. Kritische LoxBerry-, Web-, SSH-, Docker- und Backup-Dienste
+werden in der Auswahl nicht angeboten. LoxBerry-Plugins ohne eigenen
+systemd-Dienst werden nicht hart beendet; dafür sind Pre-/Post-Backup-Hooks
+der sicherere Weg.
 
 Für Datenbanken oder Anwendungen mit eigenen Backup-Mechanismen können
 zusätzliche Pre-/Post-Backup-Hooks sinnvoll sein.
