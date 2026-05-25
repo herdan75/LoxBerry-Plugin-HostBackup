@@ -1239,6 +1239,21 @@ function hostbackupEach(nodes, callback) {
   }
 }
 
+function hostbackupClosest(node, selector) {
+  while (node && node.nodeType !== 1) {
+    node = node.parentElement || node.parentNode;
+  }
+  while (node && node.nodeType === 1) {
+    if (node.matches && node.matches(selector)) return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
+function hostbackupCacheBuster(url) {
+  return url + (url.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now();
+}
+
 (function () {
   var overlay = document.getElementById('loading-overlay');
   var loadingText = document.getElementById('loading-text');
@@ -1309,20 +1324,26 @@ function hostbackupEach(nodes, callback) {
     if (timeoutMs && timeoutMs > 0) {
       request.timeout = timeoutMs;
     }
-    request.open('GET', url + '&_=' + Date.now(), true);
+    request.open('GET', hostbackupCacheBuster(url), true);
     request.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
     request.send();
   }
 
-  loadFragment('?action=target-notice', targetNotice, '<section class="inline-notice warning">Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>', 8000);
-  loadFragment('?action=backup-list' + activeParam, backupListBody, '<tr><td colspan="8" class="empty">Backup-Liste konnte nicht geladen werden.</td></tr>', 0);
-  window.setTimeout(function () {
-    loadFragment('?action=stop-targets', stopTargetsList, '<p class="empty">Dienste und Container konnten nicht geladen werden.</p>', 9000);
-  }, 250);
+  try {
+    loadFragment('?action=target-notice', targetNotice, '<section class="inline-notice warning">Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>', 8000);
+  } catch (ignored) {}
+  try {
+    loadFragment('?action=backup-list' + activeParam, backupListBody, '<tr><td colspan="8" class="empty">Backup-Liste konnte nicht geladen werden.</td></tr>', 0);
+  } catch (ignored) {}
+  try {
+    window.setTimeout(function () {
+      loadFragment('?action=stop-targets', stopTargetsList, '<p class="empty">Dienste und Container konnten nicht geladen werden.</p>', 9000);
+    }, 250);
+  } catch (ignored) {}
 
   if (stopTargetsList) {
     stopTargetsList.addEventListener('click', function (event) {
-      var button = event.target.closest ? event.target.closest('[data-stop-target-preset]') : null;
+      var button = hostbackupClosest(event.target, '[data-stop-target-preset]');
       if (!button) return;
       var mode = button.getAttribute('data-stop-target-preset');
       var boxes = stopTargetsList.querySelectorAll('input[name="stop_targets"]');
@@ -1340,7 +1361,7 @@ function hostbackupEach(nodes, callback) {
 
 (function () {
   document.addEventListener('submit', function (event) {
-    var deleteForm = event.target.closest ? event.target.closest('.delete-backup-form') : null;
+    var deleteForm = hostbackupClosest(event.target, '.delete-backup-form');
     if (deleteForm) {
       var idInput = deleteForm.querySelector('input[name="backup_id"]');
       var backupId = idInput ? idInput.value : 'dieses Backup';
@@ -1352,7 +1373,7 @@ function hostbackupEach(nodes, callback) {
       return;
     }
 
-    var restoreForm = event.target.closest ? event.target.closest('.restore-start-form') : null;
+    var restoreForm = hostbackupClosest(event.target, '.restore-start-form');
     if (restoreForm) {
       var restoreInput = restoreForm.querySelector('input[name="backup_id"]');
       var restoreId = restoreInput ? restoreInput.value : 'dieses Backup';
