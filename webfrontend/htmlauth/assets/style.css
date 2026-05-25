@@ -377,7 +377,7 @@ body.is-loading .loading-overlay {
   border: 1px solid #dddddd;
   border-radius: 6px;
   margin: 20px 0 0;
-  padding: 18px;
+  padding: 24px 24px 20px;
 }
 
 .settings-group {
