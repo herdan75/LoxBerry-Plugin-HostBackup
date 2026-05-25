@@ -981,6 +981,26 @@ start_backup_targets_if_needed() {
   start_systemd_if_needed "$state_dir"
 }
 
+backup_cleanup_on_exit() {
+  local status="$1"
+  local state_dir="$2"
+  local log_file="$3"
+  local already_restarted="$4"
+
+  [ "$already_restarted" = "true" ] && return 0
+  [ -n "$state_dir" ] && [ -d "$state_dir" ] || return 0
+
+  if [ -s "$state_dir/docker-running-containers.tsv" ] || [ -s "$state_dir/docker-running-containers.txt" ] || [ -s "$state_dir/systemd-running-services.txt" ]; then
+    if [ -n "$log_file" ]; then
+      log "Cleanup: restarting services and Docker containers after interrupted backup (exit status $status)" | tee -a "$log_file" || true
+      start_backup_targets_if_needed "$state_dir" | tee -a "$log_file" || true
+    else
+      log "Cleanup: restarting services and Docker containers after interrupted backup (exit status $status)" || true
+      start_backup_targets_if_needed "$state_dir" || true
+    fi
+  fi
+}
+
 selected_docker_stop_count() {
   selected_stop_targets | awk '$1 == "docker" { count++ } END { print count + 0 }'
 }
@@ -1135,7 +1155,7 @@ create_backup() {
   require_root_permission_ack
   command -v rsync >/dev/null 2>&1 || { echo "rsync is required." >&2; exit 3; }
 
-  local root backup_id target rootfs log_file started finished size files exclude_file backup_mode previous_backup
+  local root backup_id target rootfs log_file started finished size files exclude_file backup_mode previous_backup restart_done
   root="$(backup_root)"
   backup_mode="$(json_get_string backup_mode)"
   [ "$backup_mode" = "snapshot" ] || backup_mode="full"
@@ -1173,6 +1193,11 @@ create_backup() {
   log "Running pre-backup hook if configured" | tee -a "$log_file"
   run_hook "$pre_hook" | tee -a "$log_file" || true
   log "Stopping selected services and Docker containers if configured" | tee -a "$log_file"
+  restart_done="false"
+  trap 'backup_cleanup_on_exit "$?" "$target" "$log_file" "$restart_done"' EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   stop_backup_targets "$target" | tee -a "$log_file" || true
 
   local rsync_opts=()
@@ -1200,6 +1225,8 @@ create_backup() {
 
   log "Starting services and Docker containers again if they were stopped" | tee -a "$log_file"
   start_backup_targets_if_needed "$target" | tee -a "$log_file" || true
+  restart_done="true"
+  trap - EXIT HUP INT TERM
   log "Running post-backup hook if configured" | tee -a "$log_file"
   run_hook "$post_hook" | tee -a "$log_file" || true
 
