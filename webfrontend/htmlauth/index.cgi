@@ -1107,6 +1107,7 @@ if ($browse_id) {
 <div class="subpanel">
 <h3>Dateien in Backup <code>$safe_browse_id</code></h3>
 <p>Pfad: <code>$safe_browse_path</code></p>
+<section class="inline-notice warning">Der Datei-Explorer dient nur zur Ansicht des Backup-Inhalts. F&uuml;r eine vollst&auml;ndige Wiederherstellung bitte den Restore-Button des gew&uuml;nschten Backups verwenden.</section>
 };
 
   if ($browse_error) {
@@ -1212,6 +1213,7 @@ if ($restore_id) {
   }
 
   print qq{
+<section class="inline-notice warning">Achtung: Ein Restore kann das aktuelle System &uuml;berschreiben und sollte nur mit einem gepr&uuml;ften Backup durchgef&uuml;hrt werden.</section>
 <form data-ajax="false" method="post" class="restore-start-form">
 <input data-role="none" type="hidden" name="action" value="restore-backup">
 <input data-role="none" type="hidden" name="backup_id" value="$safe_restore_id">

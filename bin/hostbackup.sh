@@ -1693,21 +1693,34 @@ restore_plan() {
   target="$root/$backup_id"
   [ -d "$target/rootfs" ] || { echo "Backup rootfs not found: $backup_id" >&2; exit 6; }
   cat <<EOF
-Restore plan for $backup_id
+Restore-Plan fuer Backup $backup_id
 
-Source: $target/rootfs/
-Target: /
+Quelle:
+ $target/rootfs/
 
-This will rsync the stored root filesystem back to this host with numeric ids,
-ACLs, xattrs and hardlinks. Runtime paths such as /proc, /sys, /dev and /run
-remain excluded.
+Ziel:
+ /
 
-Recommended:
-- Run from a rescue/offline environment for the most complete restore.
-- Stop Docker and application services before an online restore.
-- Review $target/manifest.json before continuing.
+Dieses Restore schreibt das gesicherte Root-Dateisystem auf dieses System zurueck.
 
-To execute:
+Dabei werden unter anderem wiederhergestellt:
+- Systemdateien
+- LoxBerry-Konfigurationen
+- Docker-Daten
+- Dienste und Anwendungen
+- Benutzer-, Rechte- und Besitzinformationen
+- Hardlinks und symbolische Links
+
+Laufzeit-Verzeichnisse wie /proc, /sys, /dev und /run werden nicht ueberschrieben.
+
+Wichtige Hinweise:
+- Fuer die sicherste und vollstaendigste Wiederherstellung wird ein Restore aus einem Rescue-/Offline-System empfohlen.
+- Vor einem Online-Restore sollten Docker-Container und zusaetzliche Dienste beendet werden.
+- Pruefe vor dem Restore die Datei manifest.json des Backups.
+- Ein Restore kann bestehende Systemdaten ueberschreiben.
+- Waehrend des Restores sollte das System nicht ausgeschaltet werden.
+
+Restore-Befehl:
 ALLOW_RESTORE=1 $0 restore $backup_id
 EOF
 }
