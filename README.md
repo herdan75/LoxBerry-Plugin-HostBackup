@@ -358,6 +358,8 @@ In den Einstellungen kann gezielt ausgewählt werden, welche Docker-Container
 oder systemd-Dienste vor dem Backup gestoppt und danach wieder gestartet werden.
 Das Plugin liest dazu die vorhandenen Container und sicher steuerbare Dienste
 aus, gruppiert sie kompakt und merkt sich die Auswahl.
+Installierte LoxBerry-Plugins ohne eigenen sicher steuerbaren Dienst werden
+ebenfalls angezeigt, aber bewusst nicht als Stop-Ziel angeboten.
 
 Das verbessert die Konsistenz von Container-, Datenbank- und Dienst-Daten, kann
 aber diese Dienste während des Backups unterbrechen. Das Plugin startet nur

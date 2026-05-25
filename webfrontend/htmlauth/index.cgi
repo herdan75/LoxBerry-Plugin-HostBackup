@@ -676,11 +676,12 @@ sub render_stop_targets {
     return $hidden . '<p class="empty">Keine ausw&auml;hlbaren Dienste oder Container gefunden.</p>';
   }
 
-  my @group_order = ('Docker-Container', 'LoxBerry-/Plugin-Dienste', 'Weitere Systemdienste', 'Weitere Dienste');
+  my @group_order = ('Docker-Container', 'LoxBerry-/Plugin-Dienste', 'LoxBerry-Plugins ohne eigenen Dienst', 'Weitere Systemdienste', 'Weitere Dienste');
   my %order = map { $group_order[$_] => $_ } 0..$#group_order;
   my %group_hint = (
     'Docker-Container' => 'Container mit eigenen Datenbanken oder Konfigurationsdateien. Diese Auswahl ist meistens sinnvoll.',
     'LoxBerry-/Plugin-Dienste' => 'Erkannte Dienste mit Bezug zu LoxBerry oder Plugins. Nur ausw&auml;hlen, wenn der Dienst w&auml;hrend des Backups kurz pausieren darf.',
+    'LoxBerry-Plugins ohne eigenen Dienst' => 'Diese Plugins wurden erkannt, haben aber keinen eigenen sicher steuerbaren Dienst. Sie werden angezeigt, aber nicht automatisch gestoppt.',
     'Weitere Systemdienste' => 'Expertenbereich. Nur ausw&auml;hlen, wenn du genau weisst, was dieser Dienst macht.',
     'Weitere Dienste' => 'Sonstige erkannte Dienste.',
   );
@@ -690,7 +691,7 @@ sub render_stop_targets {
     next unless ref($target) eq 'HASH';
     my $type = $target->{type} || '';
     my $name = $target->{name} || '';
-    next unless $type =~ /^(docker|systemd)$/ && length $name;
+    next unless $type =~ /^(docker|systemd|plugin)$/ && length $name;
     my $group = $target->{group} || 'Weitere Dienste';
     push @{$groups{$group}}, $target;
   }
@@ -717,11 +718,14 @@ sub render_stop_targets {
       my $label = escapeHTML($target->{label} || $name);
       my $status = $target->{status} || '';
       my $details = $target->{details} || '';
-      my $checked = checked_attr($target->{selected});
+      my $is_stoppable = $type =~ /^(docker|systemd)$/;
+      my $checked = $is_stoppable ? checked_attr($target->{selected}) : '';
       my $meta = join(' - ', grep { length $_ } ($status, $details));
       my $meta_html = length($meta) ? '<small>' . escapeHTML($meta) . '</small>' : '';
+      my $disabled = $is_stoppable ? '' : ' disabled';
+      my $name_attr = $is_stoppable ? ' name="stop_targets"' : '';
 
-      $html .= qq{<label class="stop-target-item"><input data-role="none" type="checkbox" name="stop_targets" value="$value"$checked><span><strong>$label</strong>$meta_html</span></label>};
+      $html .= qq{<label class="stop-target-item}.($is_stoppable ? '' : ' is-disabled').qq{"><input data-role="none" type="checkbox"$name_attr value="$value"$checked$disabled><span><strong>$label</strong>$meta_html</span></label>};
     }
 
     $html .= '</div></details>';

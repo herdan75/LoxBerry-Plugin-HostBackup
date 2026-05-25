@@ -655,7 +655,7 @@ selected_stop_targets() {
 protected_systemd_service() {
   local unit="$1"
   case "$unit" in
-    loxberry.service|loxberry*.service|LoxBerryHostBackup.service|loxberryhostbackup.service) return 0 ;;
+    loxberry.service|LoxBerryHostBackup.service|loxberryhostbackup.service) return 0 ;;
     ssh.service|sshd.service|dropbear.service|cron.service|crond.service|anacron.service) return 0 ;;
     dbus.service|polkit.service|systemd-*.service|udev.service|systemd-udevd.service) return 0 ;;
     systemd-logind.service|systemd-journald.service|systemd-timesyncd.service) return 0 ;;
@@ -697,6 +697,90 @@ friendly_systemd_label() {
   printf '%s\n' "$label"
 }
 
+append_loxberry_plugin_inventory() {
+  local target_file="$1"
+  perl -MJSON::PP -e '
+    my ($home, $self, $target_file) = @ARGV;
+    my %plugins;
+
+    sub clean {
+      my ($value) = @_;
+      $value //= "";
+      $value =~ s/^\s+|\s+$//g;
+      return $value;
+    }
+
+    sub add_plugin {
+      my ($folder, $title) = @_;
+      $folder = clean($folder);
+      $title = clean($title);
+      return unless length $folder;
+      return if $folder eq $self;
+      return unless $folder =~ /^[A-Za-z0-9_.-]+$/;
+      $plugins{$folder} ||= {};
+      $plugins{$folder}{folder} = $folder;
+      $plugins{$folder}{title} = $title if length $title && !length($plugins{$folder}{title} // "");
+    }
+
+    sub walk_plugin_db {
+      my ($node) = @_;
+      if (ref($node) eq "HASH") {
+        my $folder = $node->{folder} // $node->{Folder} // $node->{foldername} // $node->{folder_name} // $node->{directory} // "";
+        my $title = $node->{title} // $node->{Title} // $node->{name} // $node->{Name} // "";
+        add_plugin($folder, $title) if length(clean($folder));
+        walk_plugin_db($_) for values %$node;
+      } elsif (ref($node) eq "ARRAY") {
+        walk_plugin_db($_) for @$node;
+      }
+    }
+
+    my $db_file = "$home/data/system/plugindatabase.json";
+    if (open my $fh, "<", $db_file) {
+      local $/;
+      my $db = eval { decode_json(<$fh>) };
+      walk_plugin_db($db) if $db;
+    }
+
+    for my $base (
+      "$home/config/plugins",
+      "$home/data/plugins",
+      "$home/bin/plugins",
+      "$home/webfrontend/htmlauth/plugins",
+      "$home/system/daemons/plugins"
+    ) {
+      next unless -d $base;
+      opendir my $dh, $base or next;
+      while (defined(my $entry = readdir $dh)) {
+        next if $entry =~ /^\./;
+        add_plugin($entry, $entry);
+      }
+      closedir $dh;
+    }
+
+    open my $existing, "<", $target_file;
+    my $existing_text = "";
+    if ($existing) {
+      local $/;
+      $existing_text = <$existing>;
+      close $existing;
+    }
+
+    open my $out, ">>", $target_file or exit 0;
+    for my $folder (sort keys %plugins) {
+      next if $existing_text =~ /\Q$folder\E/i;
+      my $label = $plugins{$folder}{title} || $folder;
+      print $out join("\t",
+        "plugin",
+        $folder,
+        $label,
+        "LoxBerry-Plugins ohne eigenen Dienst",
+        "Info",
+        "kein eigener sicher steuerbarer Dienst erkannt"
+      ), "\n";
+    }
+  ' "$LBHOMEDIR" "$PLUGIN_FOLDER" "$target_file"
+}
+
 discover_stop_targets() {
   local tmp unit load active sub description group name image status
   tmp="$(mktemp)"
@@ -732,6 +816,8 @@ discover_stop_targets() {
         printf 'systemd\t%s\t%s\t%s\t%s\t%s\n' "$unit" "$label" "$group" "${active:-inactive}" "$unit" >> "$tmp"
       done || true
   fi
+
+  append_loxberry_plugin_inventory "$tmp"
 
   perl -MJSON::PP -e '
     my ($cfg_file, $targets_file) = @ARGV;

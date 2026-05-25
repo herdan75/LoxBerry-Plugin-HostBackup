@@ -27,6 +27,8 @@ validiert werden.
   Einstellungsseite weiterhin schnell sichtbar bleibt.
 - Die Dienst-/Container-Auswahl ist kompakter, pro Rubrik einklappbar und
   blendet kritische LoxBerry-, Web-, SSH- und Backup-Dienste aus.
+- LoxBerry-Plugins ohne eigenen sicher steuerbaren Dienst werden als Information
+  angezeigt, aber nicht als Stop-Ziel angeboten.
 
 ## [0.3.2] - 2026-05-25
 
