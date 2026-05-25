@@ -1412,10 +1412,16 @@ list_backups() {
     sub log_summary {
       my ($id) = @_;
       my %summary;
+      my $max_tail = 262144;
       for my $dir (@log_dirs) {
         my $path = "$dir/backup-$id.log";
         next unless -r $path;
         open my $fh, "<", $path or next;
+        my $size = -s $fh;
+        if ($size && $size > $max_tail) {
+          seek($fh, $size - $max_tail, 0);
+          <$fh>;
+        }
         while (my $line = <$fh>) {
           chomp $line;
           if ($line =~ /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) Backup \Q$id\E finished$/) {
