@@ -1475,10 +1475,10 @@ function hostbackupCacheBuster(url) {
     }
   }
 
-  function backupIdFromTask() {
-    var match = /^backup-([A-Za-z0-9._-]+)\.log$/.exec(task || '');
-    return match ? match[1] : '';
-  }
+ function backupIdFromTask() {
+   var match = new RegExp('^backup-([A-Za-z0-9._-]+)\\\\.log$').exec(task || '');
+   return match ? match[1] : '';
+ }
 
   function redirectWithMessage(message) {
     window.location.href = window.location.pathname + '?msg=' + encodeURIComponent(message);
