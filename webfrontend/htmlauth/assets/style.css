@@ -55,7 +55,7 @@ body.is-loading .loading-overlay {
   font-size: 15px;
   letter-spacing: normal;
   line-height: 1.4;
-  max-width: 1240px;
+  max-width: 1120px;
   margin: 0 auto;
   padding: 18px 22px 24px;
 }
@@ -355,12 +355,11 @@ body.is-loading .loading-overlay {
 }
 
 .schedule-card {
-  --section-content-width: 1080px;
   background: #f7f7f7;
   border: 1px solid #d3d3d3;
   border-radius: 8px;
   margin: 18px 0 0;
-  padding: 16px 24px 18px;
+  padding: 16px 14px 14px;
 }
 
 .settings-group {
@@ -376,25 +375,10 @@ body.is-loading .loading-overlay {
   display: inline-flex;
   font-size: 14px;
   font-weight: 700;
-  margin-left: max(0px, calc((100% - var(--section-content-width)) / 2));
   margin-bottom: 12px;
   min-height: 28px;
   padding: 4px 11px;
   position: relative;
-}
-
-.schedule-card > :not(legend) {
-  max-width: var(--section-content-width);
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.schedule-card > .settings-subtitle,
-.schedule-card > .schedule-modes,
-.schedule-card > .checkline,
-.schedule-card > label,
-.schedule-card > .config-actions {
-  max-width: var(--section-content-width);
 }
 
 .schedule-card legend .info-help {
