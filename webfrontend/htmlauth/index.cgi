@@ -96,6 +96,26 @@ sub array_csv {
   return @clean ? join(',', @clean) : $default;
 }
 
+sub stop_targets_csv {
+  my ($value) = @_;
+  return '' unless ref($value) eq 'ARRAY' && @$value;
+  my @clean;
+  for my $target (@$value) {
+    my ($type, $name);
+    if (ref($target) eq 'HASH') {
+      $type = $target->{type} || '';
+      $name = $target->{name} || '';
+    } elsif (!ref($target) && $target =~ /^([^:]+):(.+)$/) {
+      ($type, $name) = ($1, $2);
+    }
+    next unless ($type || '') =~ /^(docker|systemd)$/;
+    next unless defined $name && length $name;
+    next unless $name =~ /^[A-Za-z0-9_.\@:\-]+(?:\.service)?$/;
+    push @clean, "$type:$name";
+  }
+  return join(',', @clean);
+}
+
 sub info_button {
   my ($text) = @_;
   my $safe = escapeHTML($text || '');
@@ -244,6 +264,7 @@ if ($q->request_method eq 'POST') {
         my $post_hook = $imported->{post_backup_hook} || '';
         my $root_permission_ack = bool_arg($imported->{root_permission_ack});
         my $backup_mode = $imported->{backup_mode} || 'full';
+        my $stop_targets = stop_targets_csv($imported->{stop_targets});
 
         my ($status, $out) = run_shell(
           backend_cmd(
@@ -264,7 +285,8 @@ if ($q->request_method eq 'POST') {
             $pre_hook,
             $post_hook,
             $root_permission_ack,
-            $backup_mode
+            $backup_mode,
+            $stop_targets
           )
         );
 
@@ -304,6 +326,18 @@ if ($q->request_method eq 'POST') {
     my $create_export = $q->param('create_export_after_backup') ? 'true' : 'false';
 
     my $root_permission_ack = $q->param('root_permission_ack') ? 'true' : 'false';
+    my $stop_targets = '';
+
+    if ($q->param('stop_targets_loaded')) {
+      my @stop_targets = $q->param('stop_targets');
+      $stop_targets = join(',', grep { defined $_ && /^(docker|systemd):[A-Za-z0-9_.\@:\-]+(?:\.service)?$/ } @stop_targets);
+    } else {
+      my ($current_status, $current_json) = run_shell(backend_cmd('config'));
+      if ($current_status == 0) {
+        my $current = eval { decode_json($current_json) } || {};
+        $stop_targets = stop_targets_csv($current->{stop_targets});
+      }
+    }
 
     my ($status, $out) = run_shell(
       backend_cmd(
@@ -324,7 +358,8 @@ if ($q->request_method eq 'POST') {
         $pre_hook,
         $post_hook,
         $root_permission_ack,
-        $backup_mode
+        $backup_mode,
+        $stop_targets
       )
     );
 
@@ -496,7 +531,6 @@ my $cfg_pre_hook = escapeHTML($config->{pre_backup_hook} || '');
 my $cfg_post_hook = escapeHTML($config->{post_backup_hook} || '');
 my $cfg_excludes = escapeHTML(join "\n", @{$config->{rsync_extra_excludes} || []});
 
-my $cfg_stop_docker = checked_attr($config->{stop_docker_before_backup});
 my $cfg_create_export = checked_attr($config->{create_export_after_backup});
 my $cfg_schedule_enabled = checked_attr($config->{schedule_enabled});
 my $cfg_root_permission_ack = checked_attr($config->{root_permission_ack});
@@ -533,10 +567,10 @@ my $info_months = info_button('Nur bei monatlichen Backups relevant. Mit Alle Mo
 my $info_pre_hook = info_button('Optionales Skript, das direkt vor dem Backup ausgeführt wird. Sinnvoll für Datenbank-Dumps oder das Vorbereiten von Diensten. Das Skript muss absolut angegeben werden und wird aus Sicherheitsgründen nur ausgeführt, wenn es Root gehört und nicht durch andere Benutzer beschreibbar ist.');
 my $info_post_hook = info_button('Optionales Skript, das nach dem Backup ausgeführt wird. Sinnvoll zum Aufräumen, Dienste wieder in einen gewünschten Zustand zu bringen oder Benachrichtigungen auszuführen. Es gelten dieselben Sicherheitsregeln wie beim Skript vor dem Backup.');
 my $info_excludes = info_button('Hier kannst du Pfade vom rsync-Backup ausschliessen, je ein Pfad pro Zeile. Das ist sinnvoll für grosse Medienarchive, Netzwerkshares oder Daten, die separat gesichert werden. Zu viele Ausschlüsse können aber die Wiederherstellung unvollständig machen.');
-my $info_docker = info_button('Wenn aktiv, stoppt das Plugin laufende Docker-Container vor dem Backup und startet sie danach wieder. Das verbessert die Konsistenz von Datenbanken und Volumes, verursacht aber eine Unterbrechung der Container-Dienste während des Backups.');
+my $info_stop_targets = info_button('Wähle gezielt Docker-Container oder Dienste aus, die vor dem Backup angehalten und danach wieder gestartet werden. Das Plugin merkt sich nur Ziele, die vor dem Backup wirklich liefen. Kritische Systemdienste werden nicht angeboten.');
 my $info_export = info_button('Erstellt nach jedem Backup zusätzlich ein komprimiertes tar.gz-Archiv. Das ist praktisch zum Download, Kopieren oder Archivieren, benötigt aber zusätzlichen Speicherplatz und Zeit.');
 my $info_root = info_button('Diese Bestätigung ist nötig, weil Vollbackup und Restore Systemdateien, Berechtigungen, Docker-Daten und Cronjobs betreffen. Es werden keine Passwörter gespeichert; erlaubt wird nur der Start des Backend-Skripts dieses Plugins.');
-my $info_config_export = info_button('Lädt nur die Einstellungen dieses Plugins als kleine JSON-Datei herunter. Enthalten sind zum Beispiel Backup-Verzeichnis, Ausschlüsse, Zeitplan und Docker-Optionen, aber keine Backup-Daten und keine Passwörter.');
+my $info_config_export = info_button('Lädt nur die Einstellungen dieses Plugins als kleine JSON-Datei herunter. Enthalten sind zum Beispiel Backup-Verzeichnis, Ausschlüsse, Zeitplan und ausgewählte Stop-Ziele, aber keine Backup-Daten und keine Passwörter.');
 my $info_config_import = info_button('Liest eine zuvor exportierte Einstellungsdatei wieder ein. Das ist praktisch nach einer Neuinstallation des Plugins. Danach bitte Pfade und Root-Freigabe kurz prüfen und speichern, falls sich Laufwerke geändert haben.');
 my $info_table = info_button('Diese Liste zeigt vorhandene Backups mit Status, Host, Grösse und Fertigstellungszeit. Ein vollständiges Backup sollte den Status complete haben, bevor du es für Restore-Tests verwendest.');
 my $info_import = info_button('Importiert ein extern gespeichertes Backup-Archiv im Format tar.gz, zum Beispiel von deinem PC, NAS oder einem anderen Datenträger. Für Restore eines bereits unten gelisteten Backups brauchst du diese Datei-Auswahl nicht.');
@@ -634,6 +668,53 @@ $active_task_hidden
   return $html;
 }
 
+sub render_stop_targets {
+  my ($targets) = @_;
+  my $hidden = '<input data-role="none" type="hidden" name="stop_targets_loaded" value="1">';
+
+  if (!$targets || ref($targets) ne 'ARRAY' || !@$targets) {
+    return $hidden . '<p class="empty">Keine ausw&auml;hlbaren Dienste oder Container gefunden.</p>';
+  }
+
+  my @group_order = ('Docker-Container', 'LoxBerry-nahe Dienste', 'Systemdienste', 'Weitere Dienste');
+  my %order = map { $group_order[$_] => $_ } 0..$#group_order;
+  my %groups;
+
+  for my $target (@$targets) {
+    next unless ref($target) eq 'HASH';
+    my $type = $target->{type} || '';
+    my $name = $target->{name} || '';
+    next unless $type =~ /^(docker|systemd)$/ && length $name;
+    my $group = $target->{group} || 'Weitere Dienste';
+    push @{$groups{$group}}, $target;
+  }
+
+  my $html = $hidden;
+
+  for my $group (sort { ($order{$a} // 99) <=> ($order{$b} // 99) || $a cmp $b } keys %groups) {
+    my $safe_group = escapeHTML($group);
+    $html .= qq{<div class="stop-target-group"><h4>$safe_group</h4><div class="stop-target-grid">};
+
+    for my $target (sort { ($a->{label} || $a->{name} || '') cmp ($b->{label} || $b->{name} || '') } @{$groups{$group}}) {
+      my $type = $target->{type} || '';
+      my $name = $target->{name} || '';
+      my $value = escapeHTML("$type:$name");
+      my $label = escapeHTML($target->{label} || $name);
+      my $status = $target->{status} || '';
+      my $details = $target->{details} || '';
+      my $checked = checked_attr($target->{selected});
+      my $meta = join(' · ', grep { length $_ } ($status, $details));
+      my $meta_html = length($meta) ? '<small>' . escapeHTML($meta) . '</small>' : '';
+
+      $html .= qq{<label class="stop-target-item"><input data-role="none" type="checkbox" name="stop_targets" value="$value"$checked><span><strong>$label</strong>$meta_html</span></label>};
+    }
+
+    $html .= '</div></div>';
+  }
+
+  return $html;
+}
+
 if ($action eq 'target-notice') {
   my ($target_status, $target_json) = run_shell(backend_cmd('target-info'));
   my $target_info = {};
@@ -653,6 +734,17 @@ if ($action eq 'backup-list') {
   }
   print header(-type => 'text/html', -charset => 'utf-8', -status => ($list_status == 0 ? '200 OK' : '500 Internal Server Error'));
   print $list_status == 0 ? render_backup_rows($backups) : '<tr><td colspan="8" class="empty">Backup-Liste konnte nicht geladen werden.</td></tr>';
+  exit;
+}
+
+if ($action eq 'stop-targets') {
+  my ($target_status, $target_json) = run_shell(backend_cmd('stop-targets'));
+  my $targets = [];
+  if ($target_status == 0) {
+    $targets = eval { decode_json($target_json) } || [];
+  }
+  print header(-type => 'text/html', -charset => 'utf-8', -status => ($target_status == 0 ? '200 OK' : '500 Internal Server Error'));
+  print $target_status == 0 ? render_stop_targets($targets) : '<p class="empty">Dienste und Container konnten nicht geladen werden.</p>';
   exit;
 }
 
@@ -885,10 +977,13 @@ print <<HTML;
 
 <div class="settings-subtitle">Ausführung und Sicherheit</div>
 
-<label class="checkline">
-<input data-role="none" type="checkbox" name="stop_docker_before_backup" value="1"$cfg_stop_docker>
-<span>Docker-Container während des Backups anhalten $info_docker</span>
-</label>
+<input data-role="none" type="hidden" name="stop_docker_before_backup" value="">
+
+<div class="settings-subtitle compact-subtitle">Dienste und Container $info_stop_targets</div>
+<div id="stop-targets-list" class="stop-targets-list loading">
+<span class="mini-spinner" aria-hidden="true"></span>
+<span>Dienste und Container werden geladen...</span>
+</div>
 
 <label class="checkline">
 <input data-role="none" type="checkbox" name="create_export_after_backup" value="1"$cfg_create_export>
@@ -1151,6 +1246,7 @@ print <<HTML;
 (function () {
   var targetNotice = document.getElementById('target-notice');
   var backupListBody = document.getElementById('backup-list-body');
+  var stopTargetsList = document.getElementById('stop-targets-list');
   var monitor = document.getElementById('task-monitor');
   var activeTask = monitor ? monitor.getAttribute('data-active-task') : '';
   var activeParam = activeTask ? '&active_task=' + encodeURIComponent(activeTask) : '';
@@ -1171,6 +1267,7 @@ print <<HTML;
   }
 
   loadFragment('?action=target-notice', targetNotice, '<section class="inline-notice warning">Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>');
+  loadFragment('?action=stop-targets', stopTargetsList, '<p class="empty">Dienste und Container konnten nicht geladen werden.</p>');
   loadFragment('?action=backup-list' + activeParam, backupListBody, '<tr><td colspan="8" class="empty">Backup-Liste konnte nicht geladen werden.</td></tr>');
 }());
 

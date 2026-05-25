@@ -135,7 +135,7 @@ Geprüft:
 - Weboberfläche auf einem LoxBerry-Testsystem
 - Speichern der Einstellungen über die LoxBerry-sudoers-Regel
 - Echtes Backup auf LoxBerry-/DietPi-Hardware inklusive Live-Log
-- Stoppen und Wiederanlauf von Docker-Containern im Backup-Ablauf
+- Stoppen und Wiederanlauf ausgewählter Docker-Container und Dienste im Backup-Ablauf
 - Export-Archiv nach einem Backup
 
 Noch nicht produktiv validiert:
@@ -201,8 +201,8 @@ Empfohlene Reihenfolge:
 - Export vorhandener Backups als `.tar.gz`
 - Löschen vorhandener Backups
 - Export und Import der Plugin-Einstellungen als JSON-Datei
-- Docker-Inventarisierung
-- optionales Stoppen/Starten laufender Docker-Container
+- Docker- und Dienst-Inventarisierung
+- auswählbares Stoppen/Starten einzelner Docker-Container und systemd-Dienste
 - zeitgesteuerte Backups per Cron
 - tägliche, wöchentliche und monatliche Zeitpläne
 - Monatsende-Fallback bei monatlichen Backups am 29., 30. oder 31.
@@ -352,14 +352,17 @@ Beispiel:
 /var/cache/apt
 ```
 
-### Docker-Container Anhalten
+### Dienste Und Container Anhalten
 
-Wenn aktiviert, werden laufende Docker-Container vor dem Backup gestoppt und
-danach wieder gestartet.
+In den Einstellungen kann gezielt ausgewählt werden, welche Docker-Container
+oder systemd-Dienste vor dem Backup gestoppt und danach wieder gestartet werden.
+Das Plugin liest dazu die vorhandenen Container und Dienste aus und merkt sich
+die Auswahl.
 
-Das verbessert die Konsistenz von Container-Daten, kann aber Dienste während
-des Backups unterbrechen. Das Plugin startet nur Container wieder, die es zuvor
-selbst gestoppt hat.
+Das verbessert die Konsistenz von Container-, Datenbank- und Dienst-Daten, kann
+aber diese Dienste während des Backups unterbrechen. Das Plugin startet nur
+Ziele wieder, die vor dem Backup wirklich liefen und durch dieses Backup
+gestoppt wurden. Kritische Systemdienste werden in der Auswahl nicht angeboten.
 
 Für Datenbanken oder Anwendungen mit eigenen Backup-Mechanismen können
 zusätzliche Pre-/Post-Backup-Hooks sinnvoll sein.
@@ -383,7 +386,7 @@ Enthalten sind zum Beispiel:
 - Backup-Verzeichnis
 - Backup-Modus
 - Ausschlüsse
-- Docker-Option
+- ausgewählte Stop-Ziele für Container und Dienste
 - Export-Option
 - Zeitplan
 - Aufbewahrung
@@ -409,8 +412,8 @@ nach dem Backup aufzuräumen.
 ## Live-Status
 
 Nach dem Start eines Backups erscheint ein Live-Status. Er zeigt fortlaufend,
-was das Backend gerade macht, z. B. Docker-Stop, `rsync`-Fortschritt, Export und
-Aufbewahrung.
+was das Backend gerade macht, z. B. Dienst-/Container-Stop, `rsync`-Fortschritt,
+Export und Aufbewahrung.
 
 Während ein Backup läuft:
 
@@ -470,7 +473,7 @@ inkonsistente Dateien erzeugen.
 
 Für wichtige Dienste sollten daher entweder:
 
-- Docker-Container vor dem Backup gestoppt werden
+- betroffene Container oder Dienste vor dem Backup gestoppt werden
 - Pre-/Post-Hooks für Datenbank-Dumps verwendet werden
 - oder applikationsspezifische Backup-Mechanismen genutzt werden
 

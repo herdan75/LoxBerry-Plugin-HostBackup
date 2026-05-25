@@ -3,6 +3,7 @@
   "backup_mode": "full",
   "rsync_extra_excludes": [],
   "stop_docker_before_backup": false,
+  "stop_targets": [],
   "create_export_after_backup": false,
   "keep_backups": 10,
   "schedule_enabled": false,

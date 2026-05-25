@@ -429,6 +429,10 @@ body.is-loading .loading-overlay {
   padding-top: 13px;
 }
 
+.compact-subtitle {
+  margin-top: 14px;
+}
+
 .nested-settings {
   gap: 12px 18px;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
@@ -513,6 +517,74 @@ body.is-loading .loading-overlay {
 
 .month-grid {
   grid-template-columns: repeat(8, minmax(74px, 1fr));
+}
+
+.stop-targets-list {
+  background: #ffffff;
+  border: 1px solid #dddddd;
+  border-radius: 6px;
+  margin-bottom: 14px;
+  padding: 14px;
+}
+
+.stop-targets-list.loading {
+  color: #526173;
+  display: flex;
+  align-items: center;
+}
+
+.stop-target-group + .stop-target-group {
+  margin-top: 14px;
+}
+
+.stop-target-group h4 {
+  border-bottom: 1px solid #e2e2e2;
+  color: #1f2a33;
+  font-size: 14px;
+  margin: 0 0 9px;
+  padding-bottom: 6px;
+}
+
+.stop-target-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+
+.settings-form .stop-target-item {
+  align-items: flex-start;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: row;
+  font-size: 13px;
+  font-weight: 400;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 9px;
+}
+
+.settings-form .stop-target-item input {
+  flex: 0 0 auto;
+  height: 16px;
+  margin-top: 2px;
+  min-height: 0;
+  padding: 0;
+  width: 16px;
+}
+
+.settings-form .stop-target-item strong {
+  display: block;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.settings-form .stop-target-item small {
+  color: #526173;
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
 }
 
 .day-grid {

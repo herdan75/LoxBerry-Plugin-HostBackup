@@ -27,6 +27,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
   "backup_mode": "full",
   "rsync_extra_excludes": [],
   "stop_docker_before_backup": false,
+  "stop_targets": [],
   "create_export_after_backup": false,
   "keep_backups": 10,
   "schedule_enabled": false,
@@ -109,6 +110,7 @@ show_config() {
     $cfg->{backup_mode} = "full" unless ($cfg->{backup_mode} || "") =~ /^(full|snapshot)$/;
     $cfg->{rsync_extra_excludes} = [] unless ref($cfg->{rsync_extra_excludes}) eq "ARRAY";
     $cfg->{stop_docker_before_backup} = $cfg->{stop_docker_before_backup} ? JSON::PP::true : JSON::PP::false;
+    $cfg->{stop_targets} = [] unless ref($cfg->{stop_targets}) eq "ARRAY";
     $cfg->{create_export_after_backup} = $cfg->{create_export_after_backup} ? JSON::PP::true : JSON::PP::false;
     $cfg->{keep_backups} = ($cfg->{keep_backups} && $cfg->{keep_backups} =~ /^\d+$/) ? 0 + $cfg->{keep_backups} : 10;
     $cfg->{keep_backups} = 1 if $cfg->{keep_backups} < 1;
@@ -151,9 +153,10 @@ save_config() {
   local post_hook="${15}"
   local root_permission_ack="${16:-false}"
   local backup_mode="${17:-full}"
+  local stop_targets="${18:-}"
 
   perl -MJSON::PP -e '
-    my ($file, $backup_root, $excludes_text, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $schedule_months, $schedule_weekdays, $schedule_monthdays, $pre_hook, $post_hook, $root_permission_ack, $backup_mode) = @ARGV;
+    my ($file, $backup_root, $excludes_text, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $schedule_months, $schedule_weekdays, $schedule_monthdays, $pre_hook, $post_hook, $root_permission_ack, $backup_mode, $stop_targets_text) = @ARGV;
     my @excludes;
     for my $line (split /\r?\n/, $excludes_text) {
       $line =~ s/^\s+|\s+$//g;
@@ -208,11 +211,26 @@ save_config() {
       push @months, $month;
     }
     @months = ("*") unless @months;
+    my %seen_target;
+    my @stop_targets;
+    for my $entry (split /,/, ($stop_targets_text // "")) {
+      $entry =~ s/^\s+|\s+$//g;
+      next unless length $entry;
+      my ($type, $name) = split /:/, $entry, 2;
+      next unless defined $name && length $name;
+      next unless $type =~ /^(docker|systemd)$/;
+      next if $type eq "docker" && $name !~ /^[A-Za-z0-9_.-]+$/;
+      next if $type eq "systemd" && $name !~ /^[A-Za-z0-9_.\@:\\-]+\.service$/;
+      my $key = "$type:$name";
+      next if $seen_target{$key}++;
+      push @stop_targets, { type => $type, name => $name };
+    }
     my $cfg = {
       backup_root => $backup_root,
       backup_mode => $backup_mode,
       rsync_extra_excludes => \@excludes,
       stop_docker_before_backup => ($stop_docker eq "true" ? JSON::PP::true : JSON::PP::false),
+      stop_targets => \@stop_targets,
       create_export_after_backup => ($create_export eq "true" ? JSON::PP::true : JSON::PP::false),
       keep_backups => $keep_backups,
       schedule_enabled => ($schedule_enabled eq "true" ? JSON::PP::true : JSON::PP::false),
@@ -229,7 +247,7 @@ save_config() {
     };
     open my $fh, ">", $file or die "Cannot write config: $!";
     print $fh JSON::PP->new->ascii->pretty->canonical->encode($cfg);
-  ' "$CONFIG_FILE" "$backup_root" "$excludes_text" "$stop_docker" "$create_export" "$keep_backups" "$schedule_enabled" "$schedule_mode" "$schedule_time" "$schedule_weekday" "$schedule_monthday" "$schedule_months" "$schedule_weekdays" "$schedule_monthdays" "$pre_hook" "$post_hook" "$root_permission_ack" "$backup_mode"
+  ' "$CONFIG_FILE" "$backup_root" "$excludes_text" "$stop_docker" "$create_export" "$keep_backups" "$schedule_enabled" "$schedule_mode" "$schedule_time" "$schedule_weekday" "$schedule_monthday" "$schedule_months" "$schedule_weekdays" "$schedule_monthdays" "$pre_hook" "$post_hook" "$root_permission_ack" "$backup_mode" "$stop_targets"
   install_schedule
 }
 
@@ -616,6 +634,123 @@ run_hook() {
   fi
 }
 
+selected_stop_targets() {
+  perl -MJSON::PP -e '
+    my ($file) = @ARGV;
+    open my $fh, "<", $file or exit 0;
+    local $/;
+    my $cfg = eval { decode_json(<$fh>) } || {};
+    my $targets = $cfg->{stop_targets};
+    exit 0 unless ref($targets) eq "ARRAY";
+    for my $target (@$targets) {
+      next unless ref($target) eq "HASH";
+      my $type = $target->{type} // "";
+      my $name = $target->{name} // "";
+      next unless $type =~ /^(docker|systemd)$/ && length $name;
+      print "$type\t$name\n";
+    }
+  ' "$CONFIG_FILE"
+}
+
+protected_systemd_service() {
+  local unit="$1"
+  case "$unit" in
+    ssh.service|sshd.service|dropbear.service|cron.service|crond.service|anacron.service) return 0 ;;
+    dbus.service|polkit.service|systemd-*.service|udev.service|systemd-udevd.service) return 0 ;;
+    systemd-logind.service|systemd-journald.service|systemd-timesyncd.service) return 0 ;;
+    getty@*.service|serial-getty@*.service|user@*.service) return 0 ;;
+    networking.service|NetworkManager.service|systemd-networkd.service|systemd-resolved.service) return 0 ;;
+    docker.service|containerd.service) return 0 ;;
+    apache2.service|lighttpd.service|nginx.service|php*-fpm.service) return 0 ;;
+    *.mount|*.socket|*.timer) return 0 ;;
+  esac
+  return 1
+}
+
+systemd_service_group() {
+  local unit="$1"
+  local description="${2:-}"
+  local metadata
+  metadata="$(systemctl show "$unit" -p ExecStart -p FragmentPath -p Description --no-pager 2>/dev/null || true)"
+  if printf '%s\n%s\n%s\n' "$unit" "$description" "$metadata" | grep -Eiq '(/plugins/|/opt/loxberry|loxberry|stats4lox|loxone)'; then
+    printf '%s\n' "LoxBerry-nahe Dienste"
+  else
+    printf '%s\n' "Systemdienste"
+  fi
+}
+
+discover_stop_targets() {
+  local tmp unit load active sub description group name image status
+  tmp="$(mktemp)"
+
+  if command -v docker >/dev/null 2>&1; then
+    docker ps -a --format '{{.Names}}\t{{.Image}}\t{{.Status}}' 2>/dev/null |
+      while IFS="$(printf '\t')" read -r name image status; do
+        [ -n "$name" ] || continue
+        printf 'docker\t%s\t%s\tDocker-Container\t%s\t%s\n' "$name" "$name" "$status" "$image" >> "$tmp"
+      done || true
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl list-units --type=service --state=running --all --no-legend --no-pager 2>/dev/null |
+      while read -r unit load active sub description; do
+        [ -n "$unit" ] || continue
+        protected_systemd_service "$unit" && continue
+        group="$(systemd_service_group "$unit" "$description")"
+        printf 'systemd\t%s\t%s\t%s\t%s\t%s\n' "$unit" "$description" "$group" "${active}/${sub}" "" >> "$tmp"
+      done || true
+
+    systemctl list-unit-files --type=service --no-legend --no-pager 2>/dev/null |
+      while read -r unit _state _rest; do
+        [ -n "$unit" ] || continue
+        protected_systemd_service "$unit" && continue
+        grep -F "$(printf 'systemd\t%s\t' "$unit")" "$tmp" >/dev/null 2>&1 && continue
+        group="$(systemd_service_group "$unit" "")"
+        [ "$group" = "LoxBerry-nahe Dienste" ] || continue
+        description="$(systemctl show "$unit" -p Description --value --no-pager 2>/dev/null || true)"
+        active="$(systemctl is-active "$unit" 2>/dev/null || true)"
+        printf 'systemd\t%s\t%s\t%s\t%s\t%s\n' "$unit" "${description:-$unit}" "$group" "${active:-inactive}" "" >> "$tmp"
+      done || true
+  fi
+
+  perl -MJSON::PP -e '
+    my ($cfg_file, $targets_file) = @ARGV;
+    my %selected;
+    if (open my $fh, "<", $cfg_file) {
+      local $/;
+      my $cfg = eval { decode_json(<$fh>) } || {};
+      if (ref($cfg->{stop_targets}) eq "ARRAY") {
+        for my $target (@{$cfg->{stop_targets}}) {
+          next unless ref($target) eq "HASH";
+          my $type = $target->{type} // "";
+          my $name = $target->{name} // "";
+          $selected{"$type:$name"} = 1 if length $type && length $name;
+        }
+      }
+    }
+    my @items;
+    if (open my $fh, "<", $targets_file) {
+      while (my $line = <$fh>) {
+        chomp $line;
+        my ($type, $name, $label, $group, $status, $details) = split /\t/, $line, 6;
+        next unless $type && $name;
+        push @items, {
+          type => $type,
+          name => $name,
+          label => length($label // "") ? $label : $name,
+          group => length($group // "") ? $group : "Weitere Dienste",
+          status => $status // "",
+          details => $details // "",
+          selected => ($selected{"$type:$name"} ? JSON::PP::true : JSON::PP::false),
+        };
+      }
+    }
+    @items = sort { ($a->{group} cmp $b->{group}) || ($a->{label} cmp $b->{label}) } @items;
+    print JSON::PP->new->ascii->canonical->pretty->encode(\@items);
+  ' "$CONFIG_FILE" "$tmp"
+  rm -f "$tmp"
+}
+
 stop_docker_if_requested() {
   if [ "$(json_get_bool stop_docker_before_backup)" = "true" ] && command -v docker >/dev/null 2>&1; then
     local state_dir="$1"
@@ -640,6 +775,70 @@ stop_docker_if_requested() {
     else
       log "No running Docker containers found before backup"
     fi
+  fi
+}
+
+stop_selected_systemd_targets() {
+  local state_dir="$1"
+  local targets_file="$2"
+  local unit
+  [ -s "$targets_file" ] || return 0
+  command -v systemctl >/dev/null 2>&1 || return 0
+  while IFS="$(printf '\t')" read -r type unit; do
+    [ "$type" = "systemd" ] || continue
+    [ -n "$unit" ] || continue
+    protected_systemd_service "$unit" && { log "Skipping protected systemd service $unit"; continue; }
+    if systemctl is-active --quiet "$unit" 2>/dev/null; then
+      printf '%s\n' "$unit" >> "$state_dir/systemd-running-services.txt"
+      log "Stopping systemd service $unit"
+      if command -v timeout >/dev/null 2>&1; then
+        timeout 45 systemctl stop "$unit" || log "WARNING: Could not stop systemd service $unit"
+      else
+        systemctl stop "$unit" || log "WARNING: Could not stop systemd service $unit"
+      fi
+    else
+      log "Systemd service $unit is not running; nothing to stop"
+    fi
+  done < "$targets_file"
+}
+
+stop_selected_docker_targets() {
+  local state_dir="$1"
+  local targets_file="$2"
+  local type name id running
+  [ -s "$targets_file" ] || return 0
+  command -v docker >/dev/null 2>&1 || return 0
+  while IFS="$(printf '\t')" read -r type name; do
+    [ "$type" = "docker" ] || continue
+    [ -n "$name" ] || continue
+    running="$(docker inspect --format '{{.State.Running}}' "$name" 2>/dev/null || true)"
+    if [ "$running" = "true" ]; then
+      id="$(docker inspect --format '{{.Id}}' "$name" 2>/dev/null | cut -c1-12)"
+      printf '%s\t%s\n' "${id:-$name}" "$name" >> "$state_dir/docker-running-containers.tsv"
+      printf '%s\n' "${id:-$name}" >> "$state_dir/docker-running-containers.txt"
+      log "Stopping Docker container $name (${id:-unknown})"
+      if command -v timeout >/dev/null 2>&1; then
+        timeout 45 docker stop -t 30 "$name" || log "WARNING: Could not stop Docker container $name"
+      else
+        docker stop -t 30 "$name" || log "WARNING: Could not stop Docker container $name"
+      fi
+    else
+      log "Docker container $name is not running; nothing to stop"
+    fi
+  done < "$targets_file"
+}
+
+stop_backup_targets() {
+  local state_dir="$1"
+  local targets_file="$state_dir/selected-stop-targets.tsv"
+  selected_stop_targets > "$targets_file" || true
+  if [ -s "$targets_file" ]; then
+    log "Stopping selected native services and Docker containers if they are running"
+    stop_selected_systemd_targets "$state_dir" "$targets_file"
+    stop_selected_docker_targets "$state_dir" "$targets_file"
+  else
+    log "No individual stop targets configured; checking legacy Docker option"
+    stop_docker_if_requested "$state_dir"
   fi
 }
 
@@ -675,6 +874,33 @@ start_docker_if_needed() {
       log "No Docker container state file found for restart"
     fi
   fi
+}
+
+start_systemd_if_needed() {
+  local state_dir="$1"
+  local state_file="$state_dir/systemd-running-services.txt"
+  local unit
+  if command -v systemctl >/dev/null 2>&1 && [ -s "$state_file" ]; then
+    tac "$state_file" 2>/dev/null | while IFS= read -r unit; do
+      [ -n "$unit" ] || continue
+      log "Starting systemd service $unit"
+      if command -v timeout >/dev/null 2>&1; then
+        timeout 45 systemctl start "$unit" || log "WARNING: Could not start systemd service $unit"
+      else
+        systemctl start "$unit" || log "WARNING: Could not start systemd service $unit"
+      fi
+    done
+  fi
+}
+
+start_backup_targets_if_needed() {
+  local state_dir="$1"
+  start_docker_if_needed "$state_dir"
+  start_systemd_if_needed "$state_dir"
+}
+
+selected_docker_stop_count() {
+  selected_stop_targets | awk '$1 == "docker" { count++ } END { print count + 0 }'
 }
 
 calculate_size() {
@@ -740,9 +966,9 @@ preflight_backup() {
   elif [ "$backup_mode" = "snapshot" ] && ! printf '%s\n' "$fs_type" | grep -Eq '^(ext2|ext3|ext4|xfs|btrfs)$'; then
     status="warning"
     warnings_json='["Snapshot-Backups verwenden Hardlinks. Fuer zuverlaessige Speicherersparnis wird ein Linux-Dateisystem wie ext4 empfohlen."]'
-  elif [ "$docker_running" -gt 0 ] && [ "$(json_get_bool stop_docker_before_backup)" != "true" ]; then
+  elif [ "$docker_running" -gt 0 ] && [ "$(json_get_bool stop_docker_before_backup)" != "true" ] && [ "$(selected_docker_stop_count)" -eq 0 ]; then
     status="warning"
-    warnings_json='["Docker-Container laufen. Fuer konsistente Datenbanken ggf. Container stoppen oder Hooks konfigurieren."]'
+    warnings_json='["Docker-Container laufen. Fuer konsistente Datenbanken ggf. einzelne Container in den Stop-Zielen auswaehlen oder Hooks konfigurieren."]'
   fi
   checks_json="$(cat <<EOF
 [
@@ -852,8 +1078,8 @@ create_backup() {
   log "Exclude rules written to: $exclude_file" | tee -a "$log_file"
   log "Running pre-backup hook if configured" | tee -a "$log_file"
   run_hook "$pre_hook" | tee -a "$log_file" || true
-  log "Stopping Docker containers if configured" | tee -a "$log_file"
-  stop_docker_if_requested "$target" | tee -a "$log_file" || true
+  log "Stopping selected services and Docker containers if configured" | tee -a "$log_file"
+  stop_backup_targets "$target" | tee -a "$log_file" || true
 
   local rsync_opts=()
   while IFS= read -r opt; do
@@ -878,8 +1104,8 @@ create_backup() {
   set -e
   log "rsync finished with status $rsync_status" | tee -a "$log_file"
 
-  log "Starting Docker containers again if they were stopped" | tee -a "$log_file"
-  start_docker_if_needed "$target" | tee -a "$log_file" || true
+  log "Starting services and Docker containers again if they were stopped" | tee -a "$log_file"
+  start_backup_targets_if_needed "$target" | tee -a "$log_file" || true
   log "Running post-backup hook if configured" | tee -a "$log_file"
   run_hook "$post_hook" | tee -a "$log_file" || true
 
@@ -965,8 +1191,8 @@ stop_backup() {
     log "No running backup process found for $backup_id" | tee -a "$log_file"
   fi
 
-  log "Restarting Docker containers stopped by this backup if needed" | tee -a "$log_file"
-  start_docker_if_needed "$target" | tee -a "$log_file" || true
+  log "Restarting services and Docker containers stopped by this backup if needed" | tee -a "$log_file"
+  start_backup_targets_if_needed "$target" | tee -a "$log_file" || true
   log "Backup $backup_id stopped by user" | tee -a "$log_file"
 }
 
@@ -1431,13 +1657,14 @@ Actions:
   preflight-restore ID   Check whether restore can start
   config                 Print plugin config as JSON
   target-info            Show backup target filesystem information as JSON
+  stop-targets           List selectable Docker/systemd stop targets as JSON
   save-config ARGS       Save plugin config
   install-schedule       Install or remove the configured cron schedule
   schedule-run           Run configured schedule with monthly fallback logic
   tasks                  List task logs as JSON
   task-log TASK [LINES]  Print recent task log lines
   task-status TASK [N]   Print task status and recent log as JSON
-  stop BACKUP_ID         Stop a running backup and restart stopped Docker containers
+  stop BACKUP_ID         Stop a running backup and restart stopped services/containers
   list                   List backups as JSON
   export BACKUP_ID       Create/export BACKUP_ID.tar.gz
   import ARCHIVE.tar.gz   Import an exported backup archive
@@ -1459,7 +1686,8 @@ case "$action" in
   preflight-restore) shift; preflight_restore "${1:?BACKUP_ID required}" ;;
   config) show_config ;;
   target-info) backup_target_info ;;
-  save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11:-*}" "${12:-0}" "${13:-1}" "${14:-}" "${15:-}" "${16:-false}" "${17:-full}" ;;
+  stop-targets) discover_stop_targets ;;
+  save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11:-*}" "${12:-0}" "${13:-1}" "${14:-}" "${15:-}" "${16:-false}" "${17:-full}" "${18:-}" ;;
   install-schedule) install_schedule ;;
   schedule-run) schedule_run ;;
   tasks) list_tasks ;;

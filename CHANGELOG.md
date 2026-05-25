@@ -9,7 +9,22 @@ validiert werden.
 
 ## [Unreleased]
 
-Derzeit keine Einträge.
+### Backup-Konsistenz
+
+- Neue Auswahl für Stop-Ziele ergänzt: Docker-Container und systemd-Dienste
+  werden erkannt, in Gruppen angezeigt und können einzeln für das Backup
+  ausgewählt werden.
+- Das Plugin stoppt nur ausgewählte Ziele, die vor dem Backup wirklich liefen,
+  und startet genau diese Ziele nach erfolgreichem Backup, Fehler oder manuellem
+  Abbruch wieder.
+- LoxBerry-nahe Dienste werden separat gruppiert; kritische Systemdienste wie
+  Netzwerk, Webserver, SSH, Docker-Daemon und systemd-Basisdienste werden nicht
+  zur Auswahl angeboten.
+
+### Weboberfläche
+
+- Die Dienst-/Container-Auswahl wird per AJAX nachgeladen, damit die
+  Einstellungsseite weiterhin schnell sichtbar bleibt.
 
 ## [0.3.2] - 2026-05-25
 
