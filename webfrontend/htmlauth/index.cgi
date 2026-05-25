@@ -1050,6 +1050,8 @@ if ($restore_id) {
   print qq{
 <section class="panel restore-panel">
 <h2>Restore</h2>
+<fieldset class="backup-content">
+<legend>Wiederherstellung vorbereiten</legend>
 <p>Restore nur in Rescue-/Testumgebung verwenden.</p>
 <div class="subpanel">
 <h3>Ausgewähltes Backup: <code>$safe_restore_id</code></h3>
@@ -1098,6 +1100,7 @@ if ($restore_id) {
 <button data-role="none" class="danger" type="submit">Restore starten</button>
 </form>
 </div>
+</fieldset>
 </section>
 };
 }
