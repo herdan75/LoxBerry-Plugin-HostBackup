@@ -711,7 +711,7 @@ sub render_stop_targets {
       $selected_count++ if $target->{selected};
     }
     my $count_label = $selected_count ? "$selected_count von $total_count ausgew&auml;hlt" : "$total_count verf&uuml;gbar";
-    my $open = ($selected_count || $group eq 'Docker-Container') ? ' open' : '';
+    my $open = $selected_count ? ' open' : '';
     my $safe_hint = $group_hint{$group} || '';
     my $hint_html = length($safe_hint) ? qq{<p class="stop-target-hint">$safe_hint</p>} : '';
     $html .= qq{<details class="stop-target-group"$open><summary><span>$safe_group</span><small>$count_label</small></summary>$hint_html<div class="stop-target-grid">};

@@ -524,7 +524,7 @@ body.is-loading .loading-overlay {
   border: 1px solid #dddddd;
   border-radius: 6px;
   margin-bottom: 12px;
-  padding: 12px;
+  padding: 10px;
 }
 
 .stop-targets-list.loading {
@@ -537,13 +537,15 @@ body.is-loading .loading-overlay {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 8px 10px;
   margin-bottom: 10px;
+  width: 100%;
 }
 
 .stop-target-toolbar span {
   color: #526173;
   font-size: 12px;
+  letter-spacing: normal;
 }
 
 .stop-target-group + .stop-target-group {
@@ -555,6 +557,7 @@ body.is-loading .loading-overlay {
   border: 1px solid #dddddd;
   border-radius: 5px;
   display: block;
+  clear: both;
   width: 100%;
 }
 
@@ -562,7 +565,7 @@ body.is-loading .loading-overlay {
   align-items: center;
   color: #1f2a33;
   cursor: pointer;
-  display: flex;
+  display: flex !important;
   font-size: 13px;
   font-weight: 700;
   justify-content: space-between;
@@ -587,8 +590,11 @@ body.is-loading .loading-overlay {
 .stop-target-hint {
   color: #526173;
   font-size: 12px;
+  font-weight: 400;
+  letter-spacing: normal;
   line-height: 1.35;
   margin: 7px 9px 0;
+  max-width: 900px;
 }
 
 .stop-target-grid {
@@ -610,6 +616,7 @@ body.is-loading .loading-overlay {
   gap: 6px;
   min-height: 32px;
   padding: 5px 7px;
+  width: 100%;
 }
 
 .settings-form .stop-target-item input {
@@ -624,6 +631,7 @@ body.is-loading .loading-overlay {
 .settings-form .stop-target-item strong {
   display: block;
   font-weight: 700;
+  letter-spacing: normal;
   line-height: 1.25;
 }
 
@@ -631,6 +639,8 @@ body.is-loading .loading-overlay {
   color: #526173;
   display: block;
   font-size: 11px;
+  font-weight: 400;
+  letter-spacing: normal;
   line-height: 1.25;
   margin-top: 1px;
 }
