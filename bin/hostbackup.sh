@@ -166,6 +166,9 @@ save_config() {
     if ($backup_root ne "" && $backup_root !~ m{^/}) {
       die "Backup-Ziel muss leer oder ein absoluter Pfad sein.\n";
     }
+    if ($backup_root eq "/" || $backup_root =~ m{^/(proc|sys|dev|run|tmp)(/|$)}) {
+      die "Backup-Ziel darf nicht /, /proc, /sys, /dev, /run oder /tmp sein.\n";
+    }
     if ($pre_hook ne "" && $pre_hook !~ m{^/}) {
       die "Pre-Backup-Hook muss leer oder ein absoluter Pfad sein.\n";
     }
@@ -263,6 +266,16 @@ backup_root() {
   else
     printf '%s\n' "$LBP_DATADIR/backups"
   fi
+}
+
+require_allowed_backup_root() {
+  local root="$1"
+  case "$root" in
+    /|/proc|/proc/*|/sys|/sys/*|/dev|/dev/*|/run|/run/*|/tmp|/tmp/*)
+      echo "Backup target must not be /, /proc, /sys, /dev, /run or /tmp." >&2
+      exit 14
+      ;;
+  esac
 }
 
 backup_target_info() {
@@ -1052,6 +1065,7 @@ preflight_backup() {
   local root available_mb docker_available docker_running excludes_count status warnings_json checks_json rsync_available target_writable backup_mode fs_type
   require_root_permission_ack
   root="$(backup_root)"
+  require_allowed_backup_root "$root"
   backup_mode="$(json_get_string backup_mode)"
   [ "$backup_mode" = "snapshot" ] || backup_mode="full"
   mkdir -p "$root"
@@ -1159,6 +1173,7 @@ create_backup() {
   root="$(backup_root)"
   backup_mode="$(json_get_string backup_mode)"
   [ "$backup_mode" = "snapshot" ] || backup_mode="full"
+  require_allowed_backup_root "$root"
   mkdir -p "$root"
   backup_id="${1:-$(date '+%Y%m%d-%H%M%S')}"
   backup_id="$(printf '%s' "$backup_id" | tr -cd 'A-Za-z0-9._-')"
@@ -1167,6 +1182,9 @@ create_backup() {
   rootfs="$target/rootfs"
   log_file="$LBP_LOGDIR/backup-$backup_id.log"
   exclude_file="$target/rsync-excludes.txt"
+
+  exec 9>"$LOCK_FILE"
+  flock -n 9 || { echo "Another backup is already running." >&2; exit 5; }
 
   if [ -e "$target" ]; then
     echo "Backup already exists: $backup_id" >&2
@@ -1177,9 +1195,6 @@ create_backup() {
   started="$(date -Iseconds)"
   backup_excludes "$root" > "$exclude_file"
   write_manifest "$target" "$backup_id" "running" "$started" "" 0 0
-
-  exec 9>"$LOCK_FILE"
-  flock -n 9 || { echo "Another backup is already running." >&2; exit 5; }
 
   local pre_hook post_hook
   pre_hook="$(json_get_string pre_backup_hook)"
@@ -1516,6 +1531,7 @@ import_backup() {
   local archive="$1"
   local root top
   root="$(backup_root)"
+  require_allowed_backup_root "$root"
   mkdir -p "$root"
   [ -r "$archive" ] || { echo "Archive not readable: $archive" >&2; exit 9; }
   top="$(tar -tzf "$archive" | awk -F/ 'NF {print $1; exit}')"
@@ -1538,7 +1554,7 @@ import_backup() {
     echo "Backup already exists: $top" >&2
     exit 4
   fi
-  tar -C "$root" --no-same-owner --no-same-permissions -xzf "$archive"
+  tar -C "$root" --numeric-owner --same-owner --same-permissions -xzf "$archive"
   [ -d "$root/$top/rootfs" ] || { echo "Imported archive does not contain a rootfs directory." >&2; exit 12; }
   printf '%s\n' "$top"
 }
