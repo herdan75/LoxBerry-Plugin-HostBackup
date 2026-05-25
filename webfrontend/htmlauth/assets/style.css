@@ -377,7 +377,13 @@ body.is-loading .loading-overlay {
   border: 1px solid #dddddd;
   border-radius: 6px;
   margin: 20px 0 0;
-  padding: 24px 24px 20px;
+  padding: 18px 0;
+}
+
+.schedule-card > legend,
+.schedule-card > :not(legend) {
+  margin-left: 18px;
+  margin-right: 18px;
 }
 
 .settings-group {
