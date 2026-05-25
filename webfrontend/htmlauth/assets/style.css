@@ -664,8 +664,8 @@ body.is-loading .loading-overlay {
 #hostbackup-app .config-card .config-actions button:not(.info-button) {
   font-size: 13px;
   min-height: 32px;
-  min-width: 158px;
-  padding: 6px 14px;
+  min-width: 0;
+  padding: 6px 11px;
   justify-content: center;
 }
 

@@ -62,7 +62,7 @@ Das Plugin erstellt:
 
 Standardquelle ist `/`.
 
-Standardmäßig ausgeschlossen:
+Standardmässig ausgeschlossen:
 
 - `/proc`
 - `/sys`
@@ -106,7 +106,7 @@ Beispiele:
 - ARM64 zu ARM64
 - Debian zu Debian
 
-Plattformwechsel wie ODROID zu Raspberry Pi, ARM zu x86 oder große
+Plattformwechsel wie ODROID zu Raspberry Pi, ARM zu x86 oder grosse
 Distributionssprünge können manuelle Nacharbeiten erfordern. Das betrifft vor
 allem Bootloader, Kernelmodule, Netzwerkinterfaces, UUIDs, Mountpoints,
 Device Trees und Docker-Images anderer Architektur.
@@ -178,7 +178,7 @@ Empfohlene Reihenfolge:
 1. Plugin installieren.
 2. Weboberfläche öffnen.
 3. Backup-Ziel auf einen externen oder separaten Pfad setzen.
-4. Alte Backup-, Image- oder Archivordner auf demselben Host ausschließen.
+4. Alte Backup-, Image- oder Archivordner auf demselben Host ausschliessen.
 5. Root-Freigabe bestätigen und Einstellungen speichern.
 6. Manuelles Backup starten.
 7. Live-Status beobachten.
@@ -195,7 +195,7 @@ Empfohlene Reihenfolge:
 - Restore-Check und Restore-Plan vor dem Start
 - Live-Status für laufende Backup-/Restore-Jobs
 - Stop-Button für laufende Backups
-- Backup-Liste mit Status, Größe, Dateianzahl, Abschlusszeit und Exportstatus
+- Backup-Liste mit Status, Grösse, Dateianzahl, Abschlusszeit und Exportstatus
 - Backup-Explorer in der Weboberfläche
 - Import externer `.tar.gz`-Backup-Archive
 - Export vorhandener Backups als `.tar.gz`
@@ -232,7 +232,7 @@ In der Weboberfläche muss diese Freigabe bewusst bestätigt werden. Ohne diese
 Bestätigung starten Backup- und Restore-Aktionen nicht.
 
 Es werden keine Passwörter gespeichert. Die LoxBerry-sudoers-Regel erlaubt dem
-LoxBerry-Webuser ausschließlich den Start des Backend-Skripts dieses Plugins
+LoxBerry-Webuser ausschliesslich den Start des Backend-Skripts dieses Plugins
 ohne Passwort.
 
 ### Backup-Verzeichnis
@@ -267,7 +267,7 @@ Beispiel für ein System mit zwei USB-Mounts:
 Backup-Verzeichnis:
 /media/usb/PI_Backup/loxberry-hostbackup
 
-Vom Backup ausschließen:
+Vom Backup ausschliessen:
 /media/usb/PI_Backup/dietpi-backup
 /media/usb/PI_Backup/dietpi-sync
 /media/usb/PI_Backup/Bookworm
@@ -335,11 +335,11 @@ Laufende, fehlgeschlagene oder unvollständige Backup-Verzeichnisse werden dabei
 nicht als reguläre Backups gezählt. Sie müssen bei Bedarf manuell geprüft und
 gelöscht werden.
 
-### Vom Backup Ausschließen
+### Vom Backup Ausschliessen
 
 Ein Eintrag pro Zeile.
 
-Sinnvoll für sehr große Datenpfade, alte Backupordner, Netzwerkshares,
+Sinnvoll für sehr grosse Datenpfade, alte Backupordner, Netzwerkshares,
 temporäre Daten oder Verzeichnisse, die nicht Teil des Disaster-Recovery-
 Backups sein sollen.
 
@@ -370,7 +370,7 @@ Wenn aktiviert, wird nach jedem Backup zusätzlich ein `.tar.gz`-Archiv erstellt
 
 Das ist praktisch zum Herunterladen, Kopieren oder Archivieren. Es benötigt aber
 zusätzlichen Speicherplatz und Zeit. Bei inkrementellen Snapshots kann ein
-Export-Archiv deutlich größer sein als der zusätzliche Speicherverbrauch des
+Export-Archiv deutlich grösser sein als der zusätzliche Speicherverbrauch des
 Snapshot-Ordners, weil das Archiv einen transportierbaren Stand enthält.
 
 ### Einstellungen Exportieren Und Importieren
@@ -419,7 +419,7 @@ Während ein Backup läuft:
 - sind Datei-Explorer, Restore und Export für dieses laufende Backup gesperrt
 
 Nach Abschluss stoppt die Anzeige der letzten Log-Aktualisierung. Die
-Backup-Liste wird anschließend aktualisiert.
+Backup-Liste wird anschliessend aktualisiert.
 
 ## Backup-Liste Und Aktionen
 
@@ -428,7 +428,7 @@ Die Backup-Liste zeigt pro Backup:
 - ID
 - Status
 - Host
-- Größe
+- Grösse
 - Dateianzahl
 - Abschlusszeit
 - Exportstatus
@@ -438,7 +438,7 @@ Mögliche Aktionen:
 
 - `Dateien`: Backup-Explorer für ein vollständiges Backup öffnen.
 - `Restore`: Restore-Bereich für genau dieses Backup vorbereiten.
-- `Export`: vorhandenes Export-Archiv herunterladen oder Export anstoßen.
+- `Export`: vorhandenes Export-Archiv herunterladen oder Export anstossen.
 - `Löschen`: Backup und zugehöriges Export-Archiv entfernen.
 
 `Datei auswählen` und `Externes Backup importieren` sind für bereits extern
@@ -534,7 +534,7 @@ Prüfung möglich bleibt.
 - kein Ersatz für applikationsspezifische Datenbank-Backups
 - Plattformmigration kann manuelle Nacharbeit erfordern
 - Bootloader-, Kernel- und Partitionslayout-Themen werden nicht gelöst
-- sehr große Backups und Exporte müssen auf Speicherplatz und Laufzeit getestet werden
+- sehr grosse Backups und Exporte müssen auf Speicherplatz und Laufzeit getestet werden
 - inkrementelle Snapshots setzen für optimale Speicherersparnis ein Dateisystem
   mit zuverlässiger Hardlink-Unterstützung voraus, z. B. `ext4`
 - kein sektorbasiertes Raw-Disk-/Blockdevice-Image wie z. B. `dd` oder Clonezilla

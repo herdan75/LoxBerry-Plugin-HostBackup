@@ -522,7 +522,7 @@ my %cfg_months = map { $_ => 1 } @cfg_months;
 my $all_months_checked = checked_attr($cfg_months{'*'});
 my @month_checked = map { checked_attr($cfg_months{'*'} || $cfg_months{"$_"}) } 0..12;
 
-my $info_backup_root = info_button('Hier legst du fest, wohin die Backups geschrieben werden. Für ein echtes Host-Backup sollte das ein externer Datenträger, ein separates Mount oder ein großer zweiter Datenspeicher sein. Wenn die Systemkarte selbst ausfällt, hilft ein Backup auf derselben Karte nicht.');
+my $info_backup_root = info_button('Hier legst du fest, wohin die Backups geschrieben werden. Für ein echtes Host-Backup sollte das ein externer Datenträger, ein separates Mount oder ein grosser zweiter Datenspeicher sein. Wenn die Systemkarte selbst ausfällt, hilft ein Backup auf derselben Karte nicht.');
 my $info_backup_mode = info_button('Vollbackup kopiert jeden Stand vollständig. Inkrementeller Snapshot nutzt rsync mit Hardlinks auf das vorherige vollständige Backup: jedes Backup bleibt einzeln wiederherstellbar, unveränderte Dateien benötigen aber kaum zusätzlichen Speicher. Für zuverlässige Speicherersparnis wird ein Linux-Dateisystem wie ext4 empfohlen.');
 my $info_retention = info_button('Legt fest, wie viele fertige Backups behalten werden. Erlaubt sind 1 bis 10. Bei inkrementellen Snapshots ist das Löschen alter Backups sicher: unveränderte Dateien sind per Hardlink in jedem Snapshot sichtbar. Wird ein alter Snapshot entfernt, bleiben Dateien erhalten, solange sie noch von einem jüngeren Snapshot referenziert werden. Sobald nach einem erfolgreichen Backup mehr Backups vorhanden sind als erlaubt, entfernt das Plugin automatisch das älteste fertige Backup und das passende Export-Archiv.');
 my $info_schedule = info_button('Der Zeitplan erstellt Backups automatisch per Cron. Täglich bedeutet jeden Tag zur Startzeit. Wöchentlich bedeutet an den gewählten Wochentagen zur Startzeit. Monatlich bedeutet an den gewählten Tagen in den gewählten Monaten zur Startzeit.');
@@ -532,19 +532,19 @@ my $info_monthdays = info_button('Nur bei monatlichen Backups relevant. Du kanns
 my $info_months = info_button('Nur bei monatlichen Backups relevant. Mit Alle Monate läuft der Monatsplan jeden Monat. Alternativ kannst du einzelne Monate wählen, zum Beispiel Jan, Apr, Jul und Okt für Quartalsbackups.');
 my $info_pre_hook = info_button('Optionales Skript, das direkt vor dem Backup ausgeführt wird. Sinnvoll für Datenbank-Dumps oder das Vorbereiten von Diensten. Das Skript muss absolut angegeben werden und wird aus Sicherheitsgründen nur ausgeführt, wenn es Root gehört und nicht durch andere Benutzer beschreibbar ist.');
 my $info_post_hook = info_button('Optionales Skript, das nach dem Backup ausgeführt wird. Sinnvoll zum Aufräumen, Dienste wieder in einen gewünschten Zustand zu bringen oder Benachrichtigungen auszuführen. Es gelten dieselben Sicherheitsregeln wie beim Skript vor dem Backup.');
-my $info_excludes = info_button('Hier kannst du Pfade vom rsync-Backup ausschließen, je ein Pfad pro Zeile. Das ist sinnvoll für große Medienarchive, Netzwerkshares oder Daten, die separat gesichert werden. Zu viele Ausschlüsse können aber die Wiederherstellung unvollständig machen.');
+my $info_excludes = info_button('Hier kannst du Pfade vom rsync-Backup ausschliessen, je ein Pfad pro Zeile. Das ist sinnvoll für grosse Medienarchive, Netzwerkshares oder Daten, die separat gesichert werden. Zu viele Ausschlüsse können aber die Wiederherstellung unvollständig machen.');
 my $info_docker = info_button('Wenn aktiv, stoppt das Plugin laufende Docker-Container vor dem Backup und startet sie danach wieder. Das verbessert die Konsistenz von Datenbanken und Volumes, verursacht aber eine Unterbrechung der Container-Dienste während des Backups.');
 my $info_export = info_button('Erstellt nach jedem Backup zusätzlich ein komprimiertes tar.gz-Archiv. Das ist praktisch zum Download, Kopieren oder Archivieren, benötigt aber zusätzlichen Speicherplatz und Zeit.');
 my $info_root = info_button('Diese Bestätigung ist nötig, weil Vollbackup und Restore Systemdateien, Berechtigungen, Docker-Daten und Cronjobs betreffen. Es werden keine Passwörter gespeichert; erlaubt wird nur der Start des Backend-Skripts dieses Plugins.');
 my $info_config_export = info_button('Lädt nur die Einstellungen dieses Plugins als kleine JSON-Datei herunter. Enthalten sind zum Beispiel Backup-Verzeichnis, Ausschlüsse, Zeitplan und Docker-Optionen, aber keine Backup-Daten und keine Passwörter.');
 my $info_config_import = info_button('Liest eine zuvor exportierte Einstellungsdatei wieder ein. Das ist praktisch nach einer Neuinstallation des Plugins. Danach bitte Pfade und Root-Freigabe kurz prüfen und speichern, falls sich Laufwerke geändert haben.');
-my $info_table = info_button('Diese Liste zeigt vorhandene Backups mit Status, Host, Größe und Fertigstellungszeit. Ein vollständiges Backup sollte den Status complete haben, bevor du es für Restore-Tests verwendest.');
+my $info_table = info_button('Diese Liste zeigt vorhandene Backups mit Status, Host, Grösse und Fertigstellungszeit. Ein vollständiges Backup sollte den Status complete haben, bevor du es für Restore-Tests verwendest.');
 my $info_import = info_button('Importiert ein extern gespeichertes Backup-Archiv im Format tar.gz, zum Beispiel von deinem PC, NAS oder einem anderen Datenträger. Für Restore eines bereits unten gelisteten Backups brauchst du diese Datei-Auswahl nicht.');
 my $info_delete = info_button('Löscht den Backup-Ordner und ein eventuell vorhandenes Export-Archiv dieses Backups. Das kann nicht rückgängig gemacht werden.');
 my $info_restore = info_button('Wählt dieses Backup für eine Wiederherstellung aus. Danach wird unterhalb der Backup-Liste die Restore-Prüfung mit Bestätigung und Startbutton für genau dieses Backup eingeblendet.');
 my $info_browse = info_button('Öffnet den Datei-Explorer für dieses Backup. Damit kannst du prüfen, welche Dateien im Backup enthalten sind.');
 my $info_browse_pending = info_button('Dieses Backup ist noch nicht vollständig abgeschlossen. Dateien, Restore und Export werden erst freigegeben, wenn Status, Manifest und rootfs vollständig sind.');
-my $info_download = info_button('Erstellt bei Bedarf ein Export-Archiv und lädt dieses Backup als tar.gz-Datei auf deinen Rechner herunter. Das kann bei großen Backups einige Zeit dauern.');
+my $info_download = info_button('Erstellt bei Bedarf ein Export-Archiv und lädt dieses Backup als tar.gz-Datei auf deinen Rechner herunter. Das kann bei grossen Backups einige Zeit dauern.');
 my $info_backup_start = info_button('Startet den Backup-Vorgang. Vor dem eigentlichen Backup prüft das Plugin wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und Docker-Hinweise.');
 
 sub render_target_notice {
@@ -872,7 +872,7 @@ print <<HTML;
 </label>
 
 <label class="wide">
-<span>Vom Backup ausschließen $info_excludes</span>
+<span>Vom Backup ausschliessen $info_excludes</span>
 <textarea data-role="none" name="rsync_extra_excludes" rows="5">$cfg_excludes</textarea>
 </label>
 
@@ -958,7 +958,7 @@ $info_config_import
 <th>ID</th>
 <th>Status</th>
 <th>Host</th>
-<th>Größe</th>
+<th>Grösse</th>
 <th>Dateien</th>
 <th>Fertiggestellt</th>
 <th>Export</th>
@@ -1004,7 +1004,7 @@ if ($browse_id) {
 <tr>
 <th>Name</th>
 <th>Typ</th>
-<th>Größe</th>
+<th>Grösse</th>
 <th>Aktion</th>
 </tr>
 </thead>
@@ -1333,7 +1333,7 @@ print <<HTML;
 
   if (stopForm) {
     stopForm.addEventListener('submit', function (event) {
-      if (!window.confirm('Backup wirklich stoppen? Docker-Container, die dieses Backup gestoppt hat, werden anschließend wieder gestartet.')) {
+      if (!window.confirm('Backup wirklich stoppen? Docker-Container, die dieses Backup gestoppt hat, werden anschliessend wieder gestartet.')) {
         event.preventDefault();
       }
     });

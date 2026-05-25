@@ -146,7 +146,7 @@ Derzeit keine Einträge.
 - Live-Status bleibt erhalten, wenn während eines laufenden Backups ein anderes
   vollständiges Backup im Explorer geöffnet wird.
 - Stop-Button im Live-Status ergänzt, um laufende Backups abbrechen zu können.
-- Backup-Liste zeigt Status, Host, Größe, Dateianzahl, Abschlusszeit,
+- Backup-Liste zeigt Status, Host, Grösse, Dateianzahl, Abschlusszeit,
   Exportstatus und Aktionen.
 - Aktionen für laufende oder unvollständige Backups werden gesperrt, bis das
   Backup vollständig abgeschlossen ist.
@@ -180,7 +180,7 @@ Derzeit keine Einträge.
   Retention-Schritte.
 - Abschlussmeldung und `complete`-Manifest werden erst nach Export-Archiv und
   Aufbewahrungsregel geschrieben.
-- Backup-Liste kann Status, Abschlusszeit, Größe und Dateianzahl aus Logdateien
+- Backup-Liste kann Status, Abschlusszeit, Grösse und Dateianzahl aus Logdateien
   und Backup-Ordnern ableiten, wenn `manifest.json` fehlt oder veraltet ist.
 - Docker-Stop/Start protokolliert Container-Namen und IDs, arbeitet
   containerweise und nutzt Timeouts, wenn verfügbar.
