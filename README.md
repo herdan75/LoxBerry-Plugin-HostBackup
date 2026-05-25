@@ -1,6 +1,6 @@
 # LoxBerry Host Backup
 
-**Status:** Version 0.4.0, erste vorsichtig freigegebene Version.
+**Status:** Version 0.4.1, erste vorsichtig freigegebene Version.
 
 Dieses Plugin wurde bereits auf einem LoxBerry-/DietPi-Testsystem installiert,
 konfiguriert und für echte Vollbackups sowie inkrementelle Snapshot-Backups
@@ -162,13 +162,13 @@ zur LoxBerry-Administration gewechselt werden kann.
 Release-Paket:
 
 ```text
-https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.4.0/LoxBerryHostBackup_0.4.0.zip
+https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.4.1/LoxBerryHostBackup_0.4.1.zip
 ```
 
 Lokales Paket nach dem Build:
 
 ```text
-LoxBerryHostBackup_0.4.0.zip
+LoxBerryHostBackup_0.4.1.zip
 ```
 
 ## Erste Tests Auf LoxBerry
@@ -330,6 +330,11 @@ referenziert. Wird ein alter Snapshot gelöscht, verschwinden nur dessen
 Verzeichniseinträge; Datei-Inhalte bleiben erhalten, solange sie noch von einem
 jüngeren Snapshot referenziert werden. Erst wenn kein verbleibender Snapshot
 mehr auf einen Datei-Inhalt zeigt, wird der Speicher freigegeben.
+
+Hinweis zur angezeigten Grösse: Bei inkrementellen Snapshots kann ein neuer
+Snapshot sehr klein wirken. Das ist normal. Unveränderte Dateien werden per
+Hardlink geteilt und belegen auf dem Datenträger nicht nochmals denselben
+Speicherplatz.
 
 Laufende, fehlgeschlagene oder unvollständige Backup-Verzeichnisse werden dabei
 nicht als reguläre Backups gezählt. Sie müssen bei Bedarf manuell geprüft und
@@ -569,7 +574,7 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 
 Branches:
 
-- `main`: aktueller freigegebener Stand 0.4.0
+- `main`: aktueller freigegebener Stand 0.4.1
 - `develop`: laufende Weiterentwicklung
 
 Update-Dateien:

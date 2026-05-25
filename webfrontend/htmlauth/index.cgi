@@ -1107,7 +1107,7 @@ if ($browse_id) {
 <div class="subpanel" id="backup-browser">
 <h3>Dateien in Backup <code>$safe_browse_id</code></h3>
 <p>Pfad: <code>$safe_browse_path</code></p>
-<section class="inline-notice warning">Der Datei-Explorer dient nur zur Ansicht des Backup-Inhalts. F&uuml;r eine vollst&auml;ndige Wiederherstellung bitte den Restore-Button des gew&uuml;nschten Backups verwenden.</section>
+<section class="inline-notice warning">Der Datei-Explorer dient nur zur Ansicht des Backup-Inhalts. F&uuml;r eine vollst&auml;ndige Wiederherstellung bitte den Restore-Button des gew&uuml;nschten Backups verwenden. Bei inkrementellen Snapshots sind kleine Gr&ouml;ssen normal: Unver&auml;nderte Dateien werden per Hardlink geteilt und belegen nicht mehrfach Speicher.</section>
 };
 
   if ($browse_error) {

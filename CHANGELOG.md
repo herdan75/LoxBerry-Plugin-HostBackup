@@ -9,6 +9,13 @@ validiert werden.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-25
+
+### Weboberfläche
+
+- Der Datei-Explorer erklärt nun kurz, warum inkrementelle Snapshots trotz
+  vollständiger Ansicht nur wenig zusätzlichen Speicher belegen können.
+
 ## [0.4.0] - 2026-05-25
 
 ### Backup-Konsistenz
@@ -263,7 +270,8 @@ validiert werden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.4.0...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.4.1...develop
+[0.4.1]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.4.1
 [0.4.0]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.4.0
 [0.3.2]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.3.2
 [0.3.1]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.3.1
