@@ -563,17 +563,13 @@ body.is-loading .loading-overlay {
 }
 
 .stop-target-panel {
-  border-top: 1px solid #dddddd;
-  margin-top: 13px;
-  padding-top: 10px;
+  margin: 6px 0 12px;
+  padding: 0;
 }
 
 .stop-target-panel > summary {
   color: #1f2a33;
   cursor: pointer;
-  display: inline-flex !important;
-  align-items: center;
-  gap: 6px;
   font-size: 13px;
   font-weight: 700;
   line-height: 1.25;
