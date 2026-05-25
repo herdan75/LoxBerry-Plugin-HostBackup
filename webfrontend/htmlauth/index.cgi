@@ -618,12 +618,12 @@ sub render_backup_rows {
 
     if ($is_complete) {
       $backup_actions = qq{
-<form data-ajax="false" method="get" class="inline-form">
+<form data-ajax="false" method="get" class="inline-form" data-return-anchor="backup-browser">
 <input data-role="none" type="hidden" name="browse_id" value="$id">
 $active_task_hidden
 <button data-role="none" type="submit">Dateien</button>$info_browse
 </form>
-<form data-ajax="false" method="get" class="inline-form">
+<form data-ajax="false" method="get" class="inline-form" data-return-anchor="restore-panel">
 <input data-role="none" type="hidden" name="restore_id" value="$id">
 $active_task_hidden
 <button data-role="none" type="submit">Restore</button>$info_restore
@@ -1104,7 +1104,7 @@ if ($browse_id) {
   my $safe_browse_path = escapeHTML($browse_path || '/');
 
   print qq{
-<div class="subpanel">
+<div class="subpanel" id="backup-browser">
 <h3>Dateien in Backup <code>$safe_browse_id</code></h3>
 <p>Pfad: <code>$safe_browse_path</code></p>
 <section class="inline-notice warning">Der Datei-Explorer dient nur zur Ansicht des Backup-Inhalts. F&uuml;r eine vollst&auml;ndige Wiederherstellung bitte den Restore-Button des gew&uuml;nschten Backups verwenden.</section>
@@ -1117,7 +1117,7 @@ if ($browse_id) {
       my @parts = split m{/+}, $browse_path;
       pop @parts;
       my $parent = join '/', @parts;
-      my $parent_url = url_with_active_task(browse_id => $browse_id, path => $parent);
+      my $parent_url = url_with_active_task(browse_id => $browse_id, path => $parent) . '#backup-browser';
       print qq{<p><a href="$parent_url">Eine Ebene höher</a></p>};
     }
 
@@ -1142,7 +1142,7 @@ if ($browse_id) {
       my $open = '-';
 
       if (($item->{type} || '') eq 'directory') {
-        my $url = url_with_active_task(browse_id => $browse_id, path => $path);
+        my $url = url_with_active_task(browse_id => $browse_id, path => $path) . '#backup-browser';
         $open = qq{<a href="$url">Öffnen</a>};
       }
 
@@ -1171,7 +1171,7 @@ if ($restore_id) {
   my $safe_restore_id = escapeHTML($restore_id);
 
   print qq{
-<section class="panel restore-panel">
+<section class="panel restore-panel" id="restore-panel">
 <h2>Restore</h2>
 <fieldset class="backup-content">
 <legend>Wiederherstellung vorbereiten</legend>
@@ -1251,6 +1251,65 @@ function hostbackupClosest(node, selector) {
   }
   return null;
 }
+
+(function () {
+  var key = 'loxberryhostbackup-scroll';
+
+  function saveScroll(targetId) {
+    try {
+      sessionStorage.setItem(key, JSON.stringify({
+        y: window.pageYOffset || document.documentElement.scrollTop || 0,
+        target: targetId || ''
+      }));
+    } catch (e) {}
+  }
+
+  function restoreScroll() {
+    var data = null;
+    try {
+      data = JSON.parse(sessionStorage.getItem(key) || 'null');
+      sessionStorage.removeItem(key);
+    } catch (e) {
+      data = null;
+    }
+
+    var hashTarget = window.location.hash ? window.location.hash.replace(/^#/, '') : '';
+    var targetId = hashTarget || (data && data.target ? data.target : '');
+    var y = data && typeof data.y === 'number' ? data.y : null;
+
+    window.setTimeout(function () {
+      var target = targetId ? document.getElementById(targetId) : null;
+      if (target) {
+        target.scrollIntoView({ block: 'start' });
+      } else if (y !== null) {
+        window.scrollTo(0, y);
+      }
+    }, 80);
+
+    window.setTimeout(function () {
+      if (!targetId && y !== null) {
+        window.scrollTo(0, y);
+      }
+    }, 450);
+  }
+
+  document.addEventListener('submit', function (event) {
+    var form = hostbackupClosest(event.target, 'form');
+    if (!form) return;
+    saveScroll(form.getAttribute('data-return-anchor') || '');
+  }, true);
+
+  document.addEventListener('click', function (event) {
+    var link = hostbackupClosest(event.target, 'a');
+    if (!link) return;
+    var href = link.getAttribute('href') || '';
+    if (!href || href.indexOf('javascript:') === 0 || href.indexOf('#') === 0) return;
+    if (link.hostname && link.hostname !== window.location.hostname) return;
+    saveScroll('');
+  }, true);
+
+  restoreScroll();
+}());
 
 (function () {
   var overlay = document.getElementById('loading-overlay');
