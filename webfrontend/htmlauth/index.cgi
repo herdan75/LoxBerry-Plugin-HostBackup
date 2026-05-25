@@ -1300,71 +1300,63 @@ function hostbackupCacheBuster(url) {
   var activeTask = monitor ? monitor.getAttribute('data-active-task') : '';
   var activeParam = activeTask ? '&active_task=' + encodeURIComponent(activeTask) : '';
 
-  function loadFragment(url, target, fallback) {
+  function loadFragment(url, target, fallback, timeoutMs) {
     if (!target) return;
+    var request = new XMLHttpRequest();
+    var failed = false;
 
-    fetch(url + '&_=' + Date.now(), { cache: 'no-store' })
-      .then(function (response) {
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        return response.text();
-      })
-      .then(function (html) {
-        target.innerHTML = html;
-      })
-      .catch(function () {
-        target.innerHTML = fallback;
-      });
+    function showFallback() {
+      if (failed) return;
+      failed = true;
+      target.innerHTML = fallback;
+    }
+
+    request.onreadystatechange = function () {
+      if (request.readyState !== 4) return;
+      if (request.status >= 200 && request.status < 300) {
+        target.innerHTML = request.responseText;
+      } else {
+        showFallback();
+      }
+    };
+    request.onerror = showFallback;
+    request.ontimeout = showFallback;
+    if (timeoutMs && timeoutMs > 0) {
+      request.timeout = timeoutMs;
+    }
+    request.open('GET', hostbackupCacheBuster(url), true);
+    request.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+    request.send();
   }
 
-  loadFragment(
-    '?action=target-notice',
-    targetNotice,
-    '<section class="inline-notice warning">Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>'
-  );
+  try {
+    loadFragment('?action=target-notice', targetNotice, '<section class="inline-notice warning">Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>', 8000);
+  } catch (ignored) {}
+  try {
+    loadFragment('?action=backup-list' + activeParam, backupListBody, '<tr><td colspan="8" class="empty">Backup-Liste konnte nicht geladen werden.</td></tr>', 0);
+  } catch (ignored) {}
+  try {
+    window.setTimeout(function () {
+      loadFragment('?action=stop-targets', stopTargetsList, '<p class="empty">Dienste und Container konnten nicht geladen werden.</p>', 9000);
+    }, 250);
+  } catch (ignored) {}
 
-  loadFragment(
-    '?action=backup-list' + activeParam,
-    backupListBody,
-    '<tr><td colspan="8" class="empty">Backup-Liste konnte nicht geladen werden.</td></tr>'
-  );
-
-  loadFragment(
-    '?action=stop-targets',
-    stopTargetsList,
-    '<p class="empty">Dienste und Container konnten nicht geladen werden.</p>'
-  );
-}());
-
-(function () {
-  var stopTargetsList = document.getElementById('stop-targets-list');
-  if (!stopTargetsList) return;
-
-  stopTargetsList.addEventListener('click', function (event) {
-    var node = event.target;
-
-    while (node && node !== stopTargetsList) {
-      if (node.getAttribute && node.getAttribute('data-stop-target-preset')) {
-        var mode = node.getAttribute('data-stop-target-preset');
-        var boxes = stopTargetsList.querySelectorAll('input[name="stop_targets"]');
-
-        hostbackupEach(boxes, function (box) {
-          box.checked = mode === 'recommended'
-            ? box.getAttribute('data-recommended') === '1'
-            : false;
+  if (stopTargetsList) {
+    stopTargetsList.addEventListener('click', function (event) {
+      var button = hostbackupClosest(event.target, '[data-stop-target-preset]');
+      if (!button) return;
+      var mode = button.getAttribute('data-stop-target-preset');
+      var boxes = stopTargetsList.querySelectorAll('input[name="stop_targets"]');
+      hostbackupEach(boxes, function (box) {
+        box.checked = mode === 'recommended' ? box.getAttribute('data-recommended') === '1' : false;
+      });
+      if (mode === 'recommended') {
+        hostbackupEach(stopTargetsList.querySelectorAll('details.stop-target-group'), function (detail) {
+          detail.open = !!detail.querySelector('input[name="stop_targets"]:checked');
         });
-
-        if (mode === 'recommended') {
-          hostbackupEach(stopTargetsList.querySelectorAll('details.stop-target-group'), function (detail) {
-            detail.open = !!detail.querySelector('input[name="stop_targets"]:checked');
-          });
-        }
-
-        return;
       }
-
-      node = node.parentNode;
-    }
-  });
+    });
+  }
 }());
 
 (function () {
