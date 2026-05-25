@@ -1298,12 +1298,16 @@ function hostbackupCacheBuster(url) {
   var stopTargetsList = document.getElementById('stop-targets-list');
   var monitor = document.getElementById('task-monitor');
   var activeTask = monitor ? monitor.getAttribute('data-active-task') : '';
-  var activeParam = activeTask ? '&active_task=' + encodeURIComponent(activeTask) : '';
+  var fragmentBaseUrl = window.location.pathname;
+
+  function fragmentUrl(action, extra) {
+    return fragmentBaseUrl + '?action=' + encodeURIComponent(action) + (extra || '') + '&_=' + Date.now();
+  }
 
   function loadFragment(url, target, fallback) {
     if (!target) return;
 
-    fetch(url + '&_=' + Date.now(), { cache: 'no-store' })
+    fetch(url, { cache: 'no-store' })
       .then(function (response) {
         if (!response.ok) throw new Error('HTTP ' + response.status);
         return response.text();
@@ -1317,19 +1321,19 @@ function hostbackupCacheBuster(url) {
   }
 
   loadFragment(
-    '?action=target-notice',
+    fragmentUrl('target-notice', ''),
     targetNotice,
     '<section class="inline-notice warning">Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>'
   );
 
   loadFragment(
-    '?action=backup-list' + activeParam,
+    fragmentUrl('backup-list', activeTask ? '&active_task=' + encodeURIComponent(activeTask) : ''),
     backupListBody,
     '<tr><td colspan="8" class="empty">Backup-Liste konnte nicht geladen werden.</td></tr>'
   );
 
   loadFragment(
-    '?action=stop-targets',
+    fragmentUrl('stop-targets', ''),
     stopTargetsList,
     '<p class="empty">Dienste und Container konnten nicht geladen werden.</p>'
   );
