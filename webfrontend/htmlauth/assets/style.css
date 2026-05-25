@@ -355,12 +355,15 @@ body.is-loading .loading-overlay {
 }
 
 .schedule-card {
-  --section-content-width: 1080px;
+  --section-content-width: 100%;
   background: #f7f7f7;
   border: 1px solid #d3d3d3;
   border-radius: 8px;
+  justify-self: center;
   margin: 18px 0 0;
-  padding: 16px 24px 18px;
+  max-width: 1080px;
+  padding: 12px 12px 14px;
+  width: 100%;
 }
 
 .settings-group {
@@ -376,7 +379,7 @@ body.is-loading .loading-overlay {
   display: inline-flex;
   font-size: 14px;
   font-weight: 700;
-  margin-left: max(0px, calc((100% - var(--section-content-width)) / 2));
+  margin-left: 0;
   margin-bottom: 12px;
   min-height: 28px;
   padding: 4px 11px;
@@ -667,6 +670,19 @@ body.is-loading .loading-overlay {
   font-size: 13px;
   margin-right: 8px;
   padding: 5px 10px;
+}
+
+.backup-table-frame {
+  background: #f7f7f7;
+  border: 1px solid #d3d3d3;
+  border-radius: 8px;
+  margin: 12px auto 0;
+  max-width: 1080px;
+  padding: 10px;
+}
+
+.backup-table-frame table {
+  background: #ffffff;
 }
 
 #hostbackup-app button:hover,

@@ -948,6 +948,7 @@ $info_config_import
 
 </form>
 
+<div class="backup-table-frame">
 <table>
 
 <thead>
@@ -971,6 +972,7 @@ HTML
 print <<HTML;
 </tbody>
 </table>
+</div>
 HTML
 
 if ($browse_id) {
