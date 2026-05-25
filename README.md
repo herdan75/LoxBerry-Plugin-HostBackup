@@ -374,6 +374,13 @@ werden in der Auswahl nicht angeboten. LoxBerry-Plugins ohne eigenen
 systemd-Dienst werden nicht hart beendet; dafür sind Pre-/Post-Backup-Hooks
 der sicherere Weg.
 
+Die tatsächlich gestoppten Container und Dienste werden im Backup-Verzeichnis
+protokolliert und zusätzlich im `manifest.json` festgehalten. Auch bei einem
+manuellen Abbruch wird diese Restart-Liste verwendet, damit bereits gestoppte
+Ziele wieder gestartet werden. Ein abgebrochenes Backup wird als `stopped`
+markiert; die Weboberfläche fragt danach, ob das unvollständige Backup gelöscht
+werden soll.
+
 Für Datenbanken oder Anwendungen mit eigenen Backup-Mechanismen können
 zusätzliche Pre-/Post-Backup-Hooks sinnvoll sein.
 

@@ -17,6 +17,12 @@ validiert werden.
 - Das Plugin stoppt nur ausgewählte Ziele, die vor dem Backup wirklich liefen,
   und startet genau diese Ziele nach erfolgreichem Backup, Fehler oder manuellem
   Abbruch wieder.
+- Gestoppte Docker-Container und systemd-Dienste werden im Backup-Manifest und
+  im Log protokolliert, damit nachvollziehbar bleibt, welche Ziele wieder
+  gestartet werden mussten.
+- Bei manuellem Abbruch wird das Backup als `stopped` markiert. Die
+  Weboberfläche fragt anschliessend, ob das unvollständige Backup direkt
+  gelöscht werden soll.
 - LoxBerry-nahe Dienste werden separat gruppiert; kritische Systemdienste wie
   Netzwerk, Webserver, SSH, Docker-Daemon und systemd-Basisdienste werden nicht
   zur Auswahl angeboten.

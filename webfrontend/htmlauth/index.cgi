@@ -1419,6 +1419,36 @@ print <<HTML;
     }
   }
 
+  function backupIdFromTask() {
+    var match = /^backup-([A-Za-z0-9._-]+)\.log$/.exec(task || '');
+    return match ? match[1] : '';
+  }
+
+  function redirectWithMessage(message) {
+    window.location.href = window.location.pathname + '?msg=' + encodeURIComponent(message);
+  }
+
+  function deleteStoppedBackup(backupId) {
+    var form = document.createElement('form');
+    var action = document.createElement('input');
+    var id = document.createElement('input');
+    form.method = 'post';
+    form.action = window.location.pathname;
+    action.type = 'hidden';
+    action.name = 'action';
+    action.value = 'delete-backup';
+    id.type = 'hidden';
+    id.name = 'backup_id';
+    id.value = backupId;
+    form.appendChild(action);
+    form.appendChild(id);
+    document.body.appendChild(form);
+    if (window.hostbackupShowLoading) {
+      window.hostbackupShowLoading('Unfertiges Backup wird geloescht...');
+    }
+    form.submit();
+  }
+
   function renderStatus(data) {
     pollFailures = 0;
     inFlight = false;
@@ -1444,7 +1474,7 @@ print <<HTML;
     } else if (state === 'failed') {
       heartbeatEl.textContent = 'Fehlgeschlagen. Bitte Logausgabe prüfen.';
     } else if (state === 'stopped') {
-      heartbeatEl.textContent = 'Gestoppt. Die Backup-Liste wird aktualisiert.';
+      heartbeatEl.textContent = 'Gestoppt. Dienste und Container wurden anhand der Restart-Liste wieder gestartet.';
     } else if (data.now && data.mtime) {
       var age = Math.max(0, Number(data.now) - Number(data.mtime));
       heartbeatEl.textContent = 'Letzte Log-Aktualisierung vor ' + age + ' Sekunden.';
@@ -1467,8 +1497,16 @@ print <<HTML;
         refreshScheduled = true;
         if (state === 'finished' || state === 'stopped') {
           window.setTimeout(function () {
-            var msg = state === 'stopped' ? 'backup_stop_requested' : (task.indexOf('restore-') === 0 ? 'restore_finished' : 'backup_finished');
-            window.location.href = window.location.pathname + '?msg=' + encodeURIComponent(msg);
+            var backupId = backupIdFromTask();
+            if (state === 'stopped' && backupId) {
+              if (window.confirm('Das Backup wurde gestoppt und ist unvollstaendig. Soll dieses unfertige Backup jetzt geloescht werden?')) {
+                deleteStoppedBackup(backupId);
+              } else {
+                redirectWithMessage('backup_stop_requested');
+              }
+              return;
+            }
+            redirectWithMessage(task.indexOf('restore-') === 0 ? 'restore_finished' : 'backup_finished');
           }, 2500);
         }
       }
@@ -1477,7 +1515,7 @@ print <<HTML;
 
   if (stopForm) {
     stopForm.addEventListener('submit', function (event) {
-      if (!window.confirm('Backup wirklich stoppen? Docker-Container, die dieses Backup gestoppt hat, werden anschliessend wieder gestartet.')) {
+      if (!window.confirm('Backup wirklich stoppen? Dienste und Docker-Container, die dieses Backup bereits gestoppt hat, werden anschliessend anhand der Restart-Liste wieder gestartet.')) {
         event.preventDefault();
       }
     });

@@ -576,6 +576,25 @@ write_manifest() {
 
   perl -MJSON::PP -e '
     my ($manifest, $backup_id, $status, $started_at, $finished_at, $size, $files, $os, $arch, $lbver, $backup_mode) = @ARGV;
+    my $target_dir = $manifest;
+    $target_dir =~ s{/manifest\.json$}{};
+    my @docker_stopped;
+    if (open my $docker_fh, "<", "$target_dir/docker-running-containers.tsv") {
+      while (my $line = <$docker_fh>) {
+        chomp $line;
+        my ($id, $name) = split /\t/, $line, 2;
+        next unless defined $id && length $id;
+        push @docker_stopped, { id => $id, name => ($name // "") };
+      }
+    }
+    my @systemd_stopped;
+    if (open my $systemd_fh, "<", "$target_dir/systemd-running-services.txt") {
+      while (my $unit = <$systemd_fh>) {
+        chomp $unit;
+        next unless length $unit;
+        push @systemd_stopped, $unit;
+      }
+    }
     my $data = {
       schema_version => 1,
       backup_id => $backup_id,
@@ -597,6 +616,10 @@ write_manifest() {
         version => $lbver,
       },
     };
+    $data->{stopped_targets} = {
+      docker => \@docker_stopped,
+      systemd => \@systemd_stopped,
+    } if @docker_stopped || @systemd_stopped;
     chomp $data->{host}->{hostname};
     open my $fh, ">", $manifest or die "Cannot write $manifest: $!";
     print $fh JSON::PP->new->ascii->pretty->canonical->encode($data);
@@ -924,8 +947,36 @@ start_systemd_if_needed() {
   fi
 }
 
+log_restart_targets() {
+  local state_dir="$1"
+  local docker_file="$state_dir/docker-running-containers.tsv"
+  local systemd_file="$state_dir/systemd-running-services.txt"
+  local id name unit found=0
+
+  if [ -s "$docker_file" ]; then
+    found=1
+    log "Docker containers recorded for restart:"
+    while IFS="$(printf '\t')" read -r id name; do
+      [ -n "$id" ] || continue
+      log "  ${name:-unknown} ($id)"
+    done < "$docker_file"
+  fi
+
+  if [ -s "$systemd_file" ]; then
+    found=1
+    log "Systemd services recorded for restart:"
+    while IFS= read -r unit; do
+      [ -n "$unit" ] || continue
+      log "  $unit"
+    done < "$systemd_file"
+  fi
+
+  [ "$found" -eq 1 ] || log "No stopped services or Docker containers recorded for restart"
+}
+
 start_backup_targets_if_needed() {
   local state_dir="$1"
+  log_restart_targets "$state_dir"
   start_docker_if_needed "$state_dir"
   start_systemd_if_needed "$state_dir"
 }
@@ -942,6 +993,18 @@ calculate_size() {
 calculate_files() {
   local path="$1"
   find "$path/rootfs" -xdev -type f 2>/dev/null | wc -l | tr -d ' '
+}
+
+manifest_started_at() {
+  local target="$1"
+  local manifest="$target/manifest.json"
+  [ -r "$manifest" ] || return 0
+  perl -MJSON::PP -e '
+    local $/;
+    open my $fh, "<", $ARGV[0] or exit 0;
+    my $data = eval { decode_json(<$fh>) } || {};
+    print $data->{started_at} if defined $data->{started_at};
+  ' "$manifest" 2>/dev/null || true
 }
 
 latest_complete_backup() {
@@ -1193,11 +1256,12 @@ stop_backup() {
   require_root_for_write
   require_root_permission_ack
   local backup_id="$1"
-  local root target log_file pids child_pids all_pids
+  local root target log_file pids child_pids all_pids started finished size files
   require_backup_id "$backup_id"
   root="$(backup_root)"
   target="$root/$backup_id"
   log_file="$LBP_LOGDIR/backup-$backup_id.log"
+  mkdir -p "$target"
 
   log "Stop requested for backup $backup_id" | tee -a "$log_file"
 
@@ -1224,6 +1288,12 @@ stop_backup() {
 
   log "Restarting services and Docker containers stopped by this backup if needed" | tee -a "$log_file"
   start_backup_targets_if_needed "$target" | tee -a "$log_file" || true
+  started="$(manifest_started_at "$target")"
+  [ -n "$started" ] || started="$(date -Iseconds)"
+  finished="$(date -Iseconds)"
+  size="$(calculate_size "$target")"
+  files="$(calculate_files "$target")"
+  write_manifest "$target" "$backup_id" "stopped" "$started" "$finished" "$size" "$files"
   log "Backup $backup_id stopped by user" | tee -a "$log_file"
 }
 
