@@ -691,21 +691,11 @@ protected_systemd_service() {
   return 1
 }
 
-run_limited() {
-  local seconds="$1"
-  shift
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "$seconds" "$@"
-  else
-    "$@"
-  fi
-}
-
 systemd_service_group() {
   local unit="$1"
   local description="${2:-}"
   local metadata
-  metadata="$(run_limited 3 systemctl show "$unit" -p ExecStart -p FragmentPath -p Description --no-pager 2>/dev/null || true)"
+  metadata="$(systemctl show "$unit" -p ExecStart -p FragmentPath -p Description --no-pager 2>/dev/null || true)"
   if printf '%s\n%s\n%s\n' "$unit" "$description" "$metadata" | grep -Eiq '(/plugins/|/opt/loxberry/(bin|data|config)/plugins|stats4lox|loxone|loxhue|netatmo|zigbee|mqtt|miniserver)'; then
     printf '%s\n' "LoxBerry-/Plugin-Dienste"
   else
@@ -731,11 +721,11 @@ friendly_systemd_label() {
 }
 
 discover_stop_targets() {
-  local tmp unit load active sub description group name image status unit_file
+  local tmp unit load active sub description group name image status
   tmp="$(mktemp)"
 
   if command -v docker >/dev/null 2>&1; then
-    run_limited 6 docker ps -a --format '{{.Names}}\t{{.Image}}\t{{.Status}}' 2>/dev/null |
+    docker ps -a --format '{{.Names}}\t{{.Image}}\t{{.Status}}' 2>/dev/null |
       while IFS="$(printf '\t')" read -r name image status; do
         [ -n "$name" ] || continue
         printf 'docker\t%s\t%s\tDocker-Container\t%s\t%s\n' "$name" "$name" "$status" "$image" >> "$tmp"
@@ -743,7 +733,7 @@ discover_stop_targets() {
   fi
 
   if command -v systemctl >/dev/null 2>&1; then
-    run_limited 8 systemctl list-units --type=service --state=running --all --no-legend --no-pager 2>/dev/null |
+    systemctl list-units --type=service --state=running --all --no-legend --no-pager 2>/dev/null |
       while read -r unit load active sub description; do
         [ -n "$unit" ] || continue
         protected_systemd_service "$unit" && continue
@@ -752,21 +742,17 @@ discover_stop_targets() {
         printf 'systemd\t%s\t%s\t%s\t%s\t%s\n' "$unit" "$label" "$group" "${active}/${sub}" "$unit" >> "$tmp"
       done || true
 
-    find /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system -maxdepth 1 -type f -name '*.service' 2>/dev/null |
-      while IFS= read -r unit_file; do
-        [ -n "$unit_file" ] || continue
-        unit="$(basename "$unit_file")"
+    systemctl list-unit-files --type=service --no-legend --no-pager 2>/dev/null |
+      while read -r unit _state _rest; do
+        [ -n "$unit" ] || continue
         protected_systemd_service "$unit" && continue
         grep -F "$(printf 'systemd\t%s\t' "$unit")" "$tmp" >/dev/null 2>&1 && continue
-        if ! printf '%s\n' "$unit" | grep -Eiq '(stats4lox|loxone|loxhue|netatmo|zigbee|mqtt|miniserver|nodered|node-?red|grafana|influx|telegraf|mosquitto)' \
-          && ! grep -Eiq '(/plugins/|/opt/loxberry/(bin|data|config)/plugins|stats4lox|loxone|loxhue|netatmo|zigbee|mqtt|miniserver|nodered|node-?red|grafana|influx|telegraf|mosquitto)' "$unit_file"; then
-          continue
-        fi
-        description="$(awk -F= '/^Description=/ {print $2; exit}' "$unit_file" 2>/dev/null || true)"
-        [ -n "$description" ] || description="$unit"
-        active="$(run_limited 2 systemctl is-active "$unit" 2>/dev/null || true)"
+        group="$(systemd_service_group "$unit" "")"
+        [ "$group" = "LoxBerry-/Plugin-Dienste" ] || continue
+        description="$(systemctl show "$unit" -p Description --value --no-pager 2>/dev/null || true)"
+        active="$(systemctl is-active "$unit" 2>/dev/null || true)"
         label="$(friendly_systemd_label "$unit" "$description")"
-        printf 'systemd\t%s\t%s\tLoxBerry-/Plugin-Dienste\t%s\t%s\n' "$unit" "$label" "${active:-inactive}" "$unit" >> "$tmp"
+        printf 'systemd\t%s\t%s\t%s\t%s\t%s\n' "$unit" "$label" "$group" "${active:-inactive}" "$unit" >> "$tmp"
       done || true
   fi
 
