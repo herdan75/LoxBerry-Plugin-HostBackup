@@ -1285,28 +1285,38 @@ function hostbackupEach(nodes, callback) {
   var activeTask = monitor ? monitor.getAttribute('data-active-task') : '';
   var activeParam = activeTask ? '&active_task=' + encodeURIComponent(activeTask) : '';
 
-  function loadFragment(url, target, fallback) {
+  function loadFragment(url, target, fallback, timeoutMs) {
     if (!target) return;
     var request = new XMLHttpRequest();
+    var failed = false;
+
+    function showFallback() {
+      if (failed) return;
+      failed = true;
+      target.innerHTML = fallback;
+    }
+
     request.onreadystatechange = function () {
       if (request.readyState !== 4) return;
       if (request.status >= 200 && request.status < 300) {
         target.innerHTML = request.responseText;
       } else {
-        target.innerHTML = fallback;
+        showFallback();
       }
     };
-    request.onerror = function () {
-      target.innerHTML = fallback;
-    };
+    request.onerror = showFallback;
+    request.ontimeout = showFallback;
+    request.timeout = timeoutMs || 12000;
     request.open('GET', url + '&_=' + Date.now(), true);
     request.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
     request.send();
   }
 
-  loadFragment('?action=target-notice', targetNotice, '<section class="inline-notice warning">Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>');
-  loadFragment('?action=stop-targets', stopTargetsList, '<p class="empty">Dienste und Container konnten nicht geladen werden.</p>');
-  loadFragment('?action=backup-list' + activeParam, backupListBody, '<tr><td colspan="8" class="empty">Backup-Liste konnte nicht geladen werden.</td></tr>');
+  loadFragment('?action=target-notice', targetNotice, '<section class="inline-notice warning">Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>', 8000);
+  loadFragment('?action=backup-list' + activeParam, backupListBody, '<tr><td colspan="8" class="empty">Backup-Liste konnte nicht geladen werden.</td></tr>', 12000);
+  window.setTimeout(function () {
+    loadFragment('?action=stop-targets', stopTargetsList, '<p class="empty">Dienste und Container konnten nicht geladen werden.</p>', 9000);
+  }, 250);
 
   if (stopTargetsList) {
     stopTargetsList.addEventListener('click', function (event) {
