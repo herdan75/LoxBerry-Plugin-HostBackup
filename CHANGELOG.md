@@ -41,6 +41,8 @@ validiert werden.
 - Neuer Button `Empfohlene Auswahl setzen` markiert laufende Docker-Container
   und typische datenintensive Dienste wie Datenbanken, MQTT/Zigbee, Node-RED,
   Stats4Lox, Grafana oder InfluxDB.
+- Löschdialoge und Ladehinweise weisen jetzt darauf hin, dass das Entfernen
+  grosser Backups auf langsamen Datenträgern mehrere Minuten dauern kann.
 
 ## [0.3.2] - 2026-05-25
 

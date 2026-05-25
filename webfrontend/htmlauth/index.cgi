@@ -130,7 +130,7 @@ if ($notice eq 'saved') {
 } elsif ($notice eq 'backup_stop_requested') {
   $message = 'Backup-Stopp wurde angefordert. Zuvor gestoppte Docker-Container werden wieder gestartet, falls möglich.';
 } elsif ($notice eq 'backup_deleted') {
-  $message = 'Backup gelöscht.';
+  $message = 'Backup geloescht.';
 } elsif ($notice eq 'backup_imported') {
   $message = 'Backup importiert.';
 } elsif ($notice eq 'config_imported') {
@@ -558,7 +558,7 @@ my @month_checked = map { checked_attr($cfg_months{'*'} || $cfg_months{"$_"}) } 
 
 my $info_backup_root = info_button('Hier legst du fest, wohin die Backups geschrieben werden. Für ein echtes Host-Backup sollte das ein externer Datenträger, ein separates Mount oder ein grosser zweiter Datenspeicher sein. Wenn die Systemkarte selbst ausfällt, hilft ein Backup auf derselben Karte nicht.');
 my $info_backup_mode = info_button('Vollbackup kopiert jeden Stand vollständig. Inkrementeller Snapshot nutzt rsync mit Hardlinks auf das vorherige vollständige Backup: jedes Backup bleibt einzeln wiederherstellbar, unveränderte Dateien benötigen aber kaum zusätzlichen Speicher. Für zuverlässige Speicherersparnis wird ein Linux-Dateisystem wie ext4 empfohlen.');
-my $info_retention = info_button('Legt fest, wie viele fertige Backups behalten werden. Erlaubt sind 1 bis 10. Bei inkrementellen Snapshots ist das Löschen alter Backups sicher: unveränderte Dateien sind per Hardlink in jedem Snapshot sichtbar. Wird ein alter Snapshot entfernt, bleiben Dateien erhalten, solange sie noch von einem jüngeren Snapshot referenziert werden. Sobald nach einem erfolgreichen Backup mehr Backups vorhanden sind als erlaubt, entfernt das Plugin automatisch das älteste fertige Backup und das passende Export-Archiv.');
+my $info_retention = info_button('Legt fest, wie viele fertige Backups behalten werden. Erlaubt sind 1 bis 10. Bei inkrementellen Snapshots ist das Loeschen alter Backups sicher: unveraenderte Dateien sind per Hardlink in jedem Snapshot sichtbar. Wird ein alter Snapshot entfernt, bleiben Dateien erhalten, solange sie noch von einem juengeren Snapshot referenziert werden. Sobald nach einem erfolgreichen Backup mehr Backups vorhanden sind als erlaubt, entfernt das Plugin automatisch das aelteste fertige Backup und das passende Export-Archiv.');
 my $info_schedule = info_button('Der Zeitplan erstellt Backups automatisch per Cron. Täglich bedeutet jeden Tag zur Startzeit. Wöchentlich bedeutet an den gewählten Wochentagen zur Startzeit. Monatlich bedeutet an den gewählten Tagen in den gewählten Monaten zur Startzeit.');
 my $info_time = info_button('Diese Uhrzeit gilt für alle Zeitplanarten. Bei täglich ist sie die einzige zeitliche Einstellung. Bei wöchentlich und monatlich wird sie mit den gewählten Tagen kombiniert.');
 my $info_weekdays = info_button('Nur bei wöchentlichen Backups relevant. Du kannst einen oder mehrere Wochentage auswählen, zum Beispiel Montag und Freitag. An jedem gewählten Tag startet ein Backup zur angegebenen Startzeit.');
@@ -574,7 +574,7 @@ my $info_config_export = info_button('Lädt nur die Einstellungen dieses Plugins
 my $info_config_import = info_button('Liest eine zuvor exportierte Einstellungsdatei wieder ein. Das ist praktisch nach einer Neuinstallation des Plugins. Danach bitte Pfade und Root-Freigabe kurz prüfen und speichern, falls sich Laufwerke geändert haben.');
 my $info_table = info_button('Diese Liste zeigt vorhandene Backups mit Status, Host, Grösse und Fertigstellungszeit. Ein vollständiges Backup sollte den Status complete haben, bevor du es für Restore-Tests verwendest.');
 my $info_import = info_button('Importiert ein extern gespeichertes Backup-Archiv im Format tar.gz, zum Beispiel von deinem PC, NAS oder einem anderen Datenträger. Für Restore eines bereits unten gelisteten Backups brauchst du diese Datei-Auswahl nicht.');
-my $info_delete = info_button('Löscht den Backup-Ordner und ein eventuell vorhandenes Export-Archiv dieses Backups. Das kann nicht rückgängig gemacht werden.');
+my $info_delete = info_button('Loescht den Backup-Ordner und ein eventuell vorhandenes Export-Archiv dieses Backups. Das kann nicht rueckgaengig gemacht werden. Bei grossen Backups oder langsamen Datentraegern kann das Loeschen mehrere Minuten dauern.');
 my $info_restore = info_button('Wählt dieses Backup für eine Wiederherstellung aus. Danach wird unterhalb der Backup-Liste die Restore-Prüfung mit Bestätigung und Startbutton für genau dieses Backup eingeblendet.');
 my $info_browse = info_button('Öffnet den Datei-Explorer für dieses Backup. Damit kannst du prüfen, welche Dateien im Backup enthalten sind.');
 my $info_browse_pending = info_button('Dieses Backup ist noch nicht vollständig abgeschlossen. Dateien, Restore und Export werden erst freigegeben, wenn Status, Manifest und rootfs vollständig sind.');
@@ -1254,7 +1254,7 @@ print <<HTML;
         'save-config': 'Einstellungen werden gespeichert...',
         'import-config': 'Einstellungen werden importiert...',
         'import': 'Backup wird importiert...',
-        'delete-backup': 'Backup wird gelöscht...',
+        'delete-backup': 'Backup wird geloescht. Bei grossen Backups kann das einige Minuten dauern...',
         'download-export': 'Export wird vorbereitet...',
         'restore-backup': 'Restore wird vorbereitet...',
         'stop-backup': 'Backup wird gestoppt...',
@@ -1321,10 +1321,10 @@ print <<HTML;
     if (deleteForm) {
       var idInput = deleteForm.querySelector('input[name="backup_id"]');
       var backupId = idInput ? idInput.value : 'dieses Backup';
-      if (!window.confirm('Backup ' + backupId + ' wirklich dauerhaft loeschen?')) {
+      if (!window.confirm('Backup ' + backupId + ' wirklich dauerhaft loeschen?\\n\\nBei grossen Backups oder langsamen Datentraegern kann das Loeschen mehrere Minuten dauern. Bitte danach warten, bis die Aktion abgeschlossen ist.')) {
         event.preventDefault();
       } else if (window.hostbackupShowLoading) {
-        window.hostbackupShowLoading('Backup wird geloescht...');
+        window.hostbackupShowLoading('Backup wird geloescht. Bei grossen Backups kann das einige Minuten dauern...');
       }
       return;
     }
@@ -1444,7 +1444,7 @@ print <<HTML;
     form.appendChild(id);
     document.body.appendChild(form);
     if (window.hostbackupShowLoading) {
-      window.hostbackupShowLoading('Unfertiges Backup wird geloescht...');
+      window.hostbackupShowLoading('Unfertiges Backup wird geloescht. Bei grossen Backups kann das einige Minuten dauern...');
     }
     form.submit();
   }
@@ -1499,7 +1499,7 @@ print <<HTML;
           window.setTimeout(function () {
             var backupId = backupIdFromTask();
             if (state === 'stopped' && backupId) {
-              if (window.confirm('Das Backup wurde gestoppt und ist unvollstaendig. Soll dieses unfertige Backup jetzt geloescht werden?')) {
+              if (window.confirm('Das Backup wurde gestoppt und ist unvollstaendig. Soll dieses unfertige Backup jetzt geloescht werden?\\n\\nBei grossen Backups oder langsamen Datentraegern kann das Loeschen mehrere Minuten dauern.')) {
                 deleteStoppedBackup(backupId);
               } else {
                 redirectWithMessage('backup_stop_requested');
