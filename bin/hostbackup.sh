@@ -1289,12 +1289,14 @@ create_backup() {
     fi
   fi
 
-  log "Applying backup retention policy" | tee -a "$log_file"
-  prune_old_backups
   finished="$(date -Iseconds)"
   size="$(calculate_size "$target")"
   files="$(calculate_files "$target")"
   write_manifest "$target" "$backup_id" "complete" "$started" "$finished" "$size" "$files"
+
+  log "Applying backup retention policy" | tee -a "$log_file"
+  prune_old_backups
+
   log "Backup $backup_id finished" | tee -a "$log_file"
   printf '%s\n' "$backup_id"
 }
