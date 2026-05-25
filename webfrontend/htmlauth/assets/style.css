@@ -614,6 +614,18 @@ body.is-loading .loading-overlay {
   width: auto;
 }
 
+.stop-target-group summary::before {
+  color: #1f2a33;
+  content: "▸";
+  flex: 0 0 auto;
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+.stop-target-group[open] summary::before {
+  content: "▾";
+}
+
 .stop-target-group summary small {
   color: #526173;
   font-size: 12px;
