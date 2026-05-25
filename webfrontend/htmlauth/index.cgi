@@ -567,7 +567,7 @@ my $info_months = info_button('Nur bei monatlichen Backups relevant. Mit Alle Mo
 my $info_pre_hook = info_button('Optionales Skript, das direkt vor dem Backup ausgeführt wird. Sinnvoll für Datenbank-Dumps oder das Vorbereiten von Diensten. Das Skript muss absolut angegeben werden und wird aus Sicherheitsgründen nur ausgeführt, wenn es Root gehört und nicht durch andere Benutzer beschreibbar ist.');
 my $info_post_hook = info_button('Optionales Skript, das nach dem Backup ausgeführt wird. Sinnvoll zum Aufräumen, Dienste wieder in einen gewünschten Zustand zu bringen oder Benachrichtigungen auszuführen. Es gelten dieselben Sicherheitsregeln wie beim Skript vor dem Backup.');
 my $info_excludes = info_button('Hier kannst du Pfade vom rsync-Backup ausschliessen, je ein Pfad pro Zeile. Das ist sinnvoll für grosse Medienarchive, Netzwerkshares oder Daten, die separat gesichert werden. Zu viele Ausschlüsse können aber die Wiederherstellung unvollständig machen.');
-my $info_stop_targets = info_button('Wähle gezielt Docker-Container oder sicher steuerbare Dienste aus, die vor dem Backup angehalten und danach wieder gestartet werden. Kritische LoxBerry-, Web-, SSH- und Backup-Dienste werden nicht angeboten. LoxBerry-Plugins ohne eigenen Dienst erscheinen hier nicht und werden nicht hart beendet.');
+my $info_stop_targets = info_button('Wähle gezielt Docker-Container oder sicher steuerbare Dienste aus, die vor dem Backup angehalten und danach wieder gestartet werden. Kritische LoxBerry-, Web-, SSH- und Backup-Dienste werden nicht angeboten. LoxBerry-Plugins ohne eigenen Dienst werden hier nicht aufgeführt und nicht hart beendet; dafür sind Pre-/Post-Backup-Hooks der sichere Weg.');
 my $info_export = info_button('Erstellt nach jedem Backup zusätzlich ein komprimiertes tar.gz-Archiv. Das ist praktisch zum Download, Kopieren oder Archivieren, benötigt aber zusätzlichen Speicherplatz und Zeit.');
 my $info_root = info_button('Diese Bestätigung ist nötig, weil Vollbackup und Restore Systemdateien, Berechtigungen, Docker-Daten und Cronjobs betreffen. Es werden keine Passwörter gespeichert; erlaubt wird nur der Start des Backend-Skripts dieses Plugins.');
 my $info_config_export = info_button('Lädt nur die Einstellungen dieses Plugins als kleine JSON-Datei herunter. Enthalten sind zum Beispiel Backup-Verzeichnis, Ausschlüsse, Zeitplan und ausgewählte Stop-Ziele, aber keine Backup-Daten und keine Passwörter.');
@@ -676,12 +676,11 @@ sub render_stop_targets {
     return $hidden . '<p class="empty">Keine ausw&auml;hlbaren Dienste oder Container gefunden.</p>';
   }
 
-  my @group_order = ('Docker-Container', 'LoxBerry-/Plugin-Dienste', 'LoxBerry-Plugins ohne eigenen Dienst', 'Weitere Systemdienste', 'Weitere Dienste');
+  my @group_order = ('Docker-Container', 'LoxBerry-/Plugin-Dienste', 'Weitere Systemdienste', 'Weitere Dienste');
   my %order = map { $group_order[$_] => $_ } 0..$#group_order;
   my %group_hint = (
     'Docker-Container' => 'Container mit eigenen Datenbanken oder Konfigurationsdateien. Diese Auswahl ist meistens sinnvoll.',
     'LoxBerry-/Plugin-Dienste' => 'Erkannte Dienste mit Bezug zu LoxBerry oder Plugins. Nur ausw&auml;hlen, wenn der Dienst w&auml;hrend des Backups kurz pausieren darf.',
-    'LoxBerry-Plugins ohne eigenen Dienst' => 'Diese Plugins wurden erkannt, haben aber keinen eigenen sicher steuerbaren Dienst. Sie werden angezeigt, aber nicht automatisch gestoppt.',
     'Weitere Systemdienste' => 'Expertenbereich. Nur ausw&auml;hlen, wenn du genau weisst, was dieser Dienst macht.',
     'Weitere Dienste' => 'Sonstige erkannte Dienste.',
   );
@@ -699,6 +698,7 @@ sub render_stop_targets {
   }
 
   my $html = $hidden;
+  $html .= '<div class="stop-target-row">';
   if ($recommended_total) {
     $html .= qq{<div class="stop-target-toolbar"><button data-role="none" type="button" data-stop-target-preset="recommended">Empfohlene Auswahl setzen</button><button data-role="none" type="button" data-stop-target-preset="clear">Auswahl leeren</button><span>$recommended_total Stop-Ziele empfohlen</span></div>};
   }
@@ -736,6 +736,8 @@ sub render_stop_targets {
 
     $html .= '</div></details>';
   }
+
+  $html .= '</div>';
 
   return $html;
 }

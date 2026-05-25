@@ -27,8 +27,8 @@ validiert werden.
   Einstellungsseite weiterhin schnell sichtbar bleibt.
 - Die Dienst-/Container-Auswahl ist kompakter, pro Rubrik einklappbar und
   blendet kritische LoxBerry-, Web-, SSH- und Backup-Dienste aus.
-- LoxBerry-Plugins ohne eigenen sicher steuerbaren Dienst werden als Information
-  angezeigt, aber nicht als Stop-Ziel angeboten.
+- LoxBerry-Plugins ohne eigenen sicher steuerbaren Dienst werden nicht als
+  Stop-Ziel angeboten, um unzuverlässige Stop-/Start-Aktionen zu vermeiden.
 - Neuer Button `Empfohlene Auswahl setzen` markiert laufende Docker-Container
   und typische datenintensive Dienste wie Datenbanken, MQTT/Zigbee, Node-RED,
   Stats4Lox, Grafana oder InfluxDB.

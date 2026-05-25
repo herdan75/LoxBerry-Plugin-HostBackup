@@ -359,7 +359,8 @@ oder systemd-Dienste vor dem Backup gestoppt und danach wieder gestartet werden.
 Das Plugin liest dazu die vorhandenen Container und sicher steuerbare Dienste
 aus, gruppiert sie kompakt und merkt sich die Auswahl.
 Installierte LoxBerry-Plugins ohne eigenen sicher steuerbaren Dienst werden
-ebenfalls angezeigt, aber bewusst nicht als Stop-Ziel angeboten.
+nicht als Stop-Ziel angeboten, weil sie nicht zuverlässig automatisch wieder
+gestartet werden können.
 Mit `Empfohlene Auswahl setzen` markiert das Plugin automatisch laufende
 Container und typische datenintensive Dienste, z. B. Datenbanken, MQTT/Zigbee,
 Node-RED, Stats4Lox, Grafana oder InfluxDB. Die Empfehlung kann danach manuell

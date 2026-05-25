@@ -817,8 +817,6 @@ discover_stop_targets() {
       done || true
   fi
 
-  append_loxberry_plugin_inventory "$tmp"
-
   perl -MJSON::PP -e '
     my ($cfg_file, $targets_file) = @ARGV;
     my %selected;
