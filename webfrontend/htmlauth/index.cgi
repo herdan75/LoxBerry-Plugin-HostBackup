@@ -1476,8 +1476,10 @@ function hostbackupCacheBuster(url) {
   }
 
  function backupIdFromTask() {
-   var match = new RegExp('^backup-([A-Za-z0-9._-]+)\\\\.log$').exec(task || '');
-   return match ? match[1] : '';
+   var value = task || '';
+   if (value.indexOf('backup-') !== 0) return '';
+   if (value.slice(-4) !== '.log') return '';
+   return value.slice(7, -4);
  }
 
   function redirectWithMessage(message) {
