@@ -524,7 +524,7 @@ body.is-loading .loading-overlay {
   border: 1px solid #dddddd;
   border-radius: 6px;
   margin-bottom: 12px;
-  padding: 8px;
+  padding: 12px;
 }
 
 .stop-targets-list.loading {
@@ -537,8 +537,8 @@ body.is-loading .loading-overlay {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
-  margin-bottom: 8px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .stop-target-toolbar span {
@@ -547,13 +547,15 @@ body.is-loading .loading-overlay {
 }
 
 .stop-target-group + .stop-target-group {
-  margin-top: 6px;
+  margin-top: 7px;
 }
 
 .stop-target-group {
   background: #f7f7f7;
   border: 1px solid #dddddd;
   border-radius: 5px;
+  display: block;
+  width: 100%;
 }
 
 .stop-target-group summary {
@@ -566,8 +568,9 @@ body.is-loading .loading-overlay {
   justify-content: space-between;
   line-height: 1.25;
   margin: 0;
-  min-height: 28px;
-  padding: 5px 8px;
+  min-height: 31px;
+  padding: 6px 9px;
+  width: 100%;
 }
 
 .stop-target-group summary small {
@@ -585,14 +588,14 @@ body.is-loading .loading-overlay {
   color: #526173;
   font-size: 12px;
   line-height: 1.35;
-  margin: 7px 8px 0;
+  margin: 7px 9px 0;
 }
 
 .stop-target-grid {
   display: grid;
   gap: 5px;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  padding: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  padding: 8px 9px 9px;
 }
 
 .settings-form .stop-target-item {
