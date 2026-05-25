@@ -1250,10 +1250,6 @@ function hostbackupClosest(node, selector) {
   return null;
 }
 
-function hostbackupCacheBuster(url) {
-  return url + (url.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now();
-}
-
 (function () {
   var overlay = document.getElementById('loading-overlay');
   var loadingText = document.getElementById('loading-text');
