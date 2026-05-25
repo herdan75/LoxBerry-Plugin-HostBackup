@@ -902,7 +902,7 @@ print <<HTML;
 <input data-role="none" class="schedule-time-input" name="schedule_time" type="time" value="$cfg_schedule_time">
 </label>
 
-<details class="schedule-detail" data-schedule-panel="weekly" open>
+<details class="schedule-detail" data-schedule-panel="weekly">
 <summary>Wochentage $info_weekdays</summary>
 <div class="choice-grid">
 <label><input data-role="none" type="checkbox" name="schedule_weekdays" value="1"$weekday_checked[1]> Montag</label>
@@ -915,7 +915,7 @@ print <<HTML;
 </div>
 </details>
 
-<details class="schedule-detail" data-schedule-panel="monthly" open>
+<details class="schedule-detail" data-schedule-panel="monthly">
 <summary>Tage im Monat $info_monthdays</summary>
 <div class="day-grid">
 <label><input data-role="none" type="checkbox" name="schedule_monthdays" value="1"$monthday_checked[1]> 1</label>
@@ -952,7 +952,7 @@ print <<HTML;
 </div>
 </details>
 
-<details class="schedule-detail" data-schedule-panel="monthly" open>
+<details class="schedule-detail" data-schedule-panel="monthly">
 <summary>Monate $info_months</summary>
 <div class="choice-grid month-grid">
 <label><input data-role="none" type="checkbox" name="schedule_months" value="*"$all_months_checked> Alle Monate</label>
@@ -1002,15 +1002,15 @@ print <<HTML;
 <fieldset class="schedule-card wide settings-group">
 <legend>Optionen und Freigaben</legend>
 
-<div class="settings-subtitle">Ausführung und Sicherheit</div>
-
 <input data-role="none" type="hidden" name="stop_docker_before_backup" value="">
 
-<div class="settings-subtitle compact-subtitle">Dienste und Container $info_stop_targets</div>
+<details class="stop-target-panel">
+<summary>Zu stoppende Dienste vor dem Backup $info_stop_targets</summary>
 <div id="stop-targets-list" class="stop-targets-list loading">
 <span class="mini-spinner" aria-hidden="true"></span>
 <span>Dienste und Container werden geladen...</span>
 </div>
+</details>
 
 <label class="checkline">
 <input data-role="none" type="checkbox" name="create_export_after_backup" value="1"$cfg_create_export>

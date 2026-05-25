@@ -27,6 +27,9 @@ validiert werden.
   Einstellungsseite weiterhin schnell sichtbar bleibt.
 - Die Dienst-/Container-Auswahl ist kompakter, pro Rubrik einklappbar und
   blendet kritische LoxBerry-, Web-, SSH- und Backup-Dienste aus.
+- Die erweiterten Zeitplanfelder `Tage im Monat`, `Monate` und die Stop-Ziele
+  sind standardmässig eingeklappt, damit die Einstellungsseite übersichtlich
+  bleibt.
 - LoxBerry-Plugins ohne eigenen sicher steuerbaren Dienst werden nicht als
   Stop-Ziel angeboten, um unzuverlässige Stop-/Start-Aktionen zu vermeiden.
 - Neuer Button `Empfohlene Auswahl setzen` markiert laufende Docker-Container

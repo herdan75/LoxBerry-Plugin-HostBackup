@@ -523,6 +523,7 @@ body.is-loading .loading-overlay {
   background: #ffffff;
   border: 1px solid #dddddd;
   border-radius: 6px;
+  margin-top: 10px;
   margin-bottom: 12px;
   padding: 10px;
 }
@@ -559,6 +560,32 @@ body.is-loading .loading-overlay {
 
 .stop-target-row .stop-target-toolbar {
   margin-right: 12px;
+}
+
+.stop-target-panel {
+  border-top: 1px solid #dddddd;
+  margin-top: 13px;
+  padding-top: 10px;
+}
+
+.stop-target-panel > summary {
+  color: #1f2a33;
+  cursor: pointer;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-bottom: 6px;
+}
+
+.stop-target-panel[open] > summary {
+  margin-bottom: 8px;
+}
+
+.stop-target-panel > .stop-targets-list {
+  margin-top: 0;
 }
 
 .stop-target-group + .stop-target-group {
