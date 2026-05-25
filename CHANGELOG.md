@@ -11,6 +11,18 @@ validiert werden.
 
 Derzeit keine Einträge.
 
+## [0.3.2] - 2026-05-25
+
+### Weboberfläche
+
+- Layout der Einstellungsbereiche weiter vereinheitlicht und an die Backup-
+  Verwaltung angeglichen.
+- Konfigurationsbuttons optisch an die bestehenden Backup-Import-Controls
+  angepasst.
+- Restore-Bereich in denselben Innenrahmen wie die Backup-Verwaltung gesetzt.
+- Texte und Info-Hinweise auf Schweizer Schreibweise ohne scharfes S
+  vereinheitlicht.
+
 ## [0.3.1] - 2026-05-25
 
 ### Weboberfläche
@@ -213,7 +225,8 @@ Derzeit keine Einträge.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.3.1...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.3.2...develop
+[0.3.2]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.3.2
 [0.3.1]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.3.1
 [0.3.0]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.3.0
 [0.2.0]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.2.0-beta
