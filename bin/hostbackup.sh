@@ -283,6 +283,23 @@ backup_target_info() {
   root="$(backup_root)"
   backup_mode="$(json_get_string backup_mode)"
   [ "$backup_mode" = "snapshot" ] || backup_mode="full"
+  case "$root" in
+    /|/proc|/proc/*|/sys|/sys/*|/dev|/dev/*|/run|/run/*|/tmp|/tmp/*)
+      cat <<EOF
+{
+  "kind": "backup-target",
+  "status": "error",
+  "backup_root": $(json_escape "$root"),
+  "probe_path": $(json_escape "$root"),
+  "fs_type": "blocked",
+  "source": "blocked",
+  "available_mb": 0,
+  "message": "Backup-Ziel darf nicht /, /proc, /sys, /dev, /run oder /tmp sein."
+}
+EOF
+      return 0
+      ;;
+  esac
   probe="$root"
   while [ ! -e "$probe" ] && [ "$probe" != "/" ]; do
     probe="$(dirname "$probe")"
@@ -1566,6 +1583,7 @@ move_backup() {
   local root target archive destination
   require_backup_id "$backup_id"
   root="$(backup_root)"
+  require_allowed_backup_root "$root"
   target="$root/$backup_id"
   archive="$root/$backup_id.tar.gz"
   case "$destination_root" in
@@ -1655,6 +1673,7 @@ delete_backup() {
   local root target archive
   require_backup_id "$backup_id"
   root="$(backup_root)"
+  require_allowed_backup_root "$root"
   target="$root/$backup_id"
   archive="$root/$backup_id.tar.gz"
   case "$target" in
