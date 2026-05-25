@@ -278,6 +278,24 @@ body.is-loading .loading-overlay {
   margin-bottom: 14px;
 }
 
+.backup-content {
+  background: #ffffff;
+  border: 1px solid #dddddd;
+  border-radius: 6px;
+  margin-top: 12px;
+  padding: 18px;
+}
+
+.backup-content .import {
+  margin-bottom: 16px;
+}
+
+.backup-content th,
+.backup-content td {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
 .settings-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
@@ -359,7 +377,7 @@ body.is-loading .loading-overlay {
   border: 1px solid #dddddd;
   border-radius: 6px;
   margin: 20px 0 0;
-  padding: 14px;
+  padding: 18px;
 }
 
 .settings-group {

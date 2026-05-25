@@ -934,9 +934,11 @@ $info_config_import
 
 </section>
 
-<section class="panel">
+<section class="panel backups-panel">
 
 <h2>Backups $info_table</h2>
+
+<div class="backup-content">
 
 <form data-ajax="false" class="import" method="post" enctype="multipart/form-data">
 
@@ -971,6 +973,7 @@ HTML
 print <<HTML;
 </tbody>
 </table>
+</div>
 HTML
 
 if ($browse_id) {
