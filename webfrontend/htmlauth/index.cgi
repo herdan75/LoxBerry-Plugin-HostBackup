@@ -938,9 +938,8 @@ $info_config_import
 
 <h2>Backups $info_table</h2>
 
-<div class="backup-content">
-
-<div class="settings-subtitle">Verwaltung Backups</div>
+<fieldset class="backup-content">
+<legend>Verwaltung Backups</legend>
 
 <form data-ajax="false" class="import" method="post" enctype="multipart/form-data">
 
@@ -975,7 +974,7 @@ HTML
 print <<HTML;
 </tbody>
 </table>
-</div>
+</fieldset>
 HTML
 
 if ($browse_id) {

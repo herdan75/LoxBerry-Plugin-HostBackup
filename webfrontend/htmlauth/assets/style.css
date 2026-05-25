@@ -390,7 +390,8 @@ body.is-loading .loading-overlay {
   margin-top: 18px;
 }
 
-.schedule-card legend {
+.schedule-card legend,
+.backup-content legend {
   align-items: center;
   background: transparent;
   border: 0;
