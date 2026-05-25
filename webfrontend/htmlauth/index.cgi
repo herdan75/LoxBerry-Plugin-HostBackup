@@ -1232,6 +1232,13 @@ print <<HTML;
 </main>
 
 <script>
+function hostbackupEach(nodes, callback) {
+  if (!nodes) return;
+  for (var i = 0; i < nodes.length; i += 1) {
+    callback(nodes[i], i);
+  }
+}
+
 (function () {
   var overlay = document.getElementById('loading-overlay');
   var loadingText = document.getElementById('loading-text');
@@ -1244,7 +1251,7 @@ print <<HTML;
 
   window.hostbackupShowLoading = showLoading;
 
-  document.querySelectorAll('form').forEach(function (form) {
+  hostbackupEach(document.querySelectorAll('form'), function (form) {
     form.addEventListener('submit', function (event) {
       if (form.hasAttribute('data-skip-loading')) return;
       if ((form.getAttribute('method') || 'get').toLowerCase() !== 'post') return;
@@ -1280,17 +1287,21 @@ print <<HTML;
 
   function loadFragment(url, target, fallback) {
     if (!target) return;
-    fetch(url + '&_=' + Date.now(), { cache: 'no-store' })
-      .then(function (response) {
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        return response.text();
-      })
-      .then(function (html) {
-        target.innerHTML = html;
-      })
-      .catch(function () {
+    var request = new XMLHttpRequest();
+    request.onreadystatechange = function () {
+      if (request.readyState !== 4) return;
+      if (request.status >= 200 && request.status < 300) {
+        target.innerHTML = request.responseText;
+      } else {
         target.innerHTML = fallback;
-      });
+      }
+    };
+    request.onerror = function () {
+      target.innerHTML = fallback;
+    };
+    request.open('GET', url + '&_=' + Date.now(), true);
+    request.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+    request.send();
   }
 
   loadFragment('?action=target-notice', targetNotice, '<section class="inline-notice warning">Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>');
@@ -1303,11 +1314,11 @@ print <<HTML;
       if (!button) return;
       var mode = button.getAttribute('data-stop-target-preset');
       var boxes = stopTargetsList.querySelectorAll('input[name="stop_targets"]');
-      boxes.forEach(function (box) {
+      hostbackupEach(boxes, function (box) {
         box.checked = mode === 'recommended' ? box.getAttribute('data-recommended') === '1' : false;
       });
       if (mode === 'recommended') {
-        stopTargetsList.querySelectorAll('details.stop-target-group').forEach(function (detail) {
+        hostbackupEach(stopTargetsList.querySelectorAll('details.stop-target-group'), function (detail) {
           detail.open = !!detail.querySelector('input[name="stop_targets"]:checked');
         });
       }
@@ -1355,26 +1366,26 @@ print <<HTML;
 
   function updateSchedulePanels() {
     var mode = selectedMode();
-    panels.forEach(function (panel) {
+    hostbackupEach(panels, function (panel) {
       panel.classList.toggle('schedule-hidden', panel.getAttribute('data-schedule-panel') !== mode);
     });
   }
 
   function updateMonthSelection() {
     if (!allMonths) return;
-    monthInputs.forEach(function (input) {
+    hostbackupEach(monthInputs, function (input) {
       input.disabled = allMonths.checked;
       if (allMonths.checked) input.checked = false;
     });
   }
 
-  modeInputs.forEach(function (input) {
+  hostbackupEach(modeInputs, function (input) {
     input.addEventListener('change', updateSchedulePanels);
   });
   if (allMonths) {
     allMonths.addEventListener('change', updateMonthSelection);
   }
-  monthInputs.forEach(function (input) {
+  hostbackupEach(monthInputs, function (input) {
     input.addEventListener('change', function () {
       if (input.checked && allMonths) {
         allMonths.checked = false;

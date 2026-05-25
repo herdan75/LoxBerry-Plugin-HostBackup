@@ -43,6 +43,9 @@ validiert werden.
   Stats4Lox, Grafana oder InfluxDB.
 - Löschdialoge und Ladehinweise weisen jetzt darauf hin, dass das Entfernen
   grosser Backups auf langsamen Datenträgern mehrere Minuten dauern kann.
+- Das Nachladen von Dateisystem-Prüfung, Backup-Liste und Stop-Zielen wurde
+  robuster gemacht und nutzt wieder kompatible JavaScript-Techniken ohne
+  `fetch`/`NodeList.forEach` im initialen Ladepfad.
 
 ## [0.3.2] - 2026-05-25
 
