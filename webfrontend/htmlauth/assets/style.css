@@ -511,7 +511,7 @@ body.is-loading .loading-overlay {
 }
 
 .month-grid {
-  grid-template-columns: repeat(6, minmax(90px, 150px));
+  grid-template-columns: repeat(8, minmax(74px, 1fr));
 }
 
 .day-grid {
