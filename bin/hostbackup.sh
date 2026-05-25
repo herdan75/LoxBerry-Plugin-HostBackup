@@ -731,7 +731,7 @@ friendly_systemd_label() {
 }
 
 discover_stop_targets() {
-  local tmp unit load active sub description group name image status
+  local tmp unit load active sub description group name image status unit_file
   tmp="$(mktemp)"
 
   if command -v docker >/dev/null 2>&1; then
@@ -750,6 +750,23 @@ discover_stop_targets() {
         group="$(systemd_service_group "$unit" "$description")"
         label="$(friendly_systemd_label "$unit" "$description")"
         printf 'systemd\t%s\t%s\t%s\t%s\t%s\n' "$unit" "$label" "$group" "${active}/${sub}" "$unit" >> "$tmp"
+      done || true
+
+    find /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system -maxdepth 1 -type f -name '*.service' 2>/dev/null |
+      while IFS= read -r unit_file; do
+        [ -n "$unit_file" ] || continue
+        unit="$(basename "$unit_file")"
+        protected_systemd_service "$unit" && continue
+        grep -F "$(printf 'systemd\t%s\t' "$unit")" "$tmp" >/dev/null 2>&1 && continue
+        if ! printf '%s\n' "$unit" | grep -Eiq '(stats4lox|loxone|loxhue|netatmo|zigbee|mqtt|miniserver|nodered|node-?red|grafana|influx|telegraf|mosquitto)' \
+          && ! grep -Eiq '(/plugins/|/opt/loxberry/(bin|data|config)/plugins|stats4lox|loxone|loxhue|netatmo|zigbee|mqtt|miniserver|nodered|node-?red|grafana|influx|telegraf|mosquitto)' "$unit_file"; then
+          continue
+        fi
+        description="$(awk -F= '/^Description=/ {print $2; exit}' "$unit_file" 2>/dev/null || true)"
+        [ -n "$description" ] || description="$unit"
+        active="$(run_limited 2 systemctl is-active "$unit" 2>/dev/null || true)"
+        label="$(friendly_systemd_label "$unit" "$description")"
+        printf 'systemd\t%s\t%s\tLoxBerry-/Plugin-Dienste\t%s\t%s\n' "$unit" "$label" "${active:-inactive}" "$unit" >> "$tmp"
       done || true
   fi
 
