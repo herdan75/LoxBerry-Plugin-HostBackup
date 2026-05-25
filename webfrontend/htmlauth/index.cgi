@@ -686,17 +686,22 @@ sub render_stop_targets {
     'Weitere Dienste' => 'Sonstige erkannte Dienste.',
   );
   my %groups;
+  my $recommended_total = 0;
 
   for my $target (@$targets) {
     next unless ref($target) eq 'HASH';
     my $type = $target->{type} || '';
     my $name = $target->{name} || '';
     next unless $type =~ /^(docker|systemd|plugin)$/ && length $name;
+    $recommended_total++ if $target->{recommended} && $type =~ /^(docker|systemd)$/;
     my $group = $target->{group} || 'Weitere Dienste';
     push @{$groups{$group}}, $target;
   }
 
   my $html = $hidden;
+  if ($recommended_total) {
+    $html .= qq{<div class="stop-target-toolbar"><button data-role="none" type="button" data-stop-target-preset="recommended">Empfohlene Auswahl setzen</button><button data-role="none" type="button" data-stop-target-preset="clear">Auswahl leeren</button><span>$recommended_total Stop-Ziele empfohlen</span></div>};
+  }
 
   for my $group (sort { ($order{$a} // 99) <=> ($order{$b} // 99) || $a cmp $b } keys %groups) {
     my $safe_group = escapeHTML($group);
@@ -720,12 +725,13 @@ sub render_stop_targets {
       my $details = $target->{details} || '';
       my $is_stoppable = $type =~ /^(docker|systemd)$/;
       my $checked = $is_stoppable ? checked_attr($target->{selected}) : '';
+      my $recommended = ($is_stoppable && $target->{recommended}) ? ' data-recommended="1"' : '';
       my $meta = join(' - ', grep { length $_ } ($status, $details));
       my $meta_html = length($meta) ? '<small>' . escapeHTML($meta) . '</small>' : '';
       my $disabled = $is_stoppable ? '' : ' disabled';
       my $name_attr = $is_stoppable ? ' name="stop_targets"' : '';
 
-      $html .= qq{<label class="stop-target-item}.($is_stoppable ? '' : ' is-disabled').qq{"><input data-role="none" type="checkbox"$name_attr value="$value"$checked$disabled><span><strong>$label</strong>$meta_html</span></label>};
+      $html .= qq{<label class="stop-target-item}.($is_stoppable ? '' : ' is-disabled').qq{"><input data-role="none" type="checkbox"$name_attr value="$value"$checked$disabled$recommended><span><strong>$label</strong>$meta_html</span></label>};
     }
 
     $html .= '</div></details>';
@@ -1288,6 +1294,23 @@ print <<HTML;
   loadFragment('?action=target-notice', targetNotice, '<section class="inline-notice warning">Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>');
   loadFragment('?action=stop-targets', stopTargetsList, '<p class="empty">Dienste und Container konnten nicht geladen werden.</p>');
   loadFragment('?action=backup-list' + activeParam, backupListBody, '<tr><td colspan="8" class="empty">Backup-Liste konnte nicht geladen werden.</td></tr>');
+
+  if (stopTargetsList) {
+    stopTargetsList.addEventListener('click', function (event) {
+      var button = event.target.closest ? event.target.closest('[data-stop-target-preset]') : null;
+      if (!button) return;
+      var mode = button.getAttribute('data-stop-target-preset');
+      var boxes = stopTargetsList.querySelectorAll('input[name="stop_targets"]');
+      boxes.forEach(function (box) {
+        box.checked = mode === 'recommended' ? box.getAttribute('data-recommended') === '1' : false;
+      });
+      if (mode === 'recommended') {
+        stopTargetsList.querySelectorAll('details.stop-target-group').forEach(function (detail) {
+          detail.open = !!detail.querySelector('input[name="stop_targets"]:checked');
+        });
+      }
+    });
+  }
 }());
 
 (function () {

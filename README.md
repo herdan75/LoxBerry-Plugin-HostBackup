@@ -360,6 +360,10 @@ Das Plugin liest dazu die vorhandenen Container und sicher steuerbare Dienste
 aus, gruppiert sie kompakt und merkt sich die Auswahl.
 Installierte LoxBerry-Plugins ohne eigenen sicher steuerbaren Dienst werden
 ebenfalls angezeigt, aber bewusst nicht als Stop-Ziel angeboten.
+Mit `Empfohlene Auswahl setzen` markiert das Plugin automatisch laufende
+Container und typische datenintensive Dienste, z. B. Datenbanken, MQTT/Zigbee,
+Node-RED, Stats4Lox, Grafana oder InfluxDB. Die Empfehlung kann danach manuell
+angepasst werden.
 
 Das verbessert die Konsistenz von Container-, Datenbank- und Dienst-Daten, kann
 aber diese Dienste während des Backups unterbrechen. Das Plugin startet nur

@@ -822,6 +822,7 @@ discover_stop_targets() {
   perl -MJSON::PP -e '
     my ($cfg_file, $targets_file) = @ARGV;
     my %selected;
+    my $recommend_re = qr/(mariadb|mysql|postgres|postgresql|influx|grafana|telegraf|mosquitto|mqtt|zigbee|node-?red|nodered|stats4lox|netatmo|miniserver|loxhue|huebridge|redis|mongodb|prometheus|homeassistant|home-assistant|portainer|database|db|broker)/i;
     if (open my $fh, "<", $cfg_file) {
       local $/;
       my $cfg = eval { decode_json(<$fh>) } || {};
@@ -840,6 +841,15 @@ discover_stop_targets() {
         chomp $line;
         my ($type, $name, $label, $group, $status, $details) = split /\t/, $line, 6;
         next unless $type && $name;
+        my $joined = join(" ", grep { defined && length } ($type, $name, $label, $group, $status, $details));
+        my $active = ($type eq "docker" && ($status // "") =~ /^Up\b/i)
+          || ($type eq "systemd" && ($status // "") =~ /active|running/i);
+        my $recommended = 0;
+        if ($active && $type eq "docker") {
+          $recommended = 1;
+        } elsif ($active && $type eq "systemd" && (($group // "") eq "LoxBerry-/Plugin-Dienste" || $joined =~ $recommend_re)) {
+          $recommended = 1;
+        }
         push @items, {
           type => $type,
           name => $name,
@@ -847,6 +857,7 @@ discover_stop_targets() {
           group => length($group // "") ? $group : "Weitere Dienste",
           status => $status // "",
           details => $details // "",
+          recommended => ($recommended ? JSON::PP::true : JSON::PP::false),
           selected => ($selected{"$type:$name"} ? JSON::PP::true : JSON::PP::false),
         };
       }

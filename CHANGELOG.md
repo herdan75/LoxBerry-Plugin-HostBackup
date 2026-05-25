@@ -29,6 +29,9 @@ validiert werden.
   blendet kritische LoxBerry-, Web-, SSH- und Backup-Dienste aus.
 - LoxBerry-Plugins ohne eigenen sicher steuerbaren Dienst werden als Information
   angezeigt, aber nicht als Stop-Ziel angeboten.
+- Neuer Button `Empfohlene Auswahl setzen` markiert laufende Docker-Container
+  und typische datenintensive Dienste wie Datenbanken, MQTT/Zigbee, Node-RED,
+  Stats4Lox, Grafana oder InfluxDB.
 
 ## [0.3.2] - 2026-05-25
 

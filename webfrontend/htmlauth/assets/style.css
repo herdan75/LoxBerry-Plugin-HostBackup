@@ -533,6 +533,19 @@ body.is-loading .loading-overlay {
   align-items: center;
 }
 
+.stop-target-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.stop-target-toolbar span {
+  color: #526173;
+  font-size: 12px;
+}
+
 .stop-target-group + .stop-target-group {
   margin-top: 6px;
 }
