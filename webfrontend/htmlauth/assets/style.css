@@ -488,7 +488,7 @@ body.is-loading .loading-overlay {
 }
 
 .hook-input {
-  max-width: 92%;
+  max-width: 100%;
 }
 
 .schedule-detail summary {
@@ -508,6 +508,10 @@ body.is-loading .loading-overlay {
   display: grid;
   gap: 5px 7px;
   grid-template-columns: repeat(6, minmax(88px, 1fr));
+}
+
+.month-grid {
+  grid-template-columns: repeat(6, minmax(90px, 150px));
 }
 
 .day-grid {
@@ -627,7 +631,8 @@ body.is-loading .loading-overlay {
   align-items: center;
 }
 
-.config-actions input[type="file"] {
+.config-actions input[type="file"],
+.backup-content input[type="file"] {
   border: 1px solid #bcc8d6;
   border-radius: 6px;
   font: inherit;
@@ -663,13 +668,15 @@ body.is-loading .loading-overlay {
   justify-content: center;
 }
 
-.config-card .config-file {
+.config-card .config-file,
+.backup-content .config-file {
   font-size: 13px;
   max-width: 310px;
   min-height: 32px;
 }
 
-.config-card .config-file::file-selector-button {
+.config-card .config-file::file-selector-button,
+.backup-content .config-file::file-selector-button {
   font: inherit;
   font-size: 13px;
   margin-right: 8px;

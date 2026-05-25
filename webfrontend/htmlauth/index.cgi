@@ -940,11 +940,13 @@ $info_config_import
 
 <div class="backup-content">
 
+<div class="settings-subtitle">Verwaltung Backups</div>
+
 <form data-ajax="false" class="import" method="post" enctype="multipart/form-data">
 
 <input data-role="none" type="hidden" name="action" value="import">
 
-<input data-role="none" type="file" name="backup_archive">
+<input data-role="none" class="config-file" type="file" name="backup_archive">
 
 <button data-role="none" type="submit">Externes Backup importieren</button>$info_import
 
