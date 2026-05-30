@@ -1045,6 +1045,67 @@ calculate_files() {
   find "$path/rootfs" -xdev -type f 2>/dev/null | wc -l | tr -d ' '
 }
 
+validate_completed_backup() {
+  local target="$1"
+  local backup_mode="$2"
+  local previous_backup="${3:-}"
+  local size_bytes="${4:-0}"
+  local files_count="${5:-0}"
+  local validation_file="$target/backup-validation.json"
+  local status="ok"
+  local manifest_ok rootfs_ok etc_ok loxberry_ok varlib_ok mntdocker_ok hardlink_ok size_ok files_ok
+  local hardlink_value="not_checked"
+
+  [ -r "$target/manifest.json" ] && manifest_ok=true || manifest_ok=false
+  [ -d "$target/rootfs" ] && rootfs_ok=true || rootfs_ok=false
+  [ -d "$target/rootfs/etc" ] && etc_ok=true || etc_ok=false
+  [ -d "$target/rootfs/opt/loxberry" ] && loxberry_ok=true || loxberry_ok=false
+  [ -d "$target/rootfs/var/lib" ] && varlib_ok=true || varlib_ok=false
+  [ -d "$target/rootfs/mnt/docker" ] && mntdocker_ok=true || mntdocker_ok=false
+  [ "${size_bytes:-0}" -ge 104857600 ] && size_ok=true || size_ok=false
+  [ "${files_count:-0}" -ge 100 ] && files_ok=true || files_ok=false
+
+  hardlink_ok=true
+  if [ "$backup_mode" = "snapshot" ] && [ -n "$previous_backup" ] && [ -d "$previous_backup/rootfs" ]; then
+    hardlink_value="none_found"
+    if find "$target/rootfs" -xdev -type f -links +1 -print -quit 2>/dev/null | grep -q .; then
+      hardlink_value="found"
+    else
+      hardlink_ok=false
+    fi
+  fi
+
+  if [ "$manifest_ok" != "true" ] || [ "$rootfs_ok" != "true" ] || [ "$etc_ok" != "true" ] || [ "$loxberry_ok" != "true" ]; then
+    status="error"
+  elif [ "$varlib_ok" != "true" ] || [ "$size_ok" != "true" ] || [ "$files_ok" != "true" ] || [ "$hardlink_ok" != "true" ]; then
+    status="warning"
+  fi
+
+  perl -MJSON::PP -e '
+    my ($file, $status, $manifest_ok, $rootfs_ok, $etc_ok, $loxberry_ok, $varlib_ok, $mntdocker_ok, $hardlink_ok, $hardlink_value, $size_ok, $files_ok, $size_bytes, $files_count) = @ARGV;
+    my $bool = sub { $_[0] eq "true" ? JSON::PP::true : JSON::PP::false };
+    my $data = {
+      status => $status,
+      checked_at => scalar localtime(),
+      checks => [
+        { name => "manifest.json vorhanden", ok => $bool->($manifest_ok) },
+        { name => "rootfs vorhanden", ok => $bool->($rootfs_ok) },
+        { name => "/etc vorhanden", ok => $bool->($etc_ok) },
+        { name => "/opt/loxberry vorhanden", ok => $bool->($loxberry_ok) },
+        { name => "/var/lib vorhanden", ok => $bool->($varlib_ok) },
+        { name => "/mnt/docker vorhanden", ok => $bool->($mntdocker_ok), optional => JSON::PP::true },
+        { name => "Snapshot-Hardlinks", ok => $bool->($hardlink_ok), value => $hardlink_value, optional => JSON::PP::true },
+        { name => "Backup-Groesse plausibel", ok => $bool->($size_ok), value => $size_bytes },
+        { name => "Dateianzahl plausibel", ok => $bool->($files_ok), value => $files_count },
+      ],
+    };
+    open my $fh, ">", $file or die "Cannot write validation: $!";
+    print $fh JSON::PP->new->ascii->canonical->pretty->encode($data);
+  ' "$validation_file" "$status" "$manifest_ok" "$rootfs_ok" "$etc_ok" "$loxberry_ok" "$varlib_ok" "$mntdocker_ok" "$hardlink_ok" "$hardlink_value" "$size_ok" "$files_ok" "$size_bytes" "$files_count"
+
+  log "Backup validation status: $status"
+}
+
 manifest_started_at() {
   local target="$1"
   local manifest="$target/manifest.json"
@@ -1294,6 +1355,9 @@ create_backup() {
   files="$(calculate_files "$target")"
   write_manifest "$target" "$backup_id" "complete" "$started" "$finished" "$size" "$files"
 
+  log "Checking completed backup" | tee -a "$log_file"
+  validate_completed_backup "$target" "$backup_mode" "${previous_backup:-}" "$size" "$files" | tee -a "$log_file" || true
+
   log "Applying backup retention policy" | tee -a "$log_file"
   prune_old_backups
 
@@ -1508,11 +1572,17 @@ list_backups() {
       my $dir = "$root/$entry";
       next unless -d $dir;
       my $manifest = "$dir/manifest.json";
+      my $validation = "$dir/backup-validation.json";
       my $data = {};
       if (-r $manifest) {
         local $/;
         open my $fh, "<", $manifest;
         $data = eval { decode_json(<$fh>) } || {};
+      }
+      if (-r $validation) {
+        local $/;
+        open my $vh, "<", $validation;
+        $data->{validation} = eval { decode_json(<$vh>) } || {};
       }
       my $archive = "$root/$entry.tar.gz";
       my $log = log_summary($entry);

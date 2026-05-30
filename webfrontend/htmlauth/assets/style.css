@@ -297,6 +297,30 @@ body.is-loading .loading-overlay {
   padding-right: 12px;
 }
 
+.backup-health {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-top: 3px;
+}
+
+.backup-health.ok {
+  color: #3f6f19;
+}
+
+.backup-health.warning {
+  color: #805900;
+}
+
+.backup-health.error {
+  color: #a72222;
+}
+
+.backup-health.muted {
+  color: #697684;
+}
+
 .settings-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
@@ -475,11 +499,34 @@ body.is-loading .loading-overlay {
 
 #hostbackup-app .target-picker .path-choice {
   background: #ffffff;
+  display: inline-flex;
+  flex-direction: column;
   font-family: Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   min-height: 28px;
   padding: 4px 8px;
   text-align: left;
+}
+
+#hostbackup-app .target-picker .path-choice.is-recommended {
+  border-color: #78b957;
+}
+
+#hostbackup-app .target-picker .path-choice.is-warning {
+  border-color: #d9a441;
+}
+
+#hostbackup-app .target-picker .path-choice strong {
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+#hostbackup-app .target-picker .path-choice span {
+  color: #526173;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.2;
 }
 
 .target-picker small {
@@ -739,6 +786,10 @@ body.is-loading .loading-overlay {
   letter-spacing: normal;
   line-height: 1.25;
   margin-top: 1px;
+}
+
+.settings-form .stop-target-item .stop-target-reason {
+  color: #3f6f19;
 }
 
 .settings-form .stop-target-item.is-disabled {

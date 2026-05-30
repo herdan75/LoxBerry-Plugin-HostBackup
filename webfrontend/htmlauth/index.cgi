@@ -556,7 +556,7 @@ my %cfg_months = map { $_ => 1 } @cfg_months;
 my $all_months_checked = checked_attr($cfg_months{'*'});
 my @month_checked = map { checked_attr($cfg_months{'*'} || $cfg_months{"$_"}) } 0..12;
 
-my $info_backup_root = info_button('Hier legst du fest, wohin die Backups geschrieben werden. Für ein echtes Host-Backup sollte das ein externer Datenträger, ein separates Mount oder ein grosser zweiter Datenspeicher sein. Wenn die Systemkarte selbst ausfällt, hilft ein Backup auf derselben Karte nicht.');
+my $info_backup_root = info_button('Hier legst du fest, wohin die Backups geschrieben werden. Für ein echtes Host-Backup sollte das ein externer Datenträger, ein separates Mount oder ein grosser zweiter Datenspeicher sein. Erkannte Ziele können per Klick oder Drag und Drop übernommen werden. Wenn die Systemkarte selbst ausfällt, hilft ein Backup auf derselben Karte nicht.');
 my $info_backup_mode = info_button('Vollbackup kopiert jeden Stand vollständig. Inkrementeller Snapshot nutzt rsync mit Hardlinks auf das vorherige vollständige Backup: jedes Backup bleibt einzeln wiederherstellbar, unveränderte Dateien benötigen aber kaum zusätzlichen Speicher. Für zuverlässige Speicherersparnis wird ein Linux-Dateisystem wie ext4 empfohlen.');
 my $info_retention = info_button('Legt fest, wie viele fertige Backups behalten werden. Erlaubt sind 1 bis 10. Bei inkrementellen Snapshots ist das Loeschen alter Backups sicher: unveraenderte Dateien sind per Hardlink in jedem Snapshot sichtbar. Wird ein alter Snapshot entfernt, bleiben Dateien erhalten, solange sie noch von einem juengeren Snapshot referenziert werden. Sobald nach einem erfolgreichen Backup mehr Backups vorhanden sind als erlaubt, entfernt das Plugin automatisch das aelteste fertige Backup und das passende Export-Archiv.');
 my $info_schedule = info_button('Der Zeitplan erstellt Backups automatisch per Cron. Täglich bedeutet jeden Tag zur Startzeit. Wöchentlich bedeutet an den gewählten Wochentagen zur Startzeit. Monatlich bedeutet an den gewählten Tagen in den gewählten Monaten zur Startzeit.');
@@ -572,7 +572,7 @@ my $info_export = info_button('Erstellt nach jedem Backup zusätzlich ein kompri
 my $info_root = info_button('Diese Bestätigung ist nötig, weil Vollbackup und Restore Systemdateien, Berechtigungen, Docker-Daten und Cronjobs betreffen. Es werden keine Passwörter gespeichert; erlaubt wird nur der Start des Backend-Skripts dieses Plugins.');
 my $info_config_export = info_button('Lädt nur die Einstellungen dieses Plugins als kleine JSON-Datei herunter. Enthalten sind zum Beispiel Backup-Verzeichnis, Ausschlüsse, Zeitplan und ausgewählte Stop-Ziele, aber keine Backup-Daten und keine Passwörter.');
 my $info_config_import = info_button('Liest eine zuvor exportierte Einstellungsdatei wieder ein. Das ist praktisch nach einer Neuinstallation des Plugins. Danach bitte Pfade und Root-Freigabe kurz prüfen und speichern, falls sich Laufwerke geändert haben.');
-my $info_table = info_button('Diese Liste zeigt vorhandene Backups mit Status, Host, Grösse und Fertigstellungszeit. Ein vollständiges Backup sollte den Status complete haben, bevor du es für Restore-Tests verwendest.');
+my $info_table = info_button('Diese Liste zeigt vorhandene Backups mit Status, Host, Grösse und Fertigstellungszeit. Nach neuen Backups wird zusätzlich eine kurze Plausibilitätsprüfung angezeigt. Ein vollständiges Backup sollte den Status complete und möglichst Prüfung ok haben, bevor du es für Restore-Tests verwendest.');
 my $info_import = info_button('Importiert ein extern gespeichertes Backup-Archiv im Format tar.gz, zum Beispiel von deinem PC, NAS oder einem anderen Datenträger. Für Restore eines bereits unten gelisteten Backups brauchst du diese Datei-Auswahl nicht.');
 my $info_delete = info_button('Loescht den Backup-Ordner und ein eventuell vorhandenes Export-Archiv dieses Backups. Das kann nicht rueckgaengig gemacht werden. Bei grossen Backups oder langsamen Datentraegern kann das Loeschen mehrere Minuten dauern.');
 my $info_restore = info_button('Wählt dieses Backup für eine Wiederherstellung aus. Danach wird unterhalb der Backup-Liste die Restore-Prüfung mit Bestätigung und Startbutton für genau dieses Backup eingeblendet.');
@@ -591,6 +591,34 @@ sub render_target_notice {
   my $target_fs = escapeHTML($target_info->{fs_type} || 'unbekannt');
   my $target_free = escapeHTML($target_info->{available_mb} || 0);
   return qq{<section class="inline-notice $target_state"><strong>Dateisystem-Pr&uuml;fung:</strong> $target_message<br><span>Erkannt: <code>$target_fs</code>, frei ca. $target_free MB.</span></section>};
+}
+
+sub classify_target_path {
+  my ($path) = @_;
+  my $probe = $path;
+  while (defined $probe && !-e $probe && $probe ne '/') {
+    $probe =~ s{/+[^/]+$}{};
+    $probe = '/' unless length $probe;
+  }
+  $probe = '/' unless defined $probe && length $probe && -e $probe;
+  my $fs = '';
+  if (open(my $fh, '-|', 'findmnt', '-no', 'FSTYPE', '-T', $probe)) {
+    $fs = <$fh> // '';
+    close $fh;
+  }
+  chomp $fs;
+  $fs ||= 'unbekannt';
+  my $free = 0;
+  if (open(my $fh, '-|', 'df', '-Pm', $probe)) {
+    my @lines = <$fh>;
+    close $fh;
+    if (defined $lines[1] && $lines[1] =~ /^\S+\s+\S+\s+\S+\s+(\d+)/) {
+      $free = $1;
+    }
+  }
+  $free ||= 0;
+  my $recommended = $fs =~ /^(ext2|ext3|ext4|xfs|btrfs)$/ ? 1 : 0;
+  return ($recommended, $fs, $free);
 }
 
 sub render_backup_target_picker {
@@ -634,14 +662,19 @@ sub render_backup_target_picker {
   my $buttons = '';
   for my $path (@targets) {
     my $safe_path = escapeHTML($path);
-    $buttons .= qq{<button data-role="none" type="button" class="path-choice" draggable="true" data-backup-root="$safe_path">$safe_path</button>};
+    my ($recommended, $fs, $free) = classify_target_path($path);
+    my $class = $recommended ? ' is-recommended' : ' is-warning';
+    my $label = $recommended ? 'empfohlen' : 'pr&uuml;fen';
+    my $safe_fs = escapeHTML($fs);
+    my $safe_free = escapeHTML($free);
+    $buttons .= qq{<button data-role="none" type="button" class="path-choice$class" draggable="true" data-backup-root="$safe_path"><strong>$safe_path</strong><span>$label · $safe_fs · frei ca. $safe_free MB</span></button>};
   }
 
   return qq{
 <div class="target-picker">
 <span>Erkannte Ziele:</span>
 <div class="target-picker-actions">$buttons</div>
-<small>Klick &uuml;bernimmt den Pfad. Alternativ kann ein Vorschlag in das Feld gezogen werden.</small>
+<small>Klick &uuml;bernimmt den Pfad. Linux-Dateisysteme wie ext4, xfs oder btrfs sind f&uuml;r Geschwindigkeit, Rechte und Snapshots empfohlen. Alternativ kann ein Vorschlag in das Feld gezogen werden.</small>
 </div>
 };
 }
@@ -666,6 +699,22 @@ sub render_backup_rows {
     my $files = escapeHTML($backup->{files_count} || '0');
     my $export = $backup->{export_file} ? 'vorhanden' : '-';
     my $is_complete = (($backup->{status} || '') eq 'complete') && (($backup->{files_count} || 0) > 0);
+    my $validation = $backup->{validation} || {};
+    my $validation_label = '';
+    my $delete_label = (($backup->{status} || '') eq 'complete') ? 'L&ouml;schen' : 'Unvollst&auml;ndiges Backup l&ouml;schen';
+    if (($backup->{status} || '') eq 'complete') {
+      if (($validation->{status} || '') eq 'ok') {
+        $validation_label = '<small class="backup-health ok">Pr&uuml;fung ok</small>';
+      } elsif (($validation->{status} || '') eq 'warning') {
+        $validation_label = '<small class="backup-health warning">Pr&uuml;fung mit Hinweis</small>';
+      } elsif (($validation->{status} || '') eq 'error') {
+        $validation_label = '<small class="backup-health error">Pr&uuml;fung fehlerhaft</small>';
+      } else {
+        $validation_label = '<small class="backup-health muted">Pr&uuml;fung nicht vorhanden</small>';
+      }
+    } elsif (($backup->{status} || '') =~ /^(stopped|failed|running|unbekannt)$/) {
+      $validation_label = '<small class="backup-health warning">Unvollst&auml;ndig: bei Bedarf l&ouml;schen</small>';
+    }
     my $active_task_hidden = hidden_active_task();
     my $backup_actions;
 
@@ -697,7 +746,7 @@ $active_task_hidden
     $html .= qq{
 <tr>
 <td><code>$id</code></td>
-<td>$status</td>
+<td>$status$validation_label</td>
 <td>$host</td>
 <td>${size} MB</td>
 <td>$files</td>
@@ -710,7 +759,7 @@ $backup_actions
 <input data-role="none" type="hidden" name="action" value="delete-backup">
 <input data-role="none" type="hidden" name="backup_id" value="$id">
 $active_task_hidden
-<button data-role="none" class="danger" type="submit">L&ouml;schen</button>$info_delete
+<button data-role="none" class="danger" type="submit">$delete_label</button>$info_delete
 </form>
 </div>
 </td>
@@ -732,9 +781,9 @@ sub render_stop_targets {
   my @group_order = ('Docker-Container', 'LoxBerry-/Plugin-Dienste', 'Weitere Systemdienste', 'Weitere Dienste');
   my %order = map { $group_order[$_] => $_ } 0..$#group_order;
   my %group_hint = (
-    'Docker-Container' => 'Container mit eigenen Datenbanken oder Konfigurationsdateien. Diese Auswahl ist meistens sinnvoll.',
-    'LoxBerry-/Plugin-Dienste' => 'Erkannte Dienste mit Bezug zu LoxBerry oder Plugins. Nur ausw&auml;hlen, wenn der Dienst w&auml;hrend des Backups kurz pausieren darf.',
-    'Weitere Systemdienste' => 'Expertenbereich. Nur ausw&auml;hlen, wenn du genau weisst, was dieser Dienst macht.',
+    'Docker-Container' => 'Empfohlen bei Containern mit Datenbanken, Konfigurationen oder vielen Schreibzugriffen. Gestoppt wird nur, was vor dem Backup wirklich l&auml;uft; danach wird genau das wieder gestartet.',
+    'LoxBerry-/Plugin-Dienste' => 'Dienste mit Bezug zu LoxBerry oder Plugins. Sinnvoll bei Diensten mit Datenbanken, Logs oder h&auml;ufig ge&auml;nderten Dateien. Plugins ohne eigenen Dienst werden nicht angeboten; daf&uuml;r sind Hooks der sichere Weg.',
+    'Weitere Systemdienste' => 'Expertenbereich. Nur ausw&auml;hlen, wenn du den Dienst kennst und ein kurzer Stopp w&auml;hrend des Backups unkritisch ist.',
     'Weitere Dienste' => 'Sonstige erkannte Dienste.',
   );
   my %groups;
@@ -780,10 +829,13 @@ sub render_stop_targets {
       my $recommended = ($is_stoppable && $target->{recommended}) ? ' data-recommended="1"' : '';
       my $meta = join(' - ', grep { length $_ } ($status, $details));
       my $meta_html = length($meta) ? '<small>' . escapeHTML($meta) . '</small>' : '';
+      my $reason_html = ($is_stoppable && $target->{recommended})
+        ? '<small class="stop-target-reason">Empfohlen: laufender Dienst mit wahrscheinlichen Daten&auml;nderungen</small>'
+        : '';
       my $disabled = $is_stoppable ? '' : ' disabled';
       my $name_attr = $is_stoppable ? ' name="stop_targets"' : '';
 
-      $html .= qq{<label class="stop-target-item}.($is_stoppable ? '' : ' is-disabled').qq{"><input data-role="none" type="checkbox"$name_attr value="$value"$checked$disabled$recommended><span><strong>$label</strong>$meta_html</span></label>};
+      $html .= qq{<label class="stop-target-item}.($is_stoppable ? '' : ' is-disabled').qq{"><input data-role="none" type="checkbox"$name_attr value="$value"$checked$disabled$recommended><span><strong>$label</strong>$meta_html$reason_html</span></label>};
     }
 
     $html .= '</div></details>';
