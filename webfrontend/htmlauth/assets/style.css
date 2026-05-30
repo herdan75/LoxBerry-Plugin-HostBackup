@@ -480,21 +480,30 @@ body.is-loading .loading-overlay {
   border: 1px solid #dddddd;
   border-radius: 6px;
   color: #34465a;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 9px 10px;
+  max-width: 640px;
+  padding: 7px 9px;
 }
 
-.target-picker span {
+.target-picker summary {
+  align-items: center;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 6px;
   font-size: 13px;
   font-weight: 700;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.target-picker[open] summary {
+  margin-bottom: 8px;
 }
 
 .target-picker-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 620px;
 }
 
 #hostbackup-app .target-picker .path-choice {
@@ -503,9 +512,11 @@ body.is-loading .loading-overlay {
   flex-direction: column;
   font-family: Consolas, "Liberation Mono", monospace;
   font-size: 12px;
+  max-width: 100%;
   min-height: 28px;
   padding: 4px 8px;
   text-align: left;
+  width: 100%;
 }
 
 #hostbackup-app .target-picker .path-choice.is-recommended {
@@ -519,6 +530,7 @@ body.is-loading .loading-overlay {
 #hostbackup-app .target-picker .path-choice strong {
   font-size: 12px;
   line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 #hostbackup-app .target-picker .path-choice span {
@@ -527,10 +539,6 @@ body.is-loading .loading-overlay {
   font-size: 11px;
   font-weight: 400;
   line-height: 1.2;
-}
-
-.target-picker small {
-  font-size: 12px;
 }
 
 .schedule-enable {

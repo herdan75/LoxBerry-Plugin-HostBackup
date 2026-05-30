@@ -670,12 +670,13 @@ sub render_backup_target_picker {
     $buttons .= qq{<button data-role="none" type="button" class="path-choice$class" draggable="true" data-backup-root="$safe_path"><strong>$safe_path</strong><span>$label · $safe_fs · frei ca. $safe_free MB</span></button>};
   }
 
+  my $info_targets = info_button('Klick uebernimmt den Pfad. Linux-Dateisysteme wie ext4, xfs oder btrfs sind fuer Geschwindigkeit, Rechte und Snapshots empfohlen. Alternativ kann ein Vorschlag in das Feld gezogen werden.');
+
   return qq{
-<div class="target-picker">
-<span>Erkannte Ziele:</span>
+<details class="target-picker">
+<summary>Erkannte Ziele $info_targets</summary>
 <div class="target-picker-actions">$buttons</div>
-<small>Klick &uuml;bernimmt den Pfad. Linux-Dateisysteme wie ext4, xfs oder btrfs sind f&uuml;r Geschwindigkeit, Rechte und Snapshots empfohlen. Alternativ kann ein Vorschlag in das Feld gezogen werden.</small>
-</div>
+</details>
 };
 }
 
