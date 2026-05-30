@@ -444,6 +444,48 @@ body.is-loading .loading-overlay {
   grid-column: 1 / -1;
 }
 
+.target-input-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.target-picker {
+  align-self: start;
+  background: #f7f7f7;
+  border: 1px solid #dddddd;
+  border-radius: 6px;
+  color: #34465a;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 10px;
+}
+
+.target-picker span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.target-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#hostbackup-app .target-picker .path-choice {
+  background: #ffffff;
+  font-family: Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  min-height: 28px;
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.target-picker small {
+  font-size: 12px;
+}
+
 .schedule-enable {
   margin-bottom: 10px;
 }

@@ -593,6 +593,59 @@ sub render_target_notice {
   return qq{<section class="inline-notice $target_state"><strong>Dateisystem-Pr&uuml;fung:</strong> $target_message<br><span>Erkannt: <code>$target_fs</code>, frei ca. $target_free MB.</span></section>};
 }
 
+sub render_backup_target_picker {
+  my ($current_root) = @_;
+  my @base_dirs = (
+    '/media/usb',
+    '/mnt',
+    '/opt/loxberry/system/storage/usb',
+  );
+  my %seen;
+  my @targets;
+
+  my $add_target = sub {
+    my ($path) = @_;
+    return unless defined $path && length $path;
+    $path =~ s{//+}{/}g;
+    return if $path eq '/' || $path =~ m{^/(proc|sys|dev|run|tmp)(/|$)};
+    return if $seen{$path}++;
+    push @targets, $path;
+  };
+
+  $add_target->($current_root) if defined $current_root && length $current_root;
+
+  for my $base (@base_dirs) {
+    next unless -d $base;
+    opendir(my $dh, $base) or next;
+    my @entries = sort grep { $_ !~ /^\./ } readdir($dh);
+    closedir($dh);
+
+    for my $entry (@entries) {
+      next if $entry =~ /^(lost\+found|System Volume Information)$/i;
+      my $path = "$base/$entry";
+      next unless -d $path;
+      $add_target->("$path/loxberry-hostbackup");
+    }
+  }
+
+  return '' unless @targets;
+  @targets = @targets[0..9] if @targets > 10;
+
+  my $buttons = '';
+  for my $path (@targets) {
+    my $safe_path = escapeHTML($path);
+    $buttons .= qq{<button data-role="none" type="button" class="path-choice" draggable="true" data-backup-root="$safe_path">$safe_path</button>};
+  }
+
+  return qq{
+<div class="target-picker">
+<span>Erkannte Ziele:</span>
+<div class="target-picker-actions">$buttons</div>
+<small>Klick &uuml;bernimmt den Pfad. Alternativ kann ein Vorschlag in das Feld gezogen werden.</small>
+</div>
+};
+}
+
 sub render_backup_rows {
   my ($backups) = @_;
 
@@ -775,6 +828,7 @@ if ($action eq 'stop-targets') {
 }
 
 my $target_notice = render_target_notice(undef);
+my $backup_target_picker = render_backup_target_picker($config->{backup_root} || '');
 
 our $htmlhead = qq{
 <link rel="stylesheet" href="assets/style.css">
@@ -854,10 +908,13 @@ print <<HTML;
 
 <div class="settings-form nested-settings">
 
+<div class="target-input-stack">
 <label>
 <span>Backup-Verzeichnis $info_backup_root</span>
-<input data-role="none" name="backup_root" value="$cfg_backup_root">
+<input data-role="none" id="backup-root-input" name="backup_root" value="$cfg_backup_root">
 </label>
+$backup_target_picker
+</div>
 
 <div id="target-notice">$target_notice</div>
 
@@ -1250,6 +1307,44 @@ function hostbackupClosest(node, selector) {
   }
   return null;
 }
+
+(function () {
+  var input = document.getElementById('backup-root-input');
+  if (!input) return;
+
+  function setBackupRoot(path) {
+    if (!path) return;
+    input.value = path;
+    try {
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    } catch (e) {}
+    input.focus();
+  }
+
+  document.addEventListener('click', function (event) {
+    var button = hostbackupClosest(event.target, '[data-backup-root]');
+    if (!button) return;
+    event.preventDefault();
+    setBackupRoot(button.getAttribute('data-backup-root') || '');
+  });
+
+  document.addEventListener('dragstart', function (event) {
+    var button = hostbackupClosest(event.target, '[data-backup-root]');
+    if (!button || !event.dataTransfer) return;
+    event.dataTransfer.setData('text/plain', button.getAttribute('data-backup-root') || '');
+  });
+
+  input.addEventListener('dragover', function (event) {
+    event.preventDefault();
+  });
+
+  input.addEventListener('drop', function (event) {
+    event.preventDefault();
+    var path = event.dataTransfer ? event.dataTransfer.getData('text/plain') : '';
+    setBackupRoot(path);
+  });
+}());
 
 (function () {
   var key = 'loxberryhostbackup-scroll';
