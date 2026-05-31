@@ -502,6 +502,7 @@ body.is-loading .loading-overlay {
 
 #hostbackup-app .target-picker > summary {
   align-items: center;
+  color: #1f2a33;
   cursor: pointer;
   display: inline-flex;
   gap: 6px;
@@ -510,6 +511,18 @@ body.is-loading .loading-overlay {
   line-height: 1.25 !important;
   margin: 0 !important;
   padding: 0 !important;
+}
+
+#hostbackup-app .target-picker > summary::before {
+  color: #1f2a33;
+  content: "\25B8";
+  flex: 0 0 auto;
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+#hostbackup-app .target-picker[open] > summary::before {
+  content: "\25BE";
 }
 
 #hostbackup-app .target-picker[open] > summary {
