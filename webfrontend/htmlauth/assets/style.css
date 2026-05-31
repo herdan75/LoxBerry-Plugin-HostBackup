@@ -475,62 +475,70 @@ body.is-loading .loading-overlay {
 }
 
 .target-picker {
-  align-self: start;
-  background: #f7f7f7;
-  border: 1px solid #dddddd;
-  border-radius: 6px;
+  background: transparent;
+  border-top: 1px solid #dddddd;
+  border-radius: 0;
   color: #34465a;
-  max-width: 760px;
-  padding: 8px 10px;
+  margin-top: 10px;
+  max-width: 100%;
+  padding: 9px 0 0;
 }
 
-.target-picker summary {
+#hostbackup-app .target-picker,
+#hostbackup-app .target-picker * {
+  letter-spacing: normal;
+  text-shadow: none;
+}
+
+#hostbackup-app .target-picker summary {
   align-items: center;
   cursor: pointer;
   display: inline-flex;
   gap: 6px;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.25;
-  margin: 0;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
-.target-picker[open] summary {
-  margin-bottom: 10px;
+#hostbackup-app .target-picker[open] summary {
+  margin-bottom: 8px;
 }
 
 .target-picker-groups {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 8px;
+  max-width: 720px;
 }
 
 .target-picker-group {
-  background: #ffffff;
-  border: 1px solid #dddddd;
-  border-radius: 5px;
-  padding: 8px;
+  background: transparent;
+  border: 0;
+  padding: 0;
 }
 
-.target-picker-group h4 {
+.target-picker-group-title {
   color: #102235;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.25;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
   margin: 0 0 2px;
 }
 
-.target-picker-group p {
+.target-picker-group-description {
   color: #526173;
-  font-size: 12px;
-  line-height: 1.25;
-  margin: 0 0 7px;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  line-height: 1.25 !important;
+  margin: 0 0 5px;
 }
 
 .target-picker-actions {
   display: grid;
-  gap: 6px;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 5px 7px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 #hostbackup-app .target-picker .path-choice {
@@ -540,8 +548,8 @@ body.is-loading .loading-overlay {
   font-family: Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   max-width: 100%;
-  min-height: 52px;
-  padding: 6px 8px;
+  min-height: 42px;
+  padding: 5px 8px;
   text-align: left;
   width: 100%;
 }

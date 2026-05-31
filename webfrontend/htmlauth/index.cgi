@@ -736,13 +736,13 @@ sub render_backup_target_picker {
     }
     my $safe_title = escapeHTML($group->{title});
     my $safe_description = escapeHTML($group->{description});
-    $groups_html .= qq{<section class="target-picker-group"><h4>$safe_title</h4><p>$safe_description</p><div class="target-picker-actions">$buttons</div></section>};
+    $groups_html .= qq{<div class="target-picker-group"><div class="target-picker-group-title">$safe_title</div><div class="target-picker-group-description">$safe_description</div><div class="target-picker-actions">$buttons</div></div>};
   }
 
   my $info_targets = info_button('Klick uebernimmt den Pfad ins Backup-Verzeichnis. Linux-Dateisysteme wie ext4, xfs oder btrfs sind fuer Geschwindigkeit, Rechte und inkrementelle Snapshots empfohlen.');
 
   return qq{
-<details class="target-picker">
+<details class="schedule-detail target-picker">
 <summary>Backup-Ziel auswaehlen $info_targets</summary>
 <div class="target-picker-groups">$groups_html</div>
 </details>
