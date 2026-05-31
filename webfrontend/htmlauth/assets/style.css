@@ -1414,3 +1414,37 @@ body.is-loading .loading-overlay {
     padding: 10px 0;
   }
 }
+
+#hostbackup-app .target-picker .target-picker-group[open] {
+  max-width: 560px !important;
+}
+
+#hostbackup-app .target-picker .target-picker-actions {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  padding: 3px 4px !important;
+}
+
+#hostbackup-app .target-picker button.path-choice {
+  box-sizing: border-box !important;
+  display: flex !important;
+  line-height: 1.1 !important;
+  margin: 0 !important;
+  max-width: 500px !important;
+  min-height: 0 !important;
+  padding: 2px 7px !important;
+  white-space: normal !important;
+  width: auto !important;
+}
+
+#hostbackup-app .target-picker .path-choice-head {
+  gap: 5px !important;
+}
+
+#hostbackup-app .target-picker .path-choice strong,
+#hostbackup-app .target-picker .path-choice em,
+#hostbackup-app .target-picker .path-choice-path,
+#hostbackup-app .target-picker .path-choice-meta {
+  line-height: 1.1 !important;
+}
