@@ -476,12 +476,12 @@ body.is-loading .loading-overlay {
 
 .target-picker {
   background: transparent;
-  border-top: 1px solid #dddddd;
+  border-top: 0;
   border-radius: 0;
   color: #34465a;
-  margin-top: 10px;
+  margin-top: 0;
   max-width: 100%;
-  padding: 9px 0 0;
+  padding: 0;
 }
 
 #hostbackup-app .target-picker,
@@ -509,7 +509,7 @@ body.is-loading .loading-overlay {
 .target-picker-groups {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
   max-width: 720px;
 }
 
@@ -519,20 +519,16 @@ body.is-loading .loading-overlay {
   padding: 0;
 }
 
-.target-picker-group-title {
+#hostbackup-app .target-picker .target-picker-group-title {
   color: #102235;
   font-size: 13px !important;
   font-weight: 700 !important;
   line-height: 1.25 !important;
-  margin: 0 0 2px;
-}
-
-.target-picker-group-description {
-  color: #526173;
-  font-size: 12px !important;
-  font-weight: 400 !important;
-  line-height: 1.25 !important;
+  letter-spacing: normal !important;
   margin: 0 0 5px;
+  text-shadow: none !important;
+  text-transform: none !important;
+  word-spacing: normal !important;
 }
 
 .target-picker-actions {
@@ -546,12 +542,16 @@ body.is-loading .loading-overlay {
   display: inline-flex;
   flex-direction: column;
   font-family: Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  letter-spacing: normal !important;
   max-width: 100%;
   min-height: 42px;
   padding: 5px 8px;
   text-align: left;
+  text-transform: none !important;
   width: 100%;
+  word-spacing: normal !important;
 }
 
 #hostbackup-app .target-picker .path-choice.is-recommended {
@@ -570,9 +570,13 @@ body.is-loading .loading-overlay {
 }
 
 #hostbackup-app .target-picker .path-choice strong {
-  font-size: 12px;
-  line-height: 1.25;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  letter-spacing: normal !important;
+  line-height: 1.25 !important;
   overflow-wrap: anywhere;
+  text-transform: none !important;
+  word-spacing: normal !important;
 }
 
 #hostbackup-app .target-picker .path-choice em {
@@ -583,6 +587,7 @@ body.is-loading .loading-overlay {
   font-weight: 700;
   line-height: 1.2;
   text-transform: uppercase;
+  word-spacing: normal !important;
 }
 
 #hostbackup-app .target-picker .path-choice-path,
@@ -591,7 +596,10 @@ body.is-loading .loading-overlay {
   font-family: Arial, Helvetica, sans-serif;
   font-size: 11px;
   font-weight: 400;
+  letter-spacing: normal !important;
   line-height: 1.2;
+  text-transform: none !important;
+  word-spacing: normal !important;
 }
 
 #hostbackup-app .target-picker .path-choice-path {

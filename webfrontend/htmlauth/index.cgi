@@ -735,8 +735,7 @@ sub render_backup_target_picker {
       $buttons .= qq{<button data-role="none" type="button" class="path-choice$class" draggable="true" data-backup-root="$safe_path"><span class="path-choice-head"><strong>$safe_label</strong><em>$state</em></span><span class="path-choice-path">$safe_path</span><span class="path-choice-meta">$safe_fs &middot; frei ca. $safe_free MB</span></button>};
     }
     my $safe_title = escapeHTML($group->{title});
-    my $safe_description = escapeHTML($group->{description});
-    $groups_html .= qq{<div class="target-picker-group"><div class="target-picker-group-title">$safe_title</div><div class="target-picker-group-description">$safe_description</div><div class="target-picker-actions">$buttons</div></div>};
+    $groups_html .= qq{<div class="target-picker-group"><div class="target-picker-group-title">$safe_title</div><div class="target-picker-actions">$buttons</div></div>};
   }
 
   my $info_targets = info_button('Klick uebernimmt den Pfad ins Backup-Verzeichnis. Linux-Dateisysteme wie ext4, xfs oder btrfs sind fuer Geschwindigkeit, Rechte und inkrementelle Snapshots empfohlen.');
@@ -1031,11 +1030,11 @@ print <<HTML;
 <div class="settings-form nested-settings">
 
 <div class="target-input-stack">
+$backup_target_picker
 <label>
 <span>Backup-Verzeichnis $info_backup_root</span>
 <input data-role="none" id="backup-root-input" name="backup_root" value="$cfg_backup_root">
 </label>
-$backup_target_picker
 </div>
 
 <div id="target-notice">$target_notice</div>
