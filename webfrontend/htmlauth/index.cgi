@@ -630,6 +630,39 @@ sub target_label_from_path {
   return $label || $path;
 }
 
+sub is_real_network_mount {
+  my ($path) = @_;
+  return 0 unless defined $path && length $path;
+
+  my $probe = $path;
+  while (defined $probe && !-e $probe && $probe ne '/') {
+    $probe =~ s{/+[^/]+$}{};
+    $probe = '/' unless length $probe;
+  }
+
+  return 0 unless defined $probe && length $probe && -e $probe;
+
+  my $target = '';
+  my $fs = '';
+
+  if (open(my $fh, '-|', 'findmnt', '-rn', '-T', $probe, '-o', 'TARGET,FSTYPE')) {
+    my $line = <$fh> // '';
+    close $fh;
+    chomp $line;
+
+    if ($line =~ /^(\S+)\s+(\S+)/) {
+      ($target, $fs) = ($1, $2);
+    }
+  }
+
+  return 0 unless length $target && length $fs;
+  return 0 if $target eq '/';
+
+  return 1 if $fs =~ /^(cifs|smb3?|nfs|nfs4|fuse\.sshfs|sshfs|curlftpfs|fuse|fuseblk)$/i;
+
+  return 0;
+}
+
 sub render_backup_target_picker {
   my ($current_root) = @_;
   my @groups = (
@@ -670,6 +703,7 @@ sub render_backup_target_picker {
 
   eval {
     require LoxBerry::Storage;
+
     my @usb = eval { LoxBerry::Storage::get_usbstorage() };
     for my $item (@usb) {
       my $path = $storage_value->($item, qw(path mountpoint mount dir directory devicepath USBSTORAGE_DEVICEPATH));
@@ -677,13 +711,19 @@ sub render_backup_target_picker {
       next unless length $path;
       $add_target->("$path/loxberry-hostbackup", 'usb', $label);
     }
+
     my @netshares = eval { LoxBerry::Storage::get_netshares() };
     for my $item (@netshares) {
       my $path = $storage_value->($item, qw(path mountpoint mount dir directory sharepath NETSHARE_SHAREPATH));
       my $label = $storage_value->($item, qw(name label sharename NETSHARE_SHARENAME));
       next unless length $path;
+
+      # Netzwerkspeicher nur anzeigen, wenn wirklich ein Netzwerk-Dateisystem gemountet ist.
+      next unless is_real_network_mount($path);
+
       $add_target->("$path/loxberry-hostbackup", 'network', $label);
     }
+
     1;
   };
 
@@ -700,15 +740,24 @@ sub render_backup_target_picker {
   for my $base (@base_dirs) {
     my ($base_path, $group_id) = @$base;
     next unless -d $base_path;
-    $add_target->("$base_path/loxberry-hostbackup", $group_id, target_label_from_path($base_path)) if $group_id eq 'network';
+
     opendir(my $dh, $base_path) or next;
     my @entries = sort grep { $_ !~ /^\./ } readdir($dh);
     closedir($dh);
 
     for my $entry (@entries) {
       next if $entry =~ /^(lost\+found|System Volume Information)$/i;
+      next if $base_path eq '/mnt' && $entry =~ /^(ftp_client|nfs_client|samba)$/;
+
       my $path = "$base_path/$entry";
       next unless -d $path;
+
+      # Netzwerk-Basisordner wie /mnt/samba, /mnt/nfs_client oder /mnt/ftp_client
+      # nur anzeigen, wenn darunter wirklich ein Netzwerk-Dateisystem gemountet ist.
+      if ($group_id eq 'network') {
+        next unless is_real_network_mount($path);
+      }
+
       $add_target->("$path/loxberry-hostbackup", $group_id, $entry);
     }
   }
