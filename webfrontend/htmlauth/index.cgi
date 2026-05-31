@@ -732,7 +732,7 @@ sub render_backup_target_picker {
       my $state = $target->{recommended} ? 'empfohlen' : 'pr&uuml;fen';
       my $safe_fs = escapeHTML($target->{fs});
       my $safe_free = escapeHTML($target->{free});
-      $buttons .= qq{<button data-role="none" type="button" class="path-choice$class" draggable="true" data-backup-root="$safe_path"><span class="path-choice-head"><strong>$safe_label</strong> <em>$state</em></span><span class="path-choice-path">$safe_path</span><span class="path-choice-meta">$safe_fs &middot; frei ca. $safe_free MB</span></button>};
+      $buttons .= qq{<span role="button" tabindex="0" class="path-choice$class" draggable="true" data-backup-root="$safe_path"><span class="path-choice-head"><strong>$safe_label</strong> <em>$state</em></span><span class="path-choice-path">$safe_path</span><span class="path-choice-meta">$safe_fs &middot; frei ca. $safe_free MB</span></span>};
     }
     my $safe_title = escapeHTML($group->{title});
     my $count = scalar @targets;
@@ -1445,6 +1445,14 @@ function hostbackupClosest(node, selector) {
   }
 
   document.addEventListener('click', function (event) {
+    var button = hostbackupClosest(event.target, '[data-backup-root]');
+    if (!button) return;
+    event.preventDefault();
+    setBackupRoot(button.getAttribute('data-backup-root') || '');
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
     var button = hostbackupClosest(event.target, '[data-backup-root]');
     if (!button) return;
     event.preventDefault();
