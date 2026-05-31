@@ -530,7 +530,7 @@ body.is-loading .loading-overlay {
 #hostbackup-app .target-picker .target-picker-group[open] {
   display: block;
   flex-basis: 100%;
-  max-width: 760px;
+  max-width: 620px;
   width: 100%;
 }
 
@@ -582,9 +582,9 @@ body.is-loading .loading-overlay {
 .target-picker-actions {
   background: #ffffff;
   display: grid;
-  gap: 5px 7px;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  padding: 8px;
+  gap: 3px 5px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  padding: 5px;
 }
 
 #hostbackup-app .target-picker .path-choice {
@@ -596,8 +596,8 @@ body.is-loading .loading-overlay {
   font-weight: 400 !important;
   letter-spacing: normal !important;
   max-width: 100%;
-  min-height: 42px;
-  padding: 5px 8px;
+  min-height: 34px;
+  padding: 3px 7px;
   text-align: left;
   text-transform: none !important;
   width: 100%;
