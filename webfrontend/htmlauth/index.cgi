@@ -732,10 +732,11 @@ sub render_backup_target_picker {
       my $state = $target->{recommended} ? 'empfohlen' : 'pr&uuml;fen';
       my $safe_fs = escapeHTML($target->{fs});
       my $safe_free = escapeHTML($target->{free});
-      $buttons .= qq{<button data-role="none" type="button" class="path-choice$class" draggable="true" data-backup-root="$safe_path"><span class="path-choice-head"><strong>$safe_label</strong><em>$state</em></span><span class="path-choice-path">$safe_path</span><span class="path-choice-meta">$safe_fs &middot; frei ca. $safe_free MB</span></button>};
+      $buttons .= qq{<button data-role="none" type="button" class="path-choice$class" draggable="true" data-backup-root="$safe_path"><span class="path-choice-head"><strong>$safe_label</strong> <em>$state</em></span><span class="path-choice-path">$safe_path</span><span class="path-choice-meta">$safe_fs &middot; frei ca. $safe_free MB</span></button>};
     }
     my $safe_title = escapeHTML($group->{title});
-    $groups_html .= qq{<div class="target-picker-group"><div class="target-picker-group-title">$safe_title</div><div class="target-picker-actions">$buttons</div></div>};
+    my $count = scalar @targets;
+    $groups_html .= qq{<details class="target-picker-group"><summary><span>$safe_title</span><small>$count verf&uuml;gbar</small></summary><div class="target-picker-actions">$buttons</div></details>};
   }
 
   my $info_targets = info_button('Klick uebernimmt den Pfad ins Backup-Verzeichnis. Linux-Dateisysteme wie ext4, xfs oder btrfs sind fuer Geschwindigkeit, Rechte und inkrementelle Snapshots empfohlen.');
