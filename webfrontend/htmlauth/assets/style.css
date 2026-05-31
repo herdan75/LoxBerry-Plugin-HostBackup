@@ -480,8 +480,8 @@ body.is-loading .loading-overlay {
   border: 1px solid #dddddd;
   border-radius: 6px;
   color: #34465a;
-  max-width: 640px;
-  padding: 7px 9px;
+  max-width: 760px;
+  padding: 8px 10px;
 }
 
 .target-picker summary {
@@ -496,14 +496,41 @@ body.is-loading .loading-overlay {
 }
 
 .target-picker[open] summary {
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.target-picker-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.target-picker-group {
+  background: #ffffff;
+  border: 1px solid #dddddd;
+  border-radius: 5px;
+  padding: 8px;
+}
+
+.target-picker-group h4 {
+  color: #102235;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0 0 2px;
+}
+
+.target-picker-group p {
+  color: #526173;
+  font-size: 12px;
+  line-height: 1.25;
+  margin: 0 0 7px;
 }
 
 .target-picker-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  max-width: 620px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
 #hostbackup-app .target-picker .path-choice {
@@ -513,8 +540,8 @@ body.is-loading .loading-overlay {
   font-family: Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   max-width: 100%;
-  min-height: 28px;
-  padding: 4px 8px;
+  min-height: 52px;
+  padding: 6px 8px;
   text-align: left;
   width: 100%;
 }
@@ -527,18 +554,40 @@ body.is-loading .loading-overlay {
   border-color: #d9a441;
 }
 
+#hostbackup-app .target-picker .path-choice-head {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
 #hostbackup-app .target-picker .path-choice strong {
   font-size: 12px;
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
-#hostbackup-app .target-picker .path-choice span {
+#hostbackup-app .target-picker .path-choice em {
+  color: #526173;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+#hostbackup-app .target-picker .path-choice-path,
+#hostbackup-app .target-picker .path-choice-meta {
   color: #526173;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 11px;
   font-weight: 400;
   line-height: 1.2;
+}
+
+#hostbackup-app .target-picker .path-choice-path {
+  overflow-wrap: anywhere;
 }
 
 .schedule-enable {

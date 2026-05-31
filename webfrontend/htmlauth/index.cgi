@@ -621,61 +621,130 @@ sub classify_target_path {
   return ($recommended, $fs, $free);
 }
 
+sub target_label_from_path {
+  my ($path) = @_;
+  return 'Backup-Ziel' unless defined $path && length $path;
+  $path =~ s{/loxberry-hostbackup/?$}{};
+  $path =~ s{//+}{/}g;
+  my ($label) = $path =~ m{/([^/]+)$};
+  return $label || $path;
+}
+
 sub render_backup_target_picker {
   my ($current_root) = @_;
-  my @base_dirs = (
-    '/media/usb',
-    '/mnt',
-    '/opt/loxberry/system/storage/usb',
+  my @groups = (
+    { id => 'current', title => 'Aktueller Pfad', description => 'Der derzeit gespeicherte Zielpfad.', targets => [] },
+    { id => 'usb', title => 'USB-Speicher', description => 'Erkannte USB-Datentraeger und LoxBerry-USB-Pfade.', targets => [] },
+    { id => 'network', title => 'Netzwerkspeicher', description => 'Typische LoxBerry-Mountpoints fuer Samba, NFS oder FTP.', targets => [] },
+    { id => 'local', title => 'Weitere lokale Pfade', description => 'Weitere sinnvolle lokale Speicherorte.', targets => [] },
   );
+  my %group_by_id = map { $_->{id} => $_ } @groups;
   my %seen;
-  my @targets;
 
   my $add_target = sub {
-    my ($path) = @_;
+    my ($path, $group_id, $label) = @_;
     return unless defined $path && length $path;
     $path =~ s{//+}{/}g;
     return if $path eq '/' || $path =~ m{^/(proc|sys|dev|run|tmp)(/|$)};
     return if $seen{$path}++;
-    push @targets, $path;
+    $group_id ||= 'local';
+    $group_id = 'local' unless $group_by_id{$group_id};
+    my ($recommended, $fs, $free) = classify_target_path($path);
+    push @{$group_by_id{$group_id}->{targets}}, {
+      path => $path,
+      label => $label || target_label_from_path($path),
+      recommended => $recommended,
+      fs => $fs,
+      free => $free,
+    };
   };
 
-  $add_target->($current_root) if defined $current_root && length $current_root;
+  my $storage_value = sub {
+    my ($item, @keys) = @_;
+    return '' unless ref($item) eq 'HASH';
+    for my $key (@keys) {
+      return $item->{$key} if defined $item->{$key} && length $item->{$key};
+    }
+    return '';
+  };
 
+  eval {
+    require LoxBerry::Storage;
+    my @usb = eval { LoxBerry::Storage::get_usbstorage() };
+    for my $item (@usb) {
+      my $path = $storage_value->($item, qw(path mountpoint mount dir directory devicepath USBSTORAGE_DEVICEPATH));
+      my $label = $storage_value->($item, qw(name label device USBSTORAGE_DEVICE USBSTORAGE_NAME));
+      next unless length $path;
+      $add_target->("$path/loxberry-hostbackup", 'usb', $label);
+    }
+    my @netshares = eval { LoxBerry::Storage::get_netshares() };
+    for my $item (@netshares) {
+      my $path = $storage_value->($item, qw(path mountpoint mount dir directory sharepath NETSHARE_SHAREPATH));
+      my $label = $storage_value->($item, qw(name label sharename NETSHARE_SHARENAME));
+      next unless length $path;
+      $add_target->("$path/loxberry-hostbackup", 'network', $label);
+    }
+    1;
+  };
+
+  $add_target->($current_root, 'current', 'Aktueller Zielpfad') if defined $current_root && length $current_root;
+
+  my @base_dirs = (
+    [ '/media/usb', 'usb' ],
+    [ '/opt/loxberry/system/storage/usb', 'usb' ],
+    [ '/mnt/ftp_client', 'network' ],
+    [ '/mnt/nfs_client', 'network' ],
+    [ '/mnt/samba', 'network' ],
+    [ '/mnt', 'local' ],
+  );
   for my $base (@base_dirs) {
-    next unless -d $base;
-    opendir(my $dh, $base) or next;
+    my ($base_path, $group_id) = @$base;
+    next unless -d $base_path;
+    $add_target->("$base_path/loxberry-hostbackup", $group_id, target_label_from_path($base_path)) if $group_id eq 'network';
+    opendir(my $dh, $base_path) or next;
     my @entries = sort grep { $_ !~ /^\./ } readdir($dh);
     closedir($dh);
 
     for my $entry (@entries) {
       next if $entry =~ /^(lost\+found|System Volume Information)$/i;
-      my $path = "$base/$entry";
+      my $path = "$base_path/$entry";
       next unless -d $path;
-      $add_target->("$path/loxberry-hostbackup");
+      $add_target->("$path/loxberry-hostbackup", $group_id, $entry);
     }
   }
 
-  return '' unless @targets;
-  @targets = @targets[0..9] if @targets > 10;
+  my $has_targets = 0;
+  for my $group (@groups) {
+    $has_targets ||= @{$group->{targets}};
+  }
+  return '' unless $has_targets;
 
-  my $buttons = '';
-  for my $path (@targets) {
-    my $safe_path = escapeHTML($path);
-    my ($recommended, $fs, $free) = classify_target_path($path);
-    my $class = $recommended ? ' is-recommended' : ' is-warning';
-    my $label = $recommended ? 'empfohlen' : 'pr&uuml;fen';
-    my $safe_fs = escapeHTML($fs);
-    my $safe_free = escapeHTML($free);
-    $buttons .= qq{<button data-role="none" type="button" class="path-choice$class" draggable="true" data-backup-root="$safe_path"><strong>$safe_path</strong><span>$label · $safe_fs · frei ca. $safe_free MB</span></button>};
+  my $groups_html = '';
+  for my $group (@groups) {
+    my @targets = @{$group->{targets}};
+    next unless @targets;
+    @targets = @targets[0..5] if @targets > 6;
+    my $buttons = '';
+    for my $target (@targets) {
+      my $safe_path = escapeHTML($target->{path});
+      my $safe_label = escapeHTML($target->{label});
+      my $class = $target->{recommended} ? ' is-recommended' : ' is-warning';
+      my $state = $target->{recommended} ? 'empfohlen' : 'pr&uuml;fen';
+      my $safe_fs = escapeHTML($target->{fs});
+      my $safe_free = escapeHTML($target->{free});
+      $buttons .= qq{<button data-role="none" type="button" class="path-choice$class" draggable="true" data-backup-root="$safe_path"><span class="path-choice-head"><strong>$safe_label</strong><em>$state</em></span><span class="path-choice-path">$safe_path</span><span class="path-choice-meta">$safe_fs &middot; frei ca. $safe_free MB</span></button>};
+    }
+    my $safe_title = escapeHTML($group->{title});
+    my $safe_description = escapeHTML($group->{description});
+    $groups_html .= qq{<section class="target-picker-group"><h4>$safe_title</h4><p>$safe_description</p><div class="target-picker-actions">$buttons</div></section>};
   }
 
-  my $info_targets = info_button('Klick uebernimmt den Pfad. Linux-Dateisysteme wie ext4, xfs oder btrfs sind fuer Geschwindigkeit, Rechte und Snapshots empfohlen. Alternativ kann ein Vorschlag in das Feld gezogen werden.');
+  my $info_targets = info_button('Klick uebernimmt den Pfad ins Backup-Verzeichnis. Linux-Dateisysteme wie ext4, xfs oder btrfs sind fuer Geschwindigkeit, Rechte und inkrementelle Snapshots empfohlen.');
 
   return qq{
 <details class="target-picker">
-<summary>Erkannte Ziele $info_targets</summary>
-<div class="target-picker-actions">$buttons</div>
+<summary>Backup-Ziel auswaehlen $info_targets</summary>
+<div class="target-picker-groups">$groups_html</div>
 </details>
 };
 }
