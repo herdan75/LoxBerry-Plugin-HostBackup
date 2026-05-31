@@ -485,9 +485,19 @@ body.is-loading .loading-overlay {
 }
 
 #hostbackup-app .target-picker,
-#hostbackup-app .target-picker * {
-  letter-spacing: normal;
-  text-shadow: none;
+#hostbackup-app .target-picker *,
+#hostbackup-app .target-picker-group,
+#hostbackup-app .target-picker-group *,
+#hostbackup-app .path-choice,
+#hostbackup-app .path-choice * {
+  font-family: "Helvetica Neue", Arial, Helvetica, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  letter-spacing: normal !important;
+  line-height: 1.25 !important;
+  text-shadow: none !important;
+  text-transform: none !important;
+  word-spacing: normal !important;
 }
 
 #hostbackup-app .target-picker > summary {
@@ -503,7 +513,7 @@ body.is-loading .loading-overlay {
 }
 
 #hostbackup-app .target-picker[open] > summary {
-  margin-bottom: 8px;
+  margin-bottom: 8px !important;
 }
 
 .target-picker-groups {
@@ -530,7 +540,7 @@ body.is-loading .loading-overlay {
 #hostbackup-app .target-picker .target-picker-group[open] {
   display: block;
   flex-basis: 100%;
-  max-width: 620px;
+  max-width: 760px;
   width: 100%;
 }
 
@@ -581,32 +591,32 @@ body.is-loading .loading-overlay {
 
 #hostbackup-app .target-picker .target-picker-actions {
   background: #ffffff;
-  align-items: flex-start;
-  display: flex !important;
-  flex-direction: column;
-  gap: 3px;
-  padding: 4px 5px;
+  display: grid !important;
+  gap: 5px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  padding: 8px 9px 9px;
 }
 
 #hostbackup-app .target-picker .path-choice {
   background: #ffffff;
-  display: inline-flex !important;
-  flex-direction: column;
   border: 1px solid #bcc8d6;
-  border-radius: 6px;
+  border-radius: 5px;
   cursor: pointer;
-  font-family: Consolas, "Liberation Mono", monospace;
-  font-size: 12px !important;
+  display: flex !important;
+  flex-direction: column;
+  gap: 2px;
+  font-family: "Helvetica Neue", Arial, Helvetica, sans-serif !important;
+  font-size: 13px !important;
   font-weight: 400 !important;
   letter-spacing: normal !important;
-  line-height: 1.15 !important;
+  line-height: 1.25 !important;
   margin: 0 !important;
-  max-width: 520px;
+  max-width: 100%;
   min-height: 0 !important;
-  padding: 3px 8px !important;
+  padding: 6px 8px !important;
   text-align: left;
   text-transform: none !important;
-  width: auto !important;
+  width: 100% !important;
   word-spacing: normal !important;
 }
 
@@ -628,16 +638,18 @@ body.is-loading .loading-overlay {
 #hostbackup-app .target-picker .path-choice-head {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   justify-content: flex-start;
   min-width: 0;
 }
 
 #hostbackup-app .target-picker .path-choice strong {
-  font-size: 12px !important;
+  display: inline;
+  font-size: 13px !important;
   font-weight: 700 !important;
   letter-spacing: normal !important;
-  line-height: 1.15 !important;
+  line-height: 1.2 !important;
   overflow-wrap: anywhere;
   text-transform: none !important;
   word-spacing: normal !important;
@@ -645,29 +657,43 @@ body.is-loading .loading-overlay {
 
 #hostbackup-app .target-picker .path-choice em {
   color: #526173;
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 10px;
+  font-size: 10px !important;
   font-style: normal;
-  font-weight: 700;
+  font-weight: 700 !important;
   line-height: 1.15;
-  text-transform: uppercase;
+  text-transform: uppercase !important;
   word-spacing: normal !important;
 }
 
 #hostbackup-app .target-picker .path-choice-path,
 #hostbackup-app .target-picker .path-choice-meta {
   color: #526173;
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 11px;
-  font-weight: 400;
+  display: block;
+  font-size: 11px !important;
+  font-weight: 400 !important;
   letter-spacing: normal !important;
-  line-height: 1.15;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
   text-transform: none !important;
   word-spacing: normal !important;
 }
 
 #hostbackup-app .target-picker .path-choice-path {
-  overflow-wrap: anywhere;
+  font-family: Consolas, "Liberation Mono", monospace !important;
+}
+
+#hostbackup-app .target-picker .path-choice-meta {
+  font-family: "Helvetica Neue", Arial, Helvetica, sans-serif !important;
+}
+
+#hostbackup-app .target-picker.schedule-detail {
+  border-top: 0 !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+#hostbackup-app .target-picker.schedule-detail + label {
+  margin-top: 12px;
 }
 
 .schedule-enable {
@@ -714,16 +740,6 @@ body.is-loading .loading-overlay {
   border-top: 1px solid #dddddd;
   margin-top: 13px;
   padding-top: 10px;
-}
-
-#hostbackup-app .target-picker.schedule-detail {
-  border-top: 0 !important;
-  margin-top: 0 !important;
-  padding-top: 0 !important;
-}
-
-#hostbackup-app .target-picker.schedule-detail + label {
-  margin-top: 12px;
 }
 
 .schedule-time-input {
