@@ -579,28 +579,31 @@ body.is-loading .loading-overlay {
   border-bottom: 1px solid #dddddd;
 }
 
-.target-picker-actions {
+#hostbackup-app .target-picker .target-picker-actions {
   background: #ffffff;
-  display: grid;
-  gap: 3px 5px;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  padding: 5px;
+  align-items: flex-start;
+  display: flex !important;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 5px;
 }
 
-#hostbackup-app .target-picker .path-choice {
+#hostbackup-app .target-picker button.path-choice {
   background: #ffffff;
-  display: inline-flex;
+  display: inline-flex !important;
   flex-direction: column;
   font-family: Consolas, "Liberation Mono", monospace;
   font-size: 12px !important;
   font-weight: 400 !important;
   letter-spacing: normal !important;
-  max-width: 100%;
-  min-height: 34px;
-  padding: 3px 7px;
+  line-height: 1.15 !important;
+  margin: 0 !important;
+  max-width: 520px;
+  min-height: 0 !important;
+  padding: 3px 8px !important;
   text-align: left;
   text-transform: none !important;
-  width: 100%;
+  width: auto !important;
   word-spacing: normal !important;
 }
 
@@ -615,15 +618,16 @@ body.is-loading .loading-overlay {
 #hostbackup-app .target-picker .path-choice-head {
   align-items: center;
   display: flex;
-  gap: 8px;
-  justify-content: space-between;
+  gap: 6px;
+  justify-content: flex-start;
+  min-width: 0;
 }
 
 #hostbackup-app .target-picker .path-choice strong {
   font-size: 12px !important;
   font-weight: 700 !important;
   letter-spacing: normal !important;
-  line-height: 1.25 !important;
+  line-height: 1.15 !important;
   overflow-wrap: anywhere;
   text-transform: none !important;
   word-spacing: normal !important;
@@ -635,7 +639,7 @@ body.is-loading .loading-overlay {
   font-size: 10px;
   font-style: normal;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.15;
   text-transform: uppercase;
   word-spacing: normal !important;
 }
@@ -647,7 +651,7 @@ body.is-loading .loading-overlay {
   font-size: 11px;
   font-weight: 400;
   letter-spacing: normal !important;
-  line-height: 1.2;
+  line-height: 1.15;
   text-transform: none !important;
   word-spacing: normal !important;
 }
