@@ -1267,21 +1267,6 @@ $backup_target_picker
 <span>Root-Freigabe bestätigen $info_root</span>
 </label>
 
-<input data-role="none" type="hidden" name="stop_docker_before_backup" value="">
-
-<details class="stop-target-panel">
-<summary>Zu stoppende Dienste vor dem Backup $info_stop_targets</summary>
-<div id="stop-targets-list" class="stop-targets-list loading">
-<span class="mini-spinner" aria-hidden="true"></span>
-<span>Dienste und Container werden geladen...</span>
-</div>
-</details>
-
-<label class="checkline">
-<input data-role="none" type="checkbox" name="create_export_after_backup" value="1"$cfg_create_export>
-<span>Nach jedem Backup ein Export-Archiv erstellen $info_export</span>
-</label>
-
 <details class="schedule-detail mail-detail">
 <summary>Mailbenachrichtigung $info_mail</summary>
 
@@ -1307,6 +1292,21 @@ $backup_target_picker
 </label>
 </div>
 </details>
+
+<input data-role="none" type="hidden" name="stop_docker_before_backup" value="">
+
+<details class="stop-target-panel">
+<summary>Zu stoppende Dienste vor dem Backup $info_stop_targets</summary>
+<div id="stop-targets-list" class="stop-targets-list loading">
+<span class="mini-spinner" aria-hidden="true"></span>
+<span>Dienste und Container werden geladen...</span>
+</div>
+</details>
+
+<label class="checkline">
+<input data-role="none" type="checkbox" name="create_export_after_backup" value="1"$cfg_create_export>
+<span>Nach jedem Backup ein tar.gz-Archiv erstellen $info_export</span>
+</label>
 
 </fieldset>
 
