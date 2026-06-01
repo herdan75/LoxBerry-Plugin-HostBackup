@@ -1282,22 +1282,23 @@ $backup_target_picker
 <span>Nach jedem Backup ein Export-Archiv erstellen $info_export</span>
 </label>
 
-<div class="settings-subtitle">Mailbenachrichtigung</div>
+<details class="schedule-detail mail-detail">
+<summary>Mailbenachrichtigung $info_mail</summary>
 
 <label class="checkline">
 <input data-role="none" type="checkbox" name="mail_notify_enabled" value="1"$cfg_mail_notify_enabled>
-<span>Mailbenachrichtigung aktivieren $info_mail</span>
+<span>Mailbenachrichtigung aktivieren</span>
 </label>
 
 <div class="settings-form nested-settings mail-settings">
-<label>
+<label class="wide">
 <span>Mailadresse $info_mail_to</span>
 <input data-role="none" type="email" name="mail_notify_to" value="$cfg_mail_notify_to" placeholder="leer = LoxBerry-Standardadresse">
 </label>
 
 <label class="wide">
 <span>Ereignisse $info_mail_events</span>
-<div class="mode-buttons compact-choice">
+<div class="choice-grid mail-event-grid">
 <label><input data-role="none" type="checkbox" name="mail_notify_success" value="1"$cfg_mail_notify_success> Backup erfolgreich</label>
 <label><input data-role="none" type="checkbox" name="mail_notify_failure" value="1"$cfg_mail_notify_failure> Fehler</label>
 <label><input data-role="none" type="checkbox" name="mail_notify_stopped" value="1"$cfg_mail_notify_stopped> Abbruch</label>
@@ -1305,6 +1306,7 @@ $backup_target_picker
 </div>
 </label>
 </div>
+</details>
 
 </fieldset>
 

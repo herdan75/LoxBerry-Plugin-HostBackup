@@ -472,28 +472,12 @@ body.is-loading .loading-overlay {
   margin-top: 8px;
 }
 
-.mail-settings .compact-choice {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+.mail-detail {
+  margin-bottom: 12px;
 }
 
-.mail-settings .compact-choice label {
-  align-items: center;
-  background: #ffffff;
-  border: 1px solid #d4d4d4;
-  border-radius: 6px;
-  display: flex;
-  flex-direction: row;
-  font-size: 13px;
-  font-weight: 400;
-  gap: 6px;
-  min-height: 30px;
-  padding: 5px 8px;
-}
-
-.mail-settings .compact-choice input {
-  min-height: auto;
+.mail-event-grid {
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
 }
 
 .target-input-stack {
