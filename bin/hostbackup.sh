@@ -324,13 +324,19 @@ notify_hostbackup() {
   local subject="$3"
   local message="$4"
   local logfile="${5:-}"
-  local recipient helper
+  local recipient helper notify_output
   mail_notify_enabled_for_event "$event" || return 0
   helper="$LBP_BINDIR/notify-hostbackup.php"
   command -v php >/dev/null 2>&1 || return 0
   [ -f "$helper" ] || return 0
   recipient="$(json_get_string mail_notify_to)"
-  php "$helper" "$event" "$severity" "$subject" "$message" "$logfile" "$recipient" >/dev/null 2>&1 || true
+  notify_output="$(php "$helper" "$event" "$severity" "$subject" "$message" "$logfile" "$recipient" 2>&1)" || {
+    if [ -n "$logfile" ]; then
+      printf '%s WARNING: Mail notification failed: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$notify_output" >> "$logfile"
+    else
+      printf 'WARNING: Mail notification failed: %s\n' "$notify_output" >&2
+    fi
+  }
 }
 
 backup_target_info() {
@@ -1419,7 +1425,7 @@ create_backup() {
   prune_old_backups
 
   log "Backup $backup_id finished" | tee -a "$log_file"
-  notify_hostbackup "success" 5 "LoxBerry Host Backup erfolgreich" "Backup $backup_id wurde erfolgreich abgeschlossen. Groesse: $size Bytes, Dateien: $files." "$log_file"
+  notify_hostbackup "success" 6 "LoxBerry Host Backup erfolgreich" "Backup $backup_id wurde erfolgreich abgeschlossen. Groesse: $size Bytes, Dateien: $files." "$log_file"
   printf '%s\n' "$backup_id"
 }
 
