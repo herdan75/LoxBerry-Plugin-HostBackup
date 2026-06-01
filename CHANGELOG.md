@@ -9,6 +9,11 @@ validiert werden.
 
 ## [Unreleased]
 
+### Benachrichtigung
+
+- Mailbenachrichtigungen ueber die zentrale LoxBerry-Benachrichtigung ergaenzt.
+- Optionale Empfaengeradresse im Plugin: Wenn leer, verwendet LoxBerry die globale Standardadresse.
+
 ## [0.4.2] - 2026-05-31
 
 ### Weboberflaeche

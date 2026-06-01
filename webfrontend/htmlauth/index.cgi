@@ -265,6 +265,12 @@ if ($q->request_method eq 'POST') {
         my $root_permission_ack = bool_arg($imported->{root_permission_ack});
         my $backup_mode = $imported->{backup_mode} || 'full';
         my $stop_targets = stop_targets_csv($imported->{stop_targets});
+        my $mail_notify_enabled = bool_arg($imported->{mail_notify_enabled});
+        my $mail_notify_to = $imported->{mail_notify_to} || '';
+        my $mail_notify_success = exists $imported->{mail_notify_success} ? bool_arg($imported->{mail_notify_success}) : 'true';
+        my $mail_notify_failure = exists $imported->{mail_notify_failure} ? bool_arg($imported->{mail_notify_failure}) : 'true';
+        my $mail_notify_stopped = exists $imported->{mail_notify_stopped} ? bool_arg($imported->{mail_notify_stopped}) : 'true';
+        my $mail_notify_restore = exists $imported->{mail_notify_restore} ? bool_arg($imported->{mail_notify_restore}) : 'true';
 
         my ($status, $out) = run_shell(
           backend_cmd(
@@ -286,7 +292,13 @@ if ($q->request_method eq 'POST') {
             $post_hook,
             $root_permission_ack,
             $backup_mode,
-            $stop_targets
+            $stop_targets,
+            $mail_notify_enabled,
+            $mail_notify_to,
+            $mail_notify_success,
+            $mail_notify_failure,
+            $mail_notify_stopped,
+            $mail_notify_restore
           )
         );
 
@@ -324,6 +336,12 @@ if ($q->request_method eq 'POST') {
 
     my $stop_docker = $q->param('stop_docker_before_backup') ? 'true' : 'false';
     my $create_export = $q->param('create_export_after_backup') ? 'true' : 'false';
+    my $mail_notify_enabled = $q->param('mail_notify_enabled') ? 'true' : 'false';
+    my $mail_notify_to = $q->param('mail_notify_to') || '';
+    my $mail_notify_success = $q->param('mail_notify_success') ? 'true' : 'false';
+    my $mail_notify_failure = $q->param('mail_notify_failure') ? 'true' : 'false';
+    my $mail_notify_stopped = $q->param('mail_notify_stopped') ? 'true' : 'false';
+    my $mail_notify_restore = $q->param('mail_notify_restore') ? 'true' : 'false';
 
     my $root_permission_ack = $q->param('root_permission_ack') ? 'true' : 'false';
     my $stop_targets = '';
@@ -359,7 +377,13 @@ if ($q->request_method eq 'POST') {
         $post_hook,
         $root_permission_ack,
         $backup_mode,
-        $stop_targets
+        $stop_targets,
+        $mail_notify_enabled,
+        $mail_notify_to,
+        $mail_notify_success,
+        $mail_notify_failure,
+        $mail_notify_stopped,
+        $mail_notify_restore
       )
     );
 
@@ -532,6 +556,12 @@ my $cfg_post_hook = escapeHTML($config->{post_backup_hook} || '');
 my $cfg_excludes = escapeHTML(join "\n", @{$config->{rsync_extra_excludes} || []});
 
 my $cfg_create_export = checked_attr($config->{create_export_after_backup});
+my $cfg_mail_notify_enabled = checked_attr($config->{mail_notify_enabled});
+my $cfg_mail_notify_to = escapeHTML($config->{mail_notify_to} || '');
+my $cfg_mail_notify_success = checked_attr(exists $config->{mail_notify_success} ? $config->{mail_notify_success} : 1);
+my $cfg_mail_notify_failure = checked_attr(exists $config->{mail_notify_failure} ? $config->{mail_notify_failure} : 1);
+my $cfg_mail_notify_stopped = checked_attr(exists $config->{mail_notify_stopped} ? $config->{mail_notify_stopped} : 1);
+my $cfg_mail_notify_restore = checked_attr(exists $config->{mail_notify_restore} ? $config->{mail_notify_restore} : 1);
 my $cfg_schedule_enabled = checked_attr($config->{schedule_enabled});
 my $cfg_root_permission_ack = checked_attr($config->{root_permission_ack});
 
@@ -569,6 +599,9 @@ my $info_post_hook = info_button('Optionales Skript, das nach dem Backup ausgef�
 my $info_excludes = info_button('Hier kannst du Pfade vom rsync-Backup ausschliessen, je ein Pfad pro Zeile. Das ist sinnvoll für grosse Medienarchive, Netzwerkshares oder Daten, die separat gesichert werden. Zu viele Ausschlüsse können aber die Wiederherstellung unvollständig machen.');
 my $info_stop_targets = info_button('Wähle gezielt Docker-Container oder sicher steuerbare Dienste aus, die vor dem Backup angehalten und danach wieder gestartet werden. Laufende Dienste werden erkannt; zusätzlich werden LoxBerry-/Plugin-nahe Dienste angezeigt, auch wenn sie gerade inaktiv sind. Kritische LoxBerry-, Web-, SSH- und Backup-Dienste werden nicht angeboten. LoxBerry-Plugins ohne eigenen Dienst werden nicht hart beendet; dafür sind Pre-/Post-Backup-Hooks der sichere Weg.');
 my $info_export = info_button('Erstellt nach jedem Backup zusätzlich ein komprimiertes tar.gz-Archiv. Das ist praktisch zum Download, Kopieren oder Archivieren, benötigt aber zusätzlichen Speicherplatz und Zeit.');
+my $info_mail = info_button('Sendet Mailbenachrichtigungen über die zentrale LoxBerry-Benachrichtigung. SMTP-Zugangsdaten werden nicht im Plugin gespeichert.');
+my $info_mail_to = info_button('Optional. Wenn leer, verwendet LoxBerry die Standardadresse aus der globalen Mail- und Benachrichtigungskonfiguration.');
+my $info_mail_events = info_button('Wähle aus, bei welchen Ereignissen eine Mailbenachrichtigung gesendet werden soll.');
 my $info_root = info_button('Diese Bestätigung ist nötig, weil Vollbackup und Restore Systemdateien, Berechtigungen, Docker-Daten und Cronjobs betreffen. Es werden keine Passwörter gespeichert; erlaubt wird nur der Start des Backend-Skripts dieses Plugins.');
 my $info_config_export = info_button('Lädt nur die Einstellungen dieses Plugins als kleine JSON-Datei herunter. Enthalten sind zum Beispiel Backup-Verzeichnis, Ausschlüsse, Zeitplan und ausgewählte Stop-Ziele, aber keine Backup-Daten und keine Passwörter.');
 my $info_config_import = info_button('Liest eine zuvor exportierte Einstellungsdatei wieder ein. Das ist praktisch nach einer Neuinstallation des Plugins. Danach bitte Pfade und Root-Freigabe kurz prüfen und speichern, falls sich Laufwerke geändert haben.');
@@ -1248,6 +1281,30 @@ $backup_target_picker
 <input data-role="none" type="checkbox" name="create_export_after_backup" value="1"$cfg_create_export>
 <span>Nach jedem Backup ein Export-Archiv erstellen $info_export</span>
 </label>
+
+<div class="settings-subtitle">Mailbenachrichtigung</div>
+
+<label class="checkline">
+<input data-role="none" type="checkbox" name="mail_notify_enabled" value="1"$cfg_mail_notify_enabled>
+<span>Mailbenachrichtigung aktivieren $info_mail</span>
+</label>
+
+<div class="settings-form nested-settings mail-settings">
+<label>
+<span>Mailadresse $info_mail_to</span>
+<input data-role="none" type="email" name="mail_notify_to" value="$cfg_mail_notify_to" placeholder="leer = LoxBerry-Standardadresse">
+</label>
+
+<label class="wide">
+<span>Ereignisse $info_mail_events</span>
+<div class="mode-buttons compact-choice">
+<label><input data-role="none" type="checkbox" name="mail_notify_success" value="1"$cfg_mail_notify_success> Backup erfolgreich</label>
+<label><input data-role="none" type="checkbox" name="mail_notify_failure" value="1"$cfg_mail_notify_failure> Fehler</label>
+<label><input data-role="none" type="checkbox" name="mail_notify_stopped" value="1"$cfg_mail_notify_stopped> Abbruch</label>
+<label><input data-role="none" type="checkbox" name="mail_notify_restore" value="1"$cfg_mail_notify_restore> Restore</label>
+</div>
+</label>
+</div>
 
 </fieldset>
 

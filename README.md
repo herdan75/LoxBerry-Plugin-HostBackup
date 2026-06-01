@@ -87,6 +87,14 @@ Enthalten sind unter anderem:
 - Plugin-Daten
 - native Anwendungsdaten
 
+## Mailbenachrichtigung
+
+Das Plugin kann nach Backup-, Abbruch- und Restore-Ereignissen eine
+Mailbenachrichtigung ueber die zentrale LoxBerry-Benachrichtigung ausloesen.
+SMTP-Zugangsdaten werden nicht im Plugin gespeichert. Wenn im Plugin keine
+Mailadresse eingetragen ist, verwendet LoxBerry die globale Standardadresse aus
+der LoxBerry-Mail-/Benachrichtigungskonfiguration.
+
 ## Restore Und Migration
 
 Ein Restore kann einem nahezu vollständigen 1:1-System sehr nahe kommen, wenn

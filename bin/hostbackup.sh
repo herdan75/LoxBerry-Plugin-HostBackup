@@ -29,6 +29,12 @@ if [ ! -f "$CONFIG_FILE" ]; then
   "stop_docker_before_backup": false,
   "stop_targets": [],
   "create_export_after_backup": false,
+  "mail_notify_enabled": false,
+  "mail_notify_to": "",
+  "mail_notify_success": true,
+  "mail_notify_failure": true,
+  "mail_notify_stopped": true,
+  "mail_notify_restore": true,
   "keep_backups": 10,
   "schedule_enabled": false,
   "schedule_mode": "daily",
@@ -112,6 +118,12 @@ show_config() {
     $cfg->{stop_docker_before_backup} = $cfg->{stop_docker_before_backup} ? JSON::PP::true : JSON::PP::false;
     $cfg->{stop_targets} = [] unless ref($cfg->{stop_targets}) eq "ARRAY";
     $cfg->{create_export_after_backup} = $cfg->{create_export_after_backup} ? JSON::PP::true : JSON::PP::false;
+    $cfg->{mail_notify_enabled} = $cfg->{mail_notify_enabled} ? JSON::PP::true : JSON::PP::false;
+    $cfg->{mail_notify_to} //= "";
+    $cfg->{mail_notify_success} = exists $cfg->{mail_notify_success} ? ($cfg->{mail_notify_success} ? JSON::PP::true : JSON::PP::false) : JSON::PP::true;
+    $cfg->{mail_notify_failure} = exists $cfg->{mail_notify_failure} ? ($cfg->{mail_notify_failure} ? JSON::PP::true : JSON::PP::false) : JSON::PP::true;
+    $cfg->{mail_notify_stopped} = exists $cfg->{mail_notify_stopped} ? ($cfg->{mail_notify_stopped} ? JSON::PP::true : JSON::PP::false) : JSON::PP::true;
+    $cfg->{mail_notify_restore} = exists $cfg->{mail_notify_restore} ? ($cfg->{mail_notify_restore} ? JSON::PP::true : JSON::PP::false) : JSON::PP::true;
     $cfg->{keep_backups} = ($cfg->{keep_backups} && $cfg->{keep_backups} =~ /^\d+$/) ? 0 + $cfg->{keep_backups} : 10;
     $cfg->{keep_backups} = 1 if $cfg->{keep_backups} < 1;
     $cfg->{keep_backups} = 10 if $cfg->{keep_backups} > 10;
@@ -154,9 +166,15 @@ save_config() {
   local root_permission_ack="${16:-false}"
   local backup_mode="${17:-full}"
   local stop_targets="${18:-}"
+  local mail_notify_enabled="${19:-false}"
+  local mail_notify_to="${20:-}"
+  local mail_notify_success="${21:-true}"
+  local mail_notify_failure="${22:-true}"
+  local mail_notify_stopped="${23:-true}"
+  local mail_notify_restore="${24:-true}"
 
   perl -MJSON::PP -e '
-    my ($file, $backup_root, $excludes_text, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $schedule_months, $schedule_weekdays, $schedule_monthdays, $pre_hook, $post_hook, $root_permission_ack, $backup_mode, $stop_targets_text) = @ARGV;
+    my ($file, $backup_root, $excludes_text, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $schedule_months, $schedule_weekdays, $schedule_monthdays, $pre_hook, $post_hook, $root_permission_ack, $backup_mode, $stop_targets_text, $mail_notify_enabled, $mail_notify_to, $mail_notify_success, $mail_notify_failure, $mail_notify_stopped, $mail_notify_restore) = @ARGV;
     my @excludes;
     for my $line (split /\r?\n/, $excludes_text) {
       $line =~ s/^\s+|\s+$//g;
@@ -174,6 +192,10 @@ save_config() {
     }
     if ($post_hook ne "" && $post_hook !~ m{^/}) {
       die "Post-Backup-Hook muss leer oder ein absoluter Pfad sein.\n";
+    }
+    $mail_notify_to =~ s/^\s+|\s+$//g;
+    if ($mail_notify_to ne "" && $mail_notify_to !~ /^[^\s\@]+@[^\s\@]+\.[^\s\@]+$/) {
+      die "Mailadresse muss leer oder eine gueltige E-Mail-Adresse sein.\n";
     }
     $keep_backups = ($keep_backups =~ /^\d+$/) ? 0 + $keep_backups : 10;
     $keep_backups = 1 if $keep_backups < 1;
@@ -235,6 +257,12 @@ save_config() {
       stop_docker_before_backup => ($stop_docker eq "true" ? JSON::PP::true : JSON::PP::false),
       stop_targets => \@stop_targets,
       create_export_after_backup => ($create_export eq "true" ? JSON::PP::true : JSON::PP::false),
+      mail_notify_enabled => ($mail_notify_enabled eq "true" ? JSON::PP::true : JSON::PP::false),
+      mail_notify_to => $mail_notify_to,
+      mail_notify_success => ($mail_notify_success eq "true" ? JSON::PP::true : JSON::PP::false),
+      mail_notify_failure => ($mail_notify_failure eq "true" ? JSON::PP::true : JSON::PP::false),
+      mail_notify_stopped => ($mail_notify_stopped eq "true" ? JSON::PP::true : JSON::PP::false),
+      mail_notify_restore => ($mail_notify_restore eq "true" ? JSON::PP::true : JSON::PP::false),
       keep_backups => $keep_backups,
       schedule_enabled => ($schedule_enabled eq "true" ? JSON::PP::true : JSON::PP::false),
       schedule_mode => $schedule_mode,
@@ -250,7 +278,7 @@ save_config() {
     };
     open my $fh, ">", $file or die "Cannot write config: $!";
     print $fh JSON::PP->new->ascii->pretty->canonical->encode($cfg);
-  ' "$CONFIG_FILE" "$backup_root" "$excludes_text" "$stop_docker" "$create_export" "$keep_backups" "$schedule_enabled" "$schedule_mode" "$schedule_time" "$schedule_weekday" "$schedule_monthday" "$schedule_months" "$schedule_weekdays" "$schedule_monthdays" "$pre_hook" "$post_hook" "$root_permission_ack" "$backup_mode" "$stop_targets"
+  ' "$CONFIG_FILE" "$backup_root" "$excludes_text" "$stop_docker" "$create_export" "$keep_backups" "$schedule_enabled" "$schedule_mode" "$schedule_time" "$schedule_weekday" "$schedule_monthday" "$schedule_months" "$schedule_weekdays" "$schedule_monthdays" "$pre_hook" "$post_hook" "$root_permission_ack" "$backup_mode" "$stop_targets" "$mail_notify_enabled" "$mail_notify_to" "$mail_notify_success" "$mail_notify_failure" "$mail_notify_stopped" "$mail_notify_restore"
   install_schedule
 }
 
@@ -276,6 +304,33 @@ require_allowed_backup_root() {
       exit 14
       ;;
   esac
+}
+
+mail_notify_enabled_for_event() {
+  local event="$1"
+  [ "$(json_get_bool mail_notify_enabled)" = "true" ] || return 1
+  case "$event" in
+    success) [ "$(json_get_bool mail_notify_success)" = "true" ] ;;
+    failure) [ "$(json_get_bool mail_notify_failure)" = "true" ] ;;
+    stopped) [ "$(json_get_bool mail_notify_stopped)" = "true" ] ;;
+    restore) [ "$(json_get_bool mail_notify_restore)" = "true" ] ;;
+    *) return 1 ;;
+  esac
+}
+
+notify_hostbackup() {
+  local event="$1"
+  local severity="$2"
+  local subject="$3"
+  local message="$4"
+  local logfile="${5:-}"
+  local recipient helper
+  mail_notify_enabled_for_event "$event" || return 0
+  helper="$LBP_BINDIR/notify-hostbackup.php"
+  command -v php >/dev/null 2>&1 || return 0
+  [ -f "$helper" ] || return 0
+  recipient="$(json_get_string mail_notify_to)"
+  php "$helper" "$event" "$severity" "$subject" "$message" "$logfile" "$recipient" >/dev/null 2>&1 || true
 }
 
 backup_target_info() {
@@ -1333,6 +1388,7 @@ create_backup() {
   else
     write_manifest "$target" "$backup_id" "failed" "$started" "$finished" "$size" "$files"
     log "Backup $backup_id failed with rsync status $rsync_status" | tee -a "$log_file"
+    notify_hostbackup "failure" 3 "LoxBerry Host Backup fehlgeschlagen" "Backup $backup_id ist fehlgeschlagen. rsync Status: $rsync_status." "$log_file"
     exit "$rsync_status"
   fi
 
@@ -1346,6 +1402,7 @@ create_backup() {
       finished="$(date -Iseconds)"
       write_manifest "$target" "$backup_id" "failed" "$started" "$finished" "$size" "$files"
       log "Backup $backup_id failed while creating export archive" | tee -a "$log_file"
+      notify_hostbackup "failure" 3 "LoxBerry Host Backup fehlgeschlagen" "Backup $backup_id ist beim Erstellen des Export-Archivs fehlgeschlagen." "$log_file"
       exit "$export_status"
     fi
   fi
@@ -1362,6 +1419,7 @@ create_backup() {
   prune_old_backups
 
   log "Backup $backup_id finished" | tee -a "$log_file"
+  notify_hostbackup "success" 5 "LoxBerry Host Backup erfolgreich" "Backup $backup_id wurde erfolgreich abgeschlossen. Groesse: $size Bytes, Dateien: $files." "$log_file"
   printf '%s\n' "$backup_id"
 }
 
@@ -1420,6 +1478,7 @@ stop_backup() {
   files="$(calculate_files "$target")"
   write_manifest "$target" "$backup_id" "stopped" "$started" "$finished" "$size" "$files"
   log "Backup $backup_id stopped by user" | tee -a "$log_file"
+  notify_hostbackup "stopped" 4 "LoxBerry Host Backup abgebrochen" "Backup $backup_id wurde durch den Benutzer abgebrochen. Bereits gestoppte Dienste und Container wurden wieder gestartet, soweit moeglich." "$log_file"
 }
 
 log_dirs() {
@@ -1826,8 +1885,10 @@ restore_backup() {
   log "rsync restore finished with status $rsync_status" | tee -a "$log_file"
   if [ "$rsync_status" -eq 0 ] || [ "$rsync_status" -eq 24 ]; then
     log "Restore $backup_id finished" | tee -a "$log_file"
+    notify_hostbackup "restore" 5 "LoxBerry Host Backup Restore abgeschlossen" "Restore $backup_id wurde abgeschlossen. Bitte System, Dienste und Docker-Container pruefen." "$log_file"
   else
     log "Restore $backup_id failed with rsync status $rsync_status" | tee -a "$log_file"
+    notify_hostbackup "restore" 3 "LoxBerry Host Backup Restore fehlgeschlagen" "Restore $backup_id ist fehlgeschlagen. rsync Status: $rsync_status." "$log_file"
     exit "$rsync_status"
   fi
 }
@@ -1920,7 +1981,7 @@ case "$action" in
   config) show_config ;;
   target-info) backup_target_info ;;
   stop-targets) discover_stop_targets ;;
-  save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11:-*}" "${12:-0}" "${13:-1}" "${14:-}" "${15:-}" "${16:-false}" "${17:-full}" "${18:-}" ;;
+  save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11:-*}" "${12:-0}" "${13:-1}" "${14:-}" "${15:-}" "${16:-false}" "${17:-full}" "${18:-}" "${19:-false}" "${20:-}" "${21:-true}" "${22:-true}" "${23:-true}" "${24:-true}" ;;
   install-schedule) install_schedule ;;
   schedule-run) schedule_run ;;
   tasks) list_tasks ;;
