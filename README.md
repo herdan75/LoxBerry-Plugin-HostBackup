@@ -1,6 +1,6 @@
 # LoxBerry Host Backup
 
-**Status:** Version 0.4.2, erste vorsichtig freigegebene Version.
+**Status:** Version 0.4.3, erste vorsichtig freigegebene Version.
 
 Dieses Plugin wurde bereits auf einem LoxBerry-/DietPi-Testsystem installiert,
 konfiguriert und für echte Vollbackups sowie inkrementelle Snapshot-Backups
@@ -90,10 +90,15 @@ Enthalten sind unter anderem:
 ## Mailbenachrichtigung
 
 Das Plugin kann nach Backup-, Abbruch- und Restore-Ereignissen eine
-Mailbenachrichtigung ueber die zentrale LoxBerry-Benachrichtigung ausloesen.
-SMTP-Zugangsdaten werden nicht im Plugin gespeichert. Wenn im Plugin keine
-Mailadresse eingetragen ist, verwendet LoxBerry die globale Standardadresse aus
-der LoxBerry-Mail-/Benachrichtigungskonfiguration.
+Mailbenachrichtigung senden. SMTP-Zugangsdaten werden nicht im Plugin
+gespeichert. Wenn im Plugin keine Mailadresse eingetragen ist, verwendet
+LoxBerry Host Backup die globale Standardadresse aus der
+LoxBerry-Mail-/Benachrichtigungskonfiguration.
+
+Erfolgreiche Backups werden nur per Mail gemeldet und erzeugen keinen
+zusaetzlichen Eintrag in der LoxBerry-Notification-Uebersicht. Fehler, Abbruch
+und Restore-Ereignisse bleiben bewusst LoxBerry-Notifications, damit kritische
+Ereignisse auch im System sichtbar sind.
 
 ## Restore Und Migration
 
@@ -170,13 +175,13 @@ zur LoxBerry-Administration gewechselt werden kann.
 Release-Paket:
 
 ```text
-https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.4.2/LoxBerryHostBackup_0.4.2.zip
+https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.4.3/LoxBerryHostBackup_0.4.3.zip
 ```
 
 Lokales Paket nach dem Build:
 
 ```text
-LoxBerryHostBackup_0.4.2.zip
+LoxBerryHostBackup_0.4.3.zip
 ```
 
 ## Erste Tests Auf LoxBerry
@@ -582,7 +587,7 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 
 Branches:
 
-- `main`: aktueller freigegebener Stand 0.4.2
+- `main`: aktueller freigegebener Stand 0.4.3
 - `develop`: laufende Weiterentwicklung
 
 Update-Dateien:

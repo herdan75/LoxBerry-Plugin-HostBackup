@@ -9,10 +9,14 @@ validiert werden.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-06-02
+
 ### Benachrichtigung
 
 - Mailbenachrichtigungen ueber die zentrale LoxBerry-Benachrichtigung ergaenzt.
 - Optionale Empfaengeradresse im Plugin: Wenn leer, verwendet LoxBerry die globale Standardadresse.
+- Erfolgreiche Backups senden nun nur noch eine Mail und erzeugen keinen zusaetzlichen Eintrag in der LoxBerry-Notification-Uebersicht.
+- Fehler, Abbruch und Restore-Ereignisse bleiben als LoxBerry-Notifications sichtbar.
 
 ## [0.4.2] - 2026-05-31
 
@@ -283,7 +287,8 @@ validiert werden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.4.2...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.4.3...develop
+[0.4.3]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.4.3
 [0.4.2]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.4.2
 [0.4.1]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.4.1
 [0.4.0]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.4.0
