@@ -5,12 +5,14 @@ use CGI qw(:standard escapeHTML);
 use File::Temp qw(tempfile);
 use File::Copy qw(copy);
 use File::Basename qw(basename);
+use File::Path qw(make_path);
 use JSON::PP;
 use LoxBerry::Web;
 
 my $plugin = 'loxberryhostbackup';
 my $lbhome = $ENV{LBHOMEDIR} || '/opt/loxberry';
 my $bindir = $ENV{LBPBINDIR} || "$lbhome/bin/plugins/$plugin";
+my $datadir = $ENV{LBPDATADIR} || $ENV{LBPDATA} || "$lbhome/data/plugins/$plugin";
 my $backend = "$bindir/hostbackup.sh";
 my $q = CGI->new;
 
@@ -60,6 +62,16 @@ sub url_with_active_task {
     push @parts, url_escape($key) . '=' . url_escape($params{$key});
   }
   return '?' . join('&', @parts);
+}
+
+sub base_url_with_active_task {
+  my @parts;
+  if ($active_task) {
+    push @parts, 'active_task=' . url_escape($active_task);
+  }
+  my $uri = $q->url(-relative => 1);
+  $uri .= '?' . join('&', @parts) if @parts;
+  return $uri;
 }
 
 sub shell_quote {
@@ -133,6 +145,14 @@ if ($notice eq 'saved') {
   $message = 'Backup geloescht.';
 } elsif ($notice eq 'backup_imported') {
   $message = 'Backup importiert.';
+} elsif ($notice eq 'import_started') {
+  $message = 'Import gestartet. Der Live-Status wird unten automatisch aktualisiert.';
+} elsif ($notice eq 'import_finished') {
+  $message = 'Import abgeschlossen. Die Backup-Liste wurde aktualisiert.';
+} elsif ($notice eq 'export_started') {
+  $message = 'Export gestartet. Der Live-Status wird unten automatisch aktualisiert.';
+} elsif ($notice eq 'export_finished') {
+  $message = 'Export abgeschlossen. Das Archiv steht in der Backup-Liste zum Download bereit.';
 } elsif ($notice eq 'config_imported') {
   $message = 'Einstellungen importiert.';
 } elsif ($notice eq 'restore_started') {
@@ -144,7 +164,7 @@ if ($notice eq 'saved') {
 }
 
 my $requested_active_task = $q->param('active_task') || '';
-if ($requested_active_task =~ /^(backup|restore)-[A-Za-z0-9._-]+\.log$/) {
+if ($requested_active_task =~ /^(backup|restore|export|import)-[A-Za-z0-9._-]+\.log$/) {
   $active_task = $requested_active_task;
 }
 
@@ -191,7 +211,7 @@ if ($action eq 'download-export') {
     exit;
   }
 
-  my ($status, $out) = run_shell(backend_cmd('export', $download_id));
+  my ($status, $out) = run_shell(backend_cmd('export-info', $download_id));
 
   if ($status != 0) {
     print header(-type => 'text/plain', -charset => 'utf-8', -status => '500 Internal Server Error');
@@ -199,11 +219,12 @@ if ($action eq 'download-export') {
     exit;
   }
 
-  my ($archive) = $out =~ m{^(/[^\r\n]+\.tar\.gz)\s*$}m;
+  my $info = eval { decode_json($out) } || {};
+  my $archive = $info->{archive} || '';
 
-  if (!$archive || !-r $archive || !-f $archive) {
+  if (($info->{status} || '') ne 'available' || !$archive || !-r $archive || !-f $archive) {
     print header(-type => 'text/plain', -charset => 'utf-8', -status => '404 Not Found');
-    print "Export-Archiv konnte nicht gelesen werden.\n";
+    print "Export-Archiv ist noch nicht vorhanden oder konnte nicht gelesen werden.\n";
     exit;
   }
 
@@ -445,6 +466,25 @@ if ($q->request_method eq 'POST') {
     }
   }
 
+  elsif ($action eq 'start-export') {
+
+    my $export_id = $q->param('backup_id') || '';
+
+    if ($export_id !~ /^[A-Za-z0-9._-]+$/) {
+      $error = 'Ungültige Backup-ID.';
+    } else {
+      my ($status, $out) = run_shell(backend_cmd('start-export', $export_id));
+
+      if ($status == 0) {
+        my ($task_id) = $out =~ m{^([A-Za-z0-9._-]+\.log)\s*$}m;
+        $task_id ||= "export-$export_id.log";
+        redirect_with(msg => 'export_started', active_task => $task_id);
+      } else {
+        $error = escapeHTML($out);
+      }
+    }
+  }
+
   elsif ($action eq 'import') {
 
     my $upload = $q->upload('backup_archive');
@@ -452,17 +492,25 @@ if ($q->request_method eq 'POST') {
     if (!$upload) {
       $error = 'Keine Backup-Datei ausgewählt.';
     } else {
-      my ($fh, $tmpfile) = tempfile('hostbackup-import-XXXXXX', SUFFIX => '.tar.gz', TMPDIR => 1, UNLINK => 1);
-      binmode $fh;
+      my $import_dir = "$datadir/imports";
+      make_path($import_dir);
+      my $original_name = basename($q->param('backup_archive') || 'backup.tar.gz');
+      $original_name =~ s/[^A-Za-z0-9._-]+/_/g;
+      $original_name = 'backup.tar.gz' unless length $original_name;
+      my ($fh, $tmpfile) = tempfile('hostbackup-import-XXXXXX-', SUFFIX => "-$original_name", DIR => $import_dir, UNLINK => 0);
       binmode $upload;
+      binmode $fh;
       copy($upload, $fh);
       close $fh;
 
-      my ($status, $out) = run_shell(backend_cmd('import', $tmpfile));
+      my ($status, $out) = run_shell(backend_cmd('start-import', $tmpfile));
 
       if ($status == 0) {
-        redirect_with(msg => 'backup_imported');
+        my ($task_id) = $out =~ m{^([A-Za-z0-9._-]+\.log)\s*$}m;
+        $task_id ||= '';
+        redirect_with(msg => 'import_started', active_task => $task_id);
       } else {
+        unlink $tmpfile;
         $error = escapeHTML($out);
       }
     }
@@ -611,7 +659,7 @@ my $info_delete = info_button('Loescht den Backup-Ordner und ein eventuell vorha
 my $info_restore = info_button('Wählt dieses Backup für eine Wiederherstellung aus. Danach wird unterhalb der Backup-Liste die Restore-Prüfung mit Bestätigung und Startbutton für genau dieses Backup eingeblendet.');
 my $info_browse = info_button('Öffnet den Datei-Explorer für dieses Backup. Damit kannst du prüfen, welche Dateien im Backup enthalten sind.');
 my $info_browse_pending = info_button('Dieses Backup ist noch nicht vollständig abgeschlossen. Dateien, Restore und Export werden erst freigegeben, wenn Status, Manifest und rootfs vollständig sind.');
-my $info_download = info_button('Erstellt bei Bedarf ein Export-Archiv und lädt dieses Backup als tar.gz-Datei auf deinen Rechner herunter. Das kann bei grossen Backups einige Zeit dauern.');
+my $info_download = info_button('Export erstellt ein tar.gz-Archiv im Backup-Verzeichnis. Sobald es fertig ist, kann es separat heruntergeladen werden. Die Erstellung grosser Archive laeuft im Hintergrund.');
 my $info_backup_start = info_button('Startet den Backup-Vorgang. Vor dem eigentlichen Backup prüft das Plugin wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und Docker-Hinweise.');
 
 sub render_target_notice {
@@ -849,7 +897,20 @@ sub render_backup_rows {
 
     my $size = int(($backup->{size_bytes} || 0) / 1024 / 1024);
     my $files = escapeHTML($backup->{files_count} || '0');
-    my $export = $backup->{export_file} ? 'vorhanden' : '-';
+    my $export_status = $backup->{export_status} || ($backup->{export_file} ? 'available' : 'missing');
+    my $export_message = escapeHTML($backup->{export_message} || '');
+    my $export_path = escapeHTML($backup->{export_file} || '');
+    my $export_size = int(($backup->{export_size_bytes} || 0) / 1024 / 1024);
+    my $export = '-';
+    if ($export_status eq 'available') {
+      $export = qq{<span class="export-state ok">vorhanden</span><small>${export_size} MB</small>};
+      $export .= qq{<small class="muted">Pfad: <code>$export_path</code></small>} if length $export_path;
+    } elsif ($export_status eq 'running') {
+      $export = qq{<span class="export-state running">Export laeuft</span>};
+    } elsif ($export_status eq 'failed') {
+      $export = qq{<span class="export-state failed">fehlgeschlagen</span>};
+      $export .= qq{<small class="muted">$export_message</small>} if length $export_message;
+    }
     my $is_complete = (($backup->{status} || '') eq 'complete') && (($backup->{files_count} || 0) > 0);
     my $validation = $backup->{validation} || {};
     my $validation_label = '';
@@ -869,8 +930,37 @@ sub render_backup_rows {
     }
     my $active_task_hidden = hidden_active_task();
     my $backup_actions;
+    my $export_action = '';
 
     if ($is_complete) {
+      if ($export_status eq 'available') {
+        $export_action = qq{
+<form data-ajax="false" method="get" class="inline-form">
+<input data-role="none" type="hidden" name="action" value="download-export">
+<input data-role="none" type="hidden" name="backup_id" value="$id">
+$active_task_hidden
+<button data-role="none" type="submit">Download</button>$info_download
+</form>
+<form data-ajax="false" method="post" class="inline-form loading-form">
+<input data-role="none" type="hidden" name="action" value="start-export">
+<input data-role="none" type="hidden" name="backup_id" value="$id">
+$active_task_hidden
+<button data-role="none" type="submit">Neu erstellen</button>
+</form>
+};
+      } elsif ($export_status eq 'running') {
+        $export_action = qq{<span class="pending-action">Export laeuft</span>$info_download};
+      } else {
+        $export_action = qq{
+<form data-ajax="false" method="post" class="inline-form loading-form">
+<input data-role="none" type="hidden" name="action" value="start-export">
+<input data-role="none" type="hidden" name="backup_id" value="$id">
+$active_task_hidden
+<button data-role="none" type="submit">Export erstellen</button>$info_download
+</form>
+};
+      }
+
       $backup_actions = qq{
 <form data-ajax="false" method="get" class="inline-form" data-return-anchor="backup-browser">
 <input data-role="none" type="hidden" name="browse_id" value="$id">
@@ -882,12 +972,7 @@ $active_task_hidden
 $active_task_hidden
 <button data-role="none" type="submit">Restore</button>$info_restore
 </form>
-<form data-ajax="false" method="get" class="inline-form">
-<input data-role="none" type="hidden" name="action" value="download-export">
-<input data-role="none" type="hidden" name="backup_id" value="$id">
-$active_task_hidden
-<button data-role="none" type="submit">Export</button>$info_download
-</form>
+$export_action
 };
     } else {
       $backup_actions = qq{
@@ -1082,6 +1167,20 @@ if ($error) {
 }
 
 print <<HTML;
+
+<section class="panel wizard-panel">
+<details>
+<summary>Einrichtungs-Wizard</summary>
+<ol>
+<li><strong>Backup-Ziel waehlen:</strong> Am besten ein ext4-, xfs- oder btrfs-Ziel auf USB, SSD oder Netzwerkspeicher verwenden.</li>
+<li><strong>Ausschluesse pruefen:</strong> Backup-Ziel, andere Backup-Datentraeger und grosse fremde Archive ausschliessen.</li>
+<li><strong>Backup-Modus setzen:</strong> Fuer regelmaessige Sicherungen ist der inkrementelle Snapshot auf ext4 empfohlen.</li>
+<li><strong>Dienste auswaehlen:</strong> Nur Dienste und Container stoppen, die viele Daten schreiben oder Datenbanken enthalten.</li>
+<li><strong>Testbackup erstellen:</strong> Danach Backup-Liste, Manifest, Groesse, Dateizahl und Live-Log pruefen.</li>
+<li><strong>Restore testen:</strong> Vor produktiver Nutzung mindestens einmal in einer Test- oder Rescue-Umgebung pruefen.</li>
+</ol>
+</details>
+</section>
 
 <section class="panel task-monitor" id="task-monitor" data-active-task="$active_task_attr">
 <h2>Live-Status</h2>
@@ -1342,7 +1441,7 @@ $info_config_import
 
 </section>
 
-<section class="panel backups-panel">
+<section class="panel backups-panel" id="backups">
 
 <h2>Backups $info_table</h2>
 
@@ -1388,10 +1487,14 @@ HTML
 if ($browse_id) {
   my $safe_browse_id = escapeHTML($browse_id);
   my $safe_browse_path = escapeHTML($browse_path || '/');
+  my $close_browse_url = base_url_with_active_task() . '#backups';
 
   print qq{
 <div class="subpanel" id="backup-browser">
+<div class="detail-header">
 <h3>Dateien in Backup <code>$safe_browse_id</code></h3>
+<a class="button-link" href="$close_browse_url">Ansicht schliessen</a>
+</div>
 <p>Pfad: <code>$safe_browse_path</code></p>
 <section class="inline-notice warning">Der Datei-Explorer dient nur zur Ansicht des Backup-Inhalts. F&uuml;r eine vollst&auml;ndige Wiederherstellung bitte den Restore-Button des gew&uuml;nschten Backups verwenden. Bei inkrementellen Snapshots sind kleine Gr&ouml;ssen normal: Unver&auml;nderte Dateien werden per Hardlink geteilt und belegen nicht mehrfach Speicher.</section>
 };
@@ -1455,6 +1558,7 @@ print qq{</section>};
 
 if ($restore_id) {
   my $safe_restore_id = escapeHTML($restore_id);
+  my $close_restore_url = base_url_with_active_task() . '#backups';
 
   print qq{
 <section class="panel restore-panel" id="restore-panel">
@@ -1463,7 +1567,10 @@ if ($restore_id) {
 <legend>Wiederherstellung vorbereiten</legend>
 <p>Restore nur in Rescue-/Testumgebung verwenden.</p>
 <div class="subpanel">
+<div class="detail-header">
 <h3>Ausgewähltes Backup: <code>$safe_restore_id</code></h3>
+<a class="button-link" href="$close_restore_url">Restore-Auswahl schliessen</a>
+</div>
 };
 
   if ($restore_error) {
@@ -1664,7 +1771,8 @@ function hostbackupClosest(node, selector) {
       var messages = {
         'save-config': 'Einstellungen werden gespeichert...',
         'import-config': 'Einstellungen werden importiert...',
-        'import': 'Backup wird importiert...',
+        'import': 'Backup-Import wird gestartet...',
+        'start-export': 'Export wird im Hintergrund gestartet...',
         'delete-backup': 'Backup wird geloescht. Bei grossen Backups kann das einige Minuten dauern...',
         'download-export': 'Export wird vorbereitet...',
         'restore-backup': 'Restore wird vorbereitet...',
@@ -1871,6 +1979,21 @@ function hostbackupClosest(node, selector) {
    return value.slice(7, -4);
  }
 
+  function taskKind() {
+    if ((task || '').indexOf('restore-') === 0) return 'restore';
+    if ((task || '').indexOf('export-') === 0) return 'export';
+    if ((task || '').indexOf('import-') === 0) return 'import';
+    return 'backup';
+  }
+
+  function taskName() {
+    var kind = taskKind();
+    if (kind === 'restore') return 'Restore';
+    if (kind === 'export') return 'Export';
+    if (kind === 'import') return 'Import';
+    return 'Backup';
+  }
+
   function redirectWithMessage(message) {
     window.location.href = window.location.pathname + '?msg=' + encodeURIComponent(message);
   }
@@ -1914,6 +2037,10 @@ function hostbackupClosest(node, selector) {
       labels.failed = 'Restore fehlgeschlagen';
     }
 
+    labels.running = taskName() + ' laeuft';
+    labels.finished = taskName() + ' abgeschlossen';
+    labels.failed = taskName() + ' fehlgeschlagen';
+    labels.stopped = taskName() + ' gestoppt';
     setState(state, labels[state] || state);
 
     if (state === 'finished') {
@@ -1953,7 +2080,8 @@ function hostbackupClosest(node, selector) {
               }
               return;
             }
-            redirectWithMessage(task.indexOf('restore-') === 0 ? 'restore_finished' : 'backup_finished');
+            var kind = taskKind();
+            redirectWithMessage(kind === 'restore' ? 'restore_finished' : kind === 'export' ? 'export_finished' : kind === 'import' ? 'import_finished' : 'backup_finished');
           }, 2500);
         }
       }
@@ -1991,9 +2119,10 @@ function hostbackupClosest(node, selector) {
   }
 
   monitor.classList.remove('task-monitor-idle');
-  setState('running', task.indexOf('restore-') === 0 ? 'Restore läuft' : 'Backup läuft');
+  if (stopForm && taskKind() !== 'backup') stopForm.classList.add('task-monitor-idle');
   heartbeatEl.textContent = 'Live-Status wird geladen...';
-  logEl.textContent = 'Backup wurde gestartet. Warte auf erste Logausgabe...';
+  setState('running', taskName() + ' laeuft');
+  logEl.textContent = taskName() + ' wurde gestartet. Warte auf erste Logausgabe...';
   poll();
   timer = window.setInterval(poll, 5000);
 }());

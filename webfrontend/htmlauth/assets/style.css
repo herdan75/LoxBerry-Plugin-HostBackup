@@ -216,6 +216,25 @@ body.is-loading .loading-overlay {
   margin-bottom: 22px;
 }
 
+.wizard-panel {
+  padding-bottom: 14px;
+  padding-top: 14px;
+}
+
+.wizard-panel summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.wizard-panel ol {
+  margin: 12px 0 0 20px;
+  padding: 0;
+}
+
+.wizard-panel li {
+  margin: 6px 0;
+}
+
 .notice.ok {
   border-color: #95c7a2;
   background: #edf8f0;
@@ -319,6 +338,33 @@ body.is-loading .loading-overlay {
 
 .backup-health.muted {
   color: #697684;
+}
+
+.export-state {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.export-state.ok {
+  color: #3f6f19;
+}
+
+.export-state.running {
+  color: #805900;
+}
+
+.export-state.failed {
+  color: #a72222;
+}
+
+td .muted {
+  color: #697684;
+  display: block;
+  font-size: 11px;
+  line-height: 1.25;
+  margin-top: 3px;
 }
 
 .settings-form {
@@ -1246,6 +1292,34 @@ body.is-loading .loading-overlay {
 .subpanel h3 {
   font-size: 16px;
   margin-top: 0;
+}
+
+.detail-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.detail-header h3 {
+  margin: 0;
+}
+
+a.button-link {
+  background: #f8fbff;
+  border: 1px solid #b8c9dd;
+  border-radius: 6px;
+  color: #16324a;
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 11px;
+  text-decoration: none;
+}
+
+a.button-link:hover {
+  background: #eef5fb;
 }
 
 .restore-start-form {

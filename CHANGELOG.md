@@ -9,6 +9,27 @@ validiert werden.
 
 ## [Unreleased]
 
+## [0.5.0-beta] - 2026-06-20
+
+### Import und Export
+
+- Export vorhandener Backups laeuft nun als Hintergrundjob mit Live-Status,
+  damit grosse `.tar.gz`-Archive keinen Browser- oder Webserver-Timeout mehr
+  ausloesen.
+- Export-Archive werden zuerst als temporaere Datei erstellt, per `tar -tzf`
+  geprueft und danach atomar auf den finalen Archivnamen verschoben.
+- Die Backup-Liste zeigt Exportstatus, Archivgroesse und Archivpfad an.
+- Import externer Backup-Archive laeuft nun ebenfalls als Hintergrundjob mit
+  Live-Status. Hochgeladene Importdateien werden nach erfolgreichem Import oder
+  bei Fehlern automatisch bereinigt.
+
+### Weboberflaeche
+
+- Datei-Explorer und Restore-Auswahl koennen direkt wieder geschlossen werden.
+- Ein kompakter Einrichtungs-Wizard fuehrt durch die wichtigsten Schritte fuer
+  Backup-Ziel, Ausschluesse, Backup-Modus, Stop-Ziele, Testbackup und
+  Restore-Test.
+
 ## [0.4.3] - 2026-06-02
 
 ### Benachrichtigung
@@ -287,7 +308,8 @@ validiert werden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.4.3...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.5.0-beta...develop
+[0.5.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.0-beta
 [0.4.3]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.4.3
 [0.4.2]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.4.2
 [0.4.1]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.4.1

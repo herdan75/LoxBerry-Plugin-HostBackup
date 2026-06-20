@@ -1506,7 +1506,7 @@ task_log_path() {
   local dir path
   case "$task" in
     *[!A-Za-z0-9._-]*|.*|*..*|*/*) echo "Unsafe task id." >&2; exit 11 ;;
-    backup-*.log|restore-*.log) ;;
+    backup-*.log|restore-*.log|export-*.log|import-*.log) ;;
     *) echo "Unsafe task id." >&2; exit 11 ;;
   esac
   while IFS= read -r dir; do
@@ -1533,7 +1533,7 @@ list_tasks() {
     for my $dir (@dirs) {
       next if !$dir || $seen{"dir:$dir"}++;
       opendir(my $dh, $dir) or next;
-      for my $name (sort grep { /^(backup|restore)-.*\.log$/ || /\.(launch)\.log$/ } readdir($dh)) {
+      for my $name (sort grep { /^(backup|restore|export|import)-.*\.log$/ || /\.(launch)\.log$/ } readdir($dh)) {
         my $path = "$dir/$name";
         my @st = stat($path);
         next unless @st;
@@ -1566,9 +1566,9 @@ task_status() {
   mtime="$(stat -c '%Y' "$path" 2>/dev/null || echo 0)"
   state="running"
   recent_log="$(tail -c 65536 "$path" 2>/dev/null || true)"
-  if printf '%s\n' "$recent_log" | grep -qE ' (Backup|Restore) .* finished$'; then
+  if printf '%s\n' "$recent_log" | grep -qE ' (Backup|Restore|Export|Import) .* (finished|completed)$'; then
     state="finished"
-  elif printf '%s\n' "$recent_log" | grep -qE ' (Backup|Restore) .* failed '; then
+  elif printf '%s\n' "$recent_log" | grep -qE ' (Backup|Restore|Export|Import) .* failed'; then
     state="failed"
   elif printf '%s\n' "$recent_log" | grep -qE ' Backup .* stopped by user$'; then
     state="stopped"
@@ -1630,6 +1630,34 @@ list_backups() {
       }
       return \%summary;
     }
+    sub export_log_summary {
+      my ($id) = @_;
+      my %summary;
+      my $max_tail = 131072;
+      for my $dir (@log_dirs) {
+        my $path = "$dir/export-$id.log";
+        next unless -r $path;
+        open my $fh, "<", $path or next;
+        my $size = -s $fh;
+        if ($size && $size > $max_tail) {
+          seek($fh, $size - $max_tail, 0);
+          <$fh>;
+        }
+        while (my $line = <$fh>) {
+          chomp $line;
+          if ($line =~ /Export \Q$id\E finished/) {
+            $summary{status} = "available";
+            $summary{message} = "Export abgeschlossen";
+          } elsif ($line =~ /Export \Q$id\E failed/) {
+            $summary{status} = "failed";
+            $summary{message} = $line;
+          }
+        }
+        close $fh;
+        last if $summary{status};
+      }
+      return \%summary;
+    }
     opendir(my $dh, $root) or do { print "[]"; exit 0; };
     my @items;
     for my $entry (sort readdir($dh)) {
@@ -1650,7 +1678,9 @@ list_backups() {
         $data->{validation} = eval { decode_json(<$vh>) } || {};
       }
       my $archive = "$root/$entry.tar.gz";
+      my @tmp_archives = glob("$archive.tmp.*");
       my $log = log_summary($entry);
+      my $export_log = export_log_summary($entry);
       if (($data->{status} || "") eq "running" && $log->{status}) {
         $data->{status} = $log->{status};
       } elsif (!$data->{status} && $log->{status}) {
@@ -1662,6 +1692,28 @@ list_backups() {
       $data->{backup_id} ||= $entry;
       $data->{path} = $dir;
       $data->{export_file} = -f $archive ? $archive : undef;
+      if (-f $archive) {
+        my @ast = stat($archive);
+        $data->{export_status} = "available";
+        $data->{export_size_bytes} = 0 + ($ast[7] || 0);
+        $data->{export_mtime} = 0 + ($ast[9] || 0);
+        $data->{export_message} = "Export vorhanden und bereit zum Download";
+      } elsif (@tmp_archives) {
+        $data->{export_status} = "running";
+        $data->{export_size_bytes} = 0;
+        $data->{export_mtime} = 0;
+        $data->{export_message} = "Export wird erstellt";
+      } elsif (($export_log->{status} || "") eq "failed") {
+        $data->{export_status} = "failed";
+        $data->{export_size_bytes} = 0;
+        $data->{export_mtime} = 0;
+        $data->{export_message} = $export_log->{message} || "Export fehlgeschlagen";
+      } else {
+        $data->{export_status} = "missing";
+        $data->{export_size_bytes} = 0;
+        $data->{export_mtime} = 0;
+        $data->{export_message} = "Noch kein Exportarchiv vorhanden";
+      }
       push @items, $data;
     }
     print JSON::PP->new->ascii->canonical->pretty->encode(\@items);
@@ -1670,14 +1722,93 @@ list_backups() {
 
 export_backup() {
   local backup_id="$1"
-  local root target archive
+  local root target archive tmp lock_file
   require_backup_id "$backup_id"
   root="$(backup_root)"
+  require_allowed_backup_root "$root"
+  target="$root/$backup_id"
+  archive="$root/$backup_id.tar.gz"
+  tmp="$archive.tmp.$$"
+  lock_file="$root/.export-$backup_id.lock"
+  [ -d "$target" ] || { log "Export $backup_id failed: backup not found"; echo "Backup not found: $backup_id" >&2; exit 6; }
+  if [ ! -d "$target/rootfs" ]; then
+    log "Export $backup_id failed: rootfs not found"
+    echo "Backup rootfs not found: $backup_id" >&2
+    exit 6
+  fi
+  exec 8>"$lock_file"
+  flock -n 8 || { log "Export $backup_id failed: already running"; echo "Export already running: $backup_id" >&2; exit 5; }
+  rm -f "$tmp"
+  log "Starting export $backup_id"
+  if ! tar -C "$root" -czf "$tmp" -- "$backup_id"; then
+    rm -f "$tmp"
+    log "Export $backup_id failed during archive creation"
+    exit 15
+  fi
+  if ! tar -tzf "$tmp" >/dev/null 2>&1; then
+    rm -f "$tmp"
+    log "Export $backup_id failed integrity check"
+    exit 16
+  fi
+  mv -f "$tmp" "$archive"
+  log "Export $backup_id finished"
+  printf '%s\n' "$archive"
+}
+
+export_info() {
+  local backup_id="$1"
+  local root target archive tmp_count status message size mtime
+  require_backup_id "$backup_id"
+  root="$(backup_root)"
+  require_allowed_backup_root "$root"
   target="$root/$backup_id"
   archive="$root/$backup_id.tar.gz"
   [ -d "$target" ] || { echo "Backup not found: $backup_id" >&2; exit 6; }
-  tar -C "$root" -czf "$archive" -- "$backup_id"
-  printf '%s\n' "$archive"
+  tmp_count="$(find "$root" -maxdepth 1 -type f -name "$backup_id.tar.gz.tmp.*" 2>/dev/null | wc -l)"
+  status="missing"
+  message="Noch kein Exportarchiv vorhanden"
+  size=0
+  mtime=0
+  if [ -f "$archive" ]; then
+    status="available"
+    message="Export vorhanden und bereit zum Download"
+    size="$(stat -c '%s' "$archive" 2>/dev/null || echo 0)"
+    mtime="$(stat -c '%Y' "$archive" 2>/dev/null || echo 0)"
+  elif [ "${tmp_count:-0}" -gt 0 ]; then
+    status="running"
+    message="Export wird erstellt"
+  fi
+  cat <<EOF
+{
+  "backup_id": $(json_escape "$backup_id"),
+  "status": $(json_escape "$status"),
+  "message": $(json_escape "$message"),
+  "archive": $(json_escape "$archive"),
+  "size_bytes": $size,
+  "mtime": $mtime
+}
+EOF
+}
+
+start_export() {
+  require_root_for_write
+  local backup_id="$1"
+  local log_file
+  require_backup_id "$backup_id"
+  log_file="$LBP_LOGDIR/export-$backup_id.log"
+  nohup "$0" export "$backup_id" > "$log_file" 2>&1 &
+  printf 'export-%s.log\n' "$backup_id"
+}
+
+delete_export() {
+  require_root_for_write
+  local backup_id="$1"
+  local root archive
+  require_backup_id "$backup_id"
+  root="$(backup_root)"
+  require_allowed_backup_root "$root"
+  archive="$root/$backup_id.tar.gz"
+  rm -f "$archive" "$archive".tmp.*
 }
 
 import_backup() {
@@ -1688,6 +1819,9 @@ import_backup() {
   require_allowed_backup_root "$root"
   mkdir -p "$root"
   [ -r "$archive" ] || { echo "Archive not readable: $archive" >&2; exit 9; }
+  if [ "${HOSTBACKUP_IMPORT_CLEANUP:-0}" = "1" ]; then
+    trap 'status=$?; if [ "$status" -ne 0 ]; then log "Import $archive failed"; fi; rm -f "$archive"' EXIT
+  fi
   top="$(tar -tzf "$archive" | awk -F/ 'NF {print $1; exit}')"
   [ -n "$top" ] || { echo "Archive is empty." >&2; exit 10; }
   case "$top" in
@@ -1708,9 +1842,26 @@ import_backup() {
     echo "Backup already exists: $top" >&2
     exit 4
   fi
+  log "Starting import from $archive"
   tar -C "$root" --numeric-owner --same-owner --same-permissions -xzf "$archive"
   [ -d "$root/$top/rootfs" ] || { echo "Imported archive does not contain a rootfs directory." >&2; exit 12; }
+  if [ "${HOSTBACKUP_IMPORT_CLEANUP:-0}" = "1" ]; then
+    rm -f "$archive"
+    trap - EXIT
+  fi
+  log "Import $top finished"
   printf '%s\n' "$top"
+}
+
+start_import() {
+  require_root_for_write
+  local archive="$1"
+  local task_id log_file
+  [ -r "$archive" ] || { echo "Archive not readable: $archive" >&2; exit 9; }
+  task_id="import-$(date '+%Y%m%d-%H%M%S')-$$.log"
+  log_file="$LBP_LOGDIR/$task_id"
+  HOSTBACKUP_IMPORT_CLEANUP=1 nohup "$0" import "$archive" > "$log_file" 2>&1 &
+  printf '%s\n' "$task_id"
 }
 
 move_backup() {
@@ -1967,7 +2118,11 @@ Actions:
   stop BACKUP_ID         Stop a running backup and restart stopped services/containers
   list                   List backups as JSON
   export BACKUP_ID       Create/export BACKUP_ID.tar.gz
+  start-export BACKUP_ID Create/export BACKUP_ID.tar.gz in the background
+  export-info BACKUP_ID  Show export archive status as JSON
+  delete-export BACKUP_ID Delete the export archive for BACKUP_ID
   import ARCHIVE.tar.gz   Import an exported backup archive
+  start-import ARCHIVE.tar.gz Import an exported backup archive in the background
   move BACKUP_ID DIR      Move a backup and its export archive to DIR
   browse BACKUP_ID [PATH] List files inside a backup as JSON
   cat-file BACKUP_ID PATH Print one file from a backup
@@ -1996,7 +2151,11 @@ case "$action" in
   stop) shift; stop_backup "${1:?BACKUP_ID required}" ;;
   list) list_backups ;;
   export) shift; export_backup "${1:?BACKUP_ID required}" ;;
+  start-export) shift; start_export "${1:?BACKUP_ID required}" ;;
+  export-info) shift; export_info "${1:?BACKUP_ID required}" ;;
+  delete-export) shift; delete_export "${1:?BACKUP_ID required}" ;;
   import) shift; import_backup "${1:?ARCHIVE required}" ;;
+  start-import) shift; start_import "${1:?ARCHIVE required}" ;;
   move) shift; move_backup "${1:?BACKUP_ID required}" "${2:?DIR required}" ;;
   browse) shift; browse_backup "${1:?BACKUP_ID required}" "${2:-}" ;;
   cat-file) shift; cat_backup_file "${1:?BACKUP_ID required}" "${2:?PATH required}" ;;

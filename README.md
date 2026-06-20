@@ -1,6 +1,6 @@
 # LoxBerry Host Backup
 
-**Status:** Version 0.4.3, erste vorsichtig freigegebene Version.
+**Status:** Version 0.5.0-beta, Pre-Release mit asynchronem Import/Export.
 
 Dieses Plugin wurde bereits auf einem LoxBerry-/DietPi-Testsystem installiert,
 konfiguriert und für echte Vollbackups sowie inkrementelle Snapshot-Backups
@@ -175,13 +175,13 @@ zur LoxBerry-Administration gewechselt werden kann.
 Release-Paket:
 
 ```text
-https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.4.3/LoxBerryHostBackup_0.4.3.zip
+https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.5.0-beta/LoxBerryHostBackup_0.5.0.zip
 ```
 
 Lokales Paket nach dem Build:
 
 ```text
-LoxBerryHostBackup_0.4.3.zip
+LoxBerryHostBackup_0.5.0.zip
 ```
 
 ## Erste Tests Auf LoxBerry
@@ -206,16 +206,17 @@ Empfohlene Reihenfolge:
 - inkrementelle Snapshot-Backups per `rsync --link-dest`
 - Restore eines ausgewählten Backups
 - Restore-Check und Restore-Plan vor dem Start
-- Live-Status für laufende Backup-/Restore-Jobs
+- Live-Status für laufende Backup-, Restore-, Export- und Import-Jobs
 - Stop-Button für laufende Backups
 - Backup-Liste mit Status, Grösse, Dateianzahl, Abschlusszeit und Exportstatus
 - Backup-Explorer in der Weboberfläche
-- Import externer `.tar.gz`-Backup-Archive
-- Export vorhandener Backups als `.tar.gz`
+- Import externer `.tar.gz`-Backup-Archive im Hintergrund
+- Export vorhandener Backups als `.tar.gz` im Hintergrund mit Integritätsprüfung
 - Löschen vorhandener Backups
 - Export und Import der Plugin-Einstellungen als JSON-Datei
 - Docker- und Dienst-Inventarisierung
 - auswählbares Stoppen/Starten einzelner Docker-Container und systemd-Dienste
+- Einrichtungs-Wizard für die wichtigsten Erstkonfigurationsschritte
 - zeitgesteuerte Backups per Cron
 - tägliche, wöchentliche und monatliche Zeitpläne
 - Monatsende-Fallback bei monatlichen Backups am 29., 30. oder 31.
@@ -456,6 +457,10 @@ Während ein Backup läuft:
 - kann ein laufendes Backup über `Backup stoppen` abgebrochen werden
 - sind Datei-Explorer, Restore und Export für dieses laufende Backup gesperrt
 
+Export und Import grosser `.tar.gz`-Archive laufen ebenfalls als Hintergrundjob
+mit Live-Status. Dadurch bleibt die Weboberfläche erreichbar, während das Archiv
+erstellt, geprüft oder importiert wird.
+
 Nach Abschluss stoppt die Anzeige der letzten Log-Aktualisierung. Die
 Backup-Liste wird anschliessend aktualisiert.
 
@@ -593,9 +598,9 @@ Branches:
 Update-Dateien:
 
 - `release.cfg`: Stable-Kanal mit ZIP-Download aus dem GitHub-Release
-- `prerelease.cfg`: Pre-Release-Kanal, derzeit identisch mit dem freigegebenen Paket
+- `prerelease.cfg`: Pre-Release-Kanal mit neuer Vorabversion
 
-Das installierbare ZIP wird über den Release-Kanal bereitgestellt. Der Pre-Release-Kanal zeigt aktuell auf dasselbe Paket.
+Das installierbare ZIP wird über den Release-Kanal bereitgestellt. Der Pre-Release-Kanal kann auf eine neuere Vorabversion zeigen.
 
 GitHub Actions erzeugt das Plugin-ZIP automatisch und hängt es bei
 GitHub-Releases als Asset an.
