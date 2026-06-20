@@ -216,7 +216,7 @@ Empfohlene Reihenfolge:
 - Export und Import der Plugin-Einstellungen als JSON-Datei
 - Docker- und Dienst-Inventarisierung
 - auswählbares Stoppen/Starten einzelner Docker-Container und systemd-Dienste
-- Einrichtungs-Wizard für die wichtigsten Erstkonfigurationsschritte
+- Kurzanleitung für die wichtigsten Einstellungen und Kontrollen
 - zeitgesteuerte Backups per Cron
 - tägliche, wöchentliche und monatliche Zeitpläne
 - Monatsende-Fallback bei monatlichen Backups am 29., 30. oder 31.

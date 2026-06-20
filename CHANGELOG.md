@@ -13,22 +13,21 @@ validiert werden.
 
 ### Import und Export
 
-- Export vorhandener Backups laeuft nun als Hintergrundjob mit Live-Status,
+- Export vorhandener Backups läuft nun als Hintergrundjob mit Live-Status,
   damit grosse `.tar.gz`-Archive keinen Browser- oder Webserver-Timeout mehr
-  ausloesen.
-- Export-Archive werden zuerst als temporaere Datei erstellt, per `tar -tzf`
-  geprueft und danach atomar auf den finalen Archivnamen verschoben.
-- Die Backup-Liste zeigt Exportstatus, Archivgroesse und Archivpfad an.
-- Import externer Backup-Archive laeuft nun ebenfalls als Hintergrundjob mit
+  auslösen.
+- Export-Archive werden zuerst als temporäre Datei erstellt, per `tar -tzf`
+  geprüft und danach atomar auf den finalen Archivnamen verschoben.
+- Die Backup-Liste zeigt Exportstatus, Archivgrösse und Archivpfad an.
+- Import externer Backup-Archive läuft nun ebenfalls als Hintergrundjob mit
   Live-Status. Hochgeladene Importdateien werden nach erfolgreichem Import oder
   bei Fehlern automatisch bereinigt.
 
 ### Weboberflaeche
 
-- Datei-Explorer und Restore-Auswahl koennen direkt wieder geschlossen werden.
-- Ein kompakter Einrichtungs-Wizard fuehrt durch die wichtigsten Schritte fuer
-  Backup-Ziel, Ausschluesse, Backup-Modus, Stop-Ziele, Testbackup und
-  Restore-Test.
+- Datei-Explorer und Restore-Auswahl können direkt wieder geschlossen werden.
+- Eine kompakte Kurzanleitung erklärt die wichtigsten Schritte für Backup-Ziel,
+  Ausschlüsse, Backup-Modus, Stop-Ziele, Erstkontrolle und Restore-Konzept.
 
 ## [0.4.3] - 2026-06-02
 
@@ -44,7 +43,7 @@ validiert werden.
 ### Weboberflaeche
 
 - Backup-Zielauswahl ueberarbeitet und optisch an die restliche LoxBerry-Oberflaeche angepasst.
-- Aufklappbare Bereiche fuer Backup-Ziele, Zeitplan, Stop-Ziele und Backup-Verwaltung weiter vereinheitlicht.
+- Aufklappbare Bereiche für Backup-Ziele, Zeitplan, Stop-Ziele und Backup-Verwaltung weiter vereinheitlicht.
 - Manuelle Korrekturen aus `develop` uebernommen und README sowie Update-Metadaten auf Version 0.4.2 nachgezogen.
 
 ## [0.4.1] - 2026-05-25

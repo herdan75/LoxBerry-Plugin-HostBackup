@@ -142,7 +142,7 @@ if ($notice eq 'saved') {
 } elsif ($notice eq 'backup_stop_requested') {
   $message = 'Backup-Stopp wurde angefordert. Zuvor gestoppte Docker-Container werden wieder gestartet, falls möglich.';
 } elsif ($notice eq 'backup_deleted') {
-  $message = 'Backup geloescht.';
+  $message = 'Backup gelöscht.';
 } elsif ($notice eq 'backup_imported') {
   $message = 'Backup importiert.';
 } elsif ($notice eq 'import_started') {
@@ -636,7 +636,7 @@ my @month_checked = map { checked_attr($cfg_months{'*'} || $cfg_months{"$_"}) } 
 
 my $info_backup_root = info_button('Hier legst du fest, wohin die Backups geschrieben werden. Für ein echtes Host-Backup sollte das ein externer Datenträger, ein separates Mount oder ein grosser zweiter Datenspeicher sein. Erkannte Ziele können per Klick oder Drag und Drop übernommen werden. Wenn die Systemkarte selbst ausfällt, hilft ein Backup auf derselben Karte nicht.');
 my $info_backup_mode = info_button('Vollbackup kopiert jeden Stand vollständig. Inkrementeller Snapshot nutzt rsync mit Hardlinks auf das vorherige vollständige Backup: jedes Backup bleibt einzeln wiederherstellbar, unveränderte Dateien benötigen aber kaum zusätzlichen Speicher. Für zuverlässige Speicherersparnis wird ein Linux-Dateisystem wie ext4 empfohlen.');
-my $info_retention = info_button('Legt fest, wie viele fertige Backups behalten werden. Erlaubt sind 1 bis 10. Bei inkrementellen Snapshots ist das Loeschen alter Backups sicher: unveraenderte Dateien sind per Hardlink in jedem Snapshot sichtbar. Wird ein alter Snapshot entfernt, bleiben Dateien erhalten, solange sie noch von einem juengeren Snapshot referenziert werden. Sobald nach einem erfolgreichen Backup mehr Backups vorhanden sind als erlaubt, entfernt das Plugin automatisch das aelteste fertige Backup und das passende Export-Archiv.');
+my $info_retention = info_button('Legt fest, wie viele fertige Backups behalten werden. Erlaubt sind 1 bis 10. Bei inkrementellen Snapshots ist das Löschen alter Backups sicher: unveränderte Dateien sind per Hardlink in jedem Snapshot sichtbar. Wird ein alter Snapshot entfernt, bleiben Dateien erhalten, solange sie noch von einem jüngeren Snapshot referenziert werden. Sobald nach einem erfolgreichen Backup mehr Backups vorhanden sind als erlaubt, entfernt das Plugin automatisch das älteste fertige Backup und das passende Export-Archiv.');
 my $info_schedule = info_button('Der Zeitplan erstellt Backups automatisch per Cron. Täglich bedeutet jeden Tag zur Startzeit. Wöchentlich bedeutet an den gewählten Wochentagen zur Startzeit. Monatlich bedeutet an den gewählten Tagen in den gewählten Monaten zur Startzeit.');
 my $info_time = info_button('Diese Uhrzeit gilt für alle Zeitplanarten. Bei täglich ist sie die einzige zeitliche Einstellung. Bei wöchentlich und monatlich wird sie mit den gewählten Tagen kombiniert.');
 my $info_weekdays = info_button('Nur bei wöchentlichen Backups relevant. Du kannst einen oder mehrere Wochentage auswählen, zum Beispiel Montag und Freitag. An jedem gewählten Tag startet ein Backup zur angegebenen Startzeit.');
@@ -655,11 +655,11 @@ my $info_config_export = info_button('Lädt nur die Einstellungen dieses Plugins
 my $info_config_import = info_button('Liest eine zuvor exportierte Einstellungsdatei wieder ein. Das ist praktisch nach einer Neuinstallation des Plugins. Danach bitte Pfade und Root-Freigabe kurz prüfen und speichern, falls sich Laufwerke geändert haben.');
 my $info_table = info_button('Diese Liste zeigt vorhandene Backups mit Status, Host, Grösse und Fertigstellungszeit. Nach neuen Backups wird zusätzlich eine kurze Plausibilitätsprüfung angezeigt. Ein vollständiges Backup sollte den Status complete und möglichst Prüfung ok haben, bevor du es für Restore-Tests verwendest.');
 my $info_import = info_button('Importiert ein extern gespeichertes Backup-Archiv im Format tar.gz, zum Beispiel von deinem PC, NAS oder einem anderen Datenträger. Für Restore eines bereits unten gelisteten Backups brauchst du diese Datei-Auswahl nicht.');
-my $info_delete = info_button('Loescht den Backup-Ordner und ein eventuell vorhandenes Export-Archiv dieses Backups. Das kann nicht rueckgaengig gemacht werden. Bei grossen Backups oder langsamen Datentraegern kann das Loeschen mehrere Minuten dauern.');
+my $info_delete = info_button('Löscht den Backup-Ordner und ein eventuell vorhandenes Export-Archiv dieses Backups. Das kann nicht rückgängig gemacht werden. Bei grossen Backups oder langsamen Datenträgern kann das Löschen mehrere Minuten dauern.');
 my $info_restore = info_button('Wählt dieses Backup für eine Wiederherstellung aus. Danach wird unterhalb der Backup-Liste die Restore-Prüfung mit Bestätigung und Startbutton für genau dieses Backup eingeblendet.');
 my $info_browse = info_button('Öffnet den Datei-Explorer für dieses Backup. Damit kannst du prüfen, welche Dateien im Backup enthalten sind.');
 my $info_browse_pending = info_button('Dieses Backup ist noch nicht vollständig abgeschlossen. Dateien, Restore und Export werden erst freigegeben, wenn Status, Manifest und rootfs vollständig sind.');
-my $info_download = info_button('Export erstellt ein tar.gz-Archiv im Backup-Verzeichnis. Sobald es fertig ist, kann es separat heruntergeladen werden. Die Erstellung grosser Archive laeuft im Hintergrund.');
+my $info_download = info_button('Export erstellt ein tar.gz-Archiv im Backup-Verzeichnis. Sobald es fertig ist, kann es separat heruntergeladen werden. Die Erstellung grosser Archive läuft im Hintergrund.');
 my $info_backup_start = info_button('Startet den Backup-Vorgang. Vor dem eigentlichen Backup prüft das Plugin wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und Docker-Hinweise.');
 
 sub render_target_notice {
@@ -748,8 +748,8 @@ sub render_backup_target_picker {
   my ($current_root) = @_;
   my @groups = (
     { id => 'current', title => 'Aktueller Pfad', description => 'Der derzeit gespeicherte Zielpfad.', targets => [] },
-    { id => 'usb', title => 'USB-Speicher', description => 'Erkannte USB-Datentraeger und LoxBerry-USB-Pfade.', targets => [] },
-    { id => 'network', title => 'Netzwerkspeicher', description => 'Typische LoxBerry-Mountpoints fuer Samba, NFS oder FTP.', targets => [] },
+    { id => 'usb', title => 'USB-Speicher', description => 'Erkannte USB-Datenträger und LoxBerry-USB-Pfade.', targets => [] },
+    { id => 'network', title => 'Netzwerkspeicher', description => 'Typische LoxBerry-Mountpoints für Samba, NFS oder FTP.', targets => [] },
     { id => 'local', title => 'Weitere lokale Pfade', description => 'Weitere sinnvolle lokale Speicherorte.', targets => [] },
   );
   my %group_by_id = map { $_->{id} => $_ } @groups;
@@ -869,11 +869,11 @@ sub render_backup_target_picker {
     $groups_html .= qq{<details class="target-picker-group"><summary><span>$safe_title</span><small>$count verf&uuml;gbar</small></summary><div class="target-picker-actions">$buttons</div></details>};
   }
 
-  my $info_targets = info_button('Klick uebernimmt den Pfad ins Backup-Verzeichnis. Linux-Dateisysteme wie ext4, xfs oder btrfs sind fuer Geschwindigkeit, Rechte und inkrementelle Snapshots empfohlen.');
+  my $info_targets = info_button('Klick übernimmt den Pfad ins Backup-Verzeichnis. Linux-Dateisysteme wie ext4, xfs oder btrfs sind für Geschwindigkeit, Rechte und inkrementelle Snapshots empfohlen.');
 
   return qq{
 <details class="schedule-detail target-picker">
-<summary>Backup-Ziel auswaehlen $info_targets</summary>
+<summary>Backup-Ziel auswählen $info_targets</summary>
 <div class="target-picker-groups">$groups_html</div>
 </details>
 };
@@ -906,7 +906,7 @@ sub render_backup_rows {
       $export = qq{<span class="export-state ok">vorhanden</span><small>${export_size} MB</small>};
       $export .= qq{<small class="muted">Pfad: <code>$export_path</code></small>} if length $export_path;
     } elsif ($export_status eq 'running') {
-      $export = qq{<span class="export-state running">Export laeuft</span>};
+      $export = qq{<span class="export-state running">Export läuft</span>};
     } elsif ($export_status eq 'failed') {
       $export = qq{<span class="export-state failed">fehlgeschlagen</span>};
       $export .= qq{<small class="muted">$export_message</small>} if length $export_message;
@@ -949,7 +949,7 @@ $active_task_hidden
 </form>
 };
       } elsif ($export_status eq 'running') {
-        $export_action = qq{<span class="pending-action">Export laeuft</span>$info_download};
+        $export_action = qq{<span class="pending-action">Export läuft</span>$info_download};
       } else {
         $export_action = qq{
 <form data-ajax="false" method="post" class="inline-form loading-form">
@@ -1170,14 +1170,14 @@ print <<HTML;
 
 <section class="panel wizard-panel">
 <details>
-<summary>Einrichtungs-Wizard</summary>
+<summary>Kurzanleitung</summary>
 <ol>
-<li><strong>Backup-Ziel waehlen:</strong> Am besten ein ext4-, xfs- oder btrfs-Ziel auf USB, SSD oder Netzwerkspeicher verwenden.</li>
-<li><strong>Ausschluesse pruefen:</strong> Backup-Ziel, andere Backup-Datentraeger und grosse fremde Archive ausschliessen.</li>
-<li><strong>Backup-Modus setzen:</strong> Fuer regelmaessige Sicherungen ist der inkrementelle Snapshot auf ext4 empfohlen.</li>
-<li><strong>Dienste auswaehlen:</strong> Nur Dienste und Container stoppen, die viele Daten schreiben oder Datenbanken enthalten.</li>
-<li><strong>Testbackup erstellen:</strong> Danach Backup-Liste, Manifest, Groesse, Dateizahl und Live-Log pruefen.</li>
-<li><strong>Restore testen:</strong> Vor produktiver Nutzung mindestens einmal in einer Test- oder Rescue-Umgebung pruefen.</li>
+<li><strong>Backup-Ziel wählen:</strong> Wähle ein separates Ziel mit genügend freiem Speicher, idealerweise ext4, xfs oder btrfs auf USB, SSD oder einem eingebundenen Netzwerkspeicher. Das Backup-Ziel darf nicht innerhalb eines zu sichernden Datenbestands liegen.</li>
+<li><strong>Ausschlüsse prüfen:</strong> Schliesse das Backup-Ziel selbst, weitere Backup-Datenträger, alte Images und grosse Archivordner aus. So vermeidest du doppelte Sicherungen und unnötig grosse Backups.</li>
+<li><strong>Backup-Modus festlegen:</strong> Für regelmässige Sicherungen ist der inkrementelle Snapshot empfohlen. Unveränderte Dateien werden per Hardlink geteilt; deshalb belegen Folgebackups deutlich weniger zusätzlichen Speicher.</li>
+<li><strong>Dienste und Container auswählen:</strong> Stoppe gezielt Dienste und Container, die während des Backups viele Daten schreiben oder eigene Datenbanken verwenden. Das verbessert die Konsistenz der gesicherten Daten.</li>
+<li><strong>Erstes Backup kontrollieren:</strong> Prüfe nach dem ersten Lauf Status, Live-Log, Manifest, Dateizahl, Grösse und die Backup-Liste. Öffne bei Bedarf den Datei-Explorer, um den Inhalt des Backups zu kontrollieren.</li>
+<li><strong>Restore-Konzept festlegen:</strong> Lege vor dem Ernstfall fest, wie und wo du ein Backup wiederherstellst. Für produktive Systeme ist ein Restore aus einer Rescue- oder Offline-Umgebung am zuverlässigsten; ein geplanter Restore-Test wird empfohlen.</li>
 </ol>
 </details>
 </section>
@@ -1773,7 +1773,7 @@ function hostbackupClosest(node, selector) {
         'import-config': 'Einstellungen werden importiert...',
         'import': 'Backup-Import wird gestartet...',
         'start-export': 'Export wird im Hintergrund gestartet...',
-        'delete-backup': 'Backup wird geloescht. Bei grossen Backups kann das einige Minuten dauern...',
+        'delete-backup': 'Backup wird gelöscht. Bei grossen Backups kann das einige Minuten dauern...',
         'download-export': 'Export wird vorbereitet...',
         'restore-backup': 'Restore wird vorbereitet...',
         'stop-backup': 'Backup wird gestoppt...',
@@ -1874,10 +1874,10 @@ function hostbackupClosest(node, selector) {
     if (deleteForm) {
       var idInput = deleteForm.querySelector('input[name="backup_id"]');
       var backupId = idInput ? idInput.value : 'dieses Backup';
-      if (!window.confirm('Backup ' + backupId + ' wirklich dauerhaft loeschen?\\n\\nBei grossen Backups oder langsamen Datentraegern kann das Loeschen mehrere Minuten dauern. Bitte danach warten, bis die Aktion abgeschlossen ist.')) {
+      if (!window.confirm('Backup ' + backupId + ' wirklich dauerhaft löschen?\\n\\nBei grossen Backups oder langsamen Datenträgern kann das Löschen mehrere Minuten dauern. Bitte danach warten, bis die Aktion abgeschlossen ist.')) {
         event.preventDefault();
       } else if (window.hostbackupShowLoading) {
-        window.hostbackupShowLoading('Backup wird geloescht. Bei grossen Backups kann das einige Minuten dauern...');
+        window.hostbackupShowLoading('Backup wird gelöscht. Bei grossen Backups kann das einige Minuten dauern...');
       }
       return;
     }
@@ -2014,7 +2014,7 @@ function hostbackupClosest(node, selector) {
     form.appendChild(id);
     document.body.appendChild(form);
     if (window.hostbackupShowLoading) {
-      window.hostbackupShowLoading('Unfertiges Backup wird geloescht. Bei grossen Backups kann das einige Minuten dauern...');
+      window.hostbackupShowLoading('Unfertiges Backup wird gelöscht. Bei grossen Backups kann das einige Minuten dauern...');
     }
     form.submit();
   }
@@ -2037,7 +2037,7 @@ function hostbackupClosest(node, selector) {
       labels.failed = 'Restore fehlgeschlagen';
     }
 
-    labels.running = taskName() + ' laeuft';
+    labels.running = taskName() + ' läuft';
     labels.finished = taskName() + ' abgeschlossen';
     labels.failed = taskName() + ' fehlgeschlagen';
     labels.stopped = taskName() + ' gestoppt';
@@ -2073,7 +2073,7 @@ function hostbackupClosest(node, selector) {
           window.setTimeout(function () {
             var backupId = backupIdFromTask();
             if (state === 'stopped' && backupId) {
-              if (window.confirm('Das Backup wurde gestoppt und ist unvollstaendig. Soll dieses unfertige Backup jetzt geloescht werden?\\n\\nBei grossen Backups oder langsamen Datentraegern kann das Loeschen mehrere Minuten dauern.')) {
+              if (window.confirm('Das Backup wurde gestoppt und ist unvollständig. Soll dieses unfertige Backup jetzt gelöscht werden?\\n\\nBei grossen Backups oder langsamen Datenträgern kann das Löschen mehrere Minuten dauern.')) {
                 deleteStoppedBackup(backupId);
               } else {
                 redirectWithMessage('backup_stop_requested');
@@ -2121,7 +2121,7 @@ function hostbackupClosest(node, selector) {
   monitor.classList.remove('task-monitor-idle');
   if (stopForm && taskKind() !== 'backup') stopForm.classList.add('task-monitor-idle');
   heartbeatEl.textContent = 'Live-Status wird geladen...';
-  setState('running', taskName() + ' laeuft');
+  setState('running', taskName() + ' läuft');
   logEl.textContent = taskName() + ' wurde gestartet. Warte auf erste Logausgabe...';
   poll();
   timer = window.setInterval(poll, 5000);
