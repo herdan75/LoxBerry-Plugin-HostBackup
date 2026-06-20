@@ -9,6 +9,14 @@ validiert werden.
 
 ## [Unreleased]
 
+## [0.5.1-beta] - 2026-06-20
+
+### Weboberfläche
+
+- Einrichtungs-Wizard in Kurzanleitung umbenannt.
+- Kurzanleitung produktiver formuliert und um Restore-Konzept ergänzt.
+- Sichtbare Texte im betroffenen UI-Bereich auf echte Umlaute vereinheitlicht.
+
 ## [0.5.0-beta] - 2026-06-20
 
 ### Import und Export
@@ -307,7 +315,8 @@ validiert werden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.5.0-beta...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.5.1-beta...develop
+[0.5.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.1-beta
 [0.5.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.0-beta
 [0.4.3]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.4.3
 [0.4.2]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.4.2
