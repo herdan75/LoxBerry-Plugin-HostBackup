@@ -9,6 +9,13 @@ validiert werden.
 
 ## [Unreleased]
 
+## [0.5.2-beta] - 2026-06-20
+
+### Update-Kanal
+
+- Pre-Release-CFG-URL im Plugin auf die präzisere `refs/heads/develop`-Adresse umgestellt.
+- Pre-Release-Metadaten auf ein neues ZIP-Paket aktualisiert, damit LoxBerry die aktuelle Version eindeutig erkennt.
+
 ## [0.5.1-beta] - 2026-06-20
 
 ### Weboberfläche
@@ -315,7 +322,8 @@ validiert werden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.5.1-beta...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.5.2-beta...develop
+[0.5.2-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.2-beta
 [0.5.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.1-beta
 [0.5.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.0-beta
 [0.4.3]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.4.3
