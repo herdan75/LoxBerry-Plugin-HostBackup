@@ -9,6 +9,8 @@ validiert werden.
 
 ## [Unreleased]
 
+## [0.5.7-beta] - 2026-06-22
+
 ### Stabilität
 
 - Detailansichten für Datei-Explorer und Restore schliessen nun über eine robuste Basis-URL ohne alte Query-Parameter.
@@ -367,7 +369,8 @@ validiert werden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.5.6-beta...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.5.7-beta...develop
+[0.5.7-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.7-beta
 [0.5.6-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.6-beta
 [0.5.5-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.5-beta
 [0.5.4-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.4-beta
