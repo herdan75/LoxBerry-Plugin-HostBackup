@@ -143,6 +143,8 @@ if ($notice eq 'saved') {
   $message = 'Backup-Stopp wurde angefordert. Zuvor gestoppte Docker-Container werden wieder gestartet, falls möglich.';
 } elsif ($notice eq 'backup_deleted') {
   $message = 'Backup gelöscht.';
+} elsif ($notice eq 'export_deleted') {
+  $message = 'Export-Archiv gelöscht. Das Backup selbst bleibt erhalten.';
 } elsif ($notice eq 'backup_imported') {
   $message = 'Backup importiert.';
 } elsif ($notice eq 'import_started') {
@@ -466,6 +468,23 @@ if ($q->request_method eq 'POST') {
     }
   }
 
+  elsif ($action eq 'delete-export') {
+
+    my $delete_export_id = $q->param('backup_id') || '';
+
+    if ($delete_export_id !~ /^[A-Za-z0-9._-]+$/) {
+      $error = 'Ungültige Backup-ID.';
+    } else {
+      my ($status, $out) = run_shell(backend_cmd('delete-export', $delete_export_id));
+
+      if ($status == 0) {
+        redirect_with(msg => 'export_deleted');
+      } else {
+        $error = escapeHTML($out);
+      }
+    }
+  }
+
   elsif ($action eq 'start-export') {
 
     my $export_id = $q->param('backup_id') || '';
@@ -656,10 +675,12 @@ my $info_config_import = info_button('Liest eine zuvor exportierte Einstellungsd
 my $info_table = info_button('Diese Liste zeigt vorhandene Backups mit Status, Host, Grösse und Fertigstellungszeit. Nach neuen Backups wird zusätzlich eine kurze Plausibilitätsprüfung angezeigt. Ein vollständiges Backup sollte den Status complete und möglichst Prüfung ok haben, bevor du es für Restore-Tests verwendest.');
 my $info_import = info_button('Importiert ein extern gespeichertes Backup-Archiv im Format tar.gz, zum Beispiel von deinem PC, NAS oder einem anderen Datenträger. Für Restore eines bereits unten gelisteten Backups brauchst du diese Datei-Auswahl nicht.');
 my $info_delete = info_button('Löscht den Backup-Ordner und ein eventuell vorhandenes Export-Archiv dieses Backups. Das kann nicht rückgängig gemacht werden. Bei grossen Backups oder langsamen Datenträgern kann das Löschen mehrere Minuten dauern.');
+my $info_delete_export = info_button('Löscht nur das tar.gz-Exportarchiv dieses Backups. Der eigentliche Backup-Snapshot bleibt erhalten und kann später erneut exportiert werden.');
 my $info_restore = info_button('Wählt dieses Backup für eine Wiederherstellung aus. Danach wird unterhalb der Backup-Liste die Restore-Prüfung mit Bestätigung und Startbutton für genau dieses Backup eingeblendet.');
 my $info_browse = info_button('Öffnet den Datei-Explorer für dieses Backup. Damit kannst du prüfen, welche Dateien im Backup enthalten sind.');
 my $info_browse_pending = info_button('Dieses Backup ist noch nicht vollständig abgeschlossen. Dateien, Restore und Export werden erst freigegeben, wenn Status, Manifest und rootfs vollständig sind.');
 my $info_download = info_button('Export erstellt ein tar.gz-Archiv im Backup-Verzeichnis. Sobald es fertig ist, kann es separat heruntergeladen werden. Die Erstellung grosser Archive läuft im Hintergrund.');
+my $info_download_ready = info_button('Lädt das bereits erstellte tar.gz-Exportarchiv dieses Backups auf deinen Computer herunter. Das ist nicht der Restore; für eine Wiederherstellung bitte den Restore-Button verwenden.');
 my $info_backup_start = info_button('Startet den Backup-Vorgang. Vor dem eigentlichen Backup prüft das Plugin wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und Docker-Hinweise.');
 
 sub render_target_notice {
@@ -903,7 +924,7 @@ sub render_backup_rows {
     my $export_size = int(($backup->{export_size_bytes} || 0) / 1024 / 1024);
     my $export = '-';
     if ($export_status eq 'available') {
-      $export = qq{<span class="export-state ok">vorhanden</span><small>${export_size} MB</small>};
+      $export = qq{<span class="export-state ok">vorhanden</span><small class="export-size">${export_size} MB</small>};
       $export .= qq{<small class="muted">Pfad: <code>$export_path</code></small>} if length $export_path;
     } elsif ($export_status eq 'running') {
       $export = qq{<span class="export-state running">Export läuft</span>};
@@ -939,13 +960,19 @@ sub render_backup_rows {
 <input data-role="none" type="hidden" name="action" value="download-export">
 <input data-role="none" type="hidden" name="backup_id" value="$id">
 $active_task_hidden
-<button data-role="none" type="submit">Download</button>$info_download
+<button data-role="none" type="submit">Export-Archiv herunterladen</button>$info_download_ready
 </form>
 <form data-ajax="false" method="post" class="inline-form loading-form">
 <input data-role="none" type="hidden" name="action" value="start-export">
 <input data-role="none" type="hidden" name="backup_id" value="$id">
 $active_task_hidden
-<button data-role="none" type="submit">Neu erstellen</button>
+<button data-role="none" type="submit">Export neu erstellen</button>
+</form>
+<form data-ajax="false" method="post" class="inline-form delete-export-form">
+<input data-role="none" type="hidden" name="action" value="delete-export">
+<input data-role="none" type="hidden" name="backup_id" value="$id">
+$active_task_hidden
+<button data-role="none" class="danger" type="submit">Export-Archiv löschen</button>$info_delete_export
 </form>
 };
       } elsif ($export_status eq 'running') {
@@ -1493,7 +1520,7 @@ if ($browse_id) {
 <div class="subpanel" id="backup-browser">
 <div class="detail-header">
 <h3>Dateien in Backup <code>$safe_browse_id</code></h3>
-<a class="button-link" href="$close_browse_url">Ansicht schliessen</a>
+<a data-ajax="false" class="button-link" href="$close_browse_url">Ansicht schliessen</a>
 </div>
 <p>Pfad: <code>$safe_browse_path</code></p>
 <section class="inline-notice warning">Der Datei-Explorer dient nur zur Ansicht des Backup-Inhalts. F&uuml;r eine vollst&auml;ndige Wiederherstellung bitte den Restore-Button des gew&uuml;nschten Backups verwenden. Bei inkrementellen Snapshots sind kleine Gr&ouml;ssen normal: Unver&auml;nderte Dateien werden per Hardlink geteilt und belegen nicht mehrfach Speicher.</section>
@@ -1569,7 +1596,7 @@ if ($restore_id) {
 <div class="subpanel">
 <div class="detail-header">
 <h3>Ausgewähltes Backup: <code>$safe_restore_id</code></h3>
-<a class="button-link" href="$close_restore_url">Restore-Auswahl schliessen</a>
+<a data-ajax="false" class="button-link" href="$close_restore_url">Restore-Auswahl schliessen</a>
 </div>
 };
 
@@ -1773,6 +1800,7 @@ function hostbackupClosest(node, selector) {
         'import-config': 'Einstellungen werden importiert...',
         'import': 'Backup-Import wird gestartet...',
         'start-export': 'Export wird im Hintergrund gestartet...',
+        'delete-export': 'Export-Archiv wird gelöscht...',
         'delete-backup': 'Backup wird gelöscht. Bei grossen Backups kann das einige Minuten dauern...',
         'download-export': 'Export wird vorbereitet...',
         'restore-backup': 'Restore wird vorbereitet...',
@@ -1878,6 +1906,18 @@ function hostbackupClosest(node, selector) {
         event.preventDefault();
       } else if (window.hostbackupShowLoading) {
         window.hostbackupShowLoading('Backup wird gelöscht. Bei grossen Backups kann das einige Minuten dauern...');
+      }
+      return;
+    }
+
+    var deleteExportForm = hostbackupClosest(event.target, '.delete-export-form');
+    if (deleteExportForm) {
+      var exportIdInput = deleteExportForm.querySelector('input[name="backup_id"]');
+      var exportBackupId = exportIdInput ? exportIdInput.value : 'dieses Backup';
+      if (!window.confirm('Nur das tar.gz-Exportarchiv von Backup ' + exportBackupId + ' löschen?\\n\\nDer eigentliche Backup-Snapshot bleibt erhalten und kann später erneut exportiert werden.')) {
+        event.preventDefault();
+      } else if (window.hostbackupShowLoading) {
+        window.hostbackupShowLoading('Export-Archiv wird gelöscht...');
       }
       return;
     }

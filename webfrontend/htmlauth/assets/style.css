@@ -359,6 +359,13 @@ body.is-loading .loading-overlay {
   color: #a72222;
 }
 
+.export-size {
+  display: block;
+  font-size: 11px;
+  line-height: 1.25;
+  margin-top: 2px;
+}
+
 td .muted {
   color: #697684;
   display: block;
