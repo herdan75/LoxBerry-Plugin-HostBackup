@@ -9,6 +9,13 @@ validiert werden.
 
 ## [Unreleased]
 
+## [0.5.5-beta] - 2026-06-21
+
+### Paketierung
+
+- Pre-Release-Paket neu erstellt, damit die ZIP-Einträge Unix-Pfade mit `/` verwenden und von LoxBerry sauber entpackt werden können.
+- Windows-Paketierungsskript korrigiert, damit künftige Builds keine Backslash-Pfade im ZIP erzeugen.
+
 ## [0.5.4-beta] - 2026-06-21
 
 ### Weboberfläche
@@ -345,7 +352,8 @@ validiert werden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.5.4-beta...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.5.5-beta...develop
+[0.5.5-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.5-beta
 [0.5.4-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.4-beta
 [0.5.3-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.3-beta
 [0.5.2]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.2
