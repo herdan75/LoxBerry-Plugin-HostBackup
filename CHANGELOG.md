@@ -9,6 +9,12 @@ validiert werden.
 
 ## [Unreleased]
 
+## [0.5.6-beta] - 2026-06-21
+
+### Weboberfläche
+
+- Aktion `Ansicht schliessen` und `Restore-Auswahl schliessen` korrigiert, damit Datei-Explorer und Restore-Auswahl eine saubere URL ohne `browse_id` oder `restore_id` verwenden und wirklich ausgeblendet werden.
+
 ## [0.5.5-beta] - 2026-06-21
 
 ### Paketierung
@@ -352,7 +358,8 @@ validiert werden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.5.5-beta...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.5.6-beta...develop
+[0.5.6-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.6-beta
 [0.5.5-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.5-beta
 [0.5.4-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.4-beta
 [0.5.3-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.3-beta

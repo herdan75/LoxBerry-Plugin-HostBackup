@@ -70,6 +70,7 @@ sub base_url_with_active_task {
     push @parts, 'active_task=' . url_escape($active_task);
   }
   my $uri = $q->url(-relative => 1);
+  $uri =~ s/\?.*\z//;
   $uri .= '?' . join('&', @parts) if @parts;
   return $uri;
 }
