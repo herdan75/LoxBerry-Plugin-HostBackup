@@ -681,6 +681,7 @@ my $info_browse = info_button('Öffnet den Datei-Explorer für dieses Backup. Da
 my $info_browse_pending = info_button('Dieses Backup ist noch nicht vollständig abgeschlossen. Dateien, Restore und Export werden erst freigegeben, wenn Status, Manifest und rootfs vollständig sind.');
 my $info_download = info_button('Export erstellt ein tar.gz-Archiv im Backup-Verzeichnis. Sobald es fertig ist, kann es separat heruntergeladen werden. Die Erstellung grosser Archive läuft im Hintergrund.');
 my $info_download_ready = info_button('Lädt das bereits erstellte tar.gz-Exportarchiv dieses Backups auf deinen Computer herunter. Das ist nicht der Restore; für eine Wiederherstellung bitte den Restore-Button verwenden.');
+my $info_export_recreate = info_button('Erstellt das tar.gz-Exportarchiv für dieses Backup neu. Ein vorhandenes Export-Archiv wird ersetzt; der eigentliche Backup-Snapshot bleibt unverändert.');
 my $info_backup_start = info_button('Startet den Backup-Vorgang. Vor dem eigentlichen Backup prüft das Plugin wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und Docker-Hinweise.');
 
 sub render_target_notice {
@@ -966,7 +967,7 @@ $active_task_hidden
 <input data-role="none" type="hidden" name="action" value="start-export">
 <input data-role="none" type="hidden" name="backup_id" value="$id">
 $active_task_hidden
-<button data-role="none" type="submit">Export neu erstellen</button>
+<button data-role="none" type="submit">Export neu erstellen</button>$info_export_recreate
 </form>
 <form data-ajax="false" method="post" class="inline-form delete-export-form">
 <input data-role="none" type="hidden" name="action" value="delete-export">
@@ -1520,7 +1521,7 @@ if ($browse_id) {
 <div class="subpanel" id="backup-browser">
 <div class="detail-header">
 <h3>Dateien in Backup <code>$safe_browse_id</code></h3>
-<a data-ajax="false" class="button-link" href="$close_browse_url">Ansicht schliessen</a>
+<a data-ajax="false" data-skip-scroll-save="1" class="button-link" href="$close_browse_url">Ansicht schliessen</a>
 </div>
 <p>Pfad: <code>$safe_browse_path</code></p>
 <section class="inline-notice warning">Der Datei-Explorer dient nur zur Ansicht des Backup-Inhalts. F&uuml;r eine vollst&auml;ndige Wiederherstellung bitte den Restore-Button des gew&uuml;nschten Backups verwenden. Bei inkrementellen Snapshots sind kleine Gr&ouml;ssen normal: Unver&auml;nderte Dateien werden per Hardlink geteilt und belegen nicht mehrfach Speicher.</section>
@@ -1596,7 +1597,7 @@ if ($restore_id) {
 <div class="subpanel">
 <div class="detail-header">
 <h3>Ausgewähltes Backup: <code>$safe_restore_id</code></h3>
-<a data-ajax="false" class="button-link" href="$close_restore_url">Restore-Auswahl schliessen</a>
+<a data-ajax="false" data-skip-scroll-save="1" class="button-link" href="$close_restore_url">Restore-Auswahl schliessen</a>
 </div>
 };
 
@@ -1768,6 +1769,7 @@ function hostbackupClosest(node, selector) {
   document.addEventListener('click', function (event) {
     var link = hostbackupClosest(event.target, 'a');
     if (!link) return;
+    if (link.getAttribute('data-skip-scroll-save') === '1') return;
     var href = link.getAttribute('href') || '';
     if (!href || href.indexOf('javascript:') === 0 || href.indexOf('#') === 0) return;
     if (link.hostname && link.hostname !== window.location.hostname) return;
