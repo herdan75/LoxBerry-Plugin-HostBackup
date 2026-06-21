@@ -41,7 +41,7 @@ sub redirect_with {
     next unless defined $params{$key} && length $params{$key};
     push @parts, url_escape($key) . '=' . url_escape($params{$key});
   }
-  my $uri = $q->url(-relative => 1);
+  my $uri = page_url_without_query();
   $uri .= '?' . join('&', @parts) if @parts;
   print redirect(-uri => $uri);
   exit;
@@ -64,13 +64,24 @@ sub url_with_active_task {
   return '?' . join('&', @parts);
 }
 
+sub page_url_without_query {
+  my $uri = $ENV{REQUEST_URI} || '';
+  $uri =~ s/[?#].*\z//;
+
+  if (!length $uri) {
+    $uri = $ENV{SCRIPT_NAME} || $q->url(-relative => 1) || './';
+    $uri =~ s/[?#].*\z//;
+  }
+
+  return length $uri ? $uri : './';
+}
+
 sub base_url_with_active_task {
   my @parts;
   if ($active_task) {
     push @parts, 'active_task=' . url_escape($active_task);
   }
-  my $uri = $q->url(-relative => 1);
-  $uri =~ s/\?.*\z//;
+  my $uri = page_url_without_query();
   $uri .= '?' . join('&', @parts) if @parts;
   return $uri;
 }
@@ -157,7 +168,7 @@ if ($notice eq 'saved') {
 } elsif ($notice eq 'export_finished') {
   $message = 'Export abgeschlossen. Das Archiv steht in der Backup-Liste zum Download bereit.';
 } elsif ($notice eq 'config_imported') {
-  $message = 'Einstellungen importiert.';
+  $message = 'Einstellungen importiert. Die Root-Freigabe wurde aus Sicherheitsgründen zurückgesetzt und muss erneut bestätigt werden.';
 } elsif ($notice eq 'restore_started') {
   $message = 'Restore gestartet. Der Live-Status wird unten automatisch aktualisiert.';
 } elsif ($notice eq 'backup_finished') {
@@ -286,7 +297,7 @@ if ($q->request_method eq 'POST') {
         my @monthdays = split /,/, $schedule_monthdays;
         my $pre_hook = $imported->{pre_backup_hook} || '';
         my $post_hook = $imported->{post_backup_hook} || '';
-        my $root_permission_ack = bool_arg($imported->{root_permission_ack});
+        my $root_permission_ack = 'false';
         my $backup_mode = $imported->{backup_mode} || 'full';
         my $stop_targets = stop_targets_csv($imported->{stop_targets});
         my $mail_notify_enabled = bool_arg($imported->{mail_notify_enabled});
@@ -672,7 +683,7 @@ my $info_mail_to = info_button('Optional. Wenn leer, verwendet LoxBerry Host Bac
 my $info_mail_events = info_button('Wähle aus, bei welchen Ereignissen eine Mailbenachrichtigung gesendet werden soll.');
 my $info_root = info_button('Diese Bestätigung ist nötig, weil Vollbackup und Restore Systemdateien, Berechtigungen, Docker-Daten und Cronjobs betreffen. Es werden keine Passwörter gespeichert; erlaubt wird nur der Start des Backend-Skripts dieses Plugins.');
 my $info_config_export = info_button('Lädt nur die Einstellungen dieses Plugins als kleine JSON-Datei herunter. Enthalten sind zum Beispiel Backup-Verzeichnis, Ausschlüsse, Zeitplan und ausgewählte Stop-Ziele, aber keine Backup-Daten und keine Passwörter.');
-my $info_config_import = info_button('Liest eine zuvor exportierte Einstellungsdatei wieder ein. Das ist praktisch nach einer Neuinstallation des Plugins. Danach bitte Pfade und Root-Freigabe kurz prüfen und speichern, falls sich Laufwerke geändert haben.');
+my $info_config_import = info_button('Liest eine zuvor exportierte Einstellungsdatei wieder ein. Das ist praktisch nach einer Neuinstallation des Plugins. Danach bitte Pfade prüfen und die Root-Freigabe aus Sicherheitsgründen erneut bestätigen.');
 my $info_table = info_button('Diese Liste zeigt vorhandene Backups mit Status, Host, Grösse und Fertigstellungszeit. Nach neuen Backups wird zusätzlich eine kurze Plausibilitätsprüfung angezeigt. Ein vollständiges Backup sollte den Status complete und möglichst Prüfung ok haben, bevor du es für Restore-Tests verwendest.');
 my $info_import = info_button('Importiert ein extern gespeichertes Backup-Archiv im Format tar.gz, zum Beispiel von deinem PC, NAS oder einem anderen Datenträger. Für Restore eines bereits unten gelisteten Backups brauchst du diese Datei-Auswahl nicht.');
 my $info_delete = info_button('Löscht den Backup-Ordner und ein eventuell vorhandenes Export-Archiv dieses Backups. Das kann nicht rückgängig gemacht werden. Bei grossen Backups oder langsamen Datenträgern kann das Löschen mehrere Minuten dauern.');

@@ -541,6 +541,26 @@ log() {
   printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$msg"
 }
 
+run_with_heartbeat() {
+  local label="$1"
+  shift
+  "$@" &
+  local cmd_pid=$!
+  (
+    while kill -0 "$cmd_pid" 2>/dev/null; do
+      sleep 30
+      kill -0 "$cmd_pid" 2>/dev/null || break
+      log "$label still running"
+    done
+  ) &
+  local heartbeat_pid=$!
+  wait "$cmd_pid"
+  local status=$?
+  kill "$heartbeat_pid" 2>/dev/null || true
+  wait "$heartbeat_pid" 2>/dev/null || true
+  return "$status"
+}
+
 rsync_supports_info() {
   rsync --help 2>/dev/null | grep -q -- '--info='
 }
@@ -1692,17 +1712,19 @@ list_backups() {
       $data->{backup_id} ||= $entry;
       $data->{path} = $dir;
       $data->{export_file} = -f $archive ? $archive : undef;
-      if (-f $archive) {
+      if (@tmp_archives) {
+        $data->{export_status} = "running";
+        $data->{export_size_bytes} = 0;
+        $data->{export_mtime} = 0;
+        $data->{export_message} = -f $archive
+          ? "Export wird neu erstellt. Das bisherige Archiv bleibt bis zum Abschluss erhalten."
+          : "Export wird erstellt";
+      } elsif (-f $archive) {
         my @ast = stat($archive);
         $data->{export_status} = "available";
         $data->{export_size_bytes} = 0 + ($ast[7] || 0);
         $data->{export_mtime} = 0 + ($ast[9] || 0);
         $data->{export_message} = "Export vorhanden und bereit zum Download";
-      } elsif (@tmp_archives) {
-        $data->{export_status} = "running";
-        $data->{export_size_bytes} = 0;
-        $data->{export_mtime} = 0;
-        $data->{export_message} = "Export wird erstellt";
       } elsif (($export_log->{status} || "") eq "failed") {
         $data->{export_status} = "failed";
         $data->{export_size_bytes} = 0;
@@ -1740,7 +1762,7 @@ export_backup() {
   flock -n 8 || { log "Export $backup_id failed: already running"; echo "Export already running: $backup_id" >&2; exit 5; }
   rm -f "$tmp"
   log "Starting export $backup_id"
-  if ! tar -C "$root" -czf "$tmp" -- "$backup_id"; then
+  if ! run_with_heartbeat "Export $backup_id" tar -C "$root" -czf "$tmp" -- "$backup_id"; then
     rm -f "$tmp"
     log "Export $backup_id failed during archive creation"
     exit 15
@@ -1769,14 +1791,18 @@ export_info() {
   message="Noch kein Exportarchiv vorhanden"
   size=0
   mtime=0
-  if [ -f "$archive" ]; then
+  if [ "${tmp_count:-0}" -gt 0 ]; then
+    status="running"
+    if [ -f "$archive" ]; then
+      message="Export wird neu erstellt. Das bisherige Archiv bleibt bis zum Abschluss erhalten."
+    else
+      message="Export wird erstellt"
+    fi
+  elif [ -f "$archive" ]; then
     status="available"
     message="Export vorhanden und bereit zum Download"
     size="$(stat -c '%s' "$archive" 2>/dev/null || echo 0)"
     mtime="$(stat -c '%Y' "$archive" 2>/dev/null || echo 0)"
-  elif [ "${tmp_count:-0}" -gt 0 ]; then
-    status="running"
-    message="Export wird erstellt"
   fi
   cat <<EOF
 {
@@ -1803,11 +1829,14 @@ start_export() {
 delete_export() {
   require_root_for_write
   local backup_id="$1"
-  local root archive
+  local root archive lock_file
   require_backup_id "$backup_id"
   root="$(backup_root)"
   require_allowed_backup_root "$root"
   archive="$root/$backup_id.tar.gz"
+  lock_file="$root/.export-$backup_id.lock"
+  exec 8>"$lock_file"
+  flock -n 8 || { echo "Export is currently running and cannot be deleted: $backup_id" >&2; exit 5; }
   rm -f "$archive" "$archive".tmp.*
 }
 
@@ -1843,7 +1872,10 @@ import_backup() {
     exit 4
   fi
   log "Starting import from $archive"
-  tar -C "$root" --numeric-owner --same-owner --same-permissions -xzf "$archive"
+  if ! run_with_heartbeat "Import $top" tar -C "$root" --numeric-owner --same-owner --same-permissions -xzf "$archive"; then
+    log "Import $top failed during archive extraction"
+    exit 15
+  fi
   [ -d "$root/$top/rootfs" ] || { echo "Imported archive does not contain a rootfs directory." >&2; exit 12; }
   if [ "${HOSTBACKUP_IMPORT_CLEANUP:-0}" = "1" ]; then
     rm -f "$archive"
@@ -1853,11 +1885,27 @@ import_backup() {
   printf '%s\n' "$top"
 }
 
+require_staged_import_archive() {
+  local archive="$1"
+  local staging="$LBP_DATADIR/imports"
+  local archive_real staging_real
+  [ -r "$archive" ] || { echo "Archive not readable: $archive" >&2; exit 9; }
+  mkdir -p "$staging"
+  archive_real="$(readlink -f "$archive" 2>/dev/null || true)"
+  staging_real="$(readlink -f "$staging" 2>/dev/null || true)"
+  [ -n "$archive_real" ] || { echo "Archive path could not be resolved: $archive" >&2; exit 9; }
+  [ -n "$staging_real" ] || { echo "Import staging directory could not be resolved: $staging" >&2; exit 9; }
+  case "$archive_real" in
+    "$staging_real"/*.tar.gz) printf '%s\n' "$archive_real" ;;
+    *) echo "Background import requires a staged tar.gz archive in $staging_real." >&2; exit 13 ;;
+  esac
+}
+
 start_import() {
   require_root_for_write
   local archive="$1"
   local task_id log_file
-  [ -r "$archive" ] || { echo "Archive not readable: $archive" >&2; exit 9; }
+  archive="$(require_staged_import_archive "$archive")"
   task_id="import-$(date '+%Y%m%d-%H%M%S')-$$.log"
   log_file="$LBP_LOGDIR/$task_id"
   HOSTBACKUP_IMPORT_CLEANUP=1 nohup "$0" import "$archive" > "$log_file" 2>&1 &

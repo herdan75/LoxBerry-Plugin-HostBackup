@@ -9,6 +9,15 @@ validiert werden.
 
 ## [Unreleased]
 
+### Stabilität
+
+- Detailansichten für Datei-Explorer und Restore schliessen nun über eine robuste Basis-URL ohne alte Query-Parameter.
+- Export-Neuerstellungen werden in der Backup-Liste und in `export-info` korrekt als laufend angezeigt, auch wenn noch ein altes Export-Archiv vorhanden ist.
+- Export-Archiv-Löschung ist gegen gleichzeitig laufende Export-Jobs gesperrt.
+- Lange Export- und Import-Jobs schreiben Heartbeat-Einträge ins Log, damit der Live-Status nicht fälschlich als veraltet erscheint.
+- Hintergrund-Importe akzeptieren nur noch zuvor im Plugin-Staging abgelegte `.tar.gz`-Archive.
+- Importierte Plugin-Einstellungen übernehmen die Root-Freigabe nicht mehr automatisch; sie muss nach dem Import erneut bestätigt werden.
+
 ## [0.5.6-beta] - 2026-06-21
 
 ### Weboberfläche

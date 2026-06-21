@@ -427,12 +427,13 @@ Enthalten sind zum Beispiel:
 - Zeitplan
 - Aufbewahrung
 - Pre-/Post-Backup-Hooks
-- Root-Freigabe-Bestätigung
 
 Nicht enthalten sind Backup-Daten oder Passwörter.
 
 Nach einem Import sollten die Pfade trotzdem kurz geprüft werden, weil sich
 USB-Mounts oder Laufwerksnamen nach einer Neuinstallation ändern können.
+Die Root-Freigabe wird aus Sicherheitsgründen nicht aus der Einstellungsdatei
+übernommen und muss nach dem Import erneut bestätigt werden.
 
 ### Hooks
 
