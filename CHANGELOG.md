@@ -9,6 +9,15 @@ validiert werden.
 
 ## [Unreleased]
 
+## [0.5.3-beta] - 2026-06-21
+
+### Weboberfläche
+
+- Aktion `Ansicht schliessen` und `Restore-Auswahl schliessen` robuster gemacht, damit Detailansichten wieder korrekt geschlossen werden.
+- Export-Aktionen eindeutiger beschriftet: Download, Neuerstellung und Löschung des Export-Archivs sind klar getrennt.
+- Separates Löschen eines vorhandenen `.tar.gz`-Exportarchivs ergänzt, ohne den eigentlichen Backup-Snapshot zu entfernen.
+- Export-Status in der Backup-Liste lesbarer dargestellt.
+
 ## [0.5.2] - 2026-06-20
 
 ### Release
@@ -329,7 +338,8 @@ validiert werden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.5.2...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.5.3-beta...develop
+[0.5.3-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.3-beta
 [0.5.2]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.2
 [0.5.2-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.2-beta
 [0.5.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.1-beta
