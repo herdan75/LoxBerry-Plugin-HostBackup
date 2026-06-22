@@ -9,6 +9,10 @@ validiert werden.
 
 ## [Unreleased]
 
+### Stabilität
+
+- Export-Live-Status robuster gemacht: Export-Logs werden vor dem Hintergrundjob sicher angelegt, fehlende Export-Logs werden über `export-info` abgefangen und laufende Export-Neuerstellungen werden zuverlässig als `running` erkannt.
+
 ## [0.5.7] - 2026-06-22
 
 ### Release

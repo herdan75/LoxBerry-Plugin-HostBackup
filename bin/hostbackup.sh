@@ -561,6 +561,15 @@ run_with_heartbeat() {
   return "$status"
 }
 
+export_lock_held() {
+  local lock_file="$1"
+  [ -e "$lock_file" ] || return 1
+  if ( flock -n 9 ) 9>"$lock_file"; then
+    return 1
+  fi
+  return 0
+}
+
 rsync_supports_info() {
   rsync --help 2>/dev/null | grep -q -- '--info='
 }
@@ -1578,9 +1587,68 @@ show_task_log() {
 task_status() {
   local task="$1"
   local lines="${2:-400}"
-  local max_bytes path size mtime state content_b64 recent_log
+  local max_bytes path size mtime state content_b64 recent_log backup_id info status message now
   path="$(task_log_path "$task")"
-  [ -r "$path" ] || { echo "Task log not found: $task" >&2; exit 14; }
+  if [ ! -r "$path" ]; then
+    case "$task" in
+      export-*.log)
+        backup_id="${task#export-}"
+        backup_id="${backup_id%.log}"
+        require_backup_id "$backup_id"
+        info="$(export_info "$backup_id" 2>/dev/null || true)"
+        status="$(printf '%s' "$info" | perl -MJSON::PP -e 'local $/; my $data = eval { decode_json(<STDIN>) } || {}; print $data->{status} // "";')"
+        now="$(date +%s)"
+        case "$status" in
+          available)
+            state="finished"
+            message="Exportarchiv ist vorhanden. Das Export-Log wurde nicht gefunden; der Exportstatus wurde ueber export-info bestaetigt."
+            ;;
+          running)
+            state="running"
+            message="Export laeuft. Die Logdatei wurde noch nicht gefunden."
+            ;;
+          failed)
+            state="failed"
+            message="Export ist fehlgeschlagen. Das Export-Log wurde nicht gefunden; der Status wurde ueber export-info ermittelt."
+            ;;
+          *)
+            echo "Task log not found: $task" >&2
+            exit 14
+            ;;
+        esac
+        content_b64="$(printf '%s\n' "$message" | base64 -w 0)"
+        cat <<EOF
+{
+  "task": $(json_escape "$task"),
+  "state": $(json_escape "$state"),
+  "size": 0,
+  "mtime": $now,
+  "now": $now,
+  "content_b64": $(json_escape "$content_b64")
+}
+EOF
+        return 0
+        ;;
+      import-*.log)
+        now="$(date +%s)"
+        message="Import-Log wurde noch nicht gefunden. Der Import kann noch starten oder bereits laufen."
+        content_b64="$(printf '%s\n' "$message" | base64 -w 0)"
+        cat <<EOF
+{
+  "task": $(json_escape "$task"),
+  "state": "running",
+  "size": 0,
+  "mtime": $now,
+  "now": $now,
+  "content_b64": $(json_escape "$content_b64")
+}
+EOF
+        return 0
+        ;;
+    esac
+    echo "Task log not found: $task" >&2
+    exit 14
+  fi
   max_bytes=32768
   size="$(stat -c '%s' "$path" 2>/dev/null || echo 0)"
   mtime="$(stat -c '%Y' "$path" 2>/dev/null || echo 0)"
@@ -1617,8 +1685,16 @@ list_backups() {
   while IFS= read -r dir; do
     dirs+=("$dir")
   done < <(log_dirs)
-  perl -MJSON::PP -e '
+  perl -MJSON::PP -MFcntl=:flock -e '
     my ($root, @log_dirs) = @ARGV;
+    sub export_lock_held {
+      my ($lock_path) = @_;
+      return 0 unless -e $lock_path;
+      open my $lfh, ">>", $lock_path or return 0;
+      my $locked = flock($lfh, LOCK_EX | LOCK_NB);
+      close $lfh;
+      return $locked ? 0 : 1;
+    }
     sub log_summary {
       my ($id) = @_;
       my %summary;
@@ -1698,7 +1774,9 @@ list_backups() {
         $data->{validation} = eval { decode_json(<$vh>) } || {};
       }
       my $archive = "$root/$entry.tar.gz";
+      my $lock = "$root/.export-$entry.lock";
       my @tmp_archives = glob("$archive.tmp.*");
+      my $export_running = @tmp_archives || export_lock_held($lock);
       my $log = log_summary($entry);
       my $export_log = export_log_summary($entry);
       if (($data->{status} || "") eq "running" && $log->{status}) {
@@ -1712,7 +1790,7 @@ list_backups() {
       $data->{backup_id} ||= $entry;
       $data->{path} = $dir;
       $data->{export_file} = -f $archive ? $archive : undef;
-      if (@tmp_archives) {
+      if ($export_running) {
         $data->{export_status} = "running";
         $data->{export_size_bytes} = 0;
         $data->{export_mtime} = 0;
@@ -1779,19 +1857,20 @@ export_backup() {
 
 export_info() {
   local backup_id="$1"
-  local root target archive tmp_count status message size mtime
+  local root target archive lock_file tmp_count status message size mtime
   require_backup_id "$backup_id"
   root="$(backup_root)"
   require_allowed_backup_root "$root"
   target="$root/$backup_id"
   archive="$root/$backup_id.tar.gz"
+  lock_file="$root/.export-$backup_id.lock"
   [ -d "$target" ] || { echo "Backup not found: $backup_id" >&2; exit 6; }
   tmp_count="$(find "$root" -maxdepth 1 -type f -name "$backup_id.tar.gz.tmp.*" 2>/dev/null | wc -l)"
   status="missing"
   message="Noch kein Exportarchiv vorhanden"
   size=0
   mtime=0
-  if [ "${tmp_count:-0}" -gt 0 ]; then
+  if [ "${tmp_count:-0}" -gt 0 ] || export_lock_held "$lock_file"; then
     status="running"
     if [ -f "$archive" ]; then
       message="Export wird neu erstellt. Das bisherige Archiv bleibt bis zum Abschluss erhalten."
@@ -1822,7 +1901,21 @@ start_export() {
   local log_file
   require_backup_id "$backup_id"
   log_file="$LBP_LOGDIR/export-$backup_id.log"
-  nohup "$0" export "$backup_id" > "$log_file" 2>&1 &
+  if ! mkdir -p "$LBP_LOGDIR"; then
+    echo "Could not create log directory: $LBP_LOGDIR" >&2
+    exit 14
+  fi
+  if ! : > "$log_file"; then
+    echo "Could not create export log: $log_file" >&2
+    exit 14
+  fi
+  chmod 644 "$log_file" 2>/dev/null || true
+  log "Export $backup_id queued" >> "$log_file"
+  nohup "$0" export "$backup_id" >> "$log_file" 2>&1 &
+  if [ ! -r "$log_file" ]; then
+    echo "Export log is not readable: $log_file" >&2
+    exit 14
+  fi
   printf 'export-%s.log\n' "$backup_id"
 }
 
@@ -1836,7 +1929,7 @@ delete_export() {
   archive="$root/$backup_id.tar.gz"
   lock_file="$root/.export-$backup_id.lock"
   exec 8>"$lock_file"
-  flock -n 8 || { echo "Export is currently running and cannot be deleted: $backup_id" >&2; exit 5; }
+  flock -n 8 || { echo "Export laeuft noch und kann nicht geloescht werden: $backup_id" >&2; exit 5; }
   rm -f "$archive" "$archive".tmp.*
 }
 
@@ -1908,7 +2001,21 @@ start_import() {
   archive="$(require_staged_import_archive "$archive")"
   task_id="import-$(date '+%Y%m%d-%H%M%S')-$$.log"
   log_file="$LBP_LOGDIR/$task_id"
-  HOSTBACKUP_IMPORT_CLEANUP=1 nohup "$0" import "$archive" > "$log_file" 2>&1 &
+  if ! mkdir -p "$LBP_LOGDIR"; then
+    echo "Could not create log directory: $LBP_LOGDIR" >&2
+    exit 14
+  fi
+  if ! : > "$log_file"; then
+    echo "Could not create import log: $log_file" >&2
+    exit 14
+  fi
+  chmod 644 "$log_file" 2>/dev/null || true
+  log "Import queued from $archive" >> "$log_file"
+  HOSTBACKUP_IMPORT_CLEANUP=1 nohup "$0" import "$archive" >> "$log_file" 2>&1 &
+  if [ ! -r "$log_file" ]; then
+    echo "Import log is not readable: $log_file" >&2
+    exit 14
+  fi
   printf '%s\n' "$task_id"
 }
 
