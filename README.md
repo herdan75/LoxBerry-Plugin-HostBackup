@@ -1,6 +1,6 @@
 # LoxBerry Host Backup
 
-**Status:** Version 0.5.7, Release mit robuster Detailansicht und abgesichertem Import/Export.
+**Status:** Version 0.5.8-beta, Pre-Release mit robusterem Export-Live-Status.
 
 Dieses Plugin wurde bereits auf einem LoxBerry-/DietPi-Testsystem installiert,
 konfiguriert und für echte Vollbackups sowie inkrementelle Snapshot-Backups
