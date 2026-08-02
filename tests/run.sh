@@ -33,7 +33,7 @@ if command -v node >/dev/null 2>&1; then
   LBHOMEDIR="$tmp/lbh-render" \
   LBPDATADIR="$tmp/render-data" \
   REQUEST_METHOD=GET \
-  QUERY_STRING= \
+  QUERY_STRING='' \
   REMOTE_USER=hostbackup-test \
   REMOTE_ADDR=127.0.0.1 \
   HTTP_USER_AGENT=hostbackup-test \
