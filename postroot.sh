@@ -36,6 +36,7 @@ else
 fi
 LOCK_DIR="$ROOT_STATE_DIR/locks"
 TASK_DIR="$ROOT_STATE_DIR/tasks"
+TASK_LOG_DIR="$ROOT_STATE_DIR/logs"
 ROOT_IMPORT_DIR="$ROOT_STATE_DIR/imports"
 QUARANTINE_DIR="$ROOT_STATE_DIR/import-quarantine"
 UPGRADE_DIR="/tmp/${INSTALL_ID}_loxberryhostbackup_upgrade"
@@ -69,21 +70,22 @@ for required_file in "$BACKEND" "$DISPATCHER_SOURCE" "$CGI" "$RESTORE" "$NOTIFY"
   fi
 done
 
-for secure_dir in "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR" "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"; do
+for secure_dir in "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR" "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"; do
   if [ -L "$secure_dir" ]; then
     echo "Refusing unsafe symlink directory: $secure_dir" >&2
     exit 1
   fi
 done
 
-mkdir -p "$DATA_DIR" "$LOG_DIR" "$LOCK_DIR" "$TASK_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"
+mkdir -p "$DATA_DIR" "$LOG_DIR" "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"
 
-chown root:root "$BACKEND" "$DISPATCHER_SOURCE" "$RESTORE" "$NOTIFY" "$CONFIG_DIR" "$CONFIG" "$LOG_DIR" "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"
+chown root:root "$BACKEND" "$DISPATCHER_SOURCE" "$RESTORE" "$NOTIFY" "$CONFIG_DIR" "$CONFIG" "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"
+chown loxberry:loxberry "$LOG_DIR"
 chmod 755 "$BACKEND" "$DISPATCHER_SOURCE" "$CGI" "$RESTORE"
 chmod 644 "$NOTIFY"
 chmod 755 "$CONFIG_DIR" "$LOG_DIR"
 chmod 600 "$CONFIG"
-chmod 700 "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"
+chmod 700 "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"
 
 install -o root -g root -m 0755 "$DISPATCHER_SOURCE" "$DISPATCHER_TARGET"
 

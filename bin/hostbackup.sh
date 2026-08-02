@@ -24,6 +24,7 @@ else
 fi
 LOCK_DIR="$ROOT_STATE_DIR/locks"
 TASK_DIR="$ROOT_STATE_DIR/tasks"
+TASK_LOG_DIR="$ROOT_STATE_DIR/logs"
 ROOT_IMPORT_DIR="$ROOT_STATE_DIR/imports"
 QUARANTINE_DIR="$ROOT_STATE_DIR/import-quarantine"
 TARGET_MARKER_NAME=".loxberry-hostbackup-target"
@@ -34,13 +35,13 @@ for runtime_dir in "$LBP_CONFIGDIR" "$LBP_DATADIR" "$LBP_LOGDIR"; do
   [ ! -L "$runtime_dir" ] || { echo "Unsafe symlink runtime directory: $runtime_dir" >&2; exit 13; }
   mkdir -p -- "$runtime_dir"
 done
-[ ! -L "$ROOT_STATE_DIR" ] && [ ! -L "$LOCK_DIR" ] && [ ! -L "$TASK_DIR" ] && [ ! -L "$ROOT_IMPORT_DIR" ] && [ ! -L "$QUARANTINE_DIR" ] || { echo "Unsafe root state directory symlink." >&2; exit 13; }
-mkdir -p -- "$LOCK_DIR" "$TASK_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"
+[ ! -L "$ROOT_STATE_DIR" ] && [ ! -L "$LOCK_DIR" ] && [ ! -L "$TASK_DIR" ] && [ ! -L "$TASK_LOG_DIR" ] && [ ! -L "$ROOT_IMPORT_DIR" ] && [ ! -L "$QUARANTINE_DIR" ] || { echo "Unsafe root state directory symlink." >&2; exit 13; }
+mkdir -p -- "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"
 [ -d "$ROOT_STATE_DIR" ] && [ ! -L "$ROOT_STATE_DIR" ] || { echo "Root state directory is unsafe." >&2; exit 13; }
-chmod 700 "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR" 2>/dev/null || true
+chmod 700 "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR" 2>/dev/null || true
 
 if [ "$(id -u)" -eq 0 ]; then
-  for secure_dir in "$LBP_LOGDIR" "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"; do
+  for secure_dir in "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"; do
     secure_owner="$(stat -c '%u' "$secure_dir" 2>/dev/null || echo -1)"
     secure_mode="$(stat -c '%a' "$secure_dir" 2>/dev/null || echo '')"
     [ "$secure_owner" = "0" ] && [ -n "$secure_mode" ] && (( (8#$secure_mode & 022) == 0 )) || {
@@ -915,10 +916,10 @@ log() {
 prepare_log_file() {
   local path="$1" mode="${2:-append}"
   case "$path" in
-    "$LBP_LOGDIR"/*) ;;
+    "$TASK_LOG_DIR"/*) ;;
     *) echo "Unsafe log path: $path" >&2; return 14 ;;
   esac
-  [ -d "$LBP_LOGDIR" ] && [ ! -L "$LBP_LOGDIR" ] || { echo "Unsafe log directory: $LBP_LOGDIR" >&2; return 14; }
+  [ -d "$TASK_LOG_DIR" ] && [ ! -L "$TASK_LOG_DIR" ] || { echo "Unsafe log directory: $TASK_LOG_DIR" >&2; return 14; }
   [ ! -L "$path" ] || { echo "Unsafe log symlink: $path" >&2; return 14; }
   [ ! -e "$path" ] || [ -f "$path" ] || { echo "Log path is not a regular file: $path" >&2; return 14; }
   perl -MFcntl=:DEFAULT -e '
@@ -2192,7 +2193,7 @@ create_backup() {
   acquire_backup_lock "$backup_id" exclusive
   target="$(strict_child_path "$root" "$root/$backup_id")" || { echo "Unsafe backup target." >&2; exit 7; }
   rootfs="$target/rootfs"
-  log_file="$LBP_LOGDIR/backup-$backup_id.log"
+  log_file="$TASK_LOG_DIR/backup-$backup_id.log"
   task="backup-$backup_id.log"
   exclude_file="$target/rsync-excludes.txt"
 
@@ -2362,7 +2363,7 @@ start_backup() {
     echo "Preflight-Warnungen muessen explizit bestaetigt werden." >&2
     exit 16
   fi
-  log_file="$LBP_LOGDIR/backup-$backup_id.launch.log"
+  log_file="$TASK_LOG_DIR/backup-$backup_id.launch.log"
   task="backup-$backup_id.log"
   prepare_log_file "$log_file" truncate
   pid="$(launch_background "$task" "$log_file" "$0" backup "$backup_id")"
@@ -2379,7 +2380,7 @@ stop_backup() {
   root="$(backup_root)"
   verify_backup_target "$root" false
   target="$(strict_child_path "$root" "$root/$backup_id")" || { echo "Unsafe backup path." >&2; exit 7; }
-  log_file="$LBP_LOGDIR/backup-$backup_id.log"
+  log_file="$TASK_LOG_DIR/backup-$backup_id.log"
   task="backup-$backup_id.log"
   [ -d "$target" ] || { echo "Backup not found: $backup_id" >&2; exit 6; }
   prepare_log_file "$log_file" append
@@ -2427,17 +2428,7 @@ stop_backup() {
 }
 
 log_dirs() {
-  local dir
-  for dir in \
-    "$LBP_LOGDIR" \
-    "$LBHOMEDIR/log/plugins" \
-    "$LBHOMEDIR/log/plugins/$PLUGIN_FOLDER" \
-    "$LBHOMEDIR/log/ramlog/log/plugins" \
-    "$LBHOMEDIR/log/ramlog/log/plugins/$PLUGIN_FOLDER"
-  do
-    [ -n "$dir" ] || continue
-    printf '%s\n' "$dir"
-  done | awk '!seen[$0]++'
+  printf '%s\n' "$TASK_LOG_DIR"
 }
 
 task_log_path() {
@@ -2455,13 +2446,13 @@ task_log_path() {
       return 0
     fi
   done < <(log_dirs)
-  printf '%s/%s\n' "$LBP_LOGDIR" "$task"
+  printf '%s/%s\n' "$TASK_LOG_DIR" "$task"
 }
 
 list_tasks() {
   local dirs=()
   local dir
-  mkdir -p "$LBP_LOGDIR"
+  mkdir -p "$TASK_LOG_DIR"
   while IFS= read -r dir; do
     dirs+=("$dir")
   done < <(log_dirs)
@@ -2777,7 +2768,7 @@ export_backup() {
   rm -f "$tmp"
   log "Starting export $backup_id"
   task="export-$backup_id.log"
-  log_file="$LBP_LOGDIR/$task"
+  log_file="$TASK_LOG_DIR/$task"
   prepare_log_file "$log_file" append
   task_state_write "$task" running archiving "$log_file" "$$" ""
   checksum_tmp="$archive.sha256.tmp.$$"
@@ -2890,7 +2881,7 @@ start_export() {
   require_backup_id "$backup_id"
   acquire_operation_lock shared
   acquire_backup_lock "$backup_id" shared
-  log_file="$LBP_LOGDIR/export-$backup_id.log"
+  log_file="$TASK_LOG_DIR/export-$backup_id.log"
   prepare_log_file "$log_file" truncate
   log "Export $backup_id queued" >> "$log_file"
   task="export-$backup_id.log"
@@ -2970,7 +2961,7 @@ import_backup() {
   rm -rf --one-file-system "$staging"
   mkdir -m 0700 -- "$staging"
   task="${HOSTBACKUP_TASK_ID:-import-$top.log}"
-  log_file="$LBP_LOGDIR/$task"
+  log_file="$TASK_LOG_DIR/$task"
   prepare_log_file "$log_file" append
   archive_hash="$(sha256sum "$archive" | awk '{print $1}')"
   task_state_write "$task" running extracting "$log_file" "$$" ""
@@ -3057,7 +3048,7 @@ start_import() {
   root="$(backup_root)"
   verify_backup_target "$root" true
   task_id="import-$(date '+%Y%m%d-%H%M%S')-$$.log"
-  log_file="$LBP_LOGDIR/$task_id"
+  log_file="$TASK_LOG_DIR/$task_id"
   prepare_log_file "$log_file" truncate
   archive="$(claim_staged_import_archive "$archive")"
   log "Import queued from $archive" >> "$log_file"
@@ -3286,7 +3277,7 @@ restore_backup() {
   state_dir="$(mktemp -d "$LBP_DATADIR/restore-state-$backup_id.XXXXXX")"
   exclude_file="$state_dir/restore-excludes.txt"
   restore_excludes "$root" "$target" "$exclude_file"
-  log_file="$LBP_LOGDIR/restore-$backup_id.log"
+  log_file="$TASK_LOG_DIR/restore-$backup_id.log"
   task="restore-$backup_id.log"
   prepare_log_file "$log_file" truncate
   task_state_write "$task" running preflight "$log_file" "$$" ""
@@ -3354,7 +3345,7 @@ start_restore() {
   acquire_operation_lock exclusive
   acquire_backup_lock "$backup_id" shared
   restore_eligibility "$backup_id" "$degraded_confirmation" >/dev/null
-  log_file="$LBP_LOGDIR/restore-$backup_id.launch.log"
+  log_file="$TASK_LOG_DIR/restore-$backup_id.launch.log"
   prepare_log_file "$log_file" truncate
   task="restore-$backup_id.log"
   pid="$(launch_background "$task" "$log_file" env ALLOW_RESTORE=1 "$0" restore "$backup_id" "$degraded_confirmation")"

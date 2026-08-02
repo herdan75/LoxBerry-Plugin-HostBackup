@@ -398,10 +398,23 @@ td .muted {
   margin-top: 3px;
 }
 
-.settings-form {
+.settings-form,
+.settings-load-guard {
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 14px 18px;
+}
+
+.settings-load-guard {
+  border: 0;
+  grid-column: 1 / -1;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.settings-load-guard:disabled {
+  opacity: 0.72;
 }
 
 .settings-form label {

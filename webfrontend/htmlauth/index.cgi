@@ -765,11 +765,13 @@ if ($q->request_method eq 'POST') {
 my ($config_status, $config_json) = run_shell(backend_cmd('config'));
 
 my $config = {};
+my $config_loaded = 0;
 
 if ($config_status == 0) {
   my $decoded = eval { decode_json($config_json) };
   if ($decoded && ref($decoded) eq 'HASH') {
     $config = $decoded;
+    $config_loaded = 1;
   } else {
     $error ||= 'Die Plugin-Konfiguration ist beschädigt und wurde nicht mit Standardwerten überschrieben.';
   }
@@ -842,6 +844,7 @@ my $cfg_root_permission_ack = checked_attr($config->{root_permission_ack});
 
 my $cfg_schedule_time = escapeHTML($config->{schedule_time} || '02:00');
 my $active_task_attr = escapeHTML($active_task);
+my $config_action_disabled = $config_loaded ? '' : ' disabled aria-disabled="true"';
 
 my $cfg_mode = $config->{schedule_mode} || 'daily';
 
@@ -1423,7 +1426,7 @@ print <<HTML;
 $csrf_html
 <input data-role="none" type="hidden" name="action" value="backup">
 $preflight_accept_control
-<button data-role="none" class="primary" type="submit">Backup starten</button>$info_backup_start
+<button data-role="none" class="primary" type="submit"$config_action_disabled>Backup starten</button>$info_backup_start
 </form>
 </div>
 </header>
@@ -1435,6 +1438,10 @@ if ($message) {
 
 if ($error) {
   print qq{<section class="notice error"><pre>$error</pre></section>};
+}
+
+if (!$config_loaded) {
+  print qq{<section class="notice warning"><strong>Gespeicherte Einstellungen wurden nicht geladen.</strong> Die unten sichtbaren Ersatzwerte sind nicht der gespeicherte Stand. Speichern und Backup-Start bleiben gesperrt, damit eine vorhandene Konfiguration nicht versehentlich ersetzt wird.</section>};
 }
 
 if ($preflight_warning) {
@@ -1482,6 +1489,8 @@ $csrf_html
 
 $csrf_html
 <input data-role="none" type="hidden" name="action" value="save-config">
+
+<fieldset class="settings-load-guard"$config_action_disabled>
 
 <fieldset class="schedule-card wide">
 <legend>Grundeinstellungen</legend>
@@ -1700,6 +1709,8 @@ $backup_target_picker
 
 </fieldset>
 
+</fieldset>
+
 </form>
 
 <aside class="settings-change-popup" id="settings-change-popup" role="dialog" aria-modal="false" aria-hidden="true" aria-labelledby="settings-change-title">
@@ -1710,7 +1721,7 @@ $backup_target_picker
 </div>
 </div>
 <ul id="settings-change-list" class="settings-change-list"></ul>
-<button data-role="none" class="primary settings-change-save" type="submit" form="settings-save-form">Änderungen speichern</button>
+<button data-role="none" class="primary settings-change-save" type="submit" form="settings-save-form"$config_action_disabled>Änderungen speichern</button>
 </aside>
 
 <fieldset class="schedule-card wide settings-group config-card">
@@ -1719,7 +1730,7 @@ $backup_target_picker
 <div class="settings-subtitle">Plugin-Konfiguration</div>
 
 <div class="config-actions">
-<button data-role="none" type="submit" form="settings-save-form">Plugineinstellungen speichern</button>
+<button data-role="none" type="submit" form="settings-save-form"$config_action_disabled>Plugineinstellungen speichern</button>
 </div>
 
 <div class="settings-subtitle config-subtitle">Einstellungsdatei sichern und wiederherstellen</div>
@@ -1728,7 +1739,7 @@ $backup_target_picker
 
 <form data-ajax="false" method="get" class="inline-form">
 <input data-role="none" type="hidden" name="action" value="download-config">
-<button data-role="none" type="submit">Einstellungen exportieren</button>
+<button data-role="none" type="submit"$config_action_disabled>Einstellungen exportieren</button>
 $info_config_export
 </form>
 

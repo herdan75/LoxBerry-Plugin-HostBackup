@@ -7,6 +7,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 POSTINSTALL = (ROOT / "postinstall.sh").read_text(encoding="utf-8")
 PREROOT = (ROOT / "preroot.sh").read_text(encoding="utf-8")
 POSTROOT = (ROOT / "postroot.sh").read_text(encoding="utf-8")
+BACKEND = (ROOT / "bin" / "hostbackup.sh").read_text(encoding="utf-8")
 PACKAGE_SH = (ROOT / "package.sh").read_text(encoding="utf-8")
 PACKAGE_PS1 = (ROOT / "package.ps1").read_text(encoding="utf-8")
 WORKFLOW = (ROOT / ".github" / "workflows" / "build-plugin.yml").read_text(
@@ -57,6 +58,18 @@ class InstallHookTests(unittest.TestCase):
         self.assertLess(
             POSTROOT.index('install -o root -g root -m 0600 "$CONFIG_BACKUP" "$CONFIG"'),
             POSTROOT.index('for required_file in'),
+        )
+
+    def test_reboot_safe_logs_use_persistent_root_state(self) -> None:
+        self.assertIn('TASK_LOG_DIR="$ROOT_STATE_DIR/logs"', BACKEND)
+        self.assertIn('TASK_LOG_DIR="$ROOT_STATE_DIR/logs"', POSTROOT)
+        self.assertIn('"$TASK_LOG_DIR"/*', BACKEND)
+        self.assertIn('log_file="$TASK_LOG_DIR/', BACKEND)
+        self.assertNotIn('for secure_dir in "$LBP_LOGDIR"', BACKEND)
+        self.assertIn('chown loxberry:loxberry "$LOG_DIR"', POSTROOT)
+        self.assertIn(
+            'chmod 700 "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR"',
+            POSTROOT,
         )
 
 

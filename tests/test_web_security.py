@@ -145,7 +145,9 @@ class WebSecurityTests(unittest.TestCase):
     def test_settings_change_popup_tracks_all_setting_types(self) -> None:
         self.assertIn('id="settings-change-popup"', CGI)
         self.assertIn('aria-hidden="true"', CGI)
-        self.assertIn('form="settings-save-form">Änderungen speichern', CGI)
+        self.assertIn(
+            'form="settings-save-form"$config_action_disabled>Änderungen speichern', CGI
+        )
         self.assertIn("form.addEventListener('input'", CGI)
         self.assertIn("form.addEventListener('change'", CGI)
         for name in (
@@ -178,6 +180,14 @@ class WebSecurityTests(unittest.TestCase):
         self.assertIn("refreshName('stop_targets')", CGI)
         self.assertIn("valueSeparator = String.fromCharCode(31)", CGI)
         self.assertIn(r"state.split(/\\r?\\n/)", CGI)
+
+    def test_failed_config_load_cannot_overwrite_saved_settings(self) -> None:
+        self.assertIn("my $config_loaded = 0;", CGI)
+        self.assertIn("$config_loaded = 1;", CGI)
+        self.assertIn('class="settings-load-guard"$config_action_disabled', CGI)
+        self.assertIn("Gespeicherte Einstellungen wurden nicht geladen.", CGI)
+        self.assertIn("Speichern und Backup-Start bleiben gesperrt", CGI)
+        self.assertIn("type=\"submit\"$config_action_disabled>Backup starten", CGI)
 
     def test_csrf_secret_rejects_unsafe_types(self) -> None:
         self.assertIn('die "Unsicheres Plugin-Datenverzeichnis" if -l $datadir', CGI)

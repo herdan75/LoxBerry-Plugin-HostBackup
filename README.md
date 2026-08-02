@@ -568,6 +568,24 @@ gespeicherte Original-Logdatei bleibt unverändert.
 Nach Abschluss stoppt die Anzeige der letzten Log-Aktualisierung. Die
 Backup-Liste wird anschliessend aktualisiert.
 
+### Verhalten Nach Einem LoxBerry-Neustart
+
+LoxBerry kann das normale Plugin-Logverzeichnis beim Start neu anlegen und dem
+Benutzer `loxberry` zuweisen. Host Backup verwendet dieses plattformverwaltete
+Verzeichnis deshalb nicht für privilegierte Task-Dateien. Backup-, Restore-,
+Import- und Export-Logs liegen dauerhaft und root-geschützt unter:
+
+```text
+/var/lib/loxberryhostbackup/logs/
+```
+
+Die Oberfläche liest diese Logs ausschliesslich über den begrenzten
+Root-Dispatcher. Die gespeicherte Konfiguration bleibt unabhängig davon unter
+`/opt/loxberry/config/plugins/loxberryhostbackup/config.json` erhalten. Kann die
+Konfiguration aus einem anderen technischen Grund nicht geladen werden, werden
+Speichern und Backup-Start gesperrt. Sichtbare Ersatzwerte können dadurch nicht
+versehentlich über die vorhandenen Einstellungen geschrieben werden.
+
 ## Backup-Liste Und Aktionen
 
 Die Backup-Liste zeigt pro Backup:
@@ -671,7 +689,13 @@ Typische LoxBerry-Zielpfade:
 /opt/loxberry/data/plugins/loxberryhostbackup/
 /opt/loxberry/log/plugins/loxberryhostbackup/
 /var/lib/loxberryhostbackup/
+/var/lib/loxberryhostbackup/logs/
 ```
+
+Das Verzeichnis unter `/opt/loxberry/log/plugins/` wird von LoxBerry verwaltet
+und darf nach einem Neustart `loxberry:loxberry` gehören. Sicherheitskritische
+Task-Zustände und Task-Logs liegen unter `/var/lib/loxberryhostbackup/` und
+bleiben `root:root` mit eingeschränkten Rechten.
 
 Systemdateien:
 

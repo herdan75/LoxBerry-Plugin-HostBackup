@@ -45,6 +45,11 @@ validiert werden.
   ergänzt.
 - Konfiguration root-eigen, atomar und fail-closed gespeichert; unsichere
   Helper-Include-Pfade entfernt.
+- Privilegierte Task-Logs liegen nun dauerhaft unter
+  `/var/lib/loxberryhostbackup/logs`. Das von LoxBerry beim Boot gegebenenfalls
+  neu erzeugte Plugin-Logverzeichnis darf wieder plattformkonform
+  `loxberry:loxberry` gehören und blockiert Konfiguration, Weboberfläche sowie
+  automatische Backups nach einem Neustart nicht mehr.
 
 ### Backup und Restore
 
@@ -80,6 +85,10 @@ validiert werden.
   entfernt reine Terminal-Steuerzeichen und verhindert automatische
   Zeilenumbrüche. Alle Fortschrittsmeldungen bleiben erhalten; lange Zeilen sind
   horizontal scrollbar.
+- Schlägt das Laden der gespeicherten Konfiguration fehl, kennzeichnet die
+  Oberfläche sichtbare Werte ausdrücklich als Ersatzwerte und sperrt Speichern,
+  Export sowie Backup-Start. Eine vorhandene Konfiguration kann dadurch nicht
+  versehentlich mit Standardwerten überschrieben werden.
 
 ### Import, Export und Qualität
 
@@ -90,6 +99,9 @@ validiert werden.
 - UI-Status für Backup, Restore, Import, Export und `cleanup_failed` präzisiert.
 - Automatisierte Archiv-/Web-Sicherheitstests, Shell-/Perl-/PHP-/sudoers-Checks,
   least-privilege CI und ein verbindlicher Disaster-Recovery-Testplan ergänzt.
+- Ein Root-Rechte-Test simuliert das von LoxBerry nach einem Neustart mit
+  `loxberry`-Besitz angelegte Plugin-Logverzeichnis und prüft, dass die
+  gespeicherte Konfiguration sowie die Task-Abfragen weiterhin funktionieren.
 - Installationspakete schließen generierte Python-Cachedateien zuverlässig aus.
 - Kurzanleitung um Ziel-Speichern, Metadaten-Profil und automatische Zeitpläne
   ergänzt; die vier Profilkarten beschreiben Ziel, Umfang und Einschränkungen
