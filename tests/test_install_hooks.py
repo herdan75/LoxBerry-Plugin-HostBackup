@@ -8,6 +8,10 @@ POSTINSTALL = (ROOT / "postinstall.sh").read_text(encoding="utf-8")
 PREROOT = (ROOT / "preroot.sh").read_text(encoding="utf-8")
 POSTROOT = (ROOT / "postroot.sh").read_text(encoding="utf-8")
 BACKEND = (ROOT / "bin" / "hostbackup.sh").read_text(encoding="utf-8")
+PLUGIN_CFG = (ROOT / "plugin.cfg").read_text(encoding="utf-8")
+PRERELEASE_CFG = (ROOT / "prerelease.cfg").read_text(encoding="utf-8")
+README = (ROOT / "README.md").read_text(encoding="utf-8")
+CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 PACKAGE_SH = (ROOT / "package.sh").read_text(encoding="utf-8")
 PACKAGE_PS1 = (ROOT / "package.ps1").read_text(encoding="utf-8")
 WORKFLOW = (ROOT / ".github" / "workflows" / "build-plugin.yml").read_text(
@@ -71,6 +75,14 @@ class InstallHookTests(unittest.TestCase):
             'chmod 700 "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR"',
             POSTROOT,
         )
+
+    def test_prerelease_version_and_download_are_consistent(self) -> None:
+        self.assertIn("VERSION=0.6.1", PLUGIN_CFG)
+        self.assertIn("VERSION=0.6.1", PRERELEASE_CFG)
+        self.assertIn("v0.6.1-beta/LoxBerryHostBackup_0.6.1.zip", PRERELEASE_CFG)
+        self.assertIn("Vorabversion 0.6.1-beta", README)
+        self.assertIn("## [0.6.1-beta]", CHANGELOG)
+        self.assertIn("prerelease: ${{ contains(github.ref_name, '-') }}", WORKFLOW)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,45 @@ validiert werden.
 
 ## [Unreleased]
 
+## [0.6.1-beta] - 2026-08-02
+
+### Versionierung
+
+- Pre-Release-Version auf 0.6.1 angehoben, damit LoxBerry den korrigierten Stand
+  als neues Plugin-Update erkennt und automatisch zur Installation anbietet.
+- `prerelease.cfg` verweist auf den neuen Tag `v0.6.1-beta` und das Paket
+  `LoxBerryHostBackup_0.6.1.zip`; der stabile Kanal bleibt auf Version 0.5.8.
+
+### Neustart und Einstellungen
+
+- Privilegierte Task-Logs liegen dauerhaft unter
+  `/var/lib/loxberryhostbackup/logs`. Das von LoxBerry beim Boot gegebenenfalls
+  neu erzeugte Plugin-Logverzeichnis darf plattformkonform
+  `loxberry:loxberry` gehören und blockiert Konfiguration, Weboberfläche sowie
+  automatische Backups nach einem Neustart nicht mehr.
+- Schlägt das Laden der gespeicherten Konfiguration fehl, kennzeichnet die
+  Oberfläche sichtbare Werte ausdrücklich als Ersatzwerte und sperrt Speichern,
+  Export sowie Backup-Start. Eine vorhandene Konfiguration kann dadurch nicht
+  versehentlich mit Standardwerten überschrieben werden.
+
+### Backup und Live-Status
+
+- Die Backup-Vorprüfung erkennt, wenn ein inkrementell konfigurierter Lauf ohne
+  kompatible Hardlink-Referenz eine vollständige Basiskopie erstellen muss. Sie
+  schätzt den Platzbedarf anhand des letzten abgeschlossenen Backups zuzüglich
+  Reserve und blockiert bei eindeutig zu wenig Speicher, bevor Dienste oder
+  Container gestoppt werden.
+- Die Live-Loganzeige stellt `rsync`-Wagenrückläufe als echte Zeilenenden dar,
+  entfernt reine Terminal-Steuerzeichen und verhindert automatische
+  Zeilenumbrüche. Alle Fortschrittsmeldungen bleiben erhalten; lange Zeilen sind
+  horizontal scrollbar.
+
+### Qualität
+
+- Ein Root-Rechte-Test simuliert das von LoxBerry nach einem Neustart mit
+  `loxberry`-Besitz angelegte Plugin-Logverzeichnis und prüft, dass die
+  gespeicherte Konfiguration sowie die Task-Abfragen weiterhin funktionieren.
+
 ## [0.6.0-beta] - 2026-08-02
 
 ### Versionierung
@@ -45,11 +84,6 @@ validiert werden.
   ergänzt.
 - Konfiguration root-eigen, atomar und fail-closed gespeichert; unsichere
   Helper-Include-Pfade entfernt.
-- Privilegierte Task-Logs liegen nun dauerhaft unter
-  `/var/lib/loxberryhostbackup/logs`. Das von LoxBerry beim Boot gegebenenfalls
-  neu erzeugte Plugin-Logverzeichnis darf wieder plattformkonform
-  `loxberry:loxberry` gehören und blockiert Konfiguration, Weboberfläche sowie
-  automatische Backups nach einem Neustart nicht mehr.
 
 ### Backup und Restore
 
@@ -62,11 +96,6 @@ validiert werden.
   Lauf nach dem Update erstellt in diesem Fall nochmals eine vollständige
   Basiskopie; der darauffolgende erfolgreiche Lauf kann den neuen Stand wieder
   inkrementell verwenden.
-- Die Backup-Vorprüfung erkennt, wenn ein inkrementell konfigurierter Lauf ohne
-  kompatible Hardlink-Referenz eine vollständige Basiskopie erstellen muss. Sie
-  schätzt den Platzbedarf anhand des letzten abgeschlossenen Backups zuzüglich
-  Reserve und blockiert bei eindeutig zu wenig Speicher, bevor Dienste oder
-  Container gestoppt werden.
 - CIFS-/NFS-kompatibler Modus lässt xattrs und File Capabilities bewusst aus,
   zeigt dies beim erfolgreichen Backup nur als neutralen Hinweis und blockiert
   weder manuelle noch zeitgesteuerte Starts; beim Restore bleibt die separate
@@ -79,17 +108,6 @@ validiert werden.
 - Stop-/Restart- und Hook-Ablauf fail-closed und mit überprüfbarem Cleanup-Status
   umgesetzt.
 
-### Weboberfläche
-
-- Die Live-Loganzeige stellt `rsync`-Wagenrückläufe als echte Zeilenenden dar,
-  entfernt reine Terminal-Steuerzeichen und verhindert automatische
-  Zeilenumbrüche. Alle Fortschrittsmeldungen bleiben erhalten; lange Zeilen sind
-  horizontal scrollbar.
-- Schlägt das Laden der gespeicherten Konfiguration fehl, kennzeichnet die
-  Oberfläche sichtbare Werte ausdrücklich als Ersatzwerte und sperrt Speichern,
-  Export sowie Backup-Start. Eine vorhandene Konfiguration kann dadurch nicht
-  versehentlich mit Standardwerten überschrieben werden.
-
 ### Import, Export und Qualität
 
 - Exporte enthalten Metadaten, SHA-256-Prüfsumme und einen Descriptor mit Hash
@@ -99,9 +117,6 @@ validiert werden.
 - UI-Status für Backup, Restore, Import, Export und `cleanup_failed` präzisiert.
 - Automatisierte Archiv-/Web-Sicherheitstests, Shell-/Perl-/PHP-/sudoers-Checks,
   least-privilege CI und ein verbindlicher Disaster-Recovery-Testplan ergänzt.
-- Ein Root-Rechte-Test simuliert das von LoxBerry nach einem Neustart mit
-  `loxberry`-Besitz angelegte Plugin-Logverzeichnis und prüft, dass die
-  gespeicherte Konfiguration sowie die Task-Abfragen weiterhin funktionieren.
 - Installationspakete schließen generierte Python-Cachedateien zuverlässig aus.
 - Kurzanleitung um Ziel-Speichern, Metadaten-Profil und automatische Zeitpläne
   ergänzt; die vier Profilkarten beschreiben Ziel, Umfang und Einschränkungen
@@ -513,7 +528,8 @@ nicht überarbeitet worden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.6.0-beta...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.6.1-beta...develop
+[0.6.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.6.1-beta
 [0.6.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.6.0-beta
 [0.5.8]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.8
 [0.5.8-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.8-beta

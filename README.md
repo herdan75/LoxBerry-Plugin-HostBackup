@@ -1,6 +1,6 @@
 # LoxBerry Host Backup
 
-**Status:** Vorabversion 0.6.0-beta aus `develop`. Dieser Stand enthält
+**Status:** Vorabversion 0.6.1-beta aus `develop`. Dieser Stand enthält
 zusätzliche Sicherheits-, Metadaten- und Restore-Härtungen und wird über den
 Pre-Release-Kanal für Tests bereitgestellt. Der stabile Release-Kanal bleibt
 weiterhin auf Version 0.5.8.
@@ -185,13 +185,13 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.5.8/
 Aktuelles Pre-Release-Paket:
 
 ```text
-https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.6.0-beta/LoxBerryHostBackup_0.6.0.zip
+https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.6.1-beta/LoxBerryHostBackup_0.6.1.zip
 ```
 
 Lokales Paket nach dem Build:
 
 ```text
-LoxBerryHostBackup_0.6.0.zip
+LoxBerryHostBackup_0.6.1.zip
 ```
 
 ## Erste Tests Auf LoxBerry
@@ -750,9 +750,9 @@ Update-Dateien:
 - `prerelease.cfg`: Pre-Release-Kanal mit neuer Vorabversion
 
 Das stabile installierbare ZIP wird über den Release-Kanal bereitgestellt. Der
-Pre-Release-Kanal zeigt für freiwillige Tests auf Version 0.6.0-beta. LoxBerry
+Pre-Release-Kanal zeigt für freiwillige Tests auf Version 0.6.1-beta. LoxBerry
 erkennt die Vorabversion über `prerelease.cfg`; das Paket liegt im zugehörigen
-GitHub-Pre-Release unter dem Tag `v0.6.0-beta`.
+GitHub-Pre-Release unter dem Tag `v0.6.1-beta`.
 
 GitHub Actions erzeugt das Plugin-ZIP automatisch und hängt es bei
 GitHub-Releases als Asset an.
