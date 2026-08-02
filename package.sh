@@ -41,6 +41,7 @@ zip -r "$ZIP_PATH" \
   prerelease.cfg \
   README.md \
   CHANGELOG.md \
-  LICENSE
+  LICENSE \
+  -x '*/__pycache__/*' '*.pyc' '*.pyo'
 
 printf '%s\n' "$ZIP_PATH"

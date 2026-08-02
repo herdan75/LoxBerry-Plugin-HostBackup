@@ -42,11 +42,22 @@ class InstallHookTests(unittest.TestCase):
         self.assertIn("preroot.sh", WORKFLOW)
         self.assertIn("postroot.sh", WORKFLOW)
 
+    def test_packages_exclude_generated_python_caches(self) -> None:
+        for marker in ("__pycache__", "*.pyc", "*.pyo"):
+            self.assertIn(marker, PACKAGE_SH)
+        self.assertIn("__pycache__", PACKAGE_PS1)
+        self.assertIn("'.pyc', '.pyo'", PACKAGE_PS1)
+
     def test_root_hooks_preserve_existing_configuration(self) -> None:
         self.assertIn("CONFIG_BACKUP", PREROOT)
         self.assertIn("cp --no-dereference", PREROOT)
+        self.assertIn('chown loxberry:loxberry "$CONFIG_DIR"', PREROOT)
         self.assertIn('install -o root -g root -m 0600 "$CONFIG_BACKUP" "$CONFIG"', POSTROOT)
         self.assertIn('rmdir -- "$UPGRADE_DIR"', POSTROOT)
+        self.assertLess(
+            POSTROOT.index('install -o root -g root -m 0600 "$CONFIG_BACKUP" "$CONFIG"'),
+            POSTROOT.index('for required_file in'),
+        )
 
 
 if __name__ == "__main__":

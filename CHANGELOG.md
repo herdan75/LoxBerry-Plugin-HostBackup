@@ -11,7 +11,7 @@ validiert werden.
 
 ### Versionierung
 
-- Entwicklungsstand auf Version 0.5.9 angehoben. `release.cfg` und
+- Entwicklungsstand auf Version 0.6.0 angehoben. `release.cfg` und
   `prerelease.cfg` bleiben bis zu einem ausdrücklich erstellten Tag/Release auf
   der zuletzt veröffentlichten Version 0.5.8.
 
@@ -22,6 +22,13 @@ validiert werden.
   mehr.
 - Bestehende `config.json` wird beim Upgrade im Root-Hook gesichert und nach der
   Installation mit geschützten Besitzrechten wiederhergestellt.
+- Die Wiederherstellung der gesicherten Einstellungen erfolgt nun bereits zu
+  Beginn von `postroot.sh`, damit nachfolgende Installationsprüfungen keinen
+  sichtbaren Rückfall auf die mitgelieferten Standardwerte verursachen.
+- Das gesicherte Konfigurationsverzeichnis wird für die eigentliche
+  LoxBerry-Aktualisierung kontrolliert an den Benutzer `loxberry` übergeben und
+  die systemweiten Basisvariablen `LBPCONFIG`, `LBPDATA` und `LBPLOG` werden
+  korrekt um den Plugin-Unterordner ergänzt.
 - Privilegierte Webaktionen auf einen root-eigenen Dispatcher mit fester
   Aktionsliste und bereinigter Umgebung begrenzt; direkte sudoers-Freigabe des
   Plugin-Backends entfernt.
@@ -60,6 +67,31 @@ validiert werden.
 - UI-Status für Backup, Restore, Import, Export und `cleanup_failed` präzisiert.
 - Automatisierte Archiv-/Web-Sicherheitstests, Shell-/Perl-/PHP-/sudoers-Checks,
   least-privilege CI und ein verbindlicher Disaster-Recovery-Testplan ergänzt.
+- Installationspakete schließen generierte Python-Cachedateien zuverlässig aus.
+- Kurzanleitung um Ziel-Speichern, Metadaten-Profil und automatische Zeitpläne
+  ergänzt; die vier Profilkarten beschreiben Ziel, Umfang und Einschränkungen
+  nun entscheidungsorientiert.
+- Info-Beschreibungen werden an den sichtbaren Browserbereich angepasst und
+  nicht mehr am rechten oder unteren Fensterrand abgeschnitten.
+- Ein noch nicht konfiguriertes Backup-Verzeichnis wird als neutraler Hinweis
+  statt als fehlgeschlagene Dateisystem-Prüfung dargestellt; echte technische
+  Ladefehler bleiben davon klar unterscheidbar.
+- Die Bestätigung zum Start trotz Preflight-Warnhinweisen ist standardmäßig
+  ausgeblendet und erscheint erst, nachdem tatsächlich eine übergehbare Warnung
+  erkannt wurde; die Warnung wird dabei getrennt von echten Fehlern angezeigt.
+- Das Metadaten-Profil kennzeichnet `Native Strict` sichtbar als
+  Standardeinstellung. Jede der vier Auswahlmöglichkeiten besitzt nun einen
+  eigenen, ausführlichen Info-Button; die Karten selbst bleiben kompakt und
+  nennen den vorgesehenen Zieltyp.
+- Nach jeder noch nicht gespeicherten Einstellungsänderung erscheint ein
+  nicht blockierender Speicherhinweis mit geändertem Bereich, neuem Wert,
+  Uhrzeit und direkter Speicheraktion. Auch Radio-Auswahlen wie das
+  Metadaten-Profil sowie dynamisch geladene Dienst-/Container-Ziele werden
+  erfasst; beim Zurückstellen auf den Ausgangswert verschwindet der Eintrag.
+- Die JavaScript-Ausgabe des Speicherhinweises berücksichtigt die Escape-
+  Verarbeitung des Perl-CGI-Heredocs. Dadurch starten Dateisystemprüfung,
+  Backup-Liste und Dienst-/Container-Auswahl wieder zuverlässig; ein Test prüft
+  nun zusätzlich die Syntax des tatsächlich an den Browser ausgegebenen Codes.
 
 Die bestehende Benachrichtigungs- und Mailsemantik ist in diesem Stand bewusst
 nicht überarbeitet worden.

@@ -41,21 +41,11 @@ QUARANTINE_DIR="$ROOT_STATE_DIR/import-quarantine"
 UPGRADE_DIR="/tmp/${INSTALL_ID}_loxberryhostbackup_upgrade"
 CONFIG_BACKUP="$UPGRADE_DIR/config.json"
 
-for required_file in "$BACKEND" "$DISPATCHER_SOURCE" "$CGI" "$RESTORE" "$NOTIFY" "$CONFIG"; do
-  if [ ! -f "$required_file" ] || [ -L "$required_file" ]; then
-    echo "Required installed file is missing or unsafe: $required_file" >&2
-    exit 1
-  fi
-done
-
-for secure_dir in "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR" "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"; do
-  if [ -L "$secure_dir" ]; then
-    echo "Refusing unsafe symlink directory: $secure_dir" >&2
-    exit 1
-  fi
-done
-
-mkdir -p "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR" "$LOCK_DIR" "$TASK_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"
+if [ -L "$CONFIG_DIR" ]; then
+  echo "Refusing unsafe symlink directory: $CONFIG_DIR" >&2
+  exit 1
+fi
+mkdir -p "$CONFIG_DIR"
 
 if [ -e "$UPGRADE_DIR" ]; then
   if [ ! -d "$UPGRADE_DIR" ] || [ -L "$UPGRADE_DIR" ] || [ "$(stat -c '%u' "$UPGRADE_DIR")" -ne 0 ]; then
@@ -71,6 +61,22 @@ if [ -e "$UPGRADE_DIR" ]; then
   rmdir -- "$UPGRADE_DIR"
   echo "Existing HostBackup configuration restored after upgrade."
 fi
+
+for required_file in "$BACKEND" "$DISPATCHER_SOURCE" "$CGI" "$RESTORE" "$NOTIFY" "$CONFIG"; do
+  if [ ! -f "$required_file" ] || [ -L "$required_file" ]; then
+    echo "Required installed file is missing or unsafe: $required_file" >&2
+    exit 1
+  fi
+done
+
+for secure_dir in "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR" "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"; do
+  if [ -L "$secure_dir" ]; then
+    echo "Refusing unsafe symlink directory: $secure_dir" >&2
+    exit 1
+  fi
+done
+
+mkdir -p "$DATA_DIR" "$LOG_DIR" "$LOCK_DIR" "$TASK_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"
 
 chown root:root "$BACKEND" "$DISPATCHER_SOURCE" "$RESTORE" "$NOTIFY" "$CONFIG_DIR" "$CONFIG" "$LOG_DIR" "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"
 chmod 755 "$BACKEND" "$DISPATCHER_SOURCE" "$CGI" "$RESTORE"

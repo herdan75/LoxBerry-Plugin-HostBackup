@@ -30,6 +30,7 @@ my $browse_id = $q->param('browse_id') || '';
 
 my $message = '';
 my $error = '';
+my $preflight_warning = '';
 my $active_task = '';
 
 sub url_escape {
@@ -252,7 +253,7 @@ sub stop_targets_csv {
 sub info_button {
   my ($text) = @_;
   my $safe = escapeHTML($text || '');
-  return qq{<span class="info-help"><button data-role="none" type="button" class="info-button">i</button><span class="info-bubble">$safe</span></span>};
+  return qq{<span class="info-help"><button data-role="none" type="button" class="info-button" aria-label="Hinweis anzeigen">i</button><span class="info-bubble" role="tooltip">$safe</span></span>};
 }
 
 my $notice = $q->param('msg') || '';
@@ -558,7 +559,7 @@ if ($q->request_method eq 'POST') {
       $error = escapeHTML($check_out || 'Backup-Preflight fehlgeschlagen.');
     } elsif (($check->{status} || '') eq 'warning' && $accept_warnings ne 'accept-warnings') {
       my $warnings = ref($check->{warnings}) eq 'ARRAY' ? join("\n", @{$check->{warnings}}) : 'Preflight meldet Warnungen.';
-      $error = escapeHTML("$warnings\nBitte Preflight-Warnungen bestaetigen und erneut starten.");
+      $preflight_warning = escapeHTML($warnings);
     } else {
       my ($status, $out) = run_shell(backend_cmd('start', '', $accept_warnings));
       if ($status == 0) {
@@ -866,7 +867,11 @@ my @month_checked = map { checked_attr($cfg_months{'*'} || $cfg_months{"$_"}) } 
 
 my $info_backup_root = info_button('Hier legst du fest, wohin die Backups geschrieben werden. Für ein echtes Host-Backup sollte das ein externer Datenträger, ein separates Mount oder ein grosser zweiter Datenspeicher sein. Erkannte Ziele können per Klick oder Drag und Drop übernommen werden. Wenn die Systemkarte selbst ausfällt, hilft ein Backup auf derselben Karte nicht.');
 my $info_backup_mode = info_button('Vollbackup kopiert jeden Stand vollständig. Inkrementeller Snapshot nutzt rsync mit Hardlinks auf das vorherige vollständige Backup: jedes Backup bleibt einzeln wiederherstellbar, unveränderte Dateien benötigen aber kaum zusätzlichen Speicher. Für zuverlässige Speicherersparnis wird ein Linux-Dateisystem wie ext4 empfohlen.');
-my $info_metadata_mode = info_button('Legt fest, wie Dateirechte und Linux-Metadaten gesichert werden. Native Strict ist für Linux-Dateisysteme vorgesehen. Network Compatible verzichtet bewusst auf xattrs und File Capabilities. Fake Super speichert privilegierte Metadaten in einem rsync-xattr. Portable Archive schreibt einen metadatentreuen tar-Container und kann nur offline wiederhergestellt werden.');
+my $info_metadata_mode = info_button('Das Metadaten-Profil bestimmt, wie Linux-Dateirechte und Zusatzinformationen auf dem Backup-Ziel abgelegt werden. Standard ist Native Strict. Für CIFS/NFS und viele NAS-Systeme ist meistens Network Compatible passend. Die vier Info-Buttons erklären Umfang, Voraussetzungen und Restore-Einschränkungen jedes Profils.');
+my $info_metadata_native = info_button('Standardprofil bei einer Neuinstallation. Native Strict verwendet rsync mit -aHAX, numerischen Benutzer- und Gruppen-IDs sowie Sparse-Dateien. Gesichert werden Dateien, Verzeichnisse, symbolische Links, Besitzer, Gruppen, Rechte, Zeitstempel, ACLs, Hardlinks, xattrs und damit auch File Capabilities. Geeignet für lokale Linux-Dateisysteme wie ext4, xfs und btrfs. Unterstützt das Ziel eine erforderliche Metadatenfunktion nicht, wird das Backup als Fehler beendet.');
+my $info_metadata_network = info_button('Für CIFS/NFS und viele NAS-Systeme, die Linux-xattrs nicht vollständig unterstützen. Network Compatible verwendet rsync ohne das X-Flag. Dateien, Verzeichnisse, symbolische Links, Besitzer, Gruppen, Rechte, Zeitstempel, ACLs, Hardlinks und Sparse-Dateien werden weiterhin gesichert; xattrs und File Capabilities werden bewusst ausgelassen. Das erzeugt nur einen neutralen Hinweis und blockiert auch zeitgesteuerte Backups nicht. Vor einem Restore muss die reduzierte Metadatentreue bestätigt werden.');
+my $info_metadata_fake_super = info_button('Für Ziele, die user-xattrs zuverlässig unterstützen, aber native Unix-Besitzer oder privilegierte Metadaten nicht direkt speichern können. rsync --fake-super legt diese Angaben in Attributen unter user.rsync.* ab und liest sie beim Restore wieder aus. Das Profil hilft nicht, wenn das Ziel auch user-xattrs ablehnt. Deshalb nur verwenden, wenn die automatische Zielprüfung erfolgreich ist.');
+my $info_metadata_portable = info_button('Für Ziele ohne geeignete Linux-Metadatenfunktionen. Portable Archive schreibt statt eines normalen rsync-Dateibaums einen pax-kompatiblen rootfs.tar-Container mit numerischen Besitzern, ACLs, xattrs, SELinux-Informationen und Sparse-Dateien. Dadurch liegen die Metadaten innerhalb des Archivs. Inkrementelle Snapshots sind nicht möglich; die Wiederherstellung erfolgt ausschließlich mit dem Offline-Helper aus einer Rescue- oder Offline-Umgebung.');
 my $info_retention = info_button('Legt fest, wie viele fertige Backups behalten werden. Erlaubt sind 1 bis 10. Bei inkrementellen Snapshots ist das Löschen alter Backups sicher: unveränderte Dateien sind per Hardlink in jedem Snapshot sichtbar. Wird ein alter Snapshot entfernt, bleiben Dateien erhalten, solange sie noch von einem jüngeren Snapshot referenziert werden. Sobald nach einem erfolgreichen Backup mehr Backups vorhanden sind als erlaubt, entfernt das Plugin automatisch das älteste fertige Backup und das passende Export-Archiv.');
 my $info_schedule = info_button('Der Zeitplan erstellt Backups automatisch per Cron. Täglich bedeutet jeden Tag zur Startzeit. Wöchentlich bedeutet an den gewählten Wochentagen zur Startzeit. Monatlich bedeutet an den gewählten Tagen in den gewählten Monaten zur Startzeit.');
 my $info_time = info_button('Diese Uhrzeit gilt für alle Zeitplanarten. Bei täglich ist sie die einzige zeitliche Einstellung. Bei wöchentlich und monatlich wird sie mit den gewählten Tagen kombiniert.');
@@ -894,11 +899,15 @@ my $info_browse_pending = info_button('Dieses Backup ist noch nicht vollständig
 my $info_download = info_button('Export erstellt ein tar.gz-Archiv im Backup-Verzeichnis. Sobald es fertig ist, kann es separat heruntergeladen werden. Die Erstellung grosser Archive läuft im Hintergrund.');
 my $info_download_ready = info_button('Lädt das bereits erstellte tar.gz-Exportarchiv dieses Backups auf deinen Computer herunter. Das ist nicht der Restore; für eine Wiederherstellung bitte den Restore-Button verwenden.');
 my $info_export_recreate = info_button('Erstellt das tar.gz-Exportarchiv für dieses Backup neu. Ein vorhandenes Export-Archiv wird ersetzt; der eigentliche Backup-Snapshot bleibt unverändert.');
-my $info_backup_start = info_button('Startet den Backup-Vorgang. Vor dem eigentlichen Backup prüft das Plugin wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und Docker-Hinweise.');
+my $info_backup_start = info_button('Prüft zuerst wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und laufende Docker-Container. Nur wenn eine übergehbare Warnung erkannt wird, erscheint anschließend eine Bestätigung für einen zweiten Startversuch. Echte Fehler können nicht übergangen werden.');
 
 sub render_target_notice {
   my ($target_info) = @_;
   return '<section class="inline-notice loading">Dateisystem-Pr&uuml;fung wird geladen...</section>' unless $target_info && %{$target_info};
+  if (exists $target_info->{configured} && !$target_info->{configured}) {
+    my $target_message = escapeHTML($target_info->{message} || 'Noch kein Backup-Verzeichnis festgelegt.');
+    return qq{<section class="inline-notice info"><strong>Backup-Ziel:</strong> $target_message Die Dateisystem-Pr&uuml;fung startet nach dem Speichern automatisch.</section>};
+  }
   my $target_state = $target_info->{status} || 'error';
   $target_state = 'error' unless $target_state =~ /^(?:ok|info|warning|error)$/;
   my $target_message = escapeHTML($target_info->{message} || 'Dateisystem- und Mount-Prüfung lieferte keine Detailmeldung.');
@@ -1344,7 +1353,7 @@ if ($action eq 'target-notice') {
     $target_info = eval { decode_json($target_json) } || {};
   }
   print header(-type => 'text/html', -charset => 'utf-8', -status => ($target_status == 0 ? '200 OK' : '500 Internal Server Error'));
-  print $target_status == 0 ? render_target_notice($target_info) : '<section class="inline-notice warning">Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>';
+  print $target_status == 0 ? render_target_notice($target_info) : '<section class="inline-notice error"><strong>Technischer Fehler:</strong> Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>';
   exit;
 }
 
@@ -1374,6 +1383,10 @@ my $target_notice = render_target_notice(undef);
 my $backup_target_picker = render_backup_target_picker($config->{backup_root} || '');
 my $csrf_html = csrf_field();
 my $csrf_attr = escapeHTML($csrf_token);
+my $preflight_accept_control = '';
+if (length $preflight_warning) {
+  $preflight_accept_control = '<label class="checkline preflight-confirm"><input data-role="none" type="checkbox" name="accept_preflight_warnings" value="1" required><span>Backup trotz dieser Warnhinweise starten</span></label>';
+}
 
 our $htmlhead = qq{
 <link rel="stylesheet" href="assets/style.css">
@@ -1409,7 +1422,7 @@ print <<HTML;
 <form data-ajax="false" method="post">
 $csrf_html
 <input data-role="none" type="hidden" name="action" value="backup">
-<label class="checkline"><input data-role="none" type="checkbox" name="accept_preflight_warnings" value="1"><span>Preflight-Warnungen für diesen Start akzeptieren</span></label>
+$preflight_accept_control
 <button data-role="none" class="primary" type="submit">Backup starten</button>$info_backup_start
 </form>
 </div>
@@ -1424,16 +1437,22 @@ if ($error) {
   print qq{<section class="notice error"><pre>$error</pre></section>};
 }
 
+if ($preflight_warning) {
+  print qq{<section class="notice warning"><strong>Backup noch nicht gestartet:</strong><pre>$preflight_warning</pre><span>Prüfe den Hinweis. Wenn du trotzdem fortfahren möchtest, aktiviere oben die Bestätigung und starte das Backup erneut.</span></section>};
+}
+
 print <<HTML;
 
 <section class="panel wizard-panel">
 <details>
 <summary>Kurzanleitung</summary>
 <ol>
-<li><strong>Backup-Ziel wählen:</strong> Wähle ein separates Ziel mit genügend freiem Speicher, idealerweise ext4, xfs oder btrfs auf USB, SSD oder einem eingebundenen Netzwerkspeicher. Das Backup-Ziel darf nicht innerhalb eines zu sichernden Datenbestands liegen.</li>
+<li><strong>Backup-Ziel wählen und speichern:</strong> Übernimm ein erkanntes Ziel oder trage das Backup-Verzeichnis ein. Bestätige die Root-Freigabe und speichere die Einstellungen; erst danach kann das Plugin Dateisystem, Mount und freien Speicher prüfen.</li>
+<li><strong>Metadaten-Profil passend zum Ziel wählen:</strong> Standard ist <em>Native Strict</em> für lokale Linux-Dateisysteme wie ext4, xfs oder btrfs. Für CIFS/NFS und viele NAS-Systeme ist <em>Network Compatible</em> vorgesehen; der dort angezeigte Hinweis blockiert weder manuelle noch zeitgesteuerte Backups.</li>
 <li><strong>Ausschlüsse prüfen:</strong> Schliesse das Backup-Ziel selbst, weitere Backup-Datenträger, alte Images und grosse Archivordner aus. So vermeidest du doppelte Sicherungen und unnötig grosse Backups.</li>
 <li><strong>Backup-Modus festlegen:</strong> Für regelmässige Sicherungen ist der inkrementelle Snapshot empfohlen. Unveränderte Dateien werden per Hardlink geteilt; deshalb belegen Folgebackups deutlich weniger zusätzlichen Speicher.</li>
 <li><strong>Dienste und Container auswählen:</strong> Stoppe gezielt Dienste und Container, die während des Backups viele Daten schreiben oder eigene Datenbanken verwenden. Das verbessert die Konsistenz der gesicherten Daten.</li>
+<li><strong>Zeitplan aktivieren:</strong> Lege täglich, wöchentlich oder monatlich sowie die gewünschte Startzeit fest und speichere erneut. Zeitgesteuerte Backups laufen danach selbständig; neutrale Hinweise erfordern keine Bestätigung.</li>
 <li><strong>Erstes Backup kontrollieren:</strong> Prüfe nach dem ersten Lauf Status, Live-Log, Manifest, Dateizahl, Grösse und die Backup-Liste. Öffne bei Bedarf den Datei-Explorer, um den Inhalt des Backups zu kontrollieren.</li>
 <li><strong>Restore-Konzept festlegen:</strong> Lege vor dem Ernstfall fest, wie und wo du ein Backup wiederherstellst. Für produktive Systeme ist ein Restore aus einer Rescue- oder Offline-Umgebung am zuverlässigsten; ein geplanter Restore-Test wird empfohlen.</li>
 </ol>
@@ -1492,12 +1511,13 @@ $backup_target_picker
 
 <fieldset class="schedule-card wide">
 <legend>Metadaten-Profil $info_metadata_mode</legend>
-<div class="settings-subtitle">Zielgerechte Sicherung von ACLs, xattrs und File Capabilities</div>
+<div class="settings-subtitle">Passendes Sicherungsverfahren für das verwendete Backup-Ziel</div>
+<div class="metadata-default-note"><strong>Standardeinstellung:</strong> Native Strict. Für CIFS/NFS oder ein NAS bitte das zum Ziel passende Profil wählen.</div>
 <div class="schedule-modes metadata-modes">
-<label><input data-role="none" type="radio" name="metadata_mode" value="native-strict"$native_strict_checked> <strong>Native Strict</strong><span>Volle Linux-Metadaten; empfohlen für ext4, xfs und btrfs. Nicht unterstützte Metadaten führen zum Fehler.</span></label>
-<label><input data-role="none" type="radio" name="metadata_mode" value="network-compatible"$network_compatible_checked> <strong>Network Compatible</strong><span>Für CIFS/NFS-Ziele ohne vollständige xattr-Unterstützung. Hinweis: xattrs und File Capabilities werden bewusst ausgelassen; erfolgreiche Backups erhalten trotzdem den normalen Erfolgsstatus.</span></label>
-<label><input data-role="none" type="radio" name="metadata_mode" value="fake-super"$fake_super_checked> <strong>Fake Super</strong><span>rsync speichert privilegierte Metadaten in user.rsync.%stat. Ziel muss user-xattrs zuverlässig unterstützen.</span></label>
-<label><input data-role="none" type="radio" name="metadata_mode" value="portable-archive"$portable_archive_checked> <strong>Portable Archive</strong><span>Metadatentreuer tar-Container für inkompatible Ziele. Kein Snapshot-Modus und Restore nur aus einer Offline-/Rescue-Umgebung.</span></label>
+<label><input data-role="none" type="radio" name="metadata_mode" value="native-strict"$native_strict_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Native Strict</strong><span class="metadata-default-badge">Standard</span>$info_metadata_native</span><span class="metadata-profile-summary">Lokale Linux-Dateisysteme wie ext4, xfs und btrfs; vollständige Linux-Metadaten.</span></span></label>
+<label><input data-role="none" type="radio" name="metadata_mode" value="network-compatible"$network_compatible_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Network Compatible</strong>$info_metadata_network</span><span class="metadata-profile-summary">CIFS/NFS und viele NAS-Systeme; ohne xattrs und File Capabilities.</span></span></label>
+<label><input data-role="none" type="radio" name="metadata_mode" value="fake-super"$fake_super_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Fake Super</strong>$info_metadata_fake_super</span><span class="metadata-profile-summary">Ziele mit zuverlässigen user-xattrs, aber ohne native Unix-Metadaten.</span></span></label>
+<label><input data-role="none" type="radio" name="metadata_mode" value="portable-archive"$portable_archive_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Portable Archive</strong>$info_metadata_portable</span><span class="metadata-profile-summary">Metadatentreuer Archivcontainer; keine Snapshots und Restore nur offline.</span></span></label>
 </div>
 </fieldset>
 
@@ -1681,6 +1701,17 @@ $backup_target_picker
 </fieldset>
 
 </form>
+
+<aside class="settings-change-popup" id="settings-change-popup" role="dialog" aria-modal="false" aria-hidden="true" aria-labelledby="settings-change-title">
+<div class="settings-change-popup-header">
+<div>
+<strong id="settings-change-title">Ungespeicherte Änderungen</strong>
+<span>Diese Einstellungen wurden noch nicht übernommen.</span>
+</div>
+</div>
+<ul id="settings-change-list" class="settings-change-list"></ul>
+<button data-role="none" class="primary settings-change-save" type="submit" form="settings-save-form">Änderungen speichern</button>
+</aside>
 
 <fieldset class="schedule-card wide settings-group config-card">
 <legend>Konfiguration verwalten</legend>
@@ -1948,6 +1979,55 @@ function hostbackupClosest(node, selector) {
 }
 
 (function () {
+  var edgePadding = 12;
+  var helpers = document.querySelectorAll('.info-help');
+
+  function positionInfoBubble(help) {
+    var bubble = help ? help.querySelector('.info-bubble') : null;
+    if (!bubble) return;
+
+    bubble.style.marginLeft = '0px';
+    bubble.classList.remove('info-bubble-above');
+
+    var rect = bubble.getBoundingClientRect();
+    var shift = 0;
+    if (rect.right > window.innerWidth - edgePadding) {
+      shift -= rect.right - (window.innerWidth - edgePadding);
+    }
+    if (rect.left + shift < edgePadding) {
+      shift += edgePadding - (rect.left + shift);
+    }
+    bubble.style.marginLeft = shift + 'px';
+
+    rect = bubble.getBoundingClientRect();
+    var helpRect = help.getBoundingClientRect();
+    if (rect.bottom > window.innerHeight - edgePadding && helpRect.top > rect.height + edgePadding) {
+      bubble.classList.add('info-bubble-above');
+    }
+  }
+
+  hostbackupEach(helpers, function (help) {
+    help.addEventListener('mouseenter', function () { positionInfoBubble(help); });
+    help.addEventListener('focusin', function () { positionInfoBubble(help); });
+    help.addEventListener('click', function (event) {
+      var button = help.querySelector('.info-button');
+      event.preventDefault();
+      event.stopPropagation();
+      if (button) button.focus();
+      positionInfoBubble(help);
+    });
+  });
+
+  window.addEventListener('resize', function () {
+    hostbackupEach(helpers, function (help) {
+      if (help.matches && (help.matches(':hover') || help.contains(document.activeElement))) {
+        positionInfoBubble(help);
+      }
+    });
+  });
+}());
+
+(function () {
   var input = document.getElementById('backup-root-input');
   if (!input) return;
 
@@ -2124,7 +2204,7 @@ function hostbackupClosest(node, selector) {
   loadFragment(
     fragmentUrl('target-notice', ''),
     targetNotice,
-    '<section class="inline-notice warning">Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>'
+    '<section class="inline-notice error"><strong>Technischer Fehler:</strong> Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>'
   );
 
   loadFragment(
@@ -2254,6 +2334,225 @@ function hostbackupClosest(node, selector) {
 
   updateSchedulePanels();
   updateMonthSelection();
+}());
+
+(function () {
+  var form = document.getElementById('settings-save-form');
+  var popup = document.getElementById('settings-change-popup');
+  var changeList = document.getElementById('settings-change-list');
+  var stopTargetsList = document.getElementById('stop-targets-list');
+  if (!form || !popup || !changeList) return;
+
+  var ignoredNames = {
+    action: true,
+    csrf_token: true,
+    stop_docker_before_backup: true,
+    stop_targets_loaded: true
+  };
+  var initialStates = {};
+  var changedAt = {};
+  var valueSeparator = String.fromCharCode(31);
+  var fieldLabels = {
+    backup_root: 'Backup-Verzeichnis',
+    keep_backups: 'Anzahl Backups behalten',
+    metadata_mode: 'Metadaten-Profil',
+    backup_mode: 'Backup-Modus',
+    schedule_enabled: 'Automatische Backups',
+    schedule_mode: 'Zeitplan',
+    schedule_time: 'Startzeit',
+    schedule_weekdays: 'Wochentage',
+    schedule_monthdays: 'Monatstage',
+    schedule_months: 'Monate',
+    pre_backup_hook: 'Skript vor dem Backup',
+    post_backup_hook: 'Skript nach dem Backup',
+    rsync_extra_excludes: 'Zusätzliche Ausschlüsse',
+    root_permission_ack: 'Root-Freigabe',
+    mail_notify_enabled: 'Mailbenachrichtigung',
+    mail_notify_to: 'Mailadresse',
+    mail_notify_success: 'Mail bei Erfolg',
+    mail_notify_failure: 'Mail bei Fehler',
+    mail_notify_stopped: 'Mail bei Abbruch',
+    mail_notify_restore: 'Mail bei Restore',
+    stop_targets: 'Zu stoppende Dienste/Container',
+    create_export_after_backup: 'Export nach dem Backup'
+  };
+  var valueLabels = {
+    metadata_mode: {
+      'native-strict': 'Native Strict',
+      'network-compatible': 'Network Compatible',
+      'fake-super': 'Fake Super',
+      'portable-archive': 'Portable Archive'
+    },
+    backup_mode: {
+      full: 'Volles Backup',
+      snapshot: 'Inkrementeller Snapshot'
+    },
+    schedule_mode: {
+      daily: 'Täglich',
+      weekly: 'Wöchentlich',
+      monthly: 'Monatlich'
+    }
+  };
+  var booleanNames = {
+    schedule_enabled: true,
+    root_permission_ack: true,
+    mail_notify_enabled: true,
+    mail_notify_success: true,
+    mail_notify_failure: true,
+    mail_notify_stopped: true,
+    mail_notify_restore: true,
+    create_export_after_backup: true
+  };
+  var weekdayLabels = {
+    '0': 'So', '1': 'Mo', '2': 'Di', '3': 'Mi', '4': 'Do', '5': 'Fr', '6': 'Sa'
+  };
+  var monthLabels = {
+    '1': 'Jan', '2': 'Feb', '3': 'Mär', '4': 'Apr', '5': 'Mai', '6': 'Jun',
+    '7': 'Jul', '8': 'Aug', '9': 'Sep', '10': 'Okt', '11': 'Nov', '12': 'Dez'
+  };
+
+  function namedControls(name) {
+    var controls = form.querySelectorAll('[name]');
+    var matches = [];
+    hostbackupEach(controls, function (control) {
+      if (control.name === name) matches.push(control);
+    });
+    return matches;
+  }
+
+  function relevantName(control) {
+    if (!control || !control.name || ignoredNames[control.name]) return '';
+    if (control.type === 'hidden' || control.type === 'submit' || control.type === 'button' || control.type === 'file') return '';
+    return control.name;
+  }
+
+  function stateFor(name) {
+    var controls = namedControls(name);
+    if (!controls.length) return '';
+    var type = (controls[0].type || '').toLowerCase();
+    if (type === 'radio') {
+      var selected = '';
+      hostbackupEach(controls, function (control) {
+        if (control.checked) selected = control.value;
+      });
+      return selected;
+    }
+    if (type === 'checkbox') {
+      if (controls.length === 1) return controls[0].checked ? '1' : '0';
+      var selectedValues = [];
+      hostbackupEach(controls, function (control) {
+        if (control.checked) selectedValues.push(control.value);
+      });
+      selectedValues.sort();
+      return selectedValues.join(valueSeparator);
+    }
+    return controls[0].value || '';
+  }
+
+  function captureInitialState(name) {
+    if (!name || Object.prototype.hasOwnProperty.call(initialStates, name)) return;
+    initialStates[name] = stateFor(name);
+  }
+
+  function captureCurrentControls() {
+    hostbackupEach(form.querySelectorAll('[name]'), function (control) {
+      captureInitialState(relevantName(control));
+    });
+  }
+
+  function selectedValues(state) {
+    return state ? state.split(valueSeparator) : [];
+  }
+
+  function displayValue(name, state) {
+    if (valueLabels[name] && valueLabels[name][state]) return valueLabels[name][state];
+    if (booleanNames[name]) return state === '1' ? 'Aktiviert' : 'Deaktiviert';
+    if (name === 'schedule_weekdays') {
+      return selectedValues(state).map(function (value) { return weekdayLabels[value] || value; }).join(', ') || 'Keine Auswahl';
+    }
+    if (name === 'schedule_monthdays') {
+      return selectedValues(state).join(', ') || 'Keine Auswahl';
+    }
+    if (name === 'schedule_months') {
+      if (state === '*') return 'Alle Monate';
+      return selectedValues(state).map(function (value) { return monthLabels[value] || value; }).join(', ') || 'Keine Auswahl';
+    }
+    if (name === 'stop_targets') {
+      var targetCount = selectedValues(state).length;
+      return targetCount === 1 ? '1 Ziel ausgewählt' : targetCount + ' Ziele ausgewählt';
+    }
+    if (name === 'rsync_extra_excludes') {
+      var excludeCount = state.split(/\\r?\\n/).filter(function (line) { return line.trim() !== ''; }).length;
+      return excludeCount === 1 ? '1 Eintrag' : excludeCount + ' Einträge';
+    }
+    if (name === 'pre_backup_hook' || name === 'post_backup_hook') return state ? 'Eingetragen' : 'Leer';
+    if (!state) return 'Leer';
+    return state.length > 80 ? state.substring(0, 77) + '...' : state;
+  }
+
+  function formatTime(date) {
+    function pad(number) { return number < 10 ? '0' + number : String(number); }
+    return pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds());
+  }
+
+  function renderPopup() {
+    var names = Object.keys(changedAt).sort(function (left, right) {
+      return changedAt[left].getTime() - changedAt[right].getTime();
+    });
+    changeList.innerHTML = '';
+
+    hostbackupEach(names, function (name) {
+      var item = document.createElement('li');
+      var copy = document.createElement('span');
+      var label = document.createElement('strong');
+      var value = document.createElement('small');
+      var time = document.createElement('time');
+      label.textContent = fieldLabels[name] || name;
+      value.textContent = displayValue(name, stateFor(name));
+      time.textContent = 'geändert ' + formatTime(changedAt[name]);
+      time.setAttribute('datetime', changedAt[name].toISOString());
+      copy.appendChild(label);
+      copy.appendChild(value);
+      item.appendChild(copy);
+      item.appendChild(time);
+      changeList.appendChild(item);
+    });
+
+    var visible = names.length > 0;
+    popup.classList.toggle('is-visible', visible);
+    popup.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  }
+
+  function refreshName(name) {
+    if (!name) return;
+    captureInitialState(name);
+    if (stateFor(name) === initialStates[name]) {
+      delete changedAt[name];
+    } else {
+      changedAt[name] = new Date();
+    }
+    renderPopup();
+  }
+
+  captureCurrentControls();
+
+  form.addEventListener('input', function (event) {
+    refreshName(relevantName(event.target));
+  });
+  form.addEventListener('change', function (event) {
+    refreshName(relevantName(event.target));
+  });
+
+  if (stopTargetsList && window.MutationObserver) {
+    new MutationObserver(function () {
+      captureInitialState('stop_targets');
+    }).observe(stopTargetsList, { childList: true, subtree: true });
+  }
+
+  document.addEventListener('click', function (event) {
+    if (!hostbackupClosest(event.target, '[data-stop-target-preset]')) return;
+    window.setTimeout(function () { refreshName('stop_targets'); }, 0);
+  });
 }());
 
 (function () {

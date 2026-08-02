@@ -20,6 +20,7 @@ case "$INSTALL_ID" in
 esac
 
 CONFIG="$LBHOMEDIR/config/plugins/$PLUGIN_FOLDER/config.json"
+CONFIG_DIR="${CONFIG%/*}"
 UPGRADE_DIR="/tmp/${INSTALL_ID}_loxberryhostbackup_upgrade"
 CONFIG_BACKUP="$UPGRADE_DIR/config.json"
 
@@ -36,6 +37,8 @@ if [ -e "$CONFIG" ]; then
   cp --no-dereference --preserve=mode,timestamps "$CONFIG" "$CONFIG_BACKUP"
   chown root:root "$CONFIG_BACKUP"
   chmod 0600 "$CONFIG_BACKUP"
+  chown loxberry:loxberry "$CONFIG_DIR"
+  chmod 0755 "$CONFIG_DIR"
   echo "Existing HostBackup configuration secured for upgrade."
 fi
 

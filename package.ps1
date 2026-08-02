@@ -43,7 +43,9 @@ try {
   foreach ($item in $items) {
     $path = Join-Path $root $item
     if (Test-Path -LiteralPath $path -PathType Container) {
-      Get-ChildItem -LiteralPath $path -Recurse -File | ForEach-Object {
+      Get-ChildItem -LiteralPath $path -Recurse -File |
+        Where-Object { $_.Extension -notin @('.pyc', '.pyo') -and $_.FullName -notmatch '[\\/]__pycache__[\\/]' } |
+        ForEach-Object {
         $relative = $_.FullName.Substring($rootPrefix.Length).Replace('\', '/')
         $entry = [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $_.FullName, $relative, [System.IO.Compression.CompressionLevel]::Optimal)
         $entry.ExternalAttributes = if ($relative -match '(\.sh|\.cgi|\.py)$') { -2115174400 } else { -2119958528 }

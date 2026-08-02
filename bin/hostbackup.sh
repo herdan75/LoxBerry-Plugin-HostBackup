@@ -12,9 +12,9 @@ else
 fi
 LBHOMEDIR="${LBHOMEDIR:-$DETECTED_LBHOMEDIR}"
 LBP_BINDIR="${LBPBINDIR:-$SCRIPT_DIR}"
-LBP_CONFIGDIR="${LBPCONFIGDIR:-${LBPCONFIG:-$LBHOMEDIR/config/plugins/$PLUGIN_FOLDER}}"
-LBP_DATADIR="${LBPDATADIR:-${LBPDATA:-$LBHOMEDIR/data/plugins/$PLUGIN_FOLDER}}"
-LBP_LOGDIR="${LBPLOGDIR:-${LBPLOG:-$LBHOMEDIR/log/plugins/$PLUGIN_FOLDER}}"
+LBP_CONFIGDIR="${LBPCONFIGDIR:-${LBPCONFIG:-$LBHOMEDIR/config/plugins}/$PLUGIN_FOLDER}"
+LBP_DATADIR="${LBPDATADIR:-${LBPDATA:-$LBHOMEDIR/data/plugins}/$PLUGIN_FOLDER}"
+LBP_LOGDIR="${LBPLOGDIR:-${LBPLOG:-$LBHOMEDIR/log/plugins}/$PLUGIN_FOLDER}"
 CONFIG_FILE="$LBP_CONFIGDIR/config.json"
 OPERATION_LOCK_FILE="${HOSTBACKUP_OPERATION_LOCK_FILE:-/var/lock/${PLUGIN_FOLDER}.operation.lock}"
 if [ "$LBHOMEDIR" = "/opt/loxberry" ]; then
@@ -699,11 +699,35 @@ notify_hostbackup() {
 }
 
 backup_target_info() {
-  local root probe fs_type source available_mb backup_mode status message linux_fs mode verify_message mountpoint majmin
-  root="$(backup_root)"
+  local configured root probe fs_type source available_mb backup_mode status message linux_fs mode verify_message mountpoint majmin
+  configured="$(json_get_string backup_root)"
   backup_mode="$(json_get_string backup_mode)"
   [ "$backup_mode" = "snapshot" ] || backup_mode="full"
   mode="$(metadata_mode)"
+
+  if [ -z "$configured" ]; then
+    cat <<EOF
+{
+  "kind": "backup-target",
+  "configured": false,
+  "status": "info",
+  "backup_root": "",
+  "probe_path": "",
+  "fs_type": "",
+  "source": "",
+  "mountpoint": "",
+  "majmin": "",
+  "available_mb": 0,
+  "linux_filesystem": false,
+  "backup_mode": $(json_escape "$backup_mode"),
+  "metadata_mode": $(json_escape "$mode"),
+  "message": "Noch kein Backup-Verzeichnis festgelegt. Bitte zuerst ein Backup-Ziel waehlen und die Einstellungen speichern."
+}
+EOF
+    return 0
+  fi
+
+  root="$(backup_root)"
   probe="$root"
   fs_type="$(current_mount_value "$probe" FSTYPE)"
   source="$(current_mount_value "$probe" SOURCE)"
@@ -735,6 +759,7 @@ backup_target_info() {
   cat <<EOF
 {
   "kind": "backup-target",
+  "configured": true,
   "status": $(json_escape "$status"),
   "backup_root": $(json_escape "$root"),
   "probe_path": $(json_escape "$probe"),

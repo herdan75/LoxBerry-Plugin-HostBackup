@@ -1,6 +1,6 @@
 # LoxBerry Host Backup
 
-**Status:** Entwicklungsstand Version 0.5.9 auf `develop`. Dieser Stand enthält
+**Status:** Entwicklungsstand Version 0.6.0 auf `develop`. Dieser Stand enthält
 zusätzliche Sicherheits-, Metadaten- und Restore-Härtungen, ist aber noch kein
 veröffentlichtes Release. Die stabilen Update-Kanäle bleiben deshalb bis zu
 einem ausdrücklich erstellten Release auf Version 0.5.8.
@@ -185,7 +185,7 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.5.8/
 Lokales Paket nach dem Build:
 
 ```text
-LoxBerryHostBackup_0.5.9.zip
+LoxBerryHostBackup_0.6.0.zip
 ```
 
 ## Erste Tests Auf LoxBerry
@@ -238,8 +238,16 @@ Backup vollständig abgeschlossen ist.
 ## Einstellungen
 
 Die Weboberfläche enthält Info-Buttons neben wichtigen Feldern und Aktionen. Die
-Hinweise erklären, wofür ein Feld gedacht ist und verschwinden wieder, sobald
-der Info-Button verlassen wird.
+Hinweise erklären, wofür ein Feld gedacht ist. Ihre Position wird an den
+sichtbaren Browserbereich angepasst, damit auch Info-Buttons am rechten oder
+unteren Fensterrand vollständig lesbar bleiben.
+
+Sobald eine Einstellung geändert wird, erscheint unten rechts ein nicht
+blockierender Speicherhinweis. Er nennt den geänderten Bereich, den neuen Wert
+und die Uhrzeit der Änderung und bietet direkt **Änderungen speichern** an. Das
+gilt auch für Optionsfelder wie Metadaten-Profil, Backup-Modus und Zeitplan. Wird
+ein Feld auf seinen zuletzt gespeicherten Wert zurückgestellt, verschwindet sein
+Eintrag wieder; ohne Änderungen bleibt der Hinweis vollständig ausgeblendet.
 
 ### Root-Freigabe
 
@@ -256,14 +264,18 @@ nur die für die Weboberfläche benötigten Aktionen, startet ein fest verdrahte
 root-eigenes Backend und verwirft die aufrufende Umgebung. Der Dispatcher und
 der geschützte Laufzeitbereich werden während der Installation über den von
 LoxBerry als Root ausgeführten Hook `postroot.sh` eingerichtet. Bei einem
-Upgrade sichert `preroot.sh` zuvor die bestehende Konfiguration und stellt sie
-im Root-Hook wieder her.
+Upgrade sichert `preroot.sh` zuvor die bestehende `config.json`. `postroot.sh`
+stellt sie unmittelbar zu Beginn der privilegierten Nacharbeiten wieder her,
+bevor weitere Installationsprüfungen laufen. Damit bleiben Backup-Ziel,
+Metadaten-Profil, Ausschlüsse, Zeitplan, Stop-Ziele und die übrigen
+Plugin-Einstellungen bei künftigen Updates erhalten.
 
 ### Backup-Verzeichnis
 
-Leer bedeutet: Das Plugin verwendet das eigene Datenverzeichnis. Für echte
-Backups sollte ein absoluter Pfad auf einem externen oder separaten Datenträger
-verwendet werden.
+Ohne gespeicherten Pfad zeigt die Oberfläche einen neutralen Hinweis; eine
+Dateisystem-Prüfung ist dann noch nicht möglich. Für echte Backups muss ein
+absoluter Pfad auf einem externen oder separaten Datenträger verwendet und über
+**Einstellungen speichern** übernommen werden.
 
 Beispiel:
 
@@ -330,11 +342,16 @@ eingeschränkt sein.
 
 ### Metadaten-Profil
 
-Das Metadaten-Profil muss zum Ziel passen:
+Das Metadaten-Profil muss zum Ziel passen. Die Standardeinstellung bei einer
+Neuinstallation ist `Native Strict`. Sie ist für lokale Linux-Dateisysteme
+gedacht; bei CIFS/NFS oder einem NAS muss bewusst das passende Profil gewählt
+werden. In der Weboberfläche besitzt jedes Profil einen eigenen Info-Button mit
+seinen gesicherten Metadaten, Voraussetzungen und Restore-Einschränkungen:
 
-- `Native Strict`: `rsync -aHAX` mit numerischen IDs und Sparse-Unterstützung.
-  ACLs, xattrs und File Capabilities sind Pflicht. Empfohlen für ext4, xfs und
-  btrfs.
+- `Native Strict`: für lokale Linux-Ziele mit ext4, xfs oder btrfs. `rsync`
+  sichert Besitzer, Rechte, ACLs, xattrs, File Capabilities und Hardlinks
+  vollständig. Fehlt eine benötigte Funktion, wird das Backup als Fehler
+  beendet.
 - `Network Compatible`: `rsync -aHA` ohne xattrs. Dieses Profil ist für CIFS-
   oder NFS-Ziele gedacht, die einzelne Linux-xattrs mit `Operation not
   supported` ablehnen. Das bewusste Auslassen wird als neutraler Hinweis im
@@ -342,11 +359,13 @@ Das Metadaten-Profil muss zum Ziel passen:
   Backup erhält `complete`/`ok` und läuft auch per Zeitplan ohne Bestätigung;
   ein Restore benötigt wegen der reduzierten Metadaten weiterhin eine
   zusätzliche Bestätigung.
-- `Fake Super`: rsync speichert privilegierte Metadaten in `user.rsync.*`.
-  Das Ziel muss user-xattrs zuverlässig unterstützen.
-- `Portable Archive`: erzeugt einen metadatentreuen `rootfs.tar`-Container.
-  Der Modus ist nicht mit inkrementellen Snapshots kombinierbar und darf nur
-  aus einer Rescue-/Offline-Umgebung wiederhergestellt werden.
+- `Fake Super`: für Ziele mit user-xattrs, aber ohne native Unix-Metadaten.
+  rsync speichert privilegierte Angaben in `user.rsync.*`; das Profil darf nur
+  verwendet werden, wenn das Ziel user-xattrs zuverlässig unterstützt.
+- `Portable Archive`: für Ziele ohne geeignete Linux-Metadatenfunktionen. Das
+  Profil erzeugt einen metadatentreuen `rootfs.tar`-Container, ist nicht mit
+  inkrementellen Snapshots kombinierbar und darf nur aus einer Rescue-/Offline-
+  Umgebung wiederhergestellt werden.
 
 Vor jedem Backup führt das Backend einen kleinen Metadaten-Roundtrip auf dem
 registrierten Ziel aus. Ein Profil wird nicht stillschweigend herabgestuft.
@@ -357,6 +376,13 @@ keine pauschale Behandlung von rsync-Code 23 als Erfolg.
 ### Automatische Backups
 
 Automatische Backups können täglich, wöchentlich oder monatlich laufen.
+
+Bei einem manuellen Start prüft das Plugin zuerst die Voraussetzungen. Eine
+Bestätigung zum Fortfahren wird nur eingeblendet, wenn dabei eine übergehbare
+Warnung erkannt wurde, beispielsweise sehr wenig freier Speicher oder laufende
+Docker-Container ohne Stop-Auswahl. Echte Fehler können nicht bestätigt und
+übergangen werden. Ein neutraler Hinweis des Profils `Network Compatible` löst
+diese Bestätigung nicht aus.
 
 - Täglich: Nur die Uhrzeit ist relevant.
 - Wöchentlich: Ein oder mehrere Wochentage und die Uhrzeit sind relevant.

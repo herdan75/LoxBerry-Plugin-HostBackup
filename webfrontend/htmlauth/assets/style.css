@@ -187,8 +187,15 @@ body.is-loading .loading-overlay {
   top: calc(100% + 8px);
   transform: translateX(-50%);
   width: max-content;
+  white-space: normal;
+  overflow-wrap: anywhere;
   word-spacing: normal;
   z-index: 20;
+}
+
+#hostbackup-app .info-bubble.info-bubble-above {
+  bottom: calc(100% + 8px);
+  top: auto;
 }
 
 #hostbackup-app .info-bubble * {
@@ -243,6 +250,17 @@ body.is-loading .loading-overlay {
 .notice.error {
   border-color: #d78989;
   background: #fff0f0;
+}
+
+.notice.warning {
+  background: #fff4df;
+  border-color: #d69a35;
+  color: #604000;
+}
+
+.notice.warning pre {
+  color: inherit;
+  margin: 8px 0;
 }
 
 .inline-notice {
@@ -832,15 +850,65 @@ td .muted {
   padding: 10px;
 }
 
-.metadata-modes label strong,
-.metadata-modes label span {
+.metadata-modes .metadata-profile-copy {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   grid-column: 2;
 }
 
-.metadata-modes label span {
+#hostbackup-app .metadata-default-note,
+#hostbackup-app .metadata-default-note * {
+  font-family: "Helvetica Neue", Arial, Helvetica, sans-serif !important;
+  letter-spacing: normal !important;
+  text-shadow: none !important;
+  text-transform: none !important;
+  word-spacing: normal !important;
+}
+
+#hostbackup-app .metadata-default-note {
+  background: #f3f6f8;
+  border-left: 3px solid #8ea4ba;
+  color: #435466;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  margin: 0 18px 10px !important;
+  padding: 7px 9px;
+}
+
+.metadata-modes .metadata-profile-title {
+  align-items: center;
+  color: #1d2733;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 4px;
+  line-height: 1.25;
+}
+
+.metadata-modes .metadata-profile-summary {
   color: #555;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.metadata-modes .metadata-profile-copy strong {
+  color: #1d2733;
+  font-weight: 700;
+}
+
+.metadata-default-badge {
+  background: #e8f3df;
+  border: 1px solid #b9d7a4;
+  border-radius: 10px;
+  color: #315e16;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 6px;
+  text-transform: uppercase;
 }
 
 .schedule-detail {
@@ -1118,6 +1186,94 @@ td .muted {
 .form-actions {
   display: flex;
   justify-content: flex-start;
+}
+
+.settings-change-popup {
+  background: #ffffff;
+  border: 1px solid #8ea4ba;
+  border-left: 4px solid #5ca90a;
+  border-radius: 7px;
+  bottom: 22px;
+  box-shadow: 0 10px 30px rgba(24, 42, 58, 0.24);
+  display: none;
+  max-height: calc(100vh - 44px);
+  overflow: auto;
+  padding: 14px;
+  position: fixed;
+  right: 22px;
+  width: min(390px, calc(100vw - 44px));
+  z-index: 900;
+}
+
+.settings-change-popup.is-visible {
+  display: block;
+}
+
+.settings-change-popup-header strong,
+.settings-change-popup-header span {
+  display: block;
+}
+
+.settings-change-popup-header strong {
+  color: #143b36;
+  font-size: 15px;
+}
+
+.settings-change-popup-header span {
+  color: #526173;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.settings-change-list {
+  list-style: none;
+  margin: 11px 0;
+  max-height: 230px;
+  overflow: auto;
+  padding: 0;
+}
+
+.settings-change-list li {
+  align-items: center;
+  border-top: 1px solid #e0e6eb;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+
+.settings-change-list li > span,
+.settings-change-list li strong,
+.settings-change-list li small {
+  display: block;
+}
+
+.settings-change-list li > span {
+  min-width: 0;
+}
+
+.settings-change-list li strong {
+  color: #172638;
+  font-size: 12px;
+}
+
+.settings-change-list li small {
+  color: #526173;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.settings-change-list time {
+  color: #69788a;
+  flex: 0 0 auto;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+#hostbackup-app .settings-change-save {
+  width: 100%;
 }
 
 .config-actions {
@@ -1512,6 +1668,13 @@ a.button-link:hover {
 }
 
 @media (max-width: 780px) {
+  .settings-change-popup {
+    bottom: 12px;
+    max-height: calc(100vh - 24px);
+    right: 12px;
+    width: calc(100vw - 24px);
+  }
+
   .page {
     padding: 14px;
   }

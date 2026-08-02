@@ -31,10 +31,21 @@ class WebSecurityTests(unittest.TestCase):
     def test_all_metadata_profiles_are_exposed(self) -> None:
         for mode in ("native-strict", "network-compatible", "fake-super", "portable-archive"):
             self.assertIn(f'value="{mode}"', CGI)
+        for helper in (
+            "$info_metadata_native",
+            "$info_metadata_network",
+            "$info_metadata_fake_super",
+            "$info_metadata_portable",
+        ):
+            self.assertIn(helper, CGI)
+        self.assertIn("Standardeinstellung:</strong> Native Strict", CGI)
+        self.assertIn('class="metadata-default-badge">Standard', CGI)
 
     def test_network_compatible_is_informational_for_backup(self) -> None:
         target_info = re.search(
-            r"backup_target_info\(\) \{(?P<body>.*?)\n\}", BACKEND, flags=re.DOTALL
+            r"backup_target_info\(\) \{(?P<body>.*?)\n\}\n\ninstall_schedule",
+            BACKEND,
+            flags=re.DOTALL,
         )
         preflight = re.search(
             r"preflight_backup\(\) \{(?P<body>.*?)\n\}\n\nrestore_eligibility",
@@ -67,8 +78,72 @@ class WebSecurityTests(unittest.TestCase):
         self.assertNotIn("metadata_ok=false", network_validation.group("body"))
         self.assertIn("metadata_informational=true", network_validation.group("body"))
 
+    def test_empty_backup_target_is_an_informational_state(self) -> None:
+        target_info = re.search(
+            r"backup_target_info\(\) \{(?P<body>.*?)\n\}\n\ninstall_schedule",
+            BACKEND,
+            flags=re.DOTALL,
+        )
+        self.assertIsNotNone(target_info)
+        self.assertIn('"configured": false', target_info.group("body"))
+        self.assertIn('"status": "info"', target_info.group("body"))
+        self.assertIn("exists $target_info->{configured}", CGI)
+
+    def test_info_bubbles_are_kept_inside_the_viewport(self) -> None:
+        for marker in (
+            "positionInfoBubble",
+            "getBoundingClientRect",
+            "window.innerWidth",
+            "info-bubble-above",
+        ):
+            self.assertIn(marker, CGI)
+
+    def test_preflight_confirmation_only_appears_after_a_warning(self) -> None:
+        self.assertIn("my $preflight_warning = '';", CGI)
+        self.assertIn("if (length $preflight_warning)", CGI)
+        self.assertIn("$preflight_accept_control", CGI)
+        self.assertIn("Backup trotz dieser Warnhinweise starten", CGI)
+        self.assertNotIn("Preflight-Warnungen für diesen Start akzeptieren", CGI)
+
     def test_export_download_rejects_symlinks(self) -> None:
         self.assertRegex(CGI, r"!-f \$archive \|\| -l \$archive")
+
+    def test_settings_change_popup_tracks_all_setting_types(self) -> None:
+        self.assertIn('id="settings-change-popup"', CGI)
+        self.assertIn('aria-hidden="true"', CGI)
+        self.assertIn('form="settings-save-form">Änderungen speichern', CGI)
+        self.assertIn("form.addEventListener('input'", CGI)
+        self.assertIn("form.addEventListener('change'", CGI)
+        for name in (
+            "backup_root",
+            "keep_backups",
+            "metadata_mode",
+            "backup_mode",
+            "schedule_enabled",
+            "schedule_mode",
+            "schedule_time",
+            "schedule_weekdays",
+            "schedule_monthdays",
+            "schedule_months",
+            "pre_backup_hook",
+            "post_backup_hook",
+            "rsync_extra_excludes",
+            "root_permission_ack",
+            "mail_notify_enabled",
+            "mail_notify_to",
+            "mail_notify_success",
+            "mail_notify_failure",
+            "mail_notify_stopped",
+            "mail_notify_restore",
+            "stop_targets",
+            "create_export_after_backup",
+        ):
+            self.assertRegex(CGI, rf"\b{re.escape(name)}:\s*'")
+        self.assertIn("changedAt[name] = new Date()", CGI)
+        self.assertIn("delete changedAt[name]", CGI)
+        self.assertIn("refreshName('stop_targets')", CGI)
+        self.assertIn("valueSeparator = String.fromCharCode(31)", CGI)
+        self.assertIn(r"state.split(/\\r?\\n/)", CGI)
 
     def test_csrf_secret_rejects_unsafe_types(self) -> None:
         self.assertIn('die "Unsicheres Plugin-Datenverzeichnis" if -l $datadir', CGI)
