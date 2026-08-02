@@ -1,6 +1,9 @@
 # LoxBerry Host Backup
 
-**Status:** Version 0.5.8, Release mit robusterem Export-Live-Status.
+**Status:** Entwicklungsstand Version 0.5.9 auf `develop`. Dieser Stand enthält
+zusätzliche Sicherheits-, Metadaten- und Restore-Härtungen, ist aber noch kein
+veröffentlichtes Release. Die stabilen Update-Kanäle bleiben deshalb bis zu
+einem ausdrücklich erstellten Release auf Version 0.5.8.
 
 Dieses Plugin wurde bereits auf einem LoxBerry-/DietPi-Testsystem installiert,
 konfiguriert und für echte Vollbackups sowie inkrementelle Snapshot-Backups
@@ -39,7 +42,8 @@ Voraussetzungen:
 - Linux mit Bash
 - Perl mit `JSON::PP`
 - Perl-CGI-Unterstützung für die Weboberfläche
-- `rsync`
+- `rsync` für verzeichnisbasierte Backups und Restores
+- Python 3 für die sichere Prüfung importierter Archive
 - `tar`, `find`, `awk`, `sed`, `tail`, `base64`, `stat`
 - `cron` für automatische Backups
 - `sudo` für privilegierte Aktionen aus der Weboberfläche
@@ -172,16 +176,16 @@ Die Weboberfläche ist in die normale LoxBerry-Oberfläche eingebettet. Die
 LoxBerry-Kopfzeile mit Haus-Symbol und Menü bleibt sichtbar, sodass jederzeit
 zur LoxBerry-Administration gewechselt werden kann.
 
-Release-Paket:
+Aktuelles Release-Paket:
 
 ```text
-https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.5.7/LoxBerryHostBackup_0.5.7.zip
+https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.5.8/LoxBerryHostBackup_0.5.8.zip
 ```
 
 Lokales Paket nach dem Build:
 
 ```text
-LoxBerryHostBackup_0.5.7.zip
+LoxBerryHostBackup_0.5.9.zip
 ```
 
 ## Erste Tests Auf LoxBerry
@@ -204,6 +208,7 @@ Empfohlene Reihenfolge:
 
 - vollständiges Host-Backup per `rsync`
 - inkrementelle Snapshot-Backups per `rsync --link-dest`
+- vier explizite Metadatenprofile für native Linux-, CIFS-/NFS- und portable Ziele
 - Restore eines ausgewählten Backups
 - Restore-Check und Restore-Plan vor dem Start
 - Live-Status für laufende Backup-, Restore-, Export- und Import-Jobs
@@ -211,7 +216,7 @@ Empfohlene Reihenfolge:
 - Backup-Liste mit Status, Grösse, Dateianzahl, Abschlusszeit und Exportstatus
 - Backup-Explorer in der Weboberfläche
 - Import externer `.tar.gz`-Backup-Archive im Hintergrund
-- Export vorhandener Backups als `.tar.gz` im Hintergrund mit Integritätsprüfung
+- Export vorhandener Backups als `.tar.gz` mit SHA-256- und Manifest-Bezug
 - Löschen vorhandener Backups
 - Export und Import der Plugin-Einstellungen als JSON-Datei
 - Docker- und Dienst-Inventarisierung
@@ -246,8 +251,9 @@ In der Weboberfläche muss diese Freigabe bewusst bestätigt werden. Ohne diese
 Bestätigung starten Backup- und Restore-Aktionen nicht.
 
 Es werden keine Passwörter gespeichert. Die LoxBerry-sudoers-Regel erlaubt dem
-LoxBerry-Webuser ausschliesslich den Start des Backend-Skripts dieses Plugins
-ohne Passwort.
+LoxBerry-Webuser ausschliesslich einen root-eigenen Dispatcher. Dieser akzeptiert
+nur die für die Weboberfläche benötigten Aktionen, startet ein fest verdrahtetes,
+root-eigenes Backend und verwirft die aufrufende Umgebung.
 
 ### Backup-Verzeichnis
 
@@ -271,6 +277,13 @@ Backup-Modus ist `ext4` für dieses Plugin in der Praxis meist deutlich
 schneller als NTFS/FUSE, besonders bei sehr vielen kleinen Dateien. NTFS/FUSE
 kann zusätzlich Hardlinks, Besitzer, Rechte oder Linux-Metadaten nur
 eingeschränkt abbilden.
+
+Beim Speichern wird das Ziel mit einer zufälligen Markerdatei und seiner
+Mount-Identität registriert. Vor Backup, Restore, Import, Export und Löschen
+werden Marker, Mountpoint, Quelle und Dateisystem erneut geprüft. Dadurch wird
+ein nicht eingehängtes NAS nicht unbemerkt durch das gleichnamige lokale
+Verzeichnis ersetzt. Benutzerdefinierte Ziele auf dem Root-Dateisystem sind
+standardmässig gesperrt.
 
 Wenn der Backup-Datenträger noch andere alte Backups, Images oder Archivdaten
 enthält, sollten diese zusätzlich ausgeschlossen werden.
@@ -310,6 +323,32 @@ Für zuverlässige Hardlinks, Rechte und Linux-Metadaten wird ein Linux-
 Dateisystem wie `ext4`, `xfs` oder `btrfs` als Backup-Ziel empfohlen. Auf
 NTFS/FUSE-Zielen kann die Speicherersparnis oder Metadatenunterstützung
 eingeschränkt sein.
+
+### Metadaten-Profil
+
+Das Metadaten-Profil muss zum Ziel passen:
+
+- `Native Strict`: `rsync -aHAX` mit numerischen IDs und Sparse-Unterstützung.
+  ACLs, xattrs und File Capabilities sind Pflicht. Empfohlen für ext4, xfs und
+  btrfs.
+- `Network Compatible`: `rsync -aHA` ohne xattrs. Dieses Profil ist für CIFS-
+  oder NFS-Ziele gedacht, die einzelne Linux-xattrs mit `Operation not
+  supported` ablehnen. Das bewusste Auslassen wird als neutraler Hinweis im
+  Manifest und in der Oberfläche dokumentiert. Ein ansonsten erfolgreiches
+  Backup erhält `complete`/`ok` und läuft auch per Zeitplan ohne Bestätigung;
+  ein Restore benötigt wegen der reduzierten Metadaten weiterhin eine
+  zusätzliche Bestätigung.
+- `Fake Super`: rsync speichert privilegierte Metadaten in `user.rsync.*`.
+  Das Ziel muss user-xattrs zuverlässig unterstützen.
+- `Portable Archive`: erzeugt einen metadatentreuen `rootfs.tar`-Container.
+  Der Modus ist nicht mit inkrementellen Snapshots kombinierbar und darf nur
+  aus einer Rescue-/Offline-Umgebung wiederhergestellt werden.
+
+Vor jedem Backup führt das Backend einen kleinen Metadaten-Roundtrip auf dem
+registrierten Ziel aus. Ein Profil wird nicht stillschweigend herabgestuft.
+File Capabilities können für einzelne Systemprogramme sicherheitsrelevant sein;
+deshalb ist das Weglassen von xattrs eine bewusste, sichtbare Entscheidung und
+keine pauschale Behandlung von rsync-Code 23 als Erfolg.
 
 ### Automatische Backups
 
@@ -411,6 +450,10 @@ Das ist praktisch zum Herunterladen, Kopieren oder Archivieren. Es benötigt abe
 zusätzlichen Speicherplatz und Zeit. Bei inkrementellen Snapshots kann ein
 Export-Archiv deutlich grösser sein als der zusätzliche Speicherverbrauch des
 Snapshot-Ordners, weil das Archiv einen transportierbaren Stand enthält.
+Das Archiv wird erst aus einem finalisierten und validierten Backup erstellt.
+Eine SHA-256-Datei und ein Descriptor binden es an die finale `manifest.json`;
+Download und Statusprüfung lehnen fehlende oder widersprüchliche
+Integritätsdaten ab.
 
 ### Einstellungen Exportieren Und Importieren
 
@@ -498,14 +541,22 @@ Der Restore ist deshalb absichtlich mehrstufig:
 
 1. In der Backup-Liste beim gewünschten Backup `Restore` wählen.
 2. Restore-Check und Restore-Plan im eingeblendeten Restore-Bereich prüfen.
-3. Restore per Checkbox ausdrücklich bestätigen.
-4. Restore starten.
+3. Die vollständige Backup-ID als Sicherheits-Challenge eingeben.
+4. Restore per Checkbox ausdrücklich bestätigen.
+5. Bei einem degradierten Backup den Metadatenverlust separat akzeptieren.
+6. Restore starten.
 
 Der Restore-Bereich wird nur angezeigt, wenn vorher ein Backup aus der Liste
 ausgewählt wurde.
 
 Für einen vollständigen Restore ist ein frisch installiertes Zielsystem oder
 eine Rescue-/Offline-Umgebung vorzuziehen.
+
+Nur finalisierte Backups mit passender Validierung sind restorefähig. Die
+Quelle wird durch Marker und Manifest-ID gebunden, laufende Operationen sind
+global und pro Backup gesperrt, und ein Restore wertet nur Exit-Code 0 als
+Erfolg. Portable Archive ist in der Weboberfläche absichtlich nicht startbar;
+hierfür ist der Offline-Helper vorgesehen.
 
 ## Docker Und Datenbanken
 
@@ -540,6 +591,12 @@ Wichtige Backend-Kommandos:
 /opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh restore-plan BACKUP_ID
 ```
 
+Offline-Restore eines Portable Archive:
+
+```sh
+HOSTBACKUP_OFFLINE_RESTORE=1 /opt/loxberry/bin/plugins/loxberryhostbackup/restore-hostbackup.sh BACKUP_ID
+```
+
 Weitere Backend-Kommandos wie `cat-file` oder `move` sind vorhanden, werden in
 der Weboberfläche aber nicht als Standardworkflow geführt.
 
@@ -553,6 +610,7 @@ Typische LoxBerry-Zielpfade:
 /opt/loxberry/config/plugins/loxberryhostbackup/
 /opt/loxberry/data/plugins/loxberryhostbackup/
 /opt/loxberry/log/plugins/loxberryhostbackup/
+/var/lib/loxberryhostbackup/
 ```
 
 Systemdateien:
@@ -560,6 +618,8 @@ Systemdateien:
 ```text
 /opt/loxberry/system/sudoers/LoxBerryHostBackup
 /etc/cron.d/loxberryhostbackup
+/usr/local/sbin/loxberryhostbackup-sudo
+/var/lib/loxberryhostbackup
 ```
 
 ## Deinstallation
@@ -583,6 +643,10 @@ Prüfung möglich bleibt.
   mit zuverlässiger Hardlink-Unterstützung voraus, z. B. `ext4`
 - kein sektorbasiertes Raw-Disk-/Blockdevice-Image wie z. B. `dd` oder Clonezilla
 
+Der verbindliche Restore-Testplan steht in
+[`docs/DR-TESTPLAN.md`](docs/DR-TESTPLAN.md); Sicherheitsgrenzen und
+Bedrohungsmodell stehen in [`docs/SECURITY.md`](docs/SECURITY.md).
+
 ## Entwicklung
 
 Repository:
@@ -593,7 +657,7 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 
 Branches:
 
-- `main`: aktueller freigegebener Stand 0.4.3
+- `main`: aktuell veröffentlichter stabiler Stand
 - `develop`: laufende Weiterentwicklung
 
 Update-Dateien:

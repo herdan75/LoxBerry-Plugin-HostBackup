@@ -17,7 +17,10 @@ while IFS='=' read -r key value; do
 done < "$ROOT/plugin.cfg"
 [ -n "$VERSION" ] || { echo "Cannot read VERSION from plugin.cfg" >&2; exit 1; }
 ZIP_NAME="LoxBerryHostBackup_${VERSION}.zip"
-ZIP_PATH="$ROOT/$ZIP_NAME"
+OUTPUT_DIR="${HOSTBACKUP_PACKAGE_OUTPUT_DIR:-$ROOT}"
+mkdir -p -- "$OUTPUT_DIR"
+OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
+ZIP_PATH="$OUTPUT_DIR/$ZIP_NAME"
 
 rm -f "$ZIP_PATH"
 
@@ -29,6 +32,7 @@ zip -r "$ZIP_PATH" \
   webfrontend \
   icons \
   sudoers \
+  docs \
   plugin.cfg \
   postinstall.sh \
   release.cfg \

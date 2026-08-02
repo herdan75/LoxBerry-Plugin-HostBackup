@@ -1,6 +1,7 @@
 {
   "backup_root": "",
   "backup_mode": "full",
+  "metadata_mode": "native-strict",
   "rsync_extra_excludes": [],
   "stop_docker_before_backup": false,
   "stop_targets": [],
@@ -22,5 +23,11 @@
   "schedule_months": ["*"],
   "root_permission_ack": false,
   "pre_backup_hook": "",
-  "post_backup_hook": ""
+  "post_backup_hook": "",
+  "target_marker": "",
+  "target_mountpoint": "",
+  "target_source": "",
+  "target_fstype": "",
+  "target_majmin": "",
+  "import_max_size_mb": 65536
 }

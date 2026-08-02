@@ -9,6 +9,56 @@ validiert werden.
 
 ## [Unreleased]
 
+### Versionierung
+
+- Entwicklungsstand auf Version 0.5.9 angehoben. `release.cfg` und
+  `prerelease.cfg` bleiben bis zu einem ausdrücklich erstellten Tag/Release auf
+  der zuletzt veröffentlichten Version 0.5.8.
+
+### Sicherheit
+
+- Privilegierte Webaktionen auf einen root-eigenen Dispatcher mit fester
+  Aktionsliste und bereinigter Umgebung begrenzt; direkte sudoers-Freigabe des
+  Plugin-Backends entfernt.
+- Backup-Ziele an Marker und Mount-Identität gebunden; kanonische Pfad- und
+  Symlink-Prüfungen vor Schreiben, Import, Export, Restore und Löschen ergänzt.
+- Globale und Backup-spezifische Locks sowie atomare Task-State-Dateien mit
+  PID-Startzeit eingeführt.
+- CSRF-Schutz für alle POST-Aktionen, begrenzte Streaming-Uploads und gehärtete
+  Tar-Importprüfung gegen Traversal, Link-Angriffe, Duplikate und Archive-Bombs
+  ergänzt.
+- Konfiguration root-eigen, atomar und fail-closed gespeichert; unsichere
+  Helper-Include-Pfade entfernt.
+
+### Backup und Restore
+
+- Metadatenprofile `Native Strict`, `Network Compatible`, `Fake Super` und
+  `Portable Archive` mit Ziel-Roundtrip und sichtbarer Fidelitätsangabe ergänzt.
+- CIFS-/NFS-kompatibler Modus lässt xattrs und File Capabilities bewusst aus,
+  zeigt dies beim erfolgreichen Backup nur als neutralen Hinweis und blockiert
+  weder manuelle noch zeitgesteuerte Starts; beim Restore bleibt die separate
+  Bestätigung erhalten.
+- Backup erst nach erfolgreicher Validierung finalisiert; Exit-Code 24 wird als
+  sichtbarer Hinweis behandelt, andere rsync-Fehler bleiben Fehler.
+- Restore auf finalisierte, validierte Backups begrenzt, Restore-ID-Challenge,
+  Quellschutz, Dry-Run, strikte Exit-Auswertung und Offline-Gate für Portable
+  Archive ergänzt.
+- Stop-/Restart- und Hook-Ablauf fail-closed und mit überprüfbarem Cleanup-Status
+  umgesetzt.
+
+### Import, Export und Qualität
+
+- Exporte enthalten Metadaten, SHA-256-Prüfsumme und einen Descriptor mit Hash
+  des finalen Manifests.
+- Importe werden in root-eigenem Staging geprüft und erst nach Manifest-,
+  Validierungs- und Markerprüfung atomar veröffentlicht.
+- UI-Status für Backup, Restore, Import, Export und `cleanup_failed` präzisiert.
+- Automatisierte Archiv-/Web-Sicherheitstests, Shell-/Perl-/PHP-/sudoers-Checks,
+  least-privilege CI und ein verbindlicher Disaster-Recovery-Testplan ergänzt.
+
+Die bestehende Benachrichtigungs- und Mailsemantik ist in diesem Stand bewusst
+nicht überarbeitet worden.
+
 ## [0.5.8] - 2026-06-22
 
 ### Release

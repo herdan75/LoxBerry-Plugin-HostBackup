@@ -13,9 +13,13 @@ fi
 LBHOMEDIR="${LBHOMEDIR:-$DETECTED_LBHOMEDIR}"
 BACKEND="${LBPBINDIR:-$LBHOMEDIR/bin/plugins/$PLUGIN_FOLDER}/hostbackup.sh"
 
-if [ $# -ne 1 ]; then
-  echo "Usage: $0 BACKUP_ID" >&2
+if [ $# -lt 1 ] || [ $# -gt 2 ] || { [ $# -eq 2 ] && [ "$2" != "--confirm-degraded" ]; }; then
+  echo "Usage: $0 BACKUP_ID [--confirm-degraded]" >&2
+  echo "Portable Archive restores additionally require HOSTBACKUP_OFFLINE_RESTORE=1 from a rescue/offline environment." >&2
   exit 1
 fi
 
-ALLOW_RESTORE=1 "$BACKEND" restore "$1"
+confirmation=""
+[ "${2:-}" = "--confirm-degraded" ] && confirmation="confirm-degraded"
+
+ALLOW_RESTORE=1 "$BACKEND" restore "$1" "$confirmation"

@@ -21,13 +21,21 @@ function hostbackup_include_loxberry_lib(string $file): void
     }
 
     $candidates = [
-        $file,
         '/opt/loxberry/libs/phplib/' . $file,
         '/opt/loxberry/libs/php/' . $file,
     ];
 
     foreach ($candidates as $candidate) {
-        if (@include_once($candidate)) {
+        $real = realpath($candidate);
+        if ($real === false || !is_file($real) || is_link($candidate)) {
+            continue;
+        }
+        $owner = @fileowner($real);
+        $perms = @fileperms($real);
+        if ($owner !== 0 || $perms === false || (($perms & 0022) !== 0)) {
+            continue;
+        }
+        if (@include_once($real)) {
             return;
         }
     }

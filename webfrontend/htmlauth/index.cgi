@@ -3,18 +3,23 @@ use strict;
 use warnings;
 use CGI qw(:standard escapeHTML);
 use File::Temp qw(tempfile);
-use File::Copy qw(copy);
 use File::Basename qw(basename);
 use File::Path qw(make_path);
 use JSON::PP;
+use Encode qw(encode);
+use Digest::SHA qw(hmac_sha256_hex);
+use Fcntl qw(:DEFAULT :flock);
 use LoxBerry::Web;
 
 my $plugin = 'loxberryhostbackup';
 my $lbhome = $ENV{LBHOMEDIR} || '/opt/loxberry';
 my $bindir = $ENV{LBPBINDIR} || "$lbhome/bin/plugins/$plugin";
 my $datadir = $ENV{LBPDATADIR} || $ENV{LBPDATA} || "$lbhome/data/plugins/$plugin";
-my $backend = "$bindir/hostbackup.sh";
+my $backend = $ENV{HOSTBACKUP_SUDO_DISPATCHER} || '/usr/local/sbin/loxberryhostbackup-sudo';
 my $q = CGI->new;
+my $csrf_token = '';
+my $MAX_CONFIG_UPLOAD = 1024 * 1024;
+my $MAX_BACKUP_UPLOAD = 64 * 1024 * 1024 * 1024;
 
 my $action = $q->param('action') || '';
 my $backup_id = $q->param('backup_id') || '';
@@ -30,9 +35,113 @@ my $active_task = '';
 sub url_escape {
   my ($value) = @_;
   $value //= '';
-  $value =~ s/([^A-Za-z0-9_.~-])/sprintf("%%%02X", ord($1))/ge;
-  return $value;
+  my $bytes = encode('UTF-8', $value);
+  $bytes =~ s/([^A-Za-z0-9_.~-])/sprintf("%%%02X", ord($1))/ge;
+  return $bytes;
 }
+
+sub secure_random_hex {
+  open my $fh, '<:raw', '/dev/urandom' or die "Zufallsquelle nicht verfuegbar: $!";
+  my $bytes = '';
+  my $read = read($fh, $bytes, 32);
+  close $fh;
+  die "Zufallsquelle konnte nicht gelesen werden" unless defined $read && $read == 32;
+  return unpack('H*', $bytes);
+}
+
+sub csrf_secret {
+  my $path = "$datadir/csrf-secret";
+  die "Unsicheres Plugin-Datenverzeichnis" if -l $datadir;
+  make_path($datadir, { mode => 0700 }) unless -d $datadir;
+  die "Plugin-Datenverzeichnis fehlt" unless -d $datadir && !-l $datadir;
+  die "Unsicherer CSRF-Secret-Pfad" if -l $path;
+  if (-e $path && (!-f $path || -l $path)) {
+    die "Unsicherer CSRF-Secret-Dateityp";
+  }
+  if (-f $path && -r $path) {
+    open my $fh, '<', $path or die "CSRF-Secret nicht lesbar: $!";
+    my $secret = <$fh> // '';
+    close $fh;
+    chomp $secret;
+    return $secret if $secret =~ /^[a-f0-9]{64}$/;
+    die "CSRF-Secret ist beschaedigt";
+  }
+  my $secret = secure_random_hex();
+  my $tmp = "$path.$$";
+  sysopen(my $fh, $tmp, O_WRONLY | O_CREAT | O_EXCL, 0600) or die "CSRF-Secret kann nicht angelegt werden: $!";
+  print {$fh} "$secret\n" or die "CSRF-Secret kann nicht geschrieben werden: $!";
+  close $fh or die "CSRF-Secret kann nicht geschlossen werden: $!";
+  chmod 0600, $tmp;
+  rename $tmp, $path or do { unlink $tmp; die "CSRF-Secret kann nicht aktiviert werden: $!"; };
+  return $secret;
+}
+
+sub csrf_identity {
+  return join('|', $ENV{REMOTE_USER} || '', $ENV{REMOTE_ADDR} || '', $ENV{HTTP_USER_AGENT} || '');
+}
+
+sub csrf_for_bucket {
+  my ($bucket) = @_;
+  return hmac_sha256_hex(csrf_identity() . '|' . $bucket, csrf_secret());
+}
+
+sub constant_time_equal {
+  my ($left, $right) = @_;
+  return 0 unless defined $left && defined $right && length($left) == length($right);
+  my $diff = 0;
+  for my $index (0 .. length($left) - 1) {
+    $diff |= ord(substr($left, $index, 1)) ^ ord(substr($right, $index, 1));
+  }
+  return $diff == 0;
+}
+
+sub same_origin_request {
+  my $origin = $ENV{HTTP_ORIGIN} || '';
+  return 1 unless length $origin;
+  my $scheme = (($ENV{HTTPS} || '') =~ /^(?:on|1)$/i) ? 'https' : 'http';
+  my $host = $ENV{HTTP_HOST} || '';
+  return constant_time_equal(lc($origin), lc("$scheme://$host"));
+}
+
+sub valid_csrf_request {
+  my $provided = $q->param('csrf_token') || '';
+  return 0 unless same_origin_request();
+  my $bucket = int(time() / 3600);
+  return constant_time_equal($provided, csrf_for_bucket($bucket))
+    || constant_time_equal($provided, csrf_for_bucket($bucket - 1));
+}
+
+sub csrf_field {
+  my $safe = escapeHTML($csrf_token);
+  return qq{<input data-role="none" type="hidden" name="csrf_token" value="$safe">};
+}
+
+sub available_bytes {
+  my ($path) = @_;
+  my $available = 0;
+  if (open(my $fh, '-|', 'df', '-PB1', $path)) {
+    my @lines = <$fh>;
+    close $fh;
+    $available = $1 if defined $lines[1] && $lines[1] =~ /^\S+\s+\d+\s+\d+\s+(\d+)/;
+  }
+  return $available || 0;
+}
+
+sub read_upload_limited {
+  my ($upload, $limit) = @_;
+  my $content = '';
+  my $buffer;
+  while (1) {
+    my $count = read($upload, $buffer, 65536);
+    die "Upload konnte nicht gelesen werden" unless defined $count;
+    last if $count == 0;
+    die "Upload ist groesser als erlaubt" if length($content) + $count > $limit;
+    $content .= substr($buffer, 0, $count);
+  }
+  return $content;
+}
+
+$csrf_token = csrf_for_bucket(int(time() / 3600));
 
 sub redirect_with {
   my (%params) = @_;
@@ -236,7 +345,7 @@ if ($action eq 'download-export') {
   my $info = eval { decode_json($out) } || {};
   my $archive = $info->{archive} || '';
 
-  if (($info->{status} || '') ne 'available' || !$archive || !-r $archive || !-f $archive) {
+  if (($info->{status} || '') ne 'available' || !$archive || !-r $archive || !-f $archive || -l $archive) {
     print header(-type => 'text/plain', -charset => 'utf-8', -status => '404 Not Found');
     print "Export-Archiv ist noch nicht vorhanden oder konnte nicht gelesen werden.\n";
     exit;
@@ -266,6 +375,11 @@ if ($action eq 'download-export') {
 }
 
 if ($q->request_method eq 'POST') {
+  if (!valid_csrf_request()) {
+    print header(-type => 'text/plain', -charset => 'utf-8', -status => '403 Forbidden');
+    print "Ungueltige oder abgelaufene CSRF-Bestaetigung. Seite neu laden.\n";
+    exit;
+  }
 
   if ($action eq 'import-config') {
 
@@ -275,12 +389,15 @@ if ($q->request_method eq 'POST') {
       $error = 'Keine Einstellungsdatei ausgewählt.';
     } else {
       binmode $upload;
-      local $/;
-      my $settings_json = <$upload>;
+      my $settings_json = eval { read_upload_limited($upload, $MAX_CONFIG_UPLOAD) };
+      if ($@) {
+        $error = escapeHTML($@);
+        $settings_json = '';
+      }
       my $imported = eval { decode_json($settings_json) };
 
       if (!$imported || ref($imported) ne 'HASH') {
-        $error = 'Einstellungsdatei konnte nicht gelesen werden. Erwartet wird eine JSON-Datei aus diesem Plugin.';
+        $error ||= 'Einstellungsdatei konnte nicht gelesen werden. Erwartet wird eine JSON-Datei aus diesem Plugin.';
       } else {
         my $backup_root = $imported->{backup_root} || '';
         my $excludes = ref($imported->{rsync_extra_excludes}) eq 'ARRAY' ? join("\n", @{$imported->{rsync_extra_excludes}}) : '';
@@ -299,6 +416,7 @@ if ($q->request_method eq 'POST') {
         my $post_hook = $imported->{post_backup_hook} || '';
         my $root_permission_ack = 'false';
         my $backup_mode = $imported->{backup_mode} || 'full';
+        my $metadata_mode = $imported->{metadata_mode} || 'native-strict';
         my $stop_targets = stop_targets_csv($imported->{stop_targets});
         my $mail_notify_enabled = bool_arg($imported->{mail_notify_enabled});
         my $mail_notify_to = $imported->{mail_notify_to} || '';
@@ -333,7 +451,8 @@ if ($q->request_method eq 'POST') {
             $mail_notify_success,
             $mail_notify_failure,
             $mail_notify_stopped,
-            $mail_notify_restore
+            $mail_notify_restore,
+            $metadata_mode
           )
         );
 
@@ -350,6 +469,7 @@ if ($q->request_method eq 'POST') {
 
     my $backup_root = $q->param('backup_root') || '';
     my $backup_mode = $q->param('backup_mode') || 'full';
+    my $metadata_mode = $q->param('metadata_mode') || 'native-strict';
     my $keep_backups = $q->param('keep_backups') || '10';
 
     my $schedule_enabled = $q->param('schedule_enabled') ? 'true' : 'false';
@@ -418,7 +538,8 @@ if ($q->request_method eq 'POST') {
         $mail_notify_success,
         $mail_notify_failure,
         $mail_notify_stopped,
-        $mail_notify_restore
+        $mail_notify_restore,
+        $metadata_mode
       )
     );
 
@@ -430,18 +551,26 @@ if ($q->request_method eq 'POST') {
   }
 
   elsif ($action eq 'backup') {
-
-    my ($status, $out) = run_shell(backend_cmd('start'));
-
-    if ($status == 0) {
-      my ($started_id) = $out =~ /([A-Za-z0-9._-]+)/;
-      if ($started_id) {
-        $active_task = "backup-$started_id.log";
-        redirect_with(msg => 'backup_started', active_task => $active_task);
-      }
-      redirect_with(msg => 'backup_started');
+    my $accept_warnings = $q->param('accept_preflight_warnings') ? 'accept-warnings' : '';
+    my ($check_status, $check_out) = run_shell(backend_cmd('preflight-backup'));
+    my $check = $check_status == 0 ? eval { decode_json($check_out) } : undef;
+    if ($check_status != 0 || !$check || (($check->{status} || '') eq 'error')) {
+      $error = escapeHTML($check_out || 'Backup-Preflight fehlgeschlagen.');
+    } elsif (($check->{status} || '') eq 'warning' && $accept_warnings ne 'accept-warnings') {
+      my $warnings = ref($check->{warnings}) eq 'ARRAY' ? join("\n", @{$check->{warnings}}) : 'Preflight meldet Warnungen.';
+      $error = escapeHTML("$warnings\nBitte Preflight-Warnungen bestaetigen und erneut starten.");
     } else {
-      $error = escapeHTML($out);
+      my ($status, $out) = run_shell(backend_cmd('start', '', $accept_warnings));
+      if ($status == 0) {
+        my ($started_id) = $out =~ /([A-Za-z0-9._-]+)/;
+        if ($started_id) {
+          $active_task = "backup-$started_id.log";
+          redirect_with(msg => 'backup_started', active_task => $active_task);
+        }
+        redirect_with(msg => 'backup_started');
+      } else {
+        $error = escapeHTML($out);
+      }
     }
   }
 
@@ -524,25 +653,74 @@ if ($q->request_method eq 'POST') {
       $error = 'Keine Backup-Datei ausgewählt.';
     } else {
       my $import_dir = "$datadir/imports";
-      make_path($import_dir);
+      if (-l $import_dir) {
+        $error = 'Das Import-Verzeichnis ist unsicher und darf kein symbolischer Link sein.';
+      } else {
+        make_path($import_dir, { mode => 0700 }) unless -d $import_dir;
+        chmod 0700, $import_dir;
+        $error = 'Das Import-Verzeichnis konnte nicht sicher angelegt werden.' unless -d $import_dir && !-l $import_dir;
+      }
+      if (!$error) {
       my $original_name = basename($q->param('backup_archive') || 'backup.tar.gz');
       $original_name =~ s/[^A-Za-z0-9._-]+/_/g;
       $original_name = 'backup.tar.gz' unless length $original_name;
       my ($fh, $tmpfile) = tempfile('hostbackup-import-XXXXXX-', SUFFIX => "-$original_name", DIR => $import_dir, UNLINK => 0);
       binmode $upload;
       binmode $fh;
-      copy($upload, $fh);
-      close $fh;
+      chmod 0600, $tmpfile;
 
-      my ($status, $out) = run_shell(backend_cmd('start-import', $tmpfile));
-
-      if ($status == 0) {
-        my ($task_id) = $out =~ m{^([A-Za-z0-9._-]+\.log)\s*$}m;
-        $task_id ||= '';
-        redirect_with(msg => 'import_started', active_task => $task_id);
+      my $declared_length = $ENV{CONTENT_LENGTH} || 0;
+      my $available = available_bytes($import_dir);
+      my $reserve = 512 * 1024 * 1024;
+      if ($declared_length =~ /^\d+$/ && $declared_length > $MAX_BACKUP_UPLOAD) {
+        $error = 'Backup-Upload ist größer als das erlaubte Limit.';
+      } elsif ($available && $available <= $reserve) {
+        $error = 'Für den Backup-Upload ist nicht genügend freier Speicher verfügbar.';
       } else {
+        my $total = 0;
+        my $buffer;
+        while (!$error) {
+          my $count = read($upload, $buffer, 1024 * 1024);
+          if (!defined $count) {
+            $error = 'Backup-Upload konnte nicht gelesen werden.';
+            last;
+          }
+          last if $count == 0;
+          $total += $count;
+          if ($total > $MAX_BACKUP_UPLOAD || ($available && $total + $reserve > $available)) {
+            $error = 'Backup-Upload überschreitet das Größen- oder Speicherlimit.';
+            last;
+          }
+          my $offset = 0;
+          while ($offset < $count) {
+            my $written = syswrite($fh, $buffer, $count - $offset, $offset);
+            if (!defined $written || $written == 0) {
+              $error = 'Backup-Upload konnte nicht vollständig gespeichert werden.';
+              last;
+            }
+            $offset += $written;
+          }
+        }
+      }
+
+      if (!close $fh) {
+        $error ||= 'Backup-Upload konnte nicht abgeschlossen werden.';
+      }
+
+      if ($error) {
         unlink $tmpfile;
-        $error = escapeHTML($out);
+      } else {
+        my ($status, $out) = run_shell(backend_cmd('start-import', $tmpfile));
+
+        if ($status == 0) {
+          my ($task_id) = $out =~ m{^([A-Za-z0-9._-]+\.log)\s*$}m;
+          $task_id ||= '';
+          redirect_with(msg => 'import_started', active_task => $task_id);
+        } else {
+          unlink $tmpfile;
+          $error = escapeHTML($out);
+        }
+      }
       }
     }
   }
@@ -551,19 +729,27 @@ if ($q->request_method eq 'POST') {
 
     my $restore_backup_id = $q->param('backup_id') || '';
     my $confirm_restore = $q->param('confirm_restore') ? 1 : 0;
+    my $restore_challenge = $q->param('restore_challenge') || '';
+    my $confirm_degraded = $q->param('confirm_degraded') ? 'confirm-degraded' : '';
 
     if ($restore_backup_id !~ /^[A-Za-z0-9._-]+$/) {
       $error = 'Ungültige Backup-ID.';
     } elsif (!$confirm_restore) {
       $error = 'Restore muss ausdrücklich bestätigt werden.';
+    } elsif ($restore_challenge ne $restore_backup_id) {
+      $error = 'Zur Bestätigung muss die vollständige Backup-ID eingegeben werden.';
     } else {
       my ($check_status, $check_out) = run_shell(backend_cmd('preflight-restore', $restore_backup_id));
       my $check = $check_status == 0 ? eval { decode_json($check_out) } : undef;
 
       if ($check_status != 0 || !$check || (($check->{status} || '') eq 'error')) {
         $error = escapeHTML($check_out || 'Restore-Check fehlgeschlagen.');
+      } elsif ($check->{requires_offline_restore}) {
+        $error = 'Portable Archive kann nicht aus der Weboberfläche wiederhergestellt werden. Bitte Rescue-/Offline-Helper verwenden.';
+      } elsif ($check->{requires_degraded_confirmation} && $confirm_degraded ne 'confirm-degraded') {
+        $error = 'Vor dem Restore muss der Hinweis zu den bewusst ausgelassenen Metadaten bestätigt werden.';
       } else {
-        my ($status, $out) = run_shell(backend_cmd('start-restore', $restore_backup_id));
+        my ($status, $out) = run_shell(backend_cmd('start-restore', $restore_backup_id, $confirm_degraded));
 
         if ($status == 0) {
           redirect_with(msg => 'restore_started', active_task => "restore-$restore_backup_id.log");
@@ -580,7 +766,14 @@ my ($config_status, $config_json) = run_shell(backend_cmd('config'));
 my $config = {};
 
 if ($config_status == 0) {
-  $config = eval { decode_json($config_json) } || {};
+  my $decoded = eval { decode_json($config_json) };
+  if ($decoded && ref($decoded) eq 'HASH') {
+    $config = $decoded;
+  } else {
+    $error ||= 'Die Plugin-Konfiguration ist beschädigt und wurde nicht mit Standardwerten überschrieben.';
+  }
+} else {
+  $error ||= escapeHTML($config_json || 'Die Plugin-Konfiguration konnte nicht geladen werden.');
 }
 
 if ($restore_id !~ /^[A-Za-z0-9._-]+$/) {
@@ -629,6 +822,8 @@ if ($browse_id) {
 
 my $cfg_backup_root = escapeHTML($config->{backup_root} || '');
 my $cfg_backup_mode = $config->{backup_mode} || 'full';
+my $cfg_metadata_mode = $config->{metadata_mode} || 'native-strict';
+$cfg_metadata_mode = 'native-strict' unless $cfg_metadata_mode =~ /^(?:native-strict|network-compatible|fake-super|portable-archive)$/;
 my $cfg_keep = escapeHTML($config->{keep_backups} || '10');
 my $cfg_pre_hook = escapeHTML($config->{pre_backup_hook} || '');
 my $cfg_post_hook = escapeHTML($config->{post_backup_hook} || '');
@@ -654,6 +849,10 @@ my $weekly_checked = $cfg_mode eq 'weekly' ? ' checked' : '';
 my $monthly_checked = $cfg_mode eq 'monthly' ? ' checked' : '';
 my $full_mode_checked = $cfg_backup_mode eq 'snapshot' ? '' : ' checked';
 my $snapshot_mode_checked = $cfg_backup_mode eq 'snapshot' ? ' checked' : '';
+my $native_strict_checked = $cfg_metadata_mode eq 'native-strict' ? ' checked' : '';
+my $network_compatible_checked = $cfg_metadata_mode eq 'network-compatible' ? ' checked' : '';
+my $fake_super_checked = $cfg_metadata_mode eq 'fake-super' ? ' checked' : '';
+my $portable_archive_checked = $cfg_metadata_mode eq 'portable-archive' ? ' checked' : '';
 my @cfg_weekdays = ref($config->{schedule_weekdays}) eq 'ARRAY' ? @{$config->{schedule_weekdays}} : ($config->{schedule_weekday} || '0');
 my %cfg_weekdays = map { $_ => 1 } @cfg_weekdays;
 my @weekday_checked = map { checked_attr($cfg_weekdays{"$_"}) } 0..6;
@@ -667,6 +866,7 @@ my @month_checked = map { checked_attr($cfg_months{'*'} || $cfg_months{"$_"}) } 
 
 my $info_backup_root = info_button('Hier legst du fest, wohin die Backups geschrieben werden. Für ein echtes Host-Backup sollte das ein externer Datenträger, ein separates Mount oder ein grosser zweiter Datenspeicher sein. Erkannte Ziele können per Klick oder Drag und Drop übernommen werden. Wenn die Systemkarte selbst ausfällt, hilft ein Backup auf derselben Karte nicht.');
 my $info_backup_mode = info_button('Vollbackup kopiert jeden Stand vollständig. Inkrementeller Snapshot nutzt rsync mit Hardlinks auf das vorherige vollständige Backup: jedes Backup bleibt einzeln wiederherstellbar, unveränderte Dateien benötigen aber kaum zusätzlichen Speicher. Für zuverlässige Speicherersparnis wird ein Linux-Dateisystem wie ext4 empfohlen.');
+my $info_metadata_mode = info_button('Legt fest, wie Dateirechte und Linux-Metadaten gesichert werden. Native Strict ist für Linux-Dateisysteme vorgesehen. Network Compatible verzichtet bewusst auf xattrs und File Capabilities. Fake Super speichert privilegierte Metadaten in einem rsync-xattr. Portable Archive schreibt einen metadatentreuen tar-Container und kann nur offline wiederhergestellt werden.');
 my $info_retention = info_button('Legt fest, wie viele fertige Backups behalten werden. Erlaubt sind 1 bis 10. Bei inkrementellen Snapshots ist das Löschen alter Backups sicher: unveränderte Dateien sind per Hardlink in jedem Snapshot sichtbar. Wird ein alter Snapshot entfernt, bleiben Dateien erhalten, solange sie noch von einem jüngeren Snapshot referenziert werden. Sobald nach einem erfolgreichen Backup mehr Backups vorhanden sind als erlaubt, entfernt das Plugin automatisch das älteste fertige Backup und das passende Export-Archiv.');
 my $info_schedule = info_button('Der Zeitplan erstellt Backups automatisch per Cron. Täglich bedeutet jeden Tag zur Startzeit. Wöchentlich bedeutet an den gewählten Wochentagen zur Startzeit. Monatlich bedeutet an den gewählten Tagen in den gewählten Monaten zur Startzeit.');
 my $info_time = info_button('Diese Uhrzeit gilt für alle Zeitplanarten. Bei täglich ist sie die einzige zeitliche Einstellung. Bei wöchentlich und monatlich wird sie mit den gewählten Tagen kombiniert.');
@@ -699,10 +899,9 @@ my $info_backup_start = info_button('Startet den Backup-Vorgang. Vor dem eigentl
 sub render_target_notice {
   my ($target_info) = @_;
   return '<section class="inline-notice loading">Dateisystem-Pr&uuml;fung wird geladen...</section>' unless $target_info && %{$target_info};
-  my $target_state = ($target_info->{status} || 'ok') eq 'ok' ? 'ok' : 'warning';
-  my $target_message = $target_state eq 'ok'
-    ? 'Backup-Ziel verwendet das empfohlene Dateisystem ext4.'
-    : 'Empfehlung: Backup-Ziel auf ext4 umstellen. ext4 ist deutlich schneller und f&uuml;r inkrementelle Snapshots mit Hardlinks am zuverl&auml;ssigsten.';
+  my $target_state = $target_info->{status} || 'error';
+  $target_state = 'error' unless $target_state =~ /^(?:ok|info|warning|error)$/;
+  my $target_message = escapeHTML($target_info->{message} || 'Dateisystem- und Mount-Prüfung lieferte keine Detailmeldung.');
   my $target_fs = escapeHTML($target_info->{fs_type} || 'unbekannt');
   my $target_free = escapeHTML($target_info->{available_mb} || 0);
   return qq{<section class="inline-notice $target_state"><strong>Dateisystem-Pr&uuml;fung:</strong> $target_message<br><span>Erkannt: <code>$target_fs</code>, frei ca. $target_free MB.</span></section>};
@@ -945,11 +1144,17 @@ sub render_backup_rows {
       $export = qq{<span class="export-state failed">fehlgeschlagen</span>};
       $export .= qq{<small class="muted">$export_message</small>} if length $export_message;
     }
-    my $is_complete = (($backup->{status} || '') eq 'complete') && (($backup->{files_count} || 0) > 0);
     my $validation = $backup->{validation} || {};
+    my $backup_status = $backup->{status} || '';
+    my $validation_status = $validation->{status} || '';
+    my $is_complete = ($backup_status eq 'complete' && $validation_status eq 'ok')
+      || ($backup_status eq 'complete_with_warnings' && $validation_status eq 'warning');
+    my $storage_format = (($backup->{backup} || {})->{storage_format}) || $backup->{storage_format} || 'directory';
+    my $is_portable = $storage_format eq 'portable-tar';
+    my $csrf = csrf_field();
     my $validation_label = '';
-    my $delete_label = (($backup->{status} || '') eq 'complete') ? 'L&ouml;schen' : 'Unvollst&auml;ndiges Backup l&ouml;schen';
-    if (($backup->{status} || '') eq 'complete') {
+    my $delete_label = $is_complete ? 'L&ouml;schen' : 'Unvollst&auml;ndiges Backup l&ouml;schen';
+    if ($backup_status =~ /^complete(?:_with_warnings)?$/) {
       if (($validation->{status} || '') eq 'ok') {
         $validation_label = '<small class="backup-health ok">Pr&uuml;fung ok</small>';
       } elsif (($validation->{status} || '') eq 'warning') {
@@ -976,12 +1181,14 @@ $active_task_hidden
 <button data-role="none" type="submit">Export-Archiv herunterladen</button>$info_download_ready
 </form>
 <form data-ajax="false" method="post" class="inline-form loading-form">
+$csrf
 <input data-role="none" type="hidden" name="action" value="start-export">
 <input data-role="none" type="hidden" name="backup_id" value="$id">
 $active_task_hidden
 <button data-role="none" type="submit">Export neu erstellen</button>$info_export_recreate
 </form>
 <form data-ajax="false" method="post" class="inline-form delete-export-form">
+$csrf
 <input data-role="none" type="hidden" name="action" value="delete-export">
 <input data-role="none" type="hidden" name="backup_id" value="$id">
 $active_task_hidden
@@ -993,6 +1200,7 @@ $active_task_hidden
       } else {
         $export_action = qq{
 <form data-ajax="false" method="post" class="inline-form loading-form">
+$csrf
 <input data-role="none" type="hidden" name="action" value="start-export">
 <input data-role="none" type="hidden" name="backup_id" value="$id">
 $active_task_hidden
@@ -1001,12 +1209,17 @@ $active_task_hidden
 };
       }
 
-      $backup_actions = qq{
+      my $browse_action = $is_portable
+        ? qq{<span class="pending-action">Dateiansicht bei Portable Archive nicht verf&uuml;gbar</span>$info_browse}
+        : qq{
 <form data-ajax="false" method="get" class="inline-form" data-return-anchor="backup-browser">
 <input data-role="none" type="hidden" name="browse_id" value="$id">
 $active_task_hidden
 <button data-role="none" type="submit">Dateien</button>$info_browse
 </form>
+};
+      $backup_actions = qq{
+$browse_action
 <form data-ajax="false" method="get" class="inline-form" data-return-anchor="restore-panel">
 <input data-role="none" type="hidden" name="restore_id" value="$id">
 $active_task_hidden
@@ -1033,6 +1246,7 @@ $export_action
 <div class="row-actions">
 $backup_actions
 <form data-ajax="false" method="post" class="inline-form delete-backup-form">
+$csrf
 <input data-role="none" type="hidden" name="action" value="delete-backup">
 <input data-role="none" type="hidden" name="backup_id" value="$id">
 $active_task_hidden
@@ -1158,6 +1372,8 @@ if ($action eq 'stop-targets') {
 
 my $target_notice = render_target_notice(undef);
 my $backup_target_picker = render_backup_target_picker($config->{backup_root} || '');
+my $csrf_html = csrf_field();
+my $csrf_attr = escapeHTML($csrf_token);
 
 our $htmlhead = qq{
 <link rel="stylesheet" href="assets/style.css">
@@ -1178,7 +1394,7 @@ print <<HTML;
 </div>
 </div>
 
-<main class="page" id="hostbackup-app" data-enhance="false">
+<main class="page" id="hostbackup-app" data-enhance="false" data-csrf-token="$csrf_attr">
 
 <header class="topbar">
 <div class="brand">
@@ -1191,7 +1407,9 @@ print <<HTML;
 
 <div class="topbar-actions">
 <form data-ajax="false" method="post">
+$csrf_html
 <input data-role="none" type="hidden" name="action" value="backup">
+<label class="checkline"><input data-role="none" type="checkbox" name="accept_preflight_warnings" value="1"><span>Preflight-Warnungen für diesen Start akzeptieren</span></label>
 <button data-role="none" class="primary" type="submit">Backup starten</button>$info_backup_start
 </form>
 </div>
@@ -1228,6 +1446,7 @@ print <<HTML;
 <span class="task-state state-running" id="task-state">Kein laufender Task ausgewählt</span>
 <span class="task-heartbeat" id="task-heartbeat">Nach einem gestarteten Backup werden hier Status und Log angezeigt.</span>
 <form data-ajax="false" method="post" class="stop-task-form" id="stop-task-form">
+$csrf_html
 <input data-role="none" type="hidden" name="action" value="stop-backup">
 <input data-role="none" type="hidden" name="task" value="$active_task_attr">
 <button data-role="none" class="danger" type="submit">Backup stoppen</button>
@@ -1242,6 +1461,7 @@ print <<HTML;
 
 <form data-ajax="false" method="post" class="settings-form" id="settings-save-form">
 
+$csrf_html
 <input data-role="none" type="hidden" name="action" value="save-config">
 
 <fieldset class="schedule-card wide">
@@ -1268,6 +1488,17 @@ $backup_target_picker
 
 </div>
 
+</fieldset>
+
+<fieldset class="schedule-card wide">
+<legend>Metadaten-Profil $info_metadata_mode</legend>
+<div class="settings-subtitle">Zielgerechte Sicherung von ACLs, xattrs und File Capabilities</div>
+<div class="schedule-modes metadata-modes">
+<label><input data-role="none" type="radio" name="metadata_mode" value="native-strict"$native_strict_checked> <strong>Native Strict</strong><span>Volle Linux-Metadaten; empfohlen für ext4, xfs und btrfs. Nicht unterstützte Metadaten führen zum Fehler.</span></label>
+<label><input data-role="none" type="radio" name="metadata_mode" value="network-compatible"$network_compatible_checked> <strong>Network Compatible</strong><span>Für CIFS/NFS-Ziele ohne vollständige xattr-Unterstützung. Hinweis: xattrs und File Capabilities werden bewusst ausgelassen; erfolgreiche Backups erhalten trotzdem den normalen Erfolgsstatus.</span></label>
+<label><input data-role="none" type="radio" name="metadata_mode" value="fake-super"$fake_super_checked> <strong>Fake Super</strong><span>rsync speichert privilegierte Metadaten in user.rsync.%stat. Ziel muss user-xattrs zuverlässig unterstützen.</span></label>
+<label><input data-role="none" type="radio" name="metadata_mode" value="portable-archive"$portable_archive_checked> <strong>Portable Archive</strong><span>Metadatentreuer tar-Container für inkompatible Ziele. Kein Snapshot-Modus und Restore nur aus einer Offline-/Rescue-Umgebung.</span></label>
+</div>
 </fieldset>
 
 <fieldset class="schedule-card wide">
@@ -1471,6 +1702,7 @@ $info_config_export
 </form>
 
 <form data-ajax="false" method="post" enctype="multipart/form-data" class="inline-form">
+$csrf_html
 <input data-role="none" type="hidden" name="action" value="import-config">
 <input data-role="none" class="config-file" type="file" name="settings_file" accept="application/json,.json">
 <button data-role="none" type="submit">Einstellungen importieren</button>
@@ -1490,9 +1722,10 @@ $info_config_import
 
 <form data-ajax="false" class="import" method="post" enctype="multipart/form-data">
 
+$csrf_html
 <input data-role="none" type="hidden" name="action" value="import">
 
-<input data-role="none" class="config-file" type="file" name="backup_archive">
+<input data-role="none" class="config-file" type="file" name="backup_archive" accept="application/gzip,application/x-gzip,.tar.gz,.tgz">
 
 <button data-role="none" type="submit">Externes Backup importieren</button>$info_import
 
@@ -1599,6 +1832,20 @@ print qq{</section>};
 if ($restore_id) {
   my $safe_restore_id = escapeHTML($restore_id);
   my $close_restore_url = base_url_with_active_task() . '#backups';
+  my $degraded_confirmation = '';
+  my $offline_notice = '';
+  my $restore_submit_disabled = '';
+  if ($restore_check && $restore_check->{requires_degraded_confirmation}) {
+    $degraded_confirmation = qq{
+<label class="checkline root-confirm">
+<input data-role="none" type="checkbox" name="confirm_degraded" value="1" required>
+<span>Ich habe den Hinweis verstanden: xattrs und File Capabilities sind in diesem Backup bewusst nicht enthalten.</span>
+</label>};
+  }
+  if ($restore_check && $restore_check->{requires_offline_restore}) {
+    $offline_notice = '<section class="inline-notice warning">Dieses Portable Archive kann nicht aus der Weboberfl&auml;che zur&uuml;ckgespielt werden. Starte den Restore in einer Rescue-/Offline-Umgebung mit <code>HOSTBACKUP_OFFLINE_RESTORE=1</code>.</section>';
+    $restore_submit_disabled = ' disabled';
+  }
 
   print qq{
 <section class="panel restore-panel" id="restore-panel">
@@ -1629,6 +1876,14 @@ if ($restore_id) {
       print '</ul>';
     }
 
+    if (ref($restore_check->{notices}) eq 'ARRAY' && @{$restore_check->{notices}}) {
+      print '<section class="inline-notice info"><strong>Hinweis:</strong><ul>';
+      for my $notice (@{$restore_check->{notices}}) {
+        print '<li>' . escapeHTML($notice) . '</li>';
+      }
+      print '</ul></section>';
+    }
+
     if (ref($restore_check->{checks}) eq 'ARRAY') {
       print '<table class="check-table"><thead><tr><th>Prüfung</th><th>Status</th><th>Wert</th></tr></thead><tbody>';
       for my $check (@{$restore_check->{checks}}) {
@@ -1648,13 +1903,20 @@ if ($restore_id) {
   print qq{
 <section class="inline-notice warning">Achtung: Ein Restore kann das aktuelle System &uuml;berschreiben und sollte nur mit einem gepr&uuml;ften Backup durchgef&uuml;hrt werden.</section>
 <form data-ajax="false" method="post" class="restore-start-form">
+$csrf_html
 <input data-role="none" type="hidden" name="action" value="restore-backup">
 <input data-role="none" type="hidden" name="backup_id" value="$safe_restore_id">
+$offline_notice
+$degraded_confirmation
+<label>
+<span>Backup-ID zur Sicherheitsbestätigung eingeben</span>
+<input data-role="none" type="text" name="restore_challenge" value="" autocomplete="off" required pattern="[A-Za-z0-9._-]+" placeholder="$safe_restore_id">
+</label>
 <label class="checkline root-confirm">
 <input data-role="none" type="checkbox" name="confirm_restore" value="1" required>
 <span>Ich bestätige, dass dieses Backup auf das System zurückgeschrieben werden soll.</span>
 </label>
-<button data-role="none" class="danger" type="submit">Restore starten</button>
+<button data-role="none" class="danger" type="submit"$restore_submit_disabled>Restore starten</button>
 </form>
 </div>
 </fieldset>
@@ -2003,6 +2265,8 @@ function hostbackupClosest(node, selector) {
   var heartbeatEl = document.getElementById('task-heartbeat');
   var logEl = document.getElementById('task-log');
   var stopForm = document.getElementById('stop-task-form');
+  var page = document.getElementById('hostbackup-app');
+  var csrfToken = page ? (page.getAttribute('data-csrf-token') || '') : '';
   var timer = null;
   var refreshScheduled = false;
   var inFlight = false;
@@ -2056,6 +2320,7 @@ function hostbackupClosest(node, selector) {
     var form = document.createElement('form');
     var action = document.createElement('input');
     var id = document.createElement('input');
+    var csrf = document.createElement('input');
     form.method = 'post';
     form.action = window.location.pathname;
     action.type = 'hidden';
@@ -2064,8 +2329,12 @@ function hostbackupClosest(node, selector) {
     id.type = 'hidden';
     id.name = 'backup_id';
     id.value = backupId;
+    csrf.type = 'hidden';
+    csrf.name = 'csrf_token';
+    csrf.value = csrfToken;
     form.appendChild(action);
     form.appendChild(id);
+    form.appendChild(csrf);
     document.body.appendChild(form);
     if (window.hostbackupShowLoading) {
       window.hostbackupShowLoading('Unfertiges Backup wird gelöscht. Bei grossen Backups kann das einige Minuten dauern...');
@@ -2081,6 +2350,7 @@ function hostbackupClosest(node, selector) {
       running: task.indexOf('restore-') === 0 ? 'Restore läuft' : 'Backup läuft',
       finished: 'Backup abgeschlossen',
       failed: 'Backup fehlgeschlagen',
+      cleanup_failed: 'Backup fehlgeschlagen; Wiederanlauf unvollständig',
       stopped: 'Backup gestoppt',
       stale: 'Keine neue Logausgabe',
       error: 'Status nicht verfügbar'
@@ -2094,31 +2364,32 @@ function hostbackupClosest(node, selector) {
     labels.running = taskName() + ' läuft';
     labels.finished = taskName() + ' abgeschlossen';
     labels.failed = taskName() + ' fehlgeschlagen';
+    labels.cleanup_failed = taskName() + ' fehlgeschlagen; Wiederanlauf unvollständig';
     labels.stopped = taskName() + ' gestoppt';
     setState(state, labels[state] || state);
 
     if (state === 'finished') {
-      heartbeatEl.textContent = 'Abgeschlossen. Die Backup-Liste wird aktualisiert.';
-    } else if (state === 'failed') {
-      heartbeatEl.textContent = 'Fehlgeschlagen. Bitte Logausgabe prüfen.';
+      heartbeatEl.textContent = taskName() + ' abgeschlossen. Die Ansicht wird aktualisiert.';
+    } else if (state === 'failed' || state === 'cleanup_failed') {
+      heartbeatEl.textContent = taskName() + ' fehlgeschlagen. Bitte Logausgabe und Cleanup-Status prüfen.';
     } else if (state === 'stopped') {
-      heartbeatEl.textContent = 'Gestoppt. Dienste und Container wurden anhand der Restart-Liste wieder gestartet.';
+      heartbeatEl.textContent = taskName() + ' gestoppt. Der Wiederanlauf wurde geprüft; Details stehen im Log.';
     } else if (data.now && data.mtime) {
       var age = Math.max(0, Number(data.now) - Number(data.mtime));
-      heartbeatEl.textContent = 'Letzte Log-Aktualisierung vor ' + age + ' Sekunden.';
+      heartbeatEl.textContent = (data.phase ? 'Phase: ' + data.phase + '. ' : '') + 'Letzte Log-Aktualisierung vor ' + age + ' Sekunden.';
     } else {
-      heartbeatEl.textContent = 'Warte auf Logausgabe des Backups.';
+      heartbeatEl.textContent = 'Warte auf Logausgabe für ' + taskName() + '.';
     }
 
     if (data.error) {
       logEl.textContent = data.error;
     } else {
-      logEl.textContent = decodeLog(data.content_b64) || 'Backup wurde gestartet. Die Logdatei wird vorbereitet...';
+      logEl.textContent = decodeLog(data.content_b64) || taskName() + ' wurde gestartet. Die Logdatei wird vorbereitet...';
     }
 
     logEl.scrollTop = logEl.scrollHeight;
 
-    if (state === 'finished' || state === 'failed' || state === 'stopped') {
+    if (state === 'finished' || state === 'failed' || state === 'cleanup_failed' || state === 'stopped') {
       if (stopForm) stopForm.classList.add('task-monitor-idle');
       window.clearInterval(timer);
       if (!refreshScheduled) {
@@ -2162,7 +2433,7 @@ function hostbackupClosest(node, selector) {
         inFlight = false;
         pollFailures += 1;
         setState(pollFailures >= 3 ? 'error' : 'stale', pollFailures >= 3 ? 'Status nicht verfügbar' : 'Status wird erneut gelesen');
-        heartbeatEl.textContent = 'Der Live-Status konnte gerade nicht gelesen werden. Das Backup kann trotzdem weiterlaufen; es wird automatisch erneut versucht.';
+        heartbeatEl.textContent = 'Der Live-Status für ' + taskName() + ' konnte gerade nicht gelesen werden. Der Task kann trotzdem weiterlaufen; es wird automatisch erneut versucht.';
       });
   }
 

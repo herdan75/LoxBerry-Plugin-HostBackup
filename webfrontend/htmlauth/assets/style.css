@@ -270,6 +270,12 @@ body.is-loading .loading-overlay {
   color: #1f4c28;
 }
 
+.inline-notice.info {
+  background: #f3f6f8;
+  border-color: #aab6c0;
+  color: #435466;
+}
+
 .inline-notice.warning {
   background: #fff4df;
   border-color: #d69a35;
@@ -812,6 +818,29 @@ td .muted {
 .choice-grid input,
 .day-grid input {
   min-height: auto;
+}
+
+.metadata-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.schedule-card .metadata-modes label {
+  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  padding: 10px;
+}
+
+.metadata-modes label strong,
+.metadata-modes label span {
+  grid-column: 2;
+}
+
+.metadata-modes label span {
+  color: #555;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .schedule-detail {
@@ -1430,9 +1459,16 @@ a.button-link:hover {
 }
 
 .state-failed,
+.state-cleanup_failed,
 .state-error {
   background: #fff0f0;
   color: #9e2f2f;
+}
+
+@media (max-width: 760px) {
+  .metadata-modes {
+    grid-template-columns: 1fr;
+  }
 }
 
 .state-stale {
