@@ -8,12 +8,14 @@ bash -n \
   bin/hostbackup.sh \
   bin/hostbackup-sudo.sh \
   bin/restore-hostbackup.sh \
+  preroot.sh \
   postinstall.sh \
+  postroot.sh \
   uninstall/uninstall.sh \
   package.sh \
   tests/run.sh
 
-python3 -m py_compile bin/validate-import-archive.py tests/test_archive_validator.py tests/test_web_security.py
+python3 -m py_compile bin/validate-import-archive.py tests/test_archive_validator.py tests/test_install_hooks.py tests/test_web_security.py
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 perl_lib="$ROOT/tests/perl"

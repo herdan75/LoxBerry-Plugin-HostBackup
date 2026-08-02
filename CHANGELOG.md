@@ -17,6 +17,11 @@ validiert werden.
 
 ### Sicherheit
 
+- Privilegierte Installationsschritte in den von LoxBerry als Root gestarteten
+  Hook `postroot.sh` verschoben; `postinstall.sh` benötigt keine Root-Rechte
+  mehr.
+- Bestehende `config.json` wird beim Upgrade im Root-Hook gesichert und nach der
+  Installation mit geschützten Besitzrechten wiederhergestellt.
 - Privilegierte Webaktionen auf einen root-eigenen Dispatcher mit fester
   Aktionsliste und bereinigter Umgebung begrenzt; direkte sudoers-Freigabe des
   Plugin-Backends entfernt.

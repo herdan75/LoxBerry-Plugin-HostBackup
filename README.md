@@ -253,7 +253,11 @@ Bestätigung starten Backup- und Restore-Aktionen nicht.
 Es werden keine Passwörter gespeichert. Die LoxBerry-sudoers-Regel erlaubt dem
 LoxBerry-Webuser ausschliesslich einen root-eigenen Dispatcher. Dieser akzeptiert
 nur die für die Weboberfläche benötigten Aktionen, startet ein fest verdrahtetes,
-root-eigenes Backend und verwirft die aufrufende Umgebung.
+root-eigenes Backend und verwirft die aufrufende Umgebung. Der Dispatcher und
+der geschützte Laufzeitbereich werden während der Installation über den von
+LoxBerry als Root ausgeführten Hook `postroot.sh` eingerichtet. Bei einem
+Upgrade sichert `preroot.sh` zuvor die bestehende Konfiguration und stellt sie
+im Root-Hook wieder her.
 
 ### Backup-Verzeichnis
 

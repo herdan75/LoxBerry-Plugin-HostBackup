@@ -34,7 +34,9 @@ zip -r "$ZIP_PATH" \
   sudoers \
   docs \
   plugin.cfg \
+  preroot.sh \
   postinstall.sh \
+  postroot.sh \
   release.cfg \
   prerelease.cfg \
   README.md \

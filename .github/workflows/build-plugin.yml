@@ -34,7 +34,7 @@ jobs:
 
       - name: Validate privileged entry points
         run: |
-          shellcheck --severity=warning bin/*.sh postinstall.sh uninstall/uninstall.sh package.sh tests/run.sh
+          shellcheck --severity=warning bin/*.sh preroot.sh postinstall.sh postroot.sh uninstall/uninstall.sh package.sh tests/run.sh
           sudo visudo -cf sudoers/sudoers
           php -l bin/notify-hostbackup.php
 
