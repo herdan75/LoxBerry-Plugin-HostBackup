@@ -1,9 +1,9 @@
 # LoxBerry Host Backup
 
-**Status:** Entwicklungsstand Version 0.6.0 auf `develop`. Dieser Stand enthält
-zusätzliche Sicherheits-, Metadaten- und Restore-Härtungen, ist aber noch kein
-veröffentlichtes Release. Die stabilen Update-Kanäle bleiben deshalb bis zu
-einem ausdrücklich erstellten Release auf Version 0.5.8.
+**Status:** Vorabversion 0.6.0-beta aus `develop`. Dieser Stand enthält
+zusätzliche Sicherheits-, Metadaten- und Restore-Härtungen und wird über den
+Pre-Release-Kanal für Tests bereitgestellt. Der stabile Release-Kanal bleibt
+weiterhin auf Version 0.5.8.
 
 Dieses Plugin wurde bereits auf einem LoxBerry-/DietPi-Testsystem installiert,
 konfiguriert und für echte Vollbackups sowie inkrementelle Snapshot-Backups
@@ -176,10 +176,16 @@ Die Weboberfläche ist in die normale LoxBerry-Oberfläche eingebettet. Die
 LoxBerry-Kopfzeile mit Haus-Symbol und Menü bleibt sichtbar, sodass jederzeit
 zur LoxBerry-Administration gewechselt werden kann.
 
-Aktuelles Release-Paket:
+Aktuelles stabiles Release-Paket:
 
 ```text
 https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.5.8/LoxBerryHostBackup_0.5.8.zip
+```
+
+Aktuelles Pre-Release-Paket:
+
+```text
+https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.6.0-beta/LoxBerryHostBackup_0.6.0.zip
 ```
 
 Lokales Paket nach dem Build:
@@ -334,6 +340,16 @@ Beim ersten inkrementellen Snapshot existiert noch kein vorheriges vollständige
 Backup. Das Plugin erstellt dann automatisch eine vollständige Basiskopie. Ab
 dem zweiten erfolgreichen Snapshot werden unveränderte Dateien per Hardlink auf
 das vorherige Backup referenziert.
+
+Als Referenz wird nur ein erfolgreich validierter Snapshot mit demselben
+Metadaten-Profil verwendet. Backups aus Version 0.5.8 und älter enthalten diese
+Profilinformation noch nicht und können daher nicht als `--link-dest` dienen.
+Nach einem Update von einem solchen Altbestand wird der erste inkrementelle Lauf
+nochmals als vollständige Basiskopie erstellt. Der nächste erfolgreiche Lauf
+mit unverändertem Metadaten-Profil kann diese neue Basiskopie wieder
+inkrementell verwenden. Im Live-Log zeigt `Snapshot reference: .../rootfs` die
+verwendete Referenz; `No complete previous backup found. Creating first snapshot
+as full copy.` kennzeichnet eine neue vollständige Basiskopie.
 
 Für zuverlässige Hardlinks, Rechte und Linux-Metadaten wird ein Linux-
 Dateisystem wie `ext4`, `xfs` oder `btrfs` als Backup-Ziel empfohlen. Auf
@@ -695,7 +711,10 @@ Update-Dateien:
 - `release.cfg`: Stable-Kanal mit ZIP-Download aus dem GitHub-Release
 - `prerelease.cfg`: Pre-Release-Kanal mit neuer Vorabversion
 
-Das installierbare ZIP wird über den Release-Kanal bereitgestellt. Der Pre-Release-Kanal kann auf eine neuere Vorabversion zeigen.
+Das stabile installierbare ZIP wird über den Release-Kanal bereitgestellt. Der
+Pre-Release-Kanal zeigt für freiwillige Tests auf Version 0.6.0-beta. LoxBerry
+erkennt die Vorabversion über `prerelease.cfg`; das Paket liegt im zugehörigen
+GitHub-Pre-Release unter dem Tag `v0.6.0-beta`.
 
 GitHub Actions erzeugt das Plugin-ZIP automatisch und hängt es bei
 GitHub-Releases als Asset an.

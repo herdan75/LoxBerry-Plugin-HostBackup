@@ -9,11 +9,15 @@ validiert werden.
 
 ## [Unreleased]
 
+## [0.6.0-beta] - 2026-08-02
+
 ### Versionierung
 
-- Entwicklungsstand auf Version 0.6.0 angehoben. `release.cfg` und
-  `prerelease.cfg` bleiben bis zu einem ausdrücklich erstellten Tag/Release auf
-  der zuletzt veröffentlichten Version 0.5.8.
+- Entwicklungsstand auf Version 0.6.0 angehoben und als `0.6.0-beta` für den
+  Pre-Release-Kanal vorbereitet.
+- `prerelease.cfg` verweist auf den Tag `v0.6.0-beta` und das Paket
+  `LoxBerryHostBackup_0.6.0.zip`; der stabile Kanal in `release.cfg` bleibt auf
+  Version 0.5.8.
 
 ### Sicherheit
 
@@ -46,6 +50,13 @@ validiert werden.
 
 - Metadatenprofile `Native Strict`, `Network Compatible`, `Fake Super` und
   `Portable Archive` mit Ziel-Roundtrip und sichtbarer Fidelitätsangabe ergänzt.
+- Als Hardlink-Referenz für inkrementelle Snapshots werden nur erfolgreich
+  validierte Backups mit demselben Metadaten-Profil verwendet. Backups aus
+  Version 0.5.8 und älter enthalten diese Profilinformation noch nicht und
+  werden deshalb nicht als `--link-dest` ausgewählt. Der erste inkrementelle
+  Lauf nach dem Update erstellt in diesem Fall nochmals eine vollständige
+  Basiskopie; der darauffolgende erfolgreiche Lauf kann den neuen Stand wieder
+  inkrementell verwenden.
 - CIFS-/NFS-kompatibler Modus lässt xattrs und File Capabilities bewusst aus,
   zeigt dies beim erfolgreichen Backup nur als neutralen Hinweis und blockiert
   weder manuelle noch zeitgesteuerte Starts; beim Restore bleibt die separate
@@ -478,7 +489,8 @@ nicht überarbeitet worden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.5.8...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.6.0-beta...develop
+[0.6.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.6.0-beta
 [0.5.8]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.8
 [0.5.8-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.8-beta
 [0.5.7]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.7
