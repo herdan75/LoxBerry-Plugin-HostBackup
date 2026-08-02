@@ -2589,6 +2589,14 @@ function hostbackupClosest(node, selector) {
     }
   }
 
+  function normalizeLogForDisplay(value) {
+    var text = String(value || '');
+    var newline = String.fromCharCode(10);
+    text = text.split(String.fromCharCode(13, 10)).join(newline);
+    text = text.split(String.fromCharCode(13)).join(newline);
+    return text.replace(new RegExp(String.fromCharCode(27) + '\\\\[[0-?]*[ -/]*[@-~]', 'g'), '');
+  }
+
  function backupIdFromTask() {
    var value = task || '';
    if (value.indexOf('backup-') !== 0) return '';
@@ -2683,7 +2691,7 @@ function hostbackupClosest(node, selector) {
     if (data.error) {
       logEl.textContent = data.error;
     } else {
-      logEl.textContent = decodeLog(data.content_b64) || taskName() + ' wurde gestartet. Die Logdatei wird vorbereitet...';
+      logEl.textContent = normalizeLogForDisplay(decodeLog(data.content_b64)) || taskName() + ' wurde gestartet. Die Logdatei wird vorbereitet...';
     }
 
     logEl.scrollTop = logEl.scrollHeight;

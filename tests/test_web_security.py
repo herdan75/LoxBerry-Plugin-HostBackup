@@ -7,6 +7,9 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CGI = (ROOT / "webfrontend" / "htmlauth" / "index.cgi").read_text(encoding="utf-8")
 BACKEND = (ROOT / "bin" / "hostbackup.sh").read_text(encoding="utf-8")
+STYLE = (ROOT / "webfrontend" / "htmlauth" / "assets" / "style.css").read_text(
+    encoding="utf-8"
+)
 
 
 class WebSecurityTests(unittest.TestCase):
@@ -122,6 +125,19 @@ class WebSecurityTests(unittest.TestCase):
         )
         self.assertIn('elif [ "$baseline_space_ok" != "true" ]; then', body)
         self.assertIn('"full_baseline_required": $full_baseline_required', body)
+
+    def test_live_log_keeps_all_updates_without_wrapping_lines(self) -> None:
+        self.assertIn("function normalizeLogForDisplay(value)", CGI)
+        self.assertIn("String.fromCharCode(13, 10)", CGI)
+        self.assertIn("String.fromCharCode(13)", CGI)
+        self.assertIn("String.fromCharCode(27)", CGI)
+        self.assertIn("normalizeLogForDisplay(decodeLog(data.content_b64))", CGI)
+        terminal = re.search(r"\.terminal\s*\{(?P<body>.*?)\n\}", STYLE, flags=re.DOTALL)
+        self.assertIsNotNone(terminal)
+        self.assertIn("overflow: auto", terminal.group("body"))
+        self.assertIn("overflow-wrap: normal", terminal.group("body"))
+        self.assertIn("white-space: pre", terminal.group("body"))
+        self.assertIn("word-break: normal", terminal.group("body"))
 
     def test_export_download_rejects_symlinks(self) -> None:
         self.assertRegex(CGI, r"!-f \$archive \|\| -l \$archive")

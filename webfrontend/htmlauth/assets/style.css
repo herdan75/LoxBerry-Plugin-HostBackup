@@ -1646,8 +1646,12 @@ a.button-link:hover {
   border-radius: 6px;
   color: #d9f2df;
   max-height: 560px;
+  max-width: 100%;
   overflow: auto;
+  overflow-wrap: normal;
   padding: 14px;
+  white-space: pre;
+  word-break: normal;
 }
 
 .empty {

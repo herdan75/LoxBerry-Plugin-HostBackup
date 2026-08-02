@@ -9,14 +9,6 @@ validiert werden.
 
 ## [Unreleased]
 
-### Backup
-
-- Die Backup-Vorprüfung erkennt, wenn ein inkrementell konfigurierter Lauf ohne
-  kompatible Hardlink-Referenz eine vollständige Basiskopie erstellen muss. Sie
-  schätzt den Platzbedarf anhand des letzten abgeschlossenen Backups zuzüglich
-  Reserve und blockiert bei eindeutig zu wenig Speicher, bevor Dienste oder
-  Container gestoppt werden.
-
 ## [0.6.0-beta] - 2026-08-02
 
 ### Versionierung
@@ -65,6 +57,11 @@ validiert werden.
   Lauf nach dem Update erstellt in diesem Fall nochmals eine vollständige
   Basiskopie; der darauffolgende erfolgreiche Lauf kann den neuen Stand wieder
   inkrementell verwenden.
+- Die Backup-Vorprüfung erkennt, wenn ein inkrementell konfigurierter Lauf ohne
+  kompatible Hardlink-Referenz eine vollständige Basiskopie erstellen muss. Sie
+  schätzt den Platzbedarf anhand des letzten abgeschlossenen Backups zuzüglich
+  Reserve und blockiert bei eindeutig zu wenig Speicher, bevor Dienste oder
+  Container gestoppt werden.
 - CIFS-/NFS-kompatibler Modus lässt xattrs und File Capabilities bewusst aus,
   zeigt dies beim erfolgreichen Backup nur als neutralen Hinweis und blockiert
   weder manuelle noch zeitgesteuerte Starts; beim Restore bleibt die separate
@@ -76,6 +73,13 @@ validiert werden.
   Archive ergänzt.
 - Stop-/Restart- und Hook-Ablauf fail-closed und mit überprüfbarem Cleanup-Status
   umgesetzt.
+
+### Weboberfläche
+
+- Die Live-Loganzeige stellt `rsync`-Wagenrückläufe als echte Zeilenenden dar,
+  entfernt reine Terminal-Steuerzeichen und verhindert automatische
+  Zeilenumbrüche. Alle Fortschrittsmeldungen bleiben erhalten; lange Zeilen sind
+  horizontal scrollbar.
 
 ### Import, Export und Qualität
 

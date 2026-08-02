@@ -559,6 +559,12 @@ Export und Import grosser `.tar.gz`-Archive laufen ebenfalls als Hintergrundjob
 mit Live-Status. Dadurch bleibt die Weboberfläche erreichbar, während das Archiv
 erstellt, geprüft oder importiert wird.
 
+Die Webanzeige stellt die von `rsync` verwendeten Wagenrückläufe als echte
+Zeilenenden dar und entfernt reine Terminal-Steuerzeichen. Alle
+Fortschrittsmeldungen bleiben sichtbar. Lange Einzelzeilen werden nicht mitten
+im Text umgebrochen, sondern können horizontal gescrollt werden. Die
+gespeicherte Original-Logdatei bleibt unverändert.
+
 Nach Abschluss stoppt die Anzeige der letzten Log-Aktualisierung. Die
 Backup-Liste wird anschliessend aktualisiert.
 
