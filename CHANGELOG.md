@@ -9,6 +9,14 @@ validiert werden.
 
 ## [Unreleased]
 
+### Backup
+
+- Die Backup-Vorprüfung erkennt, wenn ein inkrementell konfigurierter Lauf ohne
+  kompatible Hardlink-Referenz eine vollständige Basiskopie erstellen muss. Sie
+  schätzt den Platzbedarf anhand des letzten abgeschlossenen Backups zuzüglich
+  Reserve und blockiert bei eindeutig zu wenig Speicher, bevor Dienste oder
+  Container gestoppt werden.
+
 ## [0.6.0-beta] - 2026-08-02
 
 ### Versionierung

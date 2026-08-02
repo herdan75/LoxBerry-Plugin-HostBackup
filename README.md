@@ -351,6 +351,14 @@ inkrementell verwenden. Im Live-Log zeigt `Snapshot reference: .../rootfs` die
 verwendete Referenz; `No complete previous backup found. Creating first snapshot
 as full copy.` kennzeichnet eine neue vollständige Basiskopie.
 
+Die Vorprüfung erkennt diesen Basiskopiefall vor dem Start. Ist ein älteres
+abgeschlossenes Backup mit Größenangabe vorhanden, verwendet das Plugin dessen
+Belegung als Schätzwert und verlangt zusätzlich 20 Prozent beziehungsweise
+mindestens 1 GiB Reserve. Reicht der freie Speicher dafür erkennbar nicht aus,
+wird der Lauf noch vor dem Stoppen ausgewählter Dienste und Container beendet.
+Ein normaler inkrementeller Lauf mit passender Hardlink-Referenz bleibt davon
+unverändert.
+
 Für zuverlässige Hardlinks, Rechte und Linux-Metadaten wird ein Linux-
 Dateisystem wie `ext4`, `xfs` oder `btrfs` als Backup-Ziel empfohlen. Auf
 NTFS/FUSE-Zielen kann die Speicherersparnis oder Metadatenunterstützung

@@ -105,6 +105,24 @@ class WebSecurityTests(unittest.TestCase):
         self.assertIn("Backup trotz dieser Warnhinweise starten", CGI)
         self.assertNotIn("Preflight-Warnungen für diesen Start akzeptieren", CGI)
 
+    def test_full_baseline_preflight_requires_estimated_free_space(self) -> None:
+        preflight = re.search(
+            r"preflight_backup\(\) \{(?P<body>.*?)\n\}\n\nrestore_eligibility",
+            BACKEND,
+            flags=re.DOTALL,
+        )
+        self.assertIsNotNone(preflight)
+        body = preflight.group("body")
+        self.assertIn('baseline_reference="$(latest_complete_backup "$root")"', body)
+        self.assertIn('estimate_backup="$(latest_sized_complete_backup "$root")"', body)
+        self.assertIn('baseline_space_requirement_mb "$estimate_bytes"', body)
+        self.assertRegex(
+            body,
+            r'(?s)\[ "\$available_mb" -lt "\$baseline_required_mb" \].*?baseline_space_ok=false',
+        )
+        self.assertIn('elif [ "$baseline_space_ok" != "true" ]; then', body)
+        self.assertIn('"full_baseline_required": $full_baseline_required', body)
+
     def test_export_download_rejects_symlinks(self) -> None:
         self.assertRegex(CGI, r"!-f \$archive \|\| -l \$archive")
 

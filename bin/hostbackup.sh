@@ -1907,8 +1907,49 @@ latest_complete_backup() {
   rm -f "$tmp"
 }
 
+latest_sized_complete_backup() {
+  local root="$1"
+  local current_id="${2:-}"
+  local tmp id path _time status size_bytes
+  tmp="$(mktemp)"
+  find "$root" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %f %p\n' > "$tmp" 2>/dev/null || true
+  sort -rn "$tmp" -o "$tmp"
+  while read -r _time id path; do
+    [ "$id" != "$current_id" ] || continue
+    if ! { [ -d "$path/rootfs" ] && [ ! -L "$path/rootfs" ]; } \
+      && ! { [ -f "$path/rootfs.tar" ] && [ ! -L "$path/rootfs.tar" ]; }; then
+      continue
+    fi
+    status="$(manifest_field "$path/manifest.json" status 2>/dev/null || true)"
+    case "$status" in
+      complete|complete_with_warnings) ;;
+      *) continue ;;
+    esac
+    size_bytes="$(manifest_field "$path/manifest.json" size_bytes 2>/dev/null || true)"
+    printf '%s\n' "$size_bytes" | grep -Eq '^[1-9][0-9]*$' || continue
+    rm -f "$tmp"
+    printf '%s\n' "$path"
+    return 0
+  done < "$tmp"
+  rm -f "$tmp"
+}
+
+baseline_space_requirement_mb() {
+  perl -e '
+    my $bytes = shift // 0;
+    exit 1 unless $bytes =~ /^\d+$/ && $bytes > 0;
+    my $mib = 1024 * 1024;
+    my $estimate = int(($bytes + $mib - 1) / $mib);
+    my $reserve = int(($estimate + 4) / 5);
+    $reserve = 1024 if $reserve < 1024;
+    print "$estimate ", $estimate + $reserve;
+  ' "$1"
+}
+
 preflight_backup() {
   local root available_mb docker_available docker_running excludes_count status warnings_json notices_json checks_json rsync_available target_writable backup_mode fs_type mode probe_ok target_ok target_message copy_tool_name
+  local full_baseline_required baseline_estimate_mb baseline_required_mb baseline_space_ok baseline_reference estimate_backup estimate_bytes baseline_check_value
+  local -a notices=()
   require_root_permission_ack
   root="$(backup_root)"
   backup_mode="$(json_get_string backup_mode)"
@@ -1921,7 +1962,35 @@ preflight_backup() {
   fi
   available_mb="$(df -Pm "$root" 2>/dev/null | awk 'NR==2 {print $4}')"
   fs_type="$(current_mount_value "$root" FSTYPE)"
-  [ -n "$available_mb" ] || available_mb=0
+  case "$available_mb" in
+    ''|*[!0-9]*) available_mb=0 ;;
+  esac
+  full_baseline_required=false
+  baseline_estimate_mb=0
+  baseline_required_mb=0
+  baseline_space_ok=true
+  baseline_reference=""
+  baseline_check_value="nicht erforderlich"
+  if [ "$target_ok" = "true" ] && [ "$backup_mode" = "snapshot" ] && [ "$mode" != "portable-archive" ]; then
+    baseline_reference="$(latest_complete_backup "$root")"
+    if [ -z "$baseline_reference" ]; then
+      full_baseline_required=true
+      baseline_check_value="vollstaendige Basiskopie; Groessenschaetzung nicht verfuegbar"
+      estimate_backup="$(latest_sized_complete_backup "$root")"
+      if [ -n "$estimate_backup" ]; then
+        estimate_bytes="$(manifest_field "$estimate_backup/manifest.json" size_bytes 2>/dev/null || true)"
+        if read -r baseline_estimate_mb baseline_required_mb < <(baseline_space_requirement_mb "$estimate_bytes"); then
+          baseline_check_value="vollstaendige Basiskopie; Schaetzung ${baseline_estimate_mb} MB; mit Reserve mindestens ${baseline_required_mb} MB"
+          if [ "$available_mb" -lt "$baseline_required_mb" ]; then
+            baseline_space_ok=false
+          fi
+        fi
+      fi
+      notices+=("Hinweis: Keine kompatible Snapshot-Referenz vorhanden. Der naechste Lauf erstellt eine vollstaendige Basiskopie.")
+    else
+      baseline_check_value="inkrementelle Referenz vorhanden: $(basename -- "$baseline_reference")"
+    fi
+  fi
   rsync_available=false
   copy_tool_name="rsync"
   if [ "$mode" = "portable-archive" ]; then
@@ -1951,6 +2020,9 @@ preflight_backup() {
   elif [ "$backup_mode" = "snapshot" ] && [ "$mode" = "portable-archive" ]; then
     status="error"
     warnings_json='["Portable Archive kann nicht mit inkrementellen Snapshots kombiniert werden."]'
+  elif [ "$baseline_space_ok" != "true" ]; then
+    status="error"
+    warnings_json="$(perl -MJSON::PP -e 'print encode_json([$ARGV[0]])' "Vollstaendige Basiskopie benoetigt voraussichtlich mindestens ${baseline_required_mb} MB, auf dem Backup-Ziel sind aber nur ${available_mb} MB frei. Bitte unvollstaendige oder nicht mehr benoetigte Backups loeschen beziehungsweise das Ziel vergroessern.")"
   elif [ "$available_mb" -lt 1024 ]; then
     status="warning"
     warnings_json='["Backup-Ziel hat weniger als 1 GB freien Speicher."]'
@@ -1959,8 +2031,9 @@ preflight_backup() {
     warnings_json='["Docker-Container laufen. Fuer konsistente Datenbanken ggf. einzelne Container in den Stop-Zielen auswaehlen oder Hooks konfigurieren."]'
   fi
   if [ "$mode" = "network-compatible" ]; then
-    notices_json='["Hinweis: Network Compatible laesst xattrs und File Capabilities bewusst aus. Dies ist der konfigurierte Normalbetrieb fuer CIFS-/NFS-Ziele und behindert den Backup-Start nicht."]'
+    notices+=("Hinweis: Network Compatible laesst xattrs und File Capabilities bewusst aus. Dies ist der konfigurierte Normalbetrieb fuer CIFS-/NFS-Ziele und behindert den Backup-Start nicht.")
   fi
+  notices_json="$(perl -MJSON::PP -e 'print encode_json(\@ARGV)' "${notices[@]}")"
   checks_json="$(cat <<EOF
 [
   {"name":"Kopierwerkzeug ($copy_tool_name) verfuegbar","ok":$rsync_available},
@@ -1969,6 +2042,7 @@ preflight_backup() {
   {"name":"Metadaten-Modus","ok":$probe_ok,"value":"$mode"},
   {"name":"Dateisystem","ok":true,"value":"$fs_type"},
   {"name":"Freier Speicher MB","ok":$([ "$available_mb" -ge 1024 ] && echo true || echo false),"value":"$available_mb"},
+  {"name":"Speicher fuer Snapshot-Basiskopie","ok":$baseline_space_ok,"value":$(json_escape "$baseline_check_value")},
   {"name":"Docker verfuegbar","ok":$docker_available,"value":"running=$docker_running"},
   {"name":"Exclude-Regeln","ok":true,"value":"$excludes_count"}
 ]
@@ -1980,6 +2054,9 @@ EOF
   "status": "$status",
   "backup_root": $(json_escape "$root"),
   "available_mb": $available_mb,
+  "full_baseline_required": $full_baseline_required,
+  "baseline_estimate_mb": $baseline_estimate_mb,
+  "baseline_required_mb": $baseline_required_mb,
   "warnings": $warnings_json,
   "notices": $notices_json,
   "checks": $checks_json
