@@ -243,6 +243,20 @@ Backup vollständig abgeschlossen ist.
 
 ## Einstellungen
 
+> [!IMPORTANT]
+> **Geänderte Einstellungen müssen immer zuerst gespeichert werden.**
+> Eine Auswahl oder Eingabe in der Weboberfläche ist zunächst nur eine
+> ungespeicherte Änderung. Erst mit **Änderungen speichern** werden die Werte in
+> die Plugin-Konfiguration übernommen. Das gilt insbesondere für
+> Backup-Verzeichnis, Ausschlüsse, Aufbewahrung, Metadaten-Profil, Backup-Modus,
+> ausgewählte Dienste und Container sowie den Zeitplan. Speichere die Änderungen
+> deshalb **vor dem Start eines manuellen Backups und bevor du dich auf ein
+> automatisches Backup verlässt**. Ohne Speichern verwendet das Plugin weiterhin
+> die zuletzt gespeicherten Werte; bei einer Neuinstallation ist gegebenenfalls
+> noch kein gültiges Backup-Ziel oder kein aktiver Zeitplan vorhanden. Der
+> eingeblendete Speicherhinweis erinnert daran, speichert die Änderung aber nicht
+> automatisch.
+
 Die Weboberfläche enthält Info-Buttons neben wichtigen Feldern und Aktionen. Die
 Hinweise erklären, wofür ein Feld gedacht ist. Ihre Position wird an den
 sichtbaren Browserbereich angepasst, damit auch Info-Buttons am rechten oder
