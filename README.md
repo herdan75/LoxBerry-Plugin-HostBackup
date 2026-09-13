@@ -7,6 +7,12 @@ neuen Versionsnummer. Damit erkennt LoxBerry auch gegenüber `0.7.0` ein neues
 Pre-Release. Änderungen, Updatehinweise und Prüfgrenzen stehen in den
 [Release Notes](docs/RELEASE-0.7.1-beta.md); der stabile Kanal bleibt unverändert.
 
+**Unveröffentlichter develop-Stand:** Der automatische Dienst-Wiederanlauf setzt
+bei einer belegten Vorgangssperre still aus, statt dadurch Cron-Mails auszulösen.
+Die abschliessende Aufbewahrungsprüfung erhält eine eigene Live-Status-Phase.
+Diese Korrekturen sind noch nicht im veröffentlichten 0.7.1-beta-Download enthalten;
+Details stehen im [Changelog unter Unreleased](CHANGELOG.md#unreleased).
+
 **Neu in 0.7.1-beta:** Der alte Plugin-Bin-Baum wird vor dem Update für
 LoxBerrys unprivilegierten Dateiaustausch vorbereitet, die Konfiguration vorher
 gesichert und das eigentliche Backup-Programm vor seiner Aktivierung geprüft.
@@ -616,6 +622,22 @@ gelten nur für zuvor vom Plugin ausgewählte Stop-Ziele, nicht für beliebige D
 Das Manifest hält zusätzlich die Stop-Ziele fest. Ein abgebrochenes Backup wird
 als `stopped` markiert; schlägt der Wiederanlauf fehl, bleibt ein Fehlerzustand
 mit offenem Journal sichtbar. Unvollständige Backups vor einer Löschung prüfen.
+
+**Ergänzung auf develop (noch nicht veröffentlicht):** Die Boot-/Fünfminuten-Regel
+ruft `recover-services --scheduled` auf. Hält gerade ein Backup, Restore oder anderer
+Vorgang die globale Sperre, endet nur dieser automatische Versuch ohne Ausgabe
+und mit Erfolgscode. Der nächste Cron-Termin versucht den Wiederanlauf erneut;
+aktive Aufgaben, Dienste und offene Journale werden dabei nicht verändert.
+Das verhindert Cron-Mails allein wegen einer erwartbaren belegten Sperre.
+Technische Fehler und fehlgeschlagene Dienststarts bleiben sichtbar. Der manuelle
+Aufruf `recover-services` meldet eine belegte Sperre weiterhin als Fehler.
+Die konfigurierten Backup-Mailbenachrichtigungen werden dadurch nicht geändert.
+
+Nach erfolgreicher Backup-Prüfung kann die Aufbewahrung älterer Sicherungen noch
+Zeit benötigen. Im überarbeiteten develop-Stand zeigt der Live-Status dafür
+„Aufbewahrung prüfen und alte Backups bereinigen“ (`retention`) statt weiterhin
+`validating`. Die Aufgabe bleibt bis zum Abschluss dieses Schritts als laufend
+markiert und hält ihre Sperre; die Aufbewahrungsregeln bleiben unverändert.
 
 Für Datenbanken oder Anwendungen mit eigenen Backup-Mechanismen können
 zusätzliche Pre-/Post-Backup-Hooks sinnvoll sein.

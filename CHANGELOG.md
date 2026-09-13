@@ -9,7 +9,25 @@ validiert werden.
 
 ## [Unreleased]
 
-Noch keine weiteren Änderungen.
+### Korrekturen auf develop (noch nicht veröffentlicht)
+
+- Der automatische Dienst-Wiederanlauf beim Boot und alle fünf Minuten verwendet
+  `recover-services --scheduled`. Ist die globale Vorgangssperre belegt, setzt
+  dieser Aufruf ohne Ausgabe und mit Erfolgscode aus; die nächste Cron-Ausführung
+  versucht es erneut. Dadurch entstehen keine Cron-Mails allein wegen eines noch
+  laufenden Backups, Restores oder anderen gesperrten Vorgangs. Journale und aktive
+  Aufgaben bleiben unangetastet. Manuelle Aufrufe melden eine belegte Sperre weiter;
+  technische Sperrfehler und fehlgeschlagene Dienststarts werden nicht unterdrückt.
+- Während der abschliessenden Aufbewahrungsprüfung wechselt die laufende Aufgabe
+  jetzt auf `retention`, statt bei `validating` stehenzubleiben. Der Live-Status zeigt
+  „Aufbewahrung prüfen und alte Backups bereinigen“. Erst nach diesem Schritt wird
+  die Aufgabe abgeschlossen; Aufbewahrungsregeln und Löschschutz bleiben unverändert.
+- Regressionstests für stille Cron-Sperrkonflikte, unveränderte Journale und spätere
+  Wiederanläufe, sichtbare echte Fehler sowie die Phasenfolge ergänzt; zusätzlich
+  Linux-Test mit echter `flock`-Sperre und Browserprüfung der Phasenanzeige.
+- Versionsnummer, veröffentlichte Pre-Release-Downloads und Backup-Mail-Einstellungen
+  bleiben unverändert. Die Korrekturen wirken erst nach Installation eines Pakets
+  aus diesem überarbeiteten Stand, nicht automatisch im bestehenden 0.7.1-beta.
 
 ## [0.7.1-beta] - 2026-09-13
 

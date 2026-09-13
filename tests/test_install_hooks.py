@@ -55,6 +55,11 @@ class InstallHookTests(unittest.TestCase):
         self.assertIn("preroot.sh", WORKFLOW)
         self.assertIn("postroot.sh", WORKFLOW)
 
+    def test_recovery_cron_explicitly_selects_scheduled_mode(self) -> None:
+        self.assertIn(r"@reboot root %s recover-services --scheduled\n", POSTROOT)
+        self.assertIn(r"*/5 * * * * root %s recover-services --scheduled\n", POSTROOT)
+        self.assertIn('recover-services) shift; recover_restart_journals "$@" ;;', BACKEND)
+
     def test_packages_exclude_generated_python_caches(self) -> None:
         for marker in ("__pycache__", "*.pyc", "*.pyo"):
             self.assertIn(marker, PACKAGE_SH)
@@ -218,8 +223,8 @@ def trusted_install_integration():
         assert not (first_release / "__pycache__").exists()
         assert "first\nconfig\n" == run(dispatcher, "config").stdout
         assert (first_release / "runtime-version").read_text().strip() == "0.6.1"
-        assert "@reboot root " + str(launcher) + " recover-services\n" in recovery.read_text()
-        assert "*/5 * * * * root " + str(launcher) + " recover-services\n" in recovery.read_text()
+        assert "@reboot root " + str(launcher) + " recover-services --scheduled\n" in recovery.read_text()
+        assert "*/5 * * * * root " + str(launcher) + " recover-services --scheduled\n" in recovery.read_text()
         assert "23 * * * * root " + str(launcher) + " integrity-schedule\n" in recovery.read_text()
         assert (recovery.stat().st_mode & 0o777) == 0o644
         helper = first_release / "validate-import-archive.py"
@@ -264,6 +269,8 @@ for action in (lambda: p.write_text('injected'), lambda: p.unlink(),
         assert first_release != (trusted / "current").resolve()
         assert "first\nconfig\n" == run(first_release / "hostbackup.sh", "config").stdout
         assert "second\nconfig\n" == run(dispatcher, "config").stdout
+        assert "second\nrecover-services\n" == run(dispatcher, "recover-services").stdout
+        assert run(dispatcher, "recover-services", "--scheduled", success=False).returncode != 0
         assert run(dispatcher, "restore", "anything", success=False).returncode != 0
         assert run(dispatcher, "config", "extra", success=False).returncode != 0
 
@@ -550,8 +557,8 @@ def cron_install_integration():
             assert json.loads(config.read_text()) == saved
             assert "17 3 * * * root " in (cron / "loxberryhostbackup").read_text()
             recovery = cron / "loxberryhostbackup-recovery"
-            assert "@reboot root " + str(launcher) + " recover-services\n" in recovery.read_text()
-            assert "*/5 * * * * root " + str(launcher) + " recover-services\n" in recovery.read_text()
+            assert "@reboot root " + str(launcher) + " recover-services --scheduled\n" in recovery.read_text()
+            assert "*/5 * * * * root " + str(launcher) + " recover-services --scheduled\n" in recovery.read_text()
             assert "23 * * * * root " + str(launcher) + " integrity-schedule\n" in recovery.read_text()
             def assert_cron_permissions():
                 for entry in (cron / "loxberryhostbackup", recovery):

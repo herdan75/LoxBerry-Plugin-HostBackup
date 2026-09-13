@@ -30,6 +30,31 @@ Diese Szenarien sind ein Prüfplan, kein Nachweis bereits bestandener Hardwarete
    Fortschrittsanzeige und der bekannte Sperrkonflikt mit generischer HTTP-500-
    Meldung sind in 0.7.1-beta noch offen, nicht als behoben zu bewerten.
 
+## Ergänzende Cron-/Aufbewahrungsabnahme auf develop (unveröffentlicht)
+
+Diese Prüfungen gelten erst für ein installiertes Paket aus dem überarbeiteten
+develop-Stand, nicht für den unveränderten 0.7.1-beta-Download. Nur auf einem
+isolierten Testsystem mit Testdiensten und entbehrlichen Testbackups ausführen:
+
+1. Nach Installation enthalten sowohl die Boot- als auch die Fünfminuten-Regel
+   `recover-services --scheduled`. Während ein regulärer Vorgang die globale
+   Sperre hält, muss dieser Aufruf ohne Ausgabe mit Status 0 zurückkehren.
+   Offene Journale und aktive Aufgaben müssen unverändert bleiben; der manuelle
+   Aufruf ohne Zusatz meldet weiterhin eine belegte Sperre mit Status 5.
+2. Nach Freigabe der Sperre muss der nächste automatische Versuch ein offenes
+   Wiederanlauf-Journal abarbeiten. Einen fehlgeschlagenen Test-Dienststart
+   zusätzlich prüfen: Fehlerausgabe und Fehlerstatus müssen erhalten bleiben,
+   ebenso das Journal für einen späteren erneuten Versuch. Keine pauschale
+   Ausgabeumleitung oder Abschaltung der Cron-Mails verwenden.
+3. Die Phase muss nach der Backup-Validierung auf `retention` wechseln und in der
+   Oberfläche als „Aufbewahrung prüfen und alte Backups bereinigen“ erscheinen.
+   Die Aufgabe bleibt währenddessen laufend und hält ihre Sperre. Erst nach der
+   Aufbewahrung darf der Abschluss erscheinen; Löschregeln und Schutz bleiben gleich.
+4. `tests/test_runtime_safety.py` prüft zusätzlich eine echte konkurrierende
+   Linux-`flock`-Sperre. Unter Windows wird dieser Test ausdrücklich übersprungen;
+   Bash-Funktionstests mit simulierten Sperren und Browserprüfungen ersetzen weder
+   diesen Linux-Nachweis noch die Abnahme auf dem Test-LoxBerry.
+
 ## Testmatrix
 
 | Ziel | Profil | Backup-Modus | Erwartung |

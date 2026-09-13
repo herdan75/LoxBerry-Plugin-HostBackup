@@ -655,14 +655,19 @@ safe_backup_target() {
 }
 
 acquire_operation_lock() {
-  local mode="${1:-exclusive}"
+  local mode="${1:-exclusive}" busy_notice="${2:-report}" lock_status=0 lock_mode=-x
   [ "${HOSTBACKUP_OPERATION_LOCK_HELD:-0}" = "1" ] && return 0
   [ ! -L "$OPERATION_LOCK_FILE" ] || { echo "Unsafe operation lock symlink." >&2; return 13; }
-  exec 9>"$OPERATION_LOCK_FILE"
-  if [ "$mode" = "shared" ]; then
-    flock -n -s 9 || { echo "Another HostBackup operation is active." >&2; return 5; }
-  else
-    flock -n -x 9 || { echo "Another HostBackup operation is active." >&2; return 5; }
+  exec 9>"$OPERATION_LOCK_FILE" || return $?
+  [ "$mode" != "shared" ] || lock_mode=-s
+  # Reserve 5 for contention only; util-linux uses sysexits codes for errors.
+  flock -n -E 5 "$lock_mode" 9 || lock_status=$?
+  if [ "$lock_status" -ne 0 ]; then
+    exec 9>&-
+    if [ "$lock_status" -eq 5 ] && [ "$busy_notice" != "quiet-busy" ]; then
+      echo "Another HostBackup operation is active." >&2
+    fi
+    return "$lock_status"
   fi
   export HOSTBACKUP_OPERATION_LOCK_HELD=1
 }
@@ -1710,9 +1715,19 @@ restart_journal_retry_type() {
 }
 
 recover_restart_journals() {
-  require_root_for_write
-  acquire_operation_lock exclusive || return $?
-  local state_dir task log_file failed=0
+  require_root_for_write || return $?
+  local state_dir task log_file failed=0 busy_notice=report lock_status=0
+  case "$#:${1:-}" in
+    0:) ;;
+    1:--scheduled) busy_notice=quiet-busy ;;
+    *) echo "Usage: recover-services [--scheduled]" >&2; return 64 ;;
+  esac
+  acquire_operation_lock exclusive "$busy_notice" || lock_status=$?
+  if [ "$lock_status" -ne 0 ]; then
+    # Cron will retry in five minutes. Do not touch journals or active tasks.
+    [ "$lock_status" -ne 5 ] || [ "$busy_notice" != quiet-busy ] || return 0
+    return "$lock_status"
+  fi
   for state_dir in "$RESTART_JOURNAL_DIR"/*; do
     [ -d "$state_dir" ] && [ ! -L "$state_dir" ] || continue
     task="$(basename -- "$state_dir")"
@@ -2671,6 +2686,7 @@ create_backup() {
     fi
   fi
 
+  task_state_write "$task" running retention "$log_file" "$$" ""
   log "Applying backup retention policy" | tee -a "$log_file"
   if ! prune_old_backups 2>&1 | tee -a "$log_file"; then
     log "Aufbewahrung konnte nicht vollstaendig angewendet werden. Backups und Bereinigungsvorschau pruefen." | tee -a "$log_file"
@@ -4111,7 +4127,7 @@ Actions:
   save-config ARGS       Save plugin config
   install-schedule       Install or remove the configured cron schedule
   schedule-run           Run configured schedule with monthly fallback logic
-  recover-services       Retry outstanding local service/container recovery journals
+  recover-services [--scheduled] Retry recovery journals; scheduled mode silently skips a busy operation lock
   task-overview          Show current/history tasks, target and next scheduled start
   backup-preview         Show saved sources, excludes and snapshot reference
   storage-info           Measure logical/allocated/shared and local state storage
@@ -4164,7 +4180,7 @@ case "$action" in
   save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11-*}" "${12-0}" "${13-1}" "${14:-}" "${15:-}" "${16:-false}" "${17:-full}" "${18:-}" "${19:-false}" "${20:-}" "${21:-true}" "${22:-true}" "${23:-true}" "${24:-true}" "${25:-native-strict}" ;;
   install-schedule) install_schedule ;;
   schedule-run) schedule_run ;;
-  recover-services) recover_restart_journals ;;
+  recover-services) shift; recover_restart_journals "$@" ;;
   tasks) list_tasks ;;
   task-overview) task_overview ;;
   backup-preview) backup_preview ;;

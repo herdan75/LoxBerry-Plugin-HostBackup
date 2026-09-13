@@ -142,6 +142,19 @@ mkdir -p "$TEST_ROOT/historical"
 printf '{"size_bytes":10737418240}\n' > "$TEST_ROOT/historical/manifest.json"
 '''
 
+LOCK_MOCKS = r'''
+OPERATION_LOCK_FILE="$LOCK_DIR/operation.lock"
+flock() {
+  printf '%s\n' "$*" >> "$TEST_ROOT/flock-calls"
+  [ "$1:$2:$3:$5" = '-n:-E:5:9' ] || return 64
+  case "${LOCK_RESULT:-0}" in
+    0|5) ;;
+    *) echo "Simulated flock technical error" >&2 ;;
+  esac
+  return "${LOCK_RESULT:-0}"
+}
+'''
+
 
 @unittest.skipUnless(BASH and Path(BASH).exists(), "Bash is required for shell behavior tests")
 class RuntimeSafetyTests(unittest.TestCase):
@@ -353,6 +366,150 @@ backup_cleanup_on_exit 143 "$TEST_ROOT/missing" "$log_file" false '' backup-test
         self.assertTrue((self.root / "active-demo.service").exists())
         self.assertFalse((self.root / "state/restart-journals/backup-test.log").exists())
         self.assertEqual(json.loads((self.root / "state/tasks/backup-test.log.json").read_text())["phase"], "recovered_after_interruption")
+
+    def test_scheduled_busy_recovery_is_silent_and_retries_untouched_journal(self):
+        self.run_shell(r'''
+state_dir="$(restart_journal_create backup-test.log)"
+restart_journal_update "$state_dir" intended systemd demo.service
+task_state_write backup-test.log running retention "$TASK_LOG_DIR/backup-test.log" 4242 ''
+''', JOURNAL_FUNCTIONS)
+        journal_path = self.root / "state/restart-journals/backup-test.log/journal.json"
+        task_path = self.root / "state/tasks/backup-test.log.json"
+        journal_before, task_before = journal_path.read_bytes(), task_path.read_bytes()
+        result = self.run_shell(LOCK_MOCKS + '\nrecover_restart_journals --scheduled\n',
+                                (*JOURNAL_FUNCTIONS, "acquire_operation_lock"), {"LOCK_RESULT": "5"})
+        self.assertEqual(result.stdout + result.stderr, "")
+        self.assertEqual(journal_path.read_bytes(), journal_before)
+        self.assertEqual(task_path.read_bytes(), task_before)
+        self.assertFalse((self.root / "service-calls").exists())
+        self.assertEqual(list((self.root / "state/logs").iterdir()), [])
+        result = self.run_shell(LOCK_MOCKS + '\nrecover_restart_journals --scheduled\n',
+                                (*JOURNAL_FUNCTIONS, "acquire_operation_lock"))
+        self.assertIn("Recovering interrupted task", result.stdout)
+        self.assertTrue((self.root / "active-demo.service").exists())
+        self.assertFalse(journal_path.exists())
+        self.assertEqual(json.loads(task_path.read_text())["phase"], "recovered_after_interruption")
+
+    def test_manual_busy_recovery_remains_an_error(self):
+        result = self.run_shell(LOCK_MOCKS + '\nrecover_restart_journals\n',
+                                ("acquire_operation_lock", "recover_restart_journals"), {"LOCK_RESULT": "5"}, expected=5)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(result.stderr.strip(), "Another HostBackup operation is active.")
+
+    def test_scheduled_recovery_does_not_hide_technical_lock_errors(self):
+        for code in (1, 64, 69, 73):
+            with self.subTest(code=code):
+                result = self.run_shell(LOCK_MOCKS + '\nrecover_restart_journals --scheduled\n',
+                                        ("acquire_operation_lock", "recover_restart_journals"), {"LOCK_RESULT": str(code)}, expected=code)
+                self.assertIn("Simulated flock technical error", result.stderr)
+                self.assertNotIn("Another HostBackup", result.stderr)
+
+    def test_scheduled_recovery_does_not_hide_lock_open_error(self):
+        result = self.run_shell(LOCK_MOCKS + r'''
+OPERATION_LOCK_FILE="$TEST_ROOT/missing-parent/operation.lock"
+recover_restart_journals --scheduled
+''', ("acquire_operation_lock", "recover_restart_journals"), expected=1)
+        self.assertIn("operation.lock", result.stderr)
+        self.assertFalse((self.root / "flock-calls").exists())
+
+    def test_scheduled_recovery_rejects_symlink_lock(self):
+        # Bash predicate mock is portable to Windows; Linux covers real symlinks below.
+        result = self.run_shell(LOCK_MOCKS + r'''
+[() { if [[ "$1:${2:-}:${3:-}" == "!:-L:$OPERATION_LOCK_FILE" ]]; then return 1; fi; builtin [ "$@"; }
+recover_restart_journals --scheduled
+''', ("acquire_operation_lock", "recover_restart_journals"), expected=13)
+        self.assertIn("Unsafe operation lock symlink", result.stderr)
+        self.assertFalse((self.root / "flock-calls").exists())
+
+    def test_recovery_rejects_unknown_flags_and_nonroot_before_lock(self):
+        for args in ("--silent", "--scheduled extra", "--scheduled --scheduled"):
+            with self.subTest(args=args):
+                result = self.run_shell(LOCK_MOCKS + '\nrecover_restart_journals ' + args + '\n',
+                                        ("acquire_operation_lock", "recover_restart_journals"), expected=64)
+                self.assertIn("Usage: recover-services", result.stderr)
+        result = self.run_shell(LOCK_MOCKS + '\nrequire_root_for_write() { echo denied >&2; return 13; }\nrecover_restart_journals --scheduled\n',
+                                ("acquire_operation_lock", "recover_restart_journals"), expected=13)
+        self.assertIn("denied", result.stderr)
+        self.assertFalse((self.root / "flock-calls").exists())
+
+    def test_scheduled_empty_recovery_is_silent(self):
+        result = self.run_shell(LOCK_MOCKS + '\nrecover_restart_journals --scheduled\n',
+                                ("acquire_operation_lock", "recover_restart_journals"))
+        self.assertEqual(result.stdout + result.stderr, "")
+
+    def test_scheduled_recovery_keeps_failed_restart_visible_and_retryable(self):
+        result = self.run_shell(LOCK_MOCKS + r'''
+state_dir="$(restart_journal_create backup-test.log)"
+restart_journal_update "$state_dir" intended systemd demo.service
+recover_restart_journals --scheduled
+''', (*JOURNAL_FUNCTIONS, "acquire_operation_lock"), {"RESTART_FAIL": "true"}, expected=1)
+        self.assertIn("Recovering systemd demo.service", result.stdout)
+        self.assertTrue((self.root / "state/restart-journals/backup-test.log/journal.json").exists())
+        self.assertEqual(json.loads((self.root / "state/tasks/backup-test.log.json").read_text())["phase"], "cleanup_failed")
+
+    def test_operation_lock_modes_and_inherited_lock(self):
+        for mode, flag in (("exclusive", "-x"), ("shared", "-s")):
+            with self.subTest(mode=mode):
+                self.run_shell(LOCK_MOCKS + '\nacquire_operation_lock ' + mode + '\n[ "$HOSTBACKUP_OPERATION_LOCK_HELD" = 1 ]\nacquire_operation_lock exclusive\n',
+                               ("acquire_operation_lock",))
+                self.assertEqual((self.root / "flock-calls").read_text().splitlines()[-1], '-n -E 5 ' + flag + ' 9')
+        self.assertEqual(len((self.root / "flock-calls").read_text().splitlines()), 2)
+
+    @unittest.skipUnless(sys.platform == "linux", "Real flock contention requires Linux")
+    def test_scheduled_recovery_with_real_lock_and_symlink(self):
+        if not shutil.which("flock"):
+            if os.environ.get("HOSTBACKUP_REQUIRE_LINUX_INTEGRATION") == "1":
+                self.fail("Real lock test dependency missing: flock")
+            self.skipTest("Real lock test dependency missing: flock")
+        import fcntl
+        lock_path = self.root / "operation.lock"
+        script = 'OPERATION_LOCK_FILE="$TEST_ROOT/operation.lock"\nrecover_restart_journals'
+        names = ("acquire_operation_lock", "recover_restart_journals")
+        with lock_path.open("w") as holder:
+            fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            result = self.run_shell(script + ' --scheduled\n', names)
+            self.assertEqual(result.stdout + result.stderr, "")
+            result = self.run_shell(script + '\n', names, expected=5)
+            self.assertIn("Another HostBackup operation is active", result.stderr)
+            result = self.run_shell('OPERATION_LOCK_FILE="$TEST_ROOT/operation.lock"\nacquire_operation_lock shared\n', names, expected=5)
+            self.assertIn("Another HostBackup operation is active", result.stderr)
+        result = self.run_shell(script + ' --scheduled\n', names)
+        self.assertEqual(result.stdout + result.stderr, "")
+        (self.root / "symlink.lock").symlink_to(lock_path)
+        result = self.run_shell(script.replace('/operation.lock', '/symlink.lock') + ' --scheduled\n', names, expected=13)
+        self.assertIn("Unsafe operation lock symlink", result.stderr)
+
+    def test_retention_phase_runs_after_validation_and_before_completion(self):
+        for prune_status in (0, 1):
+            with self.subTest(prune_status=prune_status):
+                result = self.run_shell(PREFLIGHT_MOCKS + r'''
+preflight_backup() { printf '{"status":"ok"}\n'; }
+json_get_bool() { echo false; }
+write_backup_marker() { :; }
+write_manifest() { printf '{"status":"%s"}\n' "$3" > "$1/manifest.json"; }
+stop_backup_targets() { :; }
+rsync_live_options() { :; }
+rsync_metadata_options() { :; }
+rsync_destination() { printf '%s\n' "$2"; }
+# No actual filesystem copy or deletion is performed by this fixture.
+rsync() { [[ "${!#}" == "$TEST_ROOT/target/test-$PRUNE_STATUS/rootfs/" ]]; }
+calculate_size() { echo 12; }
+calculate_files() { echo 1; }
+validate_completed_backup() { cp "$TASK_DIR/backup-test-$PRUNE_STATUS.log.json" "$TEST_ROOT/validation-state.json"; }
+prune_old_backups() {
+  cp "$TASK_DIR/backup-test-$PRUNE_STATUS.log.json" "$TEST_ROOT/retention-state.json"
+  return "$PRUNE_STATUS"
+}
+create_backup "test-$PRUNE_STATUS"
+''', (*JOURNAL_FUNCTIONS, "create_backup"), {"PRUNE_STATUS": str(prune_status)})
+                validation = json.loads((self.root / "validation-state.json").read_text())
+                retention = json.loads((self.root / "retention-state.json").read_text())
+                final = json.loads((self.root / f"state/tasks/backup-test-{prune_status}.log.json").read_text())
+                self.assertEqual((validation["state"], validation["phase"]), ("running", "validating"))
+                self.assertEqual((retention["state"], retention["phase"]), ("running", "retention"))
+                self.assertEqual((final["state"], final["phase"]), ("finished", "complete"))
+                if prune_status:
+                    self.assertIn("Aufbewahrung konnte nicht vollstaendig", result.stdout)
 
     def test_term_runs_local_recovery_trap(self):
         self.run_shell(r'''

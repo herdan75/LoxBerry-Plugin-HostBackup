@@ -20,4 +20,7 @@ ui.updateDirty(initial,changed,'profile','native',t2);
 assert.equal(Object.keys(changed).length,0);
 assert.equal(ui.logViewport(0,500,2000),false);
 assert.equal(ui.logViewport(1480,500,2000),true);
+assert.equal(ui.phaseLabel('retention'),'Aufbewahrung prüfen und alte Backups bereinigen');
+assert.equal(ui.phaseLabel('copying'),'copying');
+assert.equal(ui.phaseLabel('future-phase'),'future-phase');
 console.log('HostBackup web behavior tests passed.');

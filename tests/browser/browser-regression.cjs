@@ -33,7 +33,7 @@ const overviewBackupId='20260901-020002', overviewFinishedAt='2026-09-01T02:07:2
 const overviewTarget='/media/usb/PI_Backup/loxberry-hostbackup/'+'backup-target-with-a-deliberately-long-name-'.repeat(3);
 const verificationReport={backup_id:'fixture-ok',status:'verified',checked_files:3,checked_at:'2026-09-13T12:00:00Z',changes:[],content_verified:true,restore_tested:false};
 let failSave=true, taskFinished=false, tokenNumber=0, postCount=0, htmlCount=0, statusCount=0, tokenDelay=0, saveDelay=0, lastSavedPath='';
-let overviewIssues=false, reportRequests=0;
+let overviewIssues=false, reportRequests=0, taskPhase='copying';
 const longLog = () => Array.from({length:180+statusCount},(_,i)=>`${i}: 3.43G 96% 4.23MB/s ${'long-path/'.repeat(36)} file-${i}`).join('\r');
 function json(res,value,status=200){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));}
 const server=http.createServer(async(req,res)=>{
@@ -67,7 +67,7 @@ const server=http.createServer(async(req,res)=>{
     if(action==='csrf-token'){await new Promise(resolve=>setTimeout(resolve,tokenDelay));return json(res,{csrf_token:'fresh-'+(++tokenNumber),expires_at:Date.now()/1000+3600});}
     if(action==='task-overview')return json(res,{tasks:[{task,state:taskFinished?'finished':'running'}],active_task:taskFinished?null:task,last_success:{backup_id:overviewBackupId,finished_at:overviewFinishedAt},next_run:{local:'14.09.2026 02:00'},last_failure:overviewIssues?{task:'backup-old-failure.log',state:'failed'}:null,pending_service_recovery:overviewIssues?1:0,target:{configured:true,readable:true,path:overviewTarget,available_mb:20000}});
     if(['backup-preview','storage-info','runtime-cleanup-preview','diagnostics'].includes(action))reportRequests++;
-    if(action==='task-status'){statusCount++;return json(res,{state:taskFinished?'finished':'running',phase:'copying',now:100,mtime:99,content_b64:Buffer.from(longLog()).toString('base64')});}
+    if(action==='task-status'){statusCount++;return json(res,{state:taskFinished?'finished':'running',phase:taskFinished?'complete':taskPhase,now:100,mtime:99,content_b64:Buffer.from(longLog()).toString('base64')});}
     if(action==='target-notice'){res.end('<section class="inline-notice">Fixture-Ziel verfügbar</section>');return;}
     if(action==='backup-list'){res.end('<tr><td data-label="ID">fixture-ok</td><td data-label="Status">complete</td><td data-label="Host">fixture</td><td data-label="Grösse">3 GiB</td><td data-label="Dateien">100</td><td data-label="Fertiggestellt">heute</td><td data-label="Export">–</td><td data-label="Aktionen"><form method="get" class="operation-form"><input type="hidden" name="action" value="verification-report"><input type="hidden" name="backup_id" value="fixture-ok"><button type="submit">Prüfbericht anzeigen</button></form><details class="restore-test-record"><summary>Externen Restoretest dokumentieren</summary><form method="post" class="restore-test-form"><input type="hidden" name="action" value="record-restore-test"><input type="hidden" name="backup_id" value="fixture-ok"><label>Ergebnis<select name="result" required><option value="">Bitte wählen</option><option value="passed">Erfolgreich</option><option value="failed">Fehlgeschlagen</option></select></label><label>Datum und Uhrzeit<input name="tested_at" type="datetime-local" required></label><label>Notiz<textarea name="note" maxlength="2000"></textarea></label><button type="submit">Persönlichen Testeintrag speichern</button></form></details><span class="info-help"><button type="button" class="info-button" aria-label="Information">i</button><span class="info-bubble">Dynamisch geladene Information</span></span></td></tr>');return;}
     if(action==='stop-targets'){await new Promise(resolve=>setTimeout(resolve,100));res.end('<input type="hidden" name="stop_targets_loaded" value="1"><label><input type="checkbox" name="stop_targets" value="systemd:test.service" checked>Testdienst</label><button type="button" data-stop-target-preset="none">Keine Dienste</button>');return;}
@@ -140,6 +140,10 @@ async function visible(page,selector){await page.locator(selector).waitFor({stat
     receipts.push('Compact overview has four primary values, keyboard-accessible details and complete IDs/paths; polling preserves disclosure state');
     receipts.push('Last failure and pending service recovery remain visible with details closed; expanding never runs checks');
     assert.equal(await page.locator('#task-history').inputValue(),task);receipts.push('Running task discovered without URL');
+    taskPhase='retention';
+    await page.waitForFunction(()=>document.querySelector('#task-heartbeat').textContent.includes('Aufbewahrung prüfen und alte Backups bereinigen'));
+    assert.match(await page.locator('#task-state').textContent(),/läuft/);
+    receipts.push('Retention displays its own readable phase and remains running until backend completion');
     await page.locator('[name="metadata_mode"][value="network-compatible"]').check();await visible(page,'#settings-change-popup');
     const postBefore=postCount;await page.locator('.topbar-actions button[type="submit"]').click();assert.equal(postCount,postBefore);assert.match(await page.locator('#action-feedback').textContent(),/Zuerst Änderungen speichern/);receipts.push('Dirty profile blocks backup until explicitly saved');
     await page.locator('#backup-root-input').fill('/fixture/edited');

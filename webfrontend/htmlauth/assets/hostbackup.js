@@ -30,7 +30,8 @@
     return changed;
   }
   function logViewport(scrollTop, clientHeight, scrollHeight) { return scrollHeight - scrollTop - clientHeight < 40; }
-  var core = { normalizeLogForDisplay: normalizeLogForDisplay, controlState: controlState, validateSettings: validateSettings, updateDirty: updateDirty, logViewport: logViewport };
+  function phaseLabel(phase) { return phase === 'retention' ? 'Aufbewahrung prüfen und alte Backups bereinigen' : phase; }
+  var core = { normalizeLogForDisplay: normalizeLogForDisplay, controlState: controlState, validateSettings: validateSettings, updateDirty: updateDirty, logViewport: logViewport, phaseLabel: phaseLabel };
   if (typeof module !== 'undefined' && module.exports) module.exports = core;
   if (!root.document) return;
   var document = root.document;
@@ -267,7 +268,7 @@
       var state = data.state || 'running', terminal = /^(finished|failed|cleanup_failed|stopped|interrupted|error)$/.test(state);
       byId('task-state').className = 'task-state state-' + state;
       byId('task-state').textContent = taskName(task) + ' ' + ({ running: 'läuft', starting: 'startet', queued: 'wartet', finished: 'abgeschlossen', failed: 'fehlgeschlagen', cleanup_failed: 'fehlgeschlagen; Wiederanlauf unvollständig', stopped: 'gestoppt', interrupted: 'unterbrochen', stale: 'ohne neue Ausgabe', error: 'Status nicht verfügbar' }[state] || state);
-      byId('task-heartbeat').textContent = (data.phase ? 'Phase: ' + data.phase + '. ' : '') + (terminal ? 'Die Eingaben auf dieser Seite bleiben erhalten.' : 'Letzte Log-Aktualisierung vor ' + Math.max(0, Number(data.now || 0) - Number(data.mtime || 0)) + ' Sekunden.');
+      byId('task-heartbeat').textContent = (data.phase ? 'Phase: ' + phaseLabel(data.phase) + '. ' : '') + (terminal ? 'Die Eingaben auf dieser Seite bleiben erhalten.' : 'Letzte Log-Aktualisierung vor ' + Math.max(0, Number(data.now || 0) - Number(data.mtime || 0)) + ' Sekunden.');
       var content = ''; try { content = new TextDecoder().decode(Uint8Array.from(root.atob(data.content_b64 || ''), function (char) { return char.charCodeAt(0); })); } catch (ignore) { content = data.content || ''; }
       var log = byId('task-log'), left = log.scrollLeft, top = log.scrollTop, atEnd = followLog && logViewport(log.scrollTop, log.clientHeight, log.scrollHeight);
       var normalized = normalizeLogForDisplay(content) || data.error || 'Noch keine Logausgabe vorhanden.';
