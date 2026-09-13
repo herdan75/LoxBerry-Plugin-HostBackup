@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const http = require('node:http');
+const {createHash} = require('node:crypto');
 const {execFileSync} = require('node:child_process');
 const {chromium} = require('playwright');
 const repo = path.resolve(__dirname, '../..');
@@ -18,8 +19,18 @@ if (process.platform === 'win32') {
 } else html = execFileSync('perl',['-MHostBackupFixture','webfrontend/htmlauth/index.cgi'], {cwd:repo,env:{...process.env, PERL5LIB:perlLib,LBPDATADIR:temp,REQUEST_METHOD:'GET',REMOTE_USER:'fixture',HTTP_USER_AGENT:'fixture'},encoding:'utf8'});
 assert.match(html,/value="\/fixture\/backup"/);
 assert.doesNotMatch(html,/Speichern und Backup-Start bleiben gesperrt/);
-html = '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="assets/style.css"></head><body>' + html + '</body></html>';
+assert.match(html, /<!doctype html><html><head>/);
+const assetUrls = {};
+for (const name of ['style.css', 'hostbackup.js']) {
+  const digest = createHash('sha256').update(fs.readFileSync(path.join(repo, 'webfrontend/htmlauth/assets', name))).digest('hex').slice(0, 16);
+  const assetUrl = 'assets/' + name + '?v=' + digest;
+  assert.ok(html.includes('"' + assetUrl + '"'), 'CGI must render content-fingerprinted asset URL: ' + assetUrl);
+  assetUrls[name] = '/' + assetUrl;
+}
 const task='backup-fixture.log', errors=[], receipts=[];
+const assetRequests=[];
+const overviewBackupId='20260901-020002', overviewFinishedAt='2026-09-01T02:07:27+02:00';
+const overviewTarget='/media/usb/PI_Backup/loxberry-hostbackup/'+'backup-target-with-a-deliberately-long-name-'.repeat(3);
 const verificationReport={backup_id:'fixture-ok',status:'verified',checked_files:3,checked_at:'2026-09-13T12:00:00Z',changes:[],content_verified:true,restore_tested:false};
 let failSave=true, taskFinished=false, tokenNumber=0, postCount=0, htmlCount=0, statusCount=0, tokenDelay=0, saveDelay=0, lastSavedPath='';
 const longLog = () => Array.from({length:180+statusCount},(_,i)=>`${i}: 3.43G 96% 4.23MB/s ${'long-path/'.repeat(36)} file-${i}`).join('\r');
@@ -27,7 +38,17 @@ function json(res,value,status=200){res.writeHead(status,{'Content-Type':'applic
 const server=http.createServer(async(req,res)=>{
   try{
     const url=new URL(req.url,'http://127.0.0.1');
-    if(url.pathname.endsWith('/assets/style.css')||url.pathname.endsWith('/assets/hostbackup.js')){const file=path.join(repo,'webfrontend/htmlauth',url.pathname.replace(/^\//,''));res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript':'text/css'});res.end(fs.readFileSync(file));return;}
+    if(url.pathname==='/legacy-ui'){
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});
+      res.end('<!doctype html><html><head><link rel="stylesheet" href="assets/style.css"></head><body><div class="overview-grid">Previously cached stylesheet</div></body></html>');return;
+    }
+    if(url.pathname.endsWith('/assets/style.css')||url.pathname.endsWith('/assets/hostbackup.js')){
+      assetRequests.push(url.pathname+url.search);
+      const file=path.join(repo,'webfrontend/htmlauth',url.pathname.replace(/^\//,''));
+      res.writeHead(200,{'Content-Type':file.endsWith('.js')?'application/javascript':'text/css','Cache-Control':'public, max-age=31536000, immutable'});
+      if(url.pathname.endsWith('/style.css')&&!url.search){res.end(':root { --hostbackup-legacy-css: cached; } .overview-grid { display: block; }');return;}
+      res.end(fs.readFileSync(file));return;
+    }
     const action=url.searchParams.get('action');
     if(req.method==='POST'){
       let body='';for await(const chunk of req)body+=chunk;
@@ -43,15 +64,16 @@ const server=http.createServer(async(req,res)=>{
       return json(res,{ok:true,redirect:'?active_task='+task});
     }
     if(action==='csrf-token'){await new Promise(resolve=>setTimeout(resolve,tokenDelay));return json(res,{csrf_token:'fresh-'+(++tokenNumber),expires_at:Date.now()/1000+3600});}
-    if(action==='task-overview')return json(res,{tasks:[{task,state:taskFinished?'finished':'running'}],active_task:taskFinished?null:task,last_success:{backup_id:'fixture-ok',finished_at:'2026-09-13'},next_run:{local:'14.09.2026 02:00'},last_failure:null,pending_service_recovery:0,target:{configured:true,readable:true,path:'/fixture/backup',available_mb:20000}});
+    if(action==='task-overview')return json(res,{tasks:[{task,state:taskFinished?'finished':'running'}],active_task:taskFinished?null:task,last_success:{backup_id:overviewBackupId,finished_at:overviewFinishedAt},next_run:{local:'14.09.2026 02:00'},last_failure:null,pending_service_recovery:0,target:{configured:true,readable:true,path:overviewTarget,available_mb:20000}});
     if(action==='task-status'){statusCount++;return json(res,{state:taskFinished?'finished':'running',phase:'copying',now:100,mtime:99,content_b64:Buffer.from(longLog()).toString('base64')});}
     if(action==='target-notice'){res.end('<section class="inline-notice">Fixture-Ziel verfügbar</section>');return;}
     if(action==='backup-list'){res.end('<tr><td data-label="ID">fixture-ok</td><td data-label="Status">complete</td><td data-label="Host">fixture</td><td data-label="Grösse">3 GiB</td><td data-label="Dateien">100</td><td data-label="Fertiggestellt">heute</td><td data-label="Export">–</td><td data-label="Aktionen"><form method="get" class="operation-form"><input type="hidden" name="action" value="verification-report"><input type="hidden" name="backup_id" value="fixture-ok"><button type="submit">Prüfbericht anzeigen</button></form><details class="restore-test-record"><summary>Externen Restoretest dokumentieren</summary><form method="post" class="restore-test-form"><input type="hidden" name="action" value="record-restore-test"><input type="hidden" name="backup_id" value="fixture-ok"><label>Ergebnis<select name="result" required><option value="">Bitte wählen</option><option value="passed">Erfolgreich</option><option value="failed">Fehlgeschlagen</option></select></label><label>Datum und Uhrzeit<input name="tested_at" type="datetime-local" required></label><label>Notiz<textarea name="note" maxlength="2000"></textarea></label><button type="submit">Persönlichen Testeintrag speichern</button></form></details><span class="info-help"><button type="button" class="info-button" aria-label="Information">i</button><span class="info-bubble">Dynamisch geladene Information</span></span></td></tr>');return;}
     if(action==='stop-targets'){await new Promise(resolve=>setTimeout(resolve,100));res.end('<input type="hidden" name="stop_targets_loaded" value="1"><label><input type="checkbox" name="stop_targets" value="systemd:test.service" checked>Testdienst</label><button type="button" data-stop-target-preset="none">Keine Dienste</button>');return;}
     if(action==='backup-preview')return json(res,{saved_config:true,backup_mode:'snapshot',metadata_mode:'network-compatible',full_baseline_required:true,excludes:['/fixture/backup/***'],source_volumes:[{path:'/',included:true,reason:'System'}],available_mb:20000,baseline_estimate_mb:3000});
     if(action==='verification-report')return json(res,verificationReport);
+    if(url.pathname==='/system/images/icons/loxberryhostbackup/icon_64.png'){res.writeHead(200,{'Content-Type':'image/png'});res.end(fs.readFileSync(path.join(repo,'icons/icon_64.png')));return;}
     if(url.pathname.startsWith('/system/')){res.writeHead(204);res.end();return;}
-    htmlCount++;res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end(html);
+    htmlCount++;res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(html);
   }catch(error){errors.push(error.message);json(res,{error:error.message},500);}
 });
 async function visible(page,selector){await page.locator(selector).waitFor({state:'visible'});}
@@ -63,7 +85,31 @@ async function visible(page,selector){await page.locator(selector).waitFor({stat
     const launch={headless:true};if(process.env.HOSTBACKUP_BROWSER_EXECUTABLE)launch.executablePath=process.env.HOSTBACKUP_BROWSER_EXECUTABLE;
     browser=await chromium.launch(launch);
     const page=await browser.newPage({viewport:{width:1440,height:1100}});page.on('pageerror',error=>errors.push(error.message));
-    page.on('dialog',dialog=>dialog.accept());await page.goto(base);await visible(page,'#download-task-log');
+    page.on('dialog',dialog=>dialog.accept());
+    await page.goto(base+'legacy-ui');
+    assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--hostbackup-legacy-css').trim()),'cached');
+    await page.goto(base+'legacy-ui');
+    assert.equal(assetRequests.filter(value=>value==='/assets/style.css').length,1,'The obsolete unversioned stylesheet really is cached');
+    await page.goto(base);await visible(page,'#download-task-log');
+    await page.locator('.overview-item .overview-value').first().waitFor({state:'visible'});
+    assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--hostbackup-legacy-css').trim()),'');
+    for(const assetUrl of Object.values(assetUrls))assert.ok(assetRequests.includes(assetUrl),'Fresh fingerprinted asset must be loaded: '+assetUrl);
+    assert.equal(assetRequests.filter(value=>value==='/assets/style.css').length,1,'Updated CGI must not request the obsolete URL');
+    receipts.push('Real CGI head fingerprints CSS/JS by content and bypasses a primed old stylesheet cache');
+    const overviewCards=page.locator('#overview-values .overview-item');
+    assert.equal(await overviewCards.count(),6);
+    const desktopLayout=await page.locator('#overview-values').evaluate(node=>({display:getComputedStyle(node).display,columns:getComputedStyle(node).gridTemplateColumns.split(' ').length,cards:Array.from(node.children).map(card=>{const label=card.querySelector('.overview-label'),value=card.querySelector('.overview-value');return {gap:value.getBoundingClientRect().top-label.getBoundingClientRect().bottom,text:card.textContent,background:getComputedStyle(card).backgroundColor};})}));
+    assert.equal(desktopLayout.display,'grid');assert.equal(desktopLayout.columns,2);
+    assert.ok(desktopLayout.cards.every(card=>card.gap>=7.5),JSON.stringify(desktopLayout));
+    assert.ok(desktopLayout.cards.every(card=>card.background==='rgb(255, 255, 255)'));
+    assert.equal(desktopLayout.cards[0].text,'Letztes erfolgreiches Backup: '+overviewBackupId+' · '+overviewFinishedAt);
+    assert.ok(desktopLayout.cards.some(card=>card.text==='Backup-Ziel: '+overviewTarget));
+    for(const id of ['operational-overview','task-monitor'])assert.equal(await page.locator('#'+id+' > .panel-content').evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(255, 255, 255)');
+    await page.screenshot({path:path.join(temp,'overview-desktop.png'),fullPage:false});
+    await page.evaluate(()=>{for(const sheet of document.styleSheets)sheet.disabled=true;});
+    assert.match(await overviewCards.first().innerText(),/Letztes erfolgreiches Backup: 20260901-020002/);
+    await page.evaluate(()=>{for(const sheet of document.styleSheets)sheet.disabled=false;});
+    receipts.push('Overview and live status use white content areas; six desktop cards keep title/value spacing even without CSS');
     assert.equal(await page.locator('#task-history').inputValue(),task);receipts.push('Running task discovered without URL');
     await page.locator('[name="metadata_mode"][value="network-compatible"]').check();await visible(page,'#settings-change-popup');
     const postBefore=postCount;await page.locator('.topbar-actions button[type="submit"]').click();assert.equal(postCount,postBefore);assert.match(await page.locator('#action-feedback').textContent(),/Zuerst Änderungen speichern/);receipts.push('Dirty profile blocks backup until explicitly saved');
@@ -104,7 +150,13 @@ async function visible(page,selector){await page.locator(selector).waitFor({stat
     await page.locator('#backup-list-body .operation-form button').click();await visible(page,'#verification-download');assert.match(await page.locator('#operation-result').textContent(),/Persönlich dokumentierter Restore-Test: Erfolgreich/);receipts.push('External restore test recorded with UTC date and displayed only as manual evidence');
     await page.locator('[data-load-action="backup-preview"]').click();await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('vollständige Basiskopie'));
     await page.screenshot({path:path.join(temp,'desktop.png'),fullPage:true});
-    await page.setViewportSize({width:390,height:844});await page.locator('#backup-list-body .info-button').click();
+    await page.setViewportSize({width:390,height:844});
+    await page.locator('#operational-overview').scrollIntoViewIfNeeded();
+    const mobileOverview=await page.locator('#overview-values').evaluate(node=>({columns:getComputedStyle(node).gridTemplateColumns.split(' ').length,cards:Array.from(node.children).map(card=>{const title=card.querySelector('.overview-label').getBoundingClientRect(),value=card.querySelector('.overview-value').getBoundingClientRect();return {gap:value.top-title.bottom,right:card.getBoundingClientRect().right};})}));
+    assert.equal(mobileOverview.columns,1);assert.ok(mobileOverview.cards.every(card=>card.gap>=7.5&&card.right<=392),JSON.stringify(mobileOverview));
+    await page.screenshot({path:path.join(temp,'overview-mobile.png'),fullPage:false});
+    receipts.push('Mobile overview has one column with separated labels and long backup paths contained');
+    await page.locator('#backup-list-body .info-button').click();
     const tip=await page.locator('#backup-list-body .info-bubble').boundingBox();assert.ok(tip.x>=0&&tip.x+tip.width<=392);
     assert.equal(await page.locator('#backup-list-body td').first().evaluate(node=>getComputedStyle(node,'::before').content),'"ID"');
     const overflow=await page.evaluate(()=>({width:window.innerWidth,scroll:document.documentElement.scrollWidth,nodes:Array.from(document.querySelectorAll('body *')).filter(node=>{const r=node.getBoundingClientRect();return r.right>window.innerWidth+2&&r.width>0&&getComputedStyle(node).position!=='absolute';}).slice(0,12).map(node=>({tag:node.tagName,id:node.id,cls:node.className,width:node.getBoundingClientRect().width,right:node.getBoundingClientRect().right}))}));

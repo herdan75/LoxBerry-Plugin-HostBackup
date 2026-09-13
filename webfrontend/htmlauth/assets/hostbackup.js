@@ -237,7 +237,11 @@
         ['Nächster Termin', data.next_run ? data.next_run.local || data.next_run.note || 'Zeitplan deaktiviert' : 'Zeitplan deaktiviert'],
         ['Backup-Ziel', data.target && data.target.configured ? data.target.path : 'Noch nicht konfiguriert'],
         ['Freier Speicher am Ziel', data.target && data.target.readable ? byteLabel(data.target.available_mb * 1048576) : 'Momentan nicht ermittelbar'],
-        ['Aktueller Vorgang', data.active_task || 'Keiner'], ['Letzter Fehler', data.last_failure ? data.last_failure.task + ' · ' + data.last_failure.state : 'Keiner bekannt']].forEach(function (item) { var card = el('div'); card.append(el('strong', item[0]), el('span', String(item[1]))); target.append(card); });
+        ['Aktueller Vorgang', data.active_task || 'Keiner'], ['Letzter Fehler', data.last_failure ? data.last_failure.task + ' · ' + data.last_failure.state : 'Keiner bekannt']].forEach(function (item) {
+          var card = el('div'), label = el('strong', item[0] + ': '), value = el('span', String(item[1]));
+          card.className = 'overview-item'; label.className = 'overview-label'; value.className = 'overview-value';
+          card.append(label, value); target.append(card);
+        });
       var select = byId('task-history'), tasks = data.tasks || []; select.replaceChildren(el('option', 'Vorgang auswählen'));
       select.firstChild.value = ''; tasks.forEach(function (item) { var option = el('option', item.task + ' · ' + (item.state || '')); option.value = item.task; select.append(option); });
       var active = typeof data.active_task === 'object' ? data.active_task.task : data.active_task;

@@ -24,4 +24,12 @@ Each run prints a JSON receipt and saves desktop/mobile screenshots under a new
 directories are not part of plugin packages. Tests cover actual browser startup,
 late-loaded controls, dirty state, failed saves, CSRF refresh and save races,
 configuration validation, task discovery/completion, both log scroll axes,
-responsive layout and keyboard/dynamic tooltips.
+responsive layout and keyboard/dynamic tooltips. The browser-specific LoxBerry
+header fixture emits the CGI's actual head additions instead of injecting its
+own asset URLs. Tests prime an obsolete unversioned stylesheet in the browser
+cache, then verify that content-fingerprinted CSS/JavaScript are loaded. Overview
+checks cover matching white content areas, separated titles and values (also
+without CSS), two desktop columns, one mobile column and long paths/timestamps.
+Dedicated `overview-desktop.png` and `overview-mobile.png` screenshots supplement
+the full-page screenshots. The generic fixture styles are not a full LoxBerry
+theme or a substitute for testing the installed plugin on a real device.

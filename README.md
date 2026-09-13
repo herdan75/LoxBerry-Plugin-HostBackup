@@ -641,6 +641,12 @@ nach dem Backup aufzuräumen.
 
 ## Live-Status
 
+Übersicht und Live-Status haben wie die Einstellungen weisse Inhaltsflächen.
+In der Übersicht stehen Beschriftung und Wert mit Abstand untereinander;
+schmale Ansichten verwenden eine statt zwei Spalten. CSS und JavaScript werden
+über ihren Inhaltsstand geladen, sodass auch Korrekturen ohne Versionssprung
+nach erneutem Öffnen der Plugin-Seite sichtbar werden.
+
 Nach dem Start eines Backups erscheint ein Live-Status. Er zeigt fortlaufend,
 was das Backend gerade macht, z. B. Dienst-/Container-Stop, `rsync`-Fortschritt,
 Export und Aufbewahrung.

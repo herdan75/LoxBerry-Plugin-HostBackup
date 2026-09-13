@@ -6,6 +6,7 @@ use File::Temp qw(tempfile);
 use File::Basename qw(basename);
 use File::Path qw(make_path);
 use File::Spec ();
+use FindBin qw($RealBin);
 use JSON::PP;
 use Encode qw(encode);
 use Digest::SHA qw(hmac_sha256_hex);
@@ -64,6 +65,18 @@ my $message = '';
 my $error = '';
 my $preflight_warning = '';
 my $active_task = '';
+
+sub asset_url {
+  my ($filename) = @_;
+  my $path = File::Spec->catfile($RealBin, 'assets', $filename);
+  if (open my $fh, '<:raw', $path) {
+    my $revision = substr(Digest::SHA->new(256)->addfile($fh)->hexdigest, 0, 16);
+    close $fh;
+    return "assets/$filename?v=$revision";
+  }
+  warn "Cannot fingerprint HostBackup asset $filename: $!\n";
+  return "assets/$filename";
+}
 
 sub url_escape {
   my ($value) = @_;
@@ -1582,8 +1595,10 @@ if (length $preflight_warning) {
   $preflight_accept_control = '<label class="checkline preflight-confirm"><input data-role="none" type="checkbox" name="accept_preflight_warnings" value="1" required><span>Backup trotz dieser Warnhinweise starten</span></label>';
 }
 
+my $style_url = asset_url('style.css');
+my $script_url = asset_url('hostbackup.js');
 our $htmlhead = qq{
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="$style_url">
 };
 
 LoxBerry::Web::lbheader(
@@ -1661,6 +1676,7 @@ print <<HTML;
 
 <section class="panel" id="operational-overview">
 <h2>Übersicht</h2>
+<div class="panel-content">
 <div class="overview-grid" id="overview-values"><p>Letztes Backup und nächster Termin werden geladen...</p></div>
 <div class="config-actions">
 <button data-role="none" type="button" data-load-action="backup-preview">Nächstes Backup prüfen</button>
@@ -1676,10 +1692,12 @@ $csrf_html
 </form>
 <p class="muted">Vorschau und Zeitplan verwenden die gespeicherten Einstellungen. Eine Speicherberechnung kann bei grossen Backups länger dauern.</p>
 <div id="operation-result" hidden></div>
+</div>
 </section>
 
 <section class="panel task-monitor" id="task-monitor" data-active-task="$active_task_attr">
 <h2>Live-Status</h2>
+<div class="panel-content">
 <label class="task-history-label"><span>Aktuelle und letzte Vorgänge</span><select data-role="none" id="task-history"><option value="">Noch kein Vorgang ausgewählt</option></select></label>
 <div class="task-actions">
 <span class="task-state state-running" id="task-state">Kein laufender Task ausgewählt</span>
@@ -1694,6 +1712,7 @@ $csrf_html
 <pre class="terminal" id="task-log">Noch keine Live-Ausgabe vorhanden.</pre>
 <div class="task-actions"><button data-role="none" type="button" id="log-follow">Zum Ende des Logs</button><a data-ajax="false" class="button-link" id="download-task-log" hidden>Vollständiges Log herunterladen</a></div>
 <p class="muted">Die Live-Ansicht zeigt den letzten Log-Ausschnitt. Das vollständige Original steht als Download bereit. Beim Hochscrollen bleibt deine Leseposition erhalten.</p>
+</div>
 </section>
 
 <section class="panel settings-panel">
@@ -2228,7 +2247,7 @@ print <<HTML;
 
 </main>
 
-<script src="assets/hostbackup.js" defer></script>
+<script src="$script_url" defer></script>
 
 HTML
 

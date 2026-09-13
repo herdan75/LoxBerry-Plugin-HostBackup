@@ -9,7 +9,14 @@ validiert werden.
 
 ## [Unreleased]
 
-Noch keine Änderungen nach 0.7.0-beta.
+- Übersicht und Live-Status verwenden weisse Inhaltsflächen passend zu den
+  Einstellungen. Beschriftungen und Werte in der Übersicht sind getrennt und
+  bleiben auch ohne CSS durch Doppelpunkt und Leerzeichen lesbar.
+- CSS und JavaScript erhalten inhaltsabhängige Ladeadressen. Damit werden
+  aktualisierte Oberflächendateien auch bei unveränderter Plugin-Version neu
+  geladen; alte Browser-Caches müssen nicht manuell geleert werden.
+- Browserprüfung ergänzt um die tatsächlich vom CGI erzeugten Asset-Adressen,
+  alte zwischengespeicherte Styles, weisse Flächen sowie Desktop-/Mobilabstände.
 
 ## [0.7.0-beta] - 2026-09-13
 
