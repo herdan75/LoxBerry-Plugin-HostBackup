@@ -102,6 +102,10 @@ dieses Updates**.
 
 ## Prüfung und bekannte Grenzen
 
+- [Linux-Abnahme der Installationskorrektur](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34753883131):
+  188 Tests ohne Skips, zehn Browser-Prüfblöcke sowie Rechteprüfung und ZIP-Build
+  erfolgreich. Der neue Test reproduziert die frühere Cron-Ablehnung und prüft
+  anschliessend Installation und erneute Installation mit dem echten Backend.
 - [Linux-Abnahme](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34753075077):
   187 Tests ohne Skips, alle zehn Browser-Prüfblöcke sowie Rechte-/Metadatenprüfung
   und ZIP-Build erfolgreich. Der Release-Tag wird vor Veröffentlichung erneut geprüft.

@@ -41,6 +41,7 @@ Noch keine Änderungen nach 0.7.0-beta.
 - Linux-Installationstest mit echtem Backend ergänzt: normales Cron-Verzeichnis,
   LoxBerry-Symlink mit LoxBerry-eigenen Elternverzeichnissen, Zeitplaninstallation,
   erneute Installation derselben Version und Erhalt gespeicherter Einstellungen.
+  Linux-Abnahme: alle 188 Tests ohne Skips und zehn Browser-Prüfblöcke bestanden.
 - Plugin-Version `0.7.0`, Pre-Release `v0.7.0-beta` und ZIP-URL bleiben gleich.
   Nach einem Fehlversuch das frisch heruntergeladene ZIP erneut installieren;
   bei bereits eingetragener Version 0.7.0 gibt es keine höhere Updateversion.

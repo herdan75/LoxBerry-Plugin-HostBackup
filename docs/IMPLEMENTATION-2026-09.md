@@ -95,8 +95,13 @@ Ein zusätzlicher verpflichtender Linux-Test installiert das echte Backend mit
 beiden Verzeichnisvarianten, prüft den gespeicherten Zeitplan, das Laden der
 Konfiguration und die erneute Installation derselben Version. Unbekannte,
 defekte und ungeschützte Symlink-/Zielvarianten müssen weiterhin scheitern.
-Der abschliessende CI-Nachweis und die neue ZIP-Prüfsumme werden beim bestehenden
-Pre-Release dokumentiert; Version und Download-URL bleiben unverändert.
+[Linux-Lauf 34753883131](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34753883131)
+prüfte den Korrekturstand `15957d79203d2ff084315b881c6250bb8744f43d` erfolgreich:
+188 Tests ohne Skips einschliesslich der reproduzierten alten Cron-Ablehnung
+und anschliessend erfolgreicher echter Installation, zehn Browser-Prüfblöcke,
+ShellCheck, Rechteprüfungen und ZIP-Build. Der abschliessende Tag-Lauf und die neue
+ZIP-Prüfsumme werden beim bestehenden Pre-Release dokumentiert; Version und
+Download-URL bleiben unverändert.
 
 ### Verbleibende Praxisabnahme
 
