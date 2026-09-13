@@ -30,10 +30,10 @@ Diese Szenarien sind ein Prüfplan, kein Nachweis bereits bestandener Hardwarete
    Fortschrittsanzeige und der bekannte Sperrkonflikt mit generischer HTTP-500-
    Meldung sind in 0.7.1-beta noch offen, nicht als behoben zu bewerten.
 
-## Ergänzende Cron-/Aufbewahrungsabnahme auf develop (unveröffentlicht)
+## Ergänzende Cron-/Aufbewahrungsabnahme im aktualisierten 0.7.1-beta
 
-Diese Prüfungen gelten erst für ein installiertes Paket aus dem überarbeiteten
-develop-Stand, nicht für den unveränderten 0.7.1-beta-Download. Nur auf einem
+Diese Prüfungen gelten für das am 13.09.2026 aktualisierte Paket, nicht für
+zuvor heruntergeladene 0.7.1-beta-ZIPs. Nur auf einem
 isolierten Testsystem mit Testdiensten und entbehrlichen Testbackups ausführen:
 
 1. Nach Installation enthalten sowohl die Boot- als auch die Fünfminuten-Regel

@@ -7,11 +7,12 @@ neuen Versionsnummer. Damit erkennt LoxBerry auch gegenüber `0.7.0` ein neues
 Pre-Release. Änderungen, Updatehinweise und Prüfgrenzen stehen in den
 [Release Notes](docs/RELEASE-0.7.1-beta.md); der stabile Kanal bleibt unverändert.
 
-**Unveröffentlichter develop-Stand:** Der automatische Dienst-Wiederanlauf setzt
+**Aktualisiertes 0.7.1-beta-Paket vom 13.09.2026:** Der automatische Dienst-Wiederanlauf setzt
 bei einer belegten Vorgangssperre still aus, statt dadurch Cron-Mails auszulösen.
 Die abschliessende Aufbewahrungsprüfung erhält eine eigene Live-Status-Phase.
-Diese Korrekturen sind noch nicht im veröffentlichten 0.7.1-beta-Download enthalten;
-Details stehen im [Changelog unter Unreleased](CHANGELOG.md#unreleased).
+Die Versionsnummer und die Download-Adresse bleiben gleich. Wer bereits 0.7.1
+installiert hat, muss das aktualisierte ZIP erneut installieren; es gibt dafür
+keinen höheren Versionshinweis. Details stehen im [Changelog](CHANGELOG.md).
 
 **Neu in 0.7.1-beta:** Der alte Plugin-Bin-Baum wird vor dem Update für
 LoxBerrys unprivilegierten Dateiaustausch vorbereitet, die Konfiguration vorher
@@ -201,8 +202,10 @@ Inhaltsprüfung und Browserbedienung. Windows-Prüfungen ersetzen die separat
 erforderlichen Linux-, NAS- und Offline-Restoretests nicht. Die
 [Linux-Abnahme des Teststands 39254c6](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34759728463)
 bestand 191 Tests ohne Skips, alle 14 Browser-Prüfblöcke, Rechte-/Metadatenprüfungen
-und den ZIP-Build. 0.7.1-beta übernimmt diesen Programmstand mit aktualisierten
-Versionsdaten und Dokumenten; der Release-Tag durchläuft dieselben Prüfungen erneut. Der lokale
+und den ZIP-Build. Der [nachgebesserte Stand 416e8ff](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34764161868)
+bestand 203 Linux-Tests ohne Skips sowie 15 Browser-Prüfblöcke, einschliesslich
+echter konkurrierender Dateisperren und Root-/Webbenutzerprüfungen. Der aktualisierte
+Release-Tag durchläuft die Prüfungen erneut. Der lokale
 Umsetzungs- und Prüfstand wird in [IMPLEMENTATION-2026-09.md](docs/IMPLEMENTATION-2026-09.md)
 geführt. Das Pre-Release-Paket wird nur nach erfolgreicher Linux-CI mit
 Integrations- und Browserprüfungen veröffentlicht; den zugehörigen Lauf und
@@ -267,6 +270,12 @@ aktivieren und nach Plugin-Updates suchen. Die interne Plugin-Version lautet
 Auch Installationen des manuellen 0.7.0-Testpakets erkennen diese höhere Version.
 `prerelease.cfg` enthält den installierbaren ZIP-Link oben. Stable-Nutzer erhalten
 über `release.cfg` weiterhin Version 0.5.8.
+
+**Bereits 0.7.1 installiert?** Das am 13.09.2026 nachgebesserte Pre-Release ersetzt
+das bisherige ZIP unter derselben Adresse, ohne Versionssprung. Das ZIP erneut
+herunterladen und in der Plugin-Verwaltung installieren, ohne vorher zu
+deinstallieren. Allein die Update-Suche meldet bei gleicher Version kein neues
+Update. Ein vor der Korrektur heruntergeladenes ZIP enthält noch den alten Stand.
 
 Vor dem Update laufende Backup-/Restoreaufgaben beenden lassen und die
 Plugin-Einstellungen exportieren. Vorhandene Einstellungen und Backupdaten
@@ -623,7 +632,7 @@ Das Manifest hält zusätzlich die Stop-Ziele fest. Ein abgebrochenes Backup wir
 als `stopped` markiert; schlägt der Wiederanlauf fehl, bleibt ein Fehlerzustand
 mit offenem Journal sichtbar. Unvollständige Backups vor einer Löschung prüfen.
 
-**Ergänzung auf develop (noch nicht veröffentlicht):** Die Boot-/Fünfminuten-Regel
+**Seit dem aktualisierten 0.7.1-beta-Paket:** Die Boot-/Fünfminuten-Regel
 ruft `recover-services --scheduled` auf. Hält gerade ein Backup, Restore oder anderer
 Vorgang die globale Sperre, endet nur dieser automatische Versuch ohne Ausgabe
 und mit Erfolgscode. Der nächste Cron-Termin versucht den Wiederanlauf erneut;
@@ -634,7 +643,7 @@ Aufruf `recover-services` meldet eine belegte Sperre weiterhin als Fehler.
 Die konfigurierten Backup-Mailbenachrichtigungen werden dadurch nicht geändert.
 
 Nach erfolgreicher Backup-Prüfung kann die Aufbewahrung älterer Sicherungen noch
-Zeit benötigen. Im überarbeiteten develop-Stand zeigt der Live-Status dafür
+Zeit benötigen. Im aktualisierten 0.7.1-beta-Paket zeigt der Live-Status dafür
 „Aufbewahrung prüfen und alte Backups bereinigen“ (`retention`) statt weiterhin
 `validating`. Die Aufgabe bleibt bis zum Abschluss dieses Schritts als laufend
 markiert und hält ihre Sperre; die Aufbewahrungsregeln bleiben unverändert.

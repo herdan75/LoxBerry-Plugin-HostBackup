@@ -7,6 +7,12 @@ Bestätigungsanforderungen. Die noch offene HTTP-500-Darstellung bei gesperrter
 Laufzeitprüfung ist kein Anlass, den Sperrschutz abzuschalten; siehe
 [bekannte Grenzen](RELEASE-0.7.1-beta.md#bekannte-offene-punkte).
 
+Das aktualisierte 0.7.1-beta-Paket behandelt nur beim automatischen
+`recover-services --scheduled` eine belegte Vorgangssperre als stilles Aussetzen.
+Die Sperre wird nicht umgangen und Journale werden dabei nicht verändert.
+Technische Sperrfehler und fehlgeschlagene Dienststarts bleiben Fehler. Der
+Web-Dispatcher erlaubt weiterhin nur den manuellen Aufruf ohne diesen Zusatz.
+
 ## Privilegierte Grenze
 
 Die Weboberfläche ruft nicht mehr direkt ein per Wildcard freigegebenes

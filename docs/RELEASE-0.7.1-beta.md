@@ -2,11 +2,12 @@
 
 Pre-Release vom 13.09.2026 · interne Plugin-Version 0.7.1 · Stable bleibt 0.5.8.
 
-Dieses Update veröffentlicht die Installationskorrektur und die kompakte
-Übersicht aus dem manuell bereitgestellten Teststand `39254c6` unter einer neuen
-Version. Gegenüber diesem Testpaket ändern sich Versionsdaten und Dokumentation,
-nicht die Backup-/Restorelogik. Es ist weiterhin eine Vorabversion für freiwillige
-Tests und kein Ersatz für einen nachgewiesenen vollständigen Restore.
+Die Erstveröffentlichung übernahm die Installationskorrektur und die kompakte
+Übersicht aus dem Teststand `39254c6`. Das am selben Tag aktualisierte Paket
+ergänzt die Korrekturen aus `416e8ff`: keine Cron-Mail allein wegen einer belegten
+Vorgangssperre und eine eigene Live-Status-Phase für die Aufbewahrung.
+Version und Download-Adresse bleiben unverändert. Es ist weiterhin eine
+Vorabversion für freiwillige Tests und kein Nachweis eines vollständigen Restores.
 
 ## Installation und Update
 
@@ -15,8 +16,14 @@ Tests und kein Ersatz für einen nachgewiesenen vollständigen Restore.
 In der LoxBerry-Plugin-Verwaltung den Pre-Release-Kanal aktivieren und nach
 Updates suchen. `prerelease.cfg` meldet jetzt die höhere interne Version 0.7.1,
 auch gegenüber einer installierten 0.7.0-Testfassung. Alternativ das ZIP manuell
-über die Plugin-Verwaltung laden, ohne vorherige Deinstallation. Die alten
-Release-Tags und ZIPs werden nicht überschrieben; Stable bleibt bei 0.5.8.
+über die Plugin-Verwaltung laden, ohne vorherige Deinstallation. Dieses
+0.7.1-beta-ZIP und sein Tag werden auf den korrigierten Stand aktualisiert;
+ältere Releases und Stable 0.5.8 bleiben unverändert.
+
+**Bereits 0.7.1 installiert:** Die gleiche Versionsnummer löst keinen höheren
+Versionshinweis aus. Das aktualisierte ZIP erneut herunterladen und über die
+Plugin-Verwaltung installieren, ohne vorher zu deinstallieren. Ein bereits lokal
+vorhandenes altes ZIP wird nicht automatisch aktualisiert.
 
 1. Laufende Backup-/Restoreaufgaben beenden lassen und Einstellungen exportieren.
 2. Nur eine Installation starten. Bei einer noch hängenden alten Installation
@@ -33,6 +40,20 @@ Release-Tags und ZIPs werden nicht überschrieben; Stable bleibt bei 0.5.8.
 > nochmals vollständig kopiert, weil diesen Backups die Metadaten-Profilinformation
 > fehlt. Erst nach einer erfolgreichen neuen Basiskopie sind wieder Hardlinks
 > möglich; genügend zusätzlichen Platz einplanen.
+
+## Nachbesserung ohne Versionssprung
+
+- Der automatische Wiederanlauf beim Boot und alle fünf Minuten verwendet
+  `recover-services --scheduled`. Bei belegter globaler Sperre setzt dieser
+  Versuch ohne Ausgabe mit Status 0 aus; der nächste Cron-Termin versucht es
+  erneut. Aktive Vorgänge und offene Journale bleiben dabei unberührt.
+- Nur erwartbare Sperrkonflikte werden still behandelt. Technische Sperrfehler
+  und fehlgeschlagene Dienststarts bleiben sichtbar; manuelle Wiederanläufe
+  melden eine belegte Sperre weiterhin als Fehler. AP-14 und die konfigurierten
+  Backup-Mailbenachrichtigungen werden nicht verändert.
+- Nach der Validierung erscheint „Aufbewahrung prüfen und alte Backups bereinigen“
+  (`retention`) statt eines stehengebliebenen `validating`. Die Aufgabe bleibt
+  bis zum Abschluss laufend; Aufbewahrungsregeln und Löschschutz bleiben gleich.
 
 ## Installation und Wiederinstallation korrigiert
 
@@ -85,10 +106,12 @@ Release-Tags und ZIPs werden nicht überschrieben; Stable bleibt bei 0.5.8.
 
 ## Prüfnachweise
 
-Der zugrunde liegende [Teststand 39254c6](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34759728463)
-bestand 191 Linux-Tests ohne Skips und 14 Browser-Prüfblöcke sowie Syntax-, Rechte-
-und Paketprüfungen. Der getaggte 0.7.1-Stand durchläuft die Prüfungen vor
-Veröffentlichung erneut. Den tatsächlichen abschliessenden Lauf und die
+Der [Korrekturstand 416e8ff](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34764161868)
+bestand 203 Linux-Tests ohne Skips und 15 Browser-Prüfblöcke sowie Syntax-, Rechte-
+und Paketprüfungen. Darunter sind echte konkurrierende Dateisperren,
+Metadaten-Roundtrips und Installationen mit Root-/Webbenutzerrechten.
+Der aktualisierte Tag-Stand durchläuft die Prüfungen vor Veröffentlichung erneut.
+Den tatsächlichen abschliessenden Lauf und die
 SHA-256-Prüfsumme nennt die
 [GitHub-Release-Seite](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.1-beta).
 Isolierte Fixtures sind kein Nachweis eines produktiven End-to-End-Restores.

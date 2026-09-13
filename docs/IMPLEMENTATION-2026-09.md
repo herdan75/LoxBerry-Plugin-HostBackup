@@ -3,15 +3,23 @@
 Entwicklungsbasis: develop, da9aa80. Reihenfolge: Sicherheit, Betrieb, Bedienung,
 Erweiterungen. Aktueller Zielstand: **0.7.1-beta**, interne Plugin-Version **0.7.1**.
 Die bisher zurückgestellte AP-14 zur Mail-/Benachrichtigungssemantik ist ausgenommen.
-Der Stand wird als neues Pre-Release mit eigenem ZIP und Updateeintrag
-bereitgestellt; der stabile Kanal bleibt auf 0.5.8. Die
+Das bestehende Pre-Release wird mit korrigiertem ZIP unter derselben Version und
+Adresse aktualisiert; der stabile Kanal bleibt auf 0.5.8. Die
 [Release Notes](RELEASE-0.7.1-beta.md) beschreiben Update und Prüfgrenzen.
 Die ursprüngliche Analyse wurde mit 0.7.0-beta veröffentlicht; historische
 Prüfläufe darunter behalten ihre damaligen Versions- und Commitangaben.
 
 ## Ergänzungen für 0.7.1-beta
 
-- Übernimmt den Programmstand `39254c6` des manuellen Testpakets unverändert;
+- Nachbesserung am 13.09.2026 ohne Versionssprung: automatisches `recover-services
+  --scheduled` setzt bei belegter Sperre still aus; echte Fehler bleiben sichtbar.
+  Die abschliessende Aufbewahrung erhält die Phase `retention`. Keine Änderung
+  der Aufbewahrungsregeln, des Löschschutzes oder der Backup-Mail-Einstellungen.
+- [Linux-Lauf 34764161868](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34764161868)
+  prüfte den Korrekturstand `416e8ffd18c97b198ccaf4b272e197cffc849d01`: 203 Tests
+  ohne Skips und 15 Browser-Prüfblöcke erfolgreich. Der aktualisierte Tag-Stand
+  wird einschliesslich Veröffentlichungsdokumentation erneut geprüft.
+- Die Erstveröffentlichung übernahm `39254c6` des manuellen Testpakets unverändert;
   Versionsdaten, Updateverweis und Dokumentation werden auf 0.7.1 angepasst.
 - Repariert den unprivilegierten Dateiaustausch bei Updates und erkennt einen
   zurückgebliebenen Launcher vor Aktivierung beziehungsweise Ausführung.
@@ -192,8 +200,10 @@ NAS-Profilen und vollständigem Offline-Systemstart abzuarbeiten.
 
 - Pre-Release: `v0.7.1-beta`, Plugin-Version `0.7.1`.
 - Paket: `LoxBerryHostBackup_0.7.1.zip` im zugehörigen GitHub-Pre-Release.
-- `prerelease.cfg` wird für die LoxBerry-Updateerkennung auf dieses Paket
-  umgestellt, nachdem es verfügbar ist; `release.cfg` bleibt bei 0.5.8.
+- `prerelease.cfg` behält Version 0.7.1 und denselben ZIP-Link. Das ZIP und der
+  Pre-Release-Tag werden auf den korrigierten Stand aktualisiert. Bereits
+  installierte 0.7.1-Versionen benötigen eine erneute Installation, da die
+  Updateerkennung keine höhere Version findet; `release.cfg` bleibt bei 0.5.8.
 - Produktänderungen und zugehörige Dokumentation werden auf `develop` versioniert.
   Fremde unversionierte Arbeitsdateien sind kein Teil des Releases und werden
   weder übernommen noch bereinigt.

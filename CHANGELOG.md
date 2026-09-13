@@ -9,7 +9,17 @@ validiert werden.
 
 ## [Unreleased]
 
-### Korrekturen auf develop (noch nicht veröffentlicht)
+Noch keine weiteren Änderungen.
+
+## [0.7.1-beta] - 2026-09-13
+
+### Aktualisiertes Pre-Release-Paket ohne Versionssprung
+
+- Das bestehende ZIP `LoxBerryHostBackup_0.7.1.zip` und der Pre-Release-Tag
+  `v0.7.1-beta` werden auf den korrigierten develop-Stand aktualisiert. Interne
+  Version `0.7.1`, Download-Adresse und Stable 0.5.8 bleiben gleich. Bereits
+  installierte 0.7.1-Versionen erhalten deshalb keinen höheren Versionshinweis;
+  für die Korrektur das aktualisierte ZIP erneut installieren, ohne Deinstallation.
 
 - Der automatische Dienst-Wiederanlauf beim Boot und alle fünf Minuten verwendet
   `recover-services --scheduled`. Ist die globale Vorgangssperre belegt, setzt
@@ -25,18 +35,20 @@ validiert werden.
 - Regressionstests für stille Cron-Sperrkonflikte, unveränderte Journale und spätere
   Wiederanläufe, sichtbare echte Fehler sowie die Phasenfolge ergänzt; zusätzlich
   Linux-Test mit echter `flock`-Sperre und Browserprüfung der Phasenanzeige.
-- Versionsnummer, veröffentlichte Pre-Release-Downloads und Backup-Mail-Einstellungen
-  bleiben unverändert. Die Korrekturen wirken erst nach Installation eines Pakets
-  aus diesem überarbeiteten Stand, nicht automatisch im bestehenden 0.7.1-beta.
-
-## [0.7.1-beta] - 2026-09-13
+- [Linux-Prüfung des Korrekturstands 416e8ff](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34764161868):
+  203 Tests ohne Skips, darunter echte Sperr-, Metadaten- und Root-/Webbenutzertests,
+  sowie 15 Browser-Prüfblöcke erfolgreich. Der Dokumentations-/Release-Stand wird
+  vor Ersetzen des Downloads erneut geprüft; Nachweis und Prüfsumme beim Release.
+- Backup-Mail-Einstellungen, Daten, Aufbewahrungsregeln und Löschschutz bleiben
+  unverändert. Die Korrektur gilt erst nach Installation des aktualisierten Pakets.
 
 ### Versionierung und Update
 
 - Interne Plugin-Version `0.7.1`, Pre-Release `v0.7.1-beta` und neues ZIP
   `LoxBerryHostBackup_0.7.1.zip`. LoxBerry erkennt damit ein Update gegenüber
   0.7.0 einschliesslich der manuellen Testpakete. Stable bleibt 0.5.8;
-  bestehende Release-Tags und Downloads werden nicht ersetzt.
+  ältere Release-Tags und Downloads werden nicht ersetzt. Ausnahme ist die oben
+  dokumentierte Aktualisierung dieses 0.7.1-beta-Pakets unter derselben Adresse.
 - Veröffentlicht den Programmstand `39254c6` mit angepassten Versionsdaten,
   README, Release Notes, Prüfbericht, Sicherheits- und Testdokumentation.
 - Keine neue Basiskopie allein wegen des Updates von 0.7.0 auf 0.7.1;
