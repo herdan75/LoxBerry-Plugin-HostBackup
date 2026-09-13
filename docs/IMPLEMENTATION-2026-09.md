@@ -30,7 +30,7 @@ bereitgestellt; der stabile Kanal bleibt auf 0.5.8. Die
 ## Lokale Verifikation des zusammengeführten Arbeitsstands
 
 Die folgenden Angaben dokumentieren den Windows-Prüflauf vor der
-Release-Vorbereitung; sie sind kein Nachweis für bereits erfolgreiche Linux-CI.
+Release-Vorbereitung; die anschliessende Linux-Abnahme ist separat unten dokumentiert.
 
 - Gemeinsamer finaler Lauf `bash tests/run.sh`: Exit 0, 176 Tests in 265,457 Sekunden,
   `OK (skipped=13)`, anschliessend Perl-/JavaScript-Syntax, Node-Verhalten und
@@ -51,13 +51,32 @@ Release-Vorbereitung; sie sind kein Nachweis für bereits erfolgreiche Linux-CI.
   Produktions-Zeitlimits wurden dadurch nicht verändert. Der finale Gesamtlauf
   erfolgte ohne konkurrierende Gesamttests und bestand vollständig.
 
-Lokale Browserbelege (JSON-Receipt, Desktop/Mobilbilder und Beispiel-Prüfbericht):
-`C:\Users\Daniel Hermann\AppData\Local\Temp\hostbackup-final-validation-ee2a7d11c5e94d19a7d51c2aa2d0fe58\browser\`.
-Es handelt sich ausschliesslich um künstliche Testdaten, nicht um produktive Backups.
+Lokale Browserbelege enthalten JSON-Receipt, Desktop-/Mobilbilder und einen
+Beispiel-Prüfbericht mit ausschliesslich künstlichen Testdaten. Sie sind keine
+produktiven Backups und werden nicht als Bestandteil des Plugins ausgeliefert.
 
 Nach diesem erfolgreichen Gesamtlauf folgten zunächst Dokumentation,
 Testpaketierung und lesende Abschlussprüfungen. Die anschliessende
-Release-Vorbereitung ergänzt Versions-/Update-Metadaten und Release-Dokumentation.
+Release-Vorbereitung ergänzt Versions-/Update-Metadaten, die unten beschriebenen
+Linux-Korrekturen und Release-Dokumentation.
+
+## Linux-Abnahme für 0.7.0-beta
+
+[GitHub-Lauf 34753075077](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34753075077)
+prüfte am 13.09.2026 den Code-Stand `92f4f643faffaf14e9ae3b470ad74a00e85174b5`:
+
+- 187 Tests in 13,933 Sekunden erfolgreich, keine übersprungenen Tests.
+- Root-/Webuser-Installation, Neustart-Rechte, echte rsync-/ACL-/xattr-Rückkopien
+  und Fake-Super-Hardlinks, Sonderzeichenpfade, UID/GID und File Capabilities geprüft.
+- Alle 10 Browser-Prüfblöcke mit Chromium 145.0.7632.6 erfolgreich.
+- ShellCheck, sudoers-Prüfung, PHP-/Perl-/JavaScript-Syntax und Linux-ZIP-Build erfolgreich.
+
+Die Linux-Prüfung fand zuvor den rsync-3.2.7-Fehler bei lokalen Fake-Super-Transfers;
+die feste lokale Transportumgehung ist im geprüften Stand enthalten. Künstliche
+Tar-Testeinträge erhielten die tatsächlichen Testbenutzer-Rechte und betretbare
+Verzeichnismodi; der Produktions-Restore wurde dafür nicht abgeschwächt.
+Der abschliessende Release-Tag durchläuft dieselbe Prüfschranke erneut, bevor
+ein Paket veröffentlicht wird. Hardware-/NAS-Abnahme bleibt davon getrennt.
 
 ## Testgrenzen
 
@@ -66,12 +85,12 @@ verwenden ausschliesslich isolierte temporäre Verzeichnisse. Echte Offline-
 Wiederherstellung auf LoxBerry und NAS-Matrix bleiben gesonderte Praxistests.
 
 Dieser Windows-Arbeitsplatz hat kein Linux-Root-/rsync-/ACL-/xattr-Testsystem.
-Die entsprechend markierten Tests müssen auf Linux ausgeführt werden.
+Die auf Windows übersprungenen Bereiche sind durch die obige Linux-CI abgedeckt.
 Die Veröffentlichung des Pre-Release-Pakets ist an erfolgreiche Linux-CI
 einschliesslich Integrations- und Browserprüfungen gebunden. Der zugehörige Lauf
 und seine tatsächlichen Ergebnisse werden auf der
 [Release-Seite](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.0-beta)
-nachgeführt; diese lokale Prüfung behauptet kein noch ausstehendes CI-Ergebnis.
+nachgeführt.
 Vor einer stabilen Freigabe sind zusätzlich
 die Szenarien in `DR-TESTPLAN.md` einschliesslich realem Neustart, Zielverlust,
 NAS-Profilen und vollständigem Offline-Systemstart abzuarbeiten.

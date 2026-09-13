@@ -92,6 +92,9 @@ dieses Updates**.
 
 ## Prüfung und bekannte Grenzen
 
+- [Linux-Abnahme](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34753075077):
+  187 Tests ohne Skips, alle zehn Browser-Prüfblöcke sowie Rechte-/Metadatenprüfung
+  und ZIP-Build erfolgreich. Der Release-Tag wird vor Veröffentlichung erneut geprüft.
 - Lokaler Windows-Gesamtlauf: 176 Tests, davon 13 plattformbedingte Skips;
   weitere Syntax-/Backend-Smokes erfolgreich. ShellCheck ohne Befunde.
 - Zehn Browser-Prüfblöcke mit echter CGI-Ausgabe und produktivem JavaScript/CSS

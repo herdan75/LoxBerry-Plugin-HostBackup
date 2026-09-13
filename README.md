@@ -171,7 +171,10 @@ Noch nicht produktiv validiert:
 Der neue Arbeitsstand ergänzt Verhaltenstests für Importangriffe, Dienst-Neustart,
 Zeitpläne, Ausschlüsse beim Restore, Metadaten-Roundtrips, Downloads, Aufbewahrung,
 Inhaltsprüfung und Browserbedienung. Windows-Prüfungen ersetzen die separat
-erforderlichen Linux-, NAS- und Offline-Restoretests nicht. Der lokale
+erforderlichen Linux-, NAS- und Offline-Restoretests nicht. Die
+[Linux-Abnahme für 0.7.0-beta](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34753075077)
+bestand 187 Tests ohne Skips, alle zehn Browser-Prüfblöcke, Rechte-/Metadatenprüfungen
+und den ZIP-Build. Der lokale
 Umsetzungs- und Prüfstand wird in [IMPLEMENTATION-2026-09.md](docs/IMPLEMENTATION-2026-09.md)
 geführt. Das Pre-Release-Paket wird nur nach erfolgreicher Linux-CI mit
 Integrations- und Browserprüfungen veröffentlicht; den zugehörigen Lauf und

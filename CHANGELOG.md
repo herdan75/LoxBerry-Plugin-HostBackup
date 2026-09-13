@@ -71,6 +71,9 @@ Noch keine Änderungen nach 0.7.0-beta.
 
 ### Qualität und Abgrenzung
 
+- Linux-Abnahme für 0.7.0-beta: 187 Tests ohne Skips, zehn Browser-Prüfblöcke,
+  privilegierte Installation/Neustart-Rechte, Metadaten-Roundtrips und ZIP-Build
+  erfolgreich; datierter Lauf im Umsetzungsbericht verlinkt.
 - Verhaltenstests für Sicherheitsgrenzen, Abbrüche, Restore, Metadaten, Downloads,
   Wartung und Browserinteraktionen ergänzt; Linux-Integration in CI verpflichtend.
 - README, Release Notes, Umsetzungsbericht und Disaster-Recovery-Testplan
