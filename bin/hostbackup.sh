@@ -1117,6 +1117,21 @@ rsync_metadata_options() {
       printf '%s\n' '-aHAX' '--numeric-ids' '--sparse'
       ;;
   esac
+  if [ "$mode" = "fake-super" ]; then
+    # rsync <= 3.2.7 with popt 1.19 can corrupt the destination of a local
+    # -M transfer and still exit 0: https://github.com/RsyncProject/rsync/issues/505
+    # Start the receiver as a separate LOCAL process. No SSH, network or eval;
+    # -s carries filenames over the protocol, preserving spaces/metacharacters.
+    printf '%s\n' '--whole-file' '--protect-args' "--rsh=/bin/sh -c 'shift; exec \"\$@\"' hostbackup-local"
+  fi
+}
+
+rsync_destination() {
+  if [ "$1" = "fake-super" ]; then
+    printf 'hostbackup-local:%s\n' "$2"
+  else
+    printf '%s\n' "$2"
+  fi
 }
 
 tar_metadata_options() {
@@ -1170,9 +1185,9 @@ metadata_capability_probe() {
     tar "${options[@]}" -C "$restored_dir" -xpf "$archive" || status=1
   else
     while IFS= read -r opt; do options+=("$opt"); done < <(rsync_metadata_options "$mode" backup)
-    rsync "${options[@]}" "$source_dir/" "$target_dir/" >/dev/null 2>&1 || status=1
+    rsync "${options[@]}" "$source_dir/" "$(rsync_destination "$mode" "$target_dir/")" >/dev/null 2>&1 || status=1
     while IFS= read -r opt; do restore_options+=("$opt"); done < <(rsync_metadata_options "$mode" restore)
-    rsync "${restore_options[@]}" "$target_dir/" "$restored_dir/" >/dev/null 2>&1 || status=1
+    rsync "${restore_options[@]}" "$target_dir/" "$(rsync_destination "$mode" "$restored_dir/")" >/dev/null 2>&1 || status=1
     if [ "$mode" = "fake-super" ]; then
       command -v getfattr >/dev/null 2>&1 || status=1
       getfattr -d -m '^user\.rsync\.' "$target_dir/sub/file" 2>/dev/null | grep 'user.rsync.' >/dev/null || status=1
@@ -2579,7 +2594,7 @@ create_backup() {
   else
     log "Starting rsync copy from / to $rootfs" | tee -a "$log_file"
     log "rsync live output follows. Large files or slow storage can keep one line active for a while." | tee -a "$log_file"
-    rsync "${metadata_opts[@]}" --delete "${rsync_opts[@]}" --exclude-from="$exclude_file" / "$rootfs/" 2>&1 | tee -a "$log_file"
+    rsync "${metadata_opts[@]}" --delete "${rsync_opts[@]}" --exclude-from="$exclude_file" / "$(rsync_destination "$mode" "$rootfs/")" 2>&1 | tee -a "$log_file"
     rsync_status=${PIPESTATUS[0]}
   fi
   set -e

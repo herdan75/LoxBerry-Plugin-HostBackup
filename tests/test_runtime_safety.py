@@ -444,7 +444,7 @@ snapshot_reference_stats "$TEST_ROOT/snapshot" "$TEST_ROOT/reference" > "$TEST_R
                 result = self.run_shell(r'''
 metadata_capability_probe "$TEST_ROOT/target" "$TEST_METADATA_MODE"
 printf '%s\n' "$METADATA_PROBE_MESSAGE"
-''', ("rsync_metadata_options", "tar_metadata_options", "metadata_capability_probe"), {"TEST_METADATA_MODE": mode})
+''', ("rsync_metadata_options", "rsync_destination", "tar_metadata_options", "metadata_capability_probe"), {"TEST_METADATA_MODE": mode})
                 self.assertIn("UID/GID", result.stdout)
                 self.assertIn("ACL-Werte bestaetigt", result.stdout)
                 if mode != "network-compatible":

@@ -441,6 +441,10 @@ seinen gesicherten Metadaten, Voraussetzungen und Restore-Einschränkungen:
 - `Fake Super`: für Ziele mit user-xattrs, aber ohne native Unix-Metadaten.
   rsync speichert privilegierte Angaben in `user.rsync.*`; das Profil darf nur
   verwendet werden, wenn das Ziel user-xattrs zuverlässig unterstützt.
+  Dieses Profil verwendet zwei lokale rsync-Prozesse mit einem fest definierten
+  lokalen Transport, um einen bekannten Fehler lokaler `-M`-Aufrufe in rsync
+  3.2.7 zu umgehen. Dafür werden weder SSH noch ein Netzwerkdienst benötigt;
+  die Sicherung bleibt auf dem eingebundenen lokalen/NAS-Dateisystem.
 - `Portable Archive`: für Ziele ohne geeignete Linux-Metadatenfunktionen. Das
   Profil erzeugt einen metadatentreuen `rootfs.tar`-Container, ist nicht mit
   inkrementellen Snapshots kombinierbar und darf nur aus einer Rescue-/Offline-

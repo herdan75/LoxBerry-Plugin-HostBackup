@@ -42,13 +42,19 @@ class RecoveryWorkflowTests(unittest.TestCase):
         return recovery.build_plan(self.backup, self.backup_root, self.destination, kwargs.pop("mappings", []), kwargs.pop("protected", []), mounts=[], **kwargs)
 
     def archive(self, files, hardlinks=()):
+        # These non-privileged fixtures exercise selection and destination safety.
+        # Give synthetic members the fixture owner's identity; TarInfo defaults
+        # to root, which would require an unrelated privileged chown on extraction.
+        owner = self.root.stat()
         with tarfile.open(self.backup / "rootfs.tar", "w", format=tarfile.PAX_FORMAT) as archive:
             for name, value in files.items():
                 entry = tarfile.TarInfo(name)
+                entry.uid, entry.gid = owner.st_uid, owner.st_gid
                 entry.size = len(value)
                 archive.addfile(entry, io.BytesIO(value))
             for name, link in hardlinks:
                 entry = tarfile.TarInfo(name)
+                entry.uid, entry.gid = owner.st_uid, owner.st_gid
                 entry.type = tarfile.LNKTYPE
                 entry.linkname = link
                 archive.addfile(entry)
@@ -149,6 +155,10 @@ class RecoveryWorkflowTests(unittest.TestCase):
         self.assertEqual(private.read_bytes(), b"existing private data")
         self.assertEqual((self.destination / config).read_bytes(), b"saved config")
         self.assertEqual((self.destination / "etc/settings").read_bytes(), b"new")
+        if os.name == "posix":
+            restored = (self.destination / config).stat()
+            owner = self.root.stat()
+            self.assertEqual((restored.st_uid, restored.st_gid), (owner.st_uid, owner.st_gid))
 
     def test_real_partial_tar_uses_fresh_directory_and_never_overwrites(self):
         self.archive({"docs/readme.txt": b"saved file"})
@@ -163,7 +173,11 @@ class RecoveryWorkflowTests(unittest.TestCase):
         self.assertEqual(len(restored), 2)
         for path in restored:
             self.assertEqual((path / "docs/readme.txt").read_bytes(), b"saved file")
-            if os.name == "posix": self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o700)
+            if os.name == "posix":
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o700)
+                restored_file = (path / "docs/readme.txt").stat()
+                owner = self.root.stat()
+                self.assertEqual((restored_file.st_uid, restored_file.st_gid), (owner.st_uid, owner.st_gid))
 
     def test_tar_preview_lists_exact_selected_paths_without_writing(self):
         self.archive({"etc/settings": b"system", "docs/strange\nname": b"newline", "home/private/keep": b"omitted"})

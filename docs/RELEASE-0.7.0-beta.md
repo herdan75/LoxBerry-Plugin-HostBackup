@@ -51,6 +51,9 @@ zusätzlichen lokalen Speicher; sie müssen bewusst aktiviert werden.
   wöchentliche und monatliche Zeitpläne verwenden denselben Startweg.
 - Metadaten werden mit einer echten Rückkopie geprüft. Snapshot-Wiederverwendung
   wird von blossen Hardlinks innerhalb eines Backups unterschieden.
+- Fake Super erhält einen lokalen Kompatibilitätsweg für den bekannten
+  [rsync-3.2.7-Fehler bei lokalen `-M`-Transfers](https://github.com/RsyncProject/rsync/issues/505),
+  ohne zusätzliche SSH-Einrichtung oder Netzwerkdienst.
 - Exporte und vollständige Logs werden über das Root-Backend gestreamt;
   Exportprüfung und Ausgabe beziehen sich auf dieselbe geöffnete Datei.
 

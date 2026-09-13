@@ -47,6 +47,23 @@ def recovery_module():
     return module
 
 
+class MetadataTransportOptionsTests(unittest.TestCase):
+    def test_fake_super_transport_is_local_and_preserves_protocol_paths(self) -> None:
+        recovery = recovery_module()
+        options = recovery.copy_options("fake-super")
+        self.assertIn("--fake-super", options)
+        self.assertIn("-M--super", options)
+        self.assertIn("--protect-args", options)
+        self.assertIn("--whole-file", options)
+        transport = next(value.split("=", 1)[1] for value in options if value.startswith("--rsh="))
+        self.assertEqual(shlex.split(transport), ["/bin/sh", "-c", 'shift; exec "$@"', "hostbackup-local"])
+        self.assertEqual(recovery.rsync_destination("fake-super", "/backup with ' quotes/"),
+                         "hostbackup-local:/backup with ' quotes/")
+        for mode in ("native-strict", "network-compatible"):
+            self.assertFalse(any(value.startswith("--rsh=") for value in recovery.copy_options(mode)))
+            self.assertEqual(recovery.rsync_destination(mode, "/backup/"), "/backup/")
+
+
 class RecoveryExclusionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.workspace = tempfile.TemporaryDirectory(prefix="hostbackup-recovery-test-")
@@ -303,7 +320,7 @@ class LinuxRestoreRoundtripTests(unittest.TestCase):
         result = subprocess.run(
             ["bash", "--noprofile", "--norc", "-s"],
             input="set -euo pipefail\n" + script,
-            env=self.environment, text=True, capture_output=True, check=False, timeout=60,
+            env=self.environment, cwd=self.root, text=True, capture_output=True, check=False, timeout=60,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return result
@@ -338,12 +355,18 @@ class LinuxRestoreRoundtripTests(unittest.TestCase):
 
     def copy_and_restore(self, mode: str) -> None:
         self.environment["METADATA_MODE"] = mode
-        self.bash(backend_function("rsync_metadata_options") + r'''
+        self.bash(backend_function("rsync_metadata_options") + backend_function("rsync_destination") + r'''
 declare -a backup_options=() restore_options=()
 while IFS= read -r option; do backup_options+=("$option"); done < <(rsync_metadata_options "$METADATA_MODE" backup)
 while IFS= read -r option; do restore_options+=("$option"); done < <(rsync_metadata_options "$METADATA_MODE" restore)
-rsync "${backup_options[@]}" "$SOURCE/" "$COPY/"
-rsync "${restore_options[@]}" "$COPY/" "$DESTINATION/"
+rsync "${backup_options[@]}" "$SOURCE/" "$(rsync_destination "$METADATA_MODE" "$COPY/")"
+test -f "$COPY/payload" || { echo 'Backup payload missing despite rsync success' >&2; exit 1; }
+cmp "$SOURCE/payload" "$COPY/payload"
+if [ "$METADATA_MODE" = fake-super ]; then
+  getfattr --only-values -n 'user.rsync.%stat' "$COPY/payload"
+fi
+rsync "${restore_options[@]}" "$COPY/" "$(rsync_destination "$METADATA_MODE" "$DESTINATION/")"
+test -f "$DESTINATION/payload" || { echo 'Restore payload missing despite rsync success' >&2; exit 1; }
 ''')
 
     def test_native_strict_metadata_roundtrip(self) -> None:
@@ -360,6 +383,54 @@ rsync "${restore_options[@]}" "$COPY/" "$DESTINATION/"
         self.make_metadata_fixture()
         self.copy_and_restore("fake-super")
         self.assert_metadata_roundtrip(xattrs=True)
+        self.assertTrue(any(name.startswith("user.rsync.") for name in os.listxattr(self.copy / "payload")))
+        self.assertFalse(any(name.startswith("user.rsync.") for name in os.listxattr(self.destination / "payload")))
+
+    def test_fake_super_snapshot_and_python_restore_keep_exact_local_paths(self) -> None:
+        self.make_metadata_fixture()
+        name = "data with spaces 'quotes' $() [brackets] ;.txt"
+        (self.source / name).write_text("literal pathname", encoding="utf-8")
+        # A shell evaluation would create this sentinel; protocol arguments must
+        # instead preserve this complete name as the destination directory.
+        tricky = self.root / "snapshot '$(touch SHOULD_NOT_EXIST)' ; [literal]"
+        tricky.mkdir()
+        self.environment["SNAPSHOT"] = str(tricky)
+        self.environment["METADATA_MODE"] = "fake-super"
+        self.copy_and_restore("fake-super")
+        self.bash(backend_function("rsync_metadata_options") + backend_function("rsync_destination") + r'''
+declare -a options=()
+while IFS= read -r option; do options+=("$option"); done < <(rsync_metadata_options fake-super backup)
+rsync "${options[@]}" --link-dest="$COPY" "$SOURCE/" "$(rsync_destination fake-super "$SNAPSHOT/")"
+''')
+        self.assertEqual((self.copy / "payload").stat().st_ino, (tricky / "payload").stat().st_ino)
+        self.assertEqual((tricky / name).read_text(encoding="utf-8"), "literal pathname")
+        backup_root = self.root / "backups"
+        backup = backup_root / "backup-1"
+        backup.mkdir(parents=True)
+        tricky.rename(backup / "rootfs")
+        (backup / "rsync-excludes.txt").write_text("", encoding="utf-8")
+        self.destination = self.root / "restored '$(touch SHOULD_NOT_EXIST)' ; [literal]"
+        self.destination.mkdir()
+        self.environment["DESTINATION"] = str(self.destination)
+        command = [sys.executable, str(RECOVERY), "execute", "--backup", str(backup),
+                   "--backup-root", str(backup_root), "--destination", str(self.destination), "--mode", "fake-super"]
+        result = subprocess.run(command, cwd=self.root, text=True, capture_output=True, check=False, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assert_metadata_roundtrip(xattrs=True)
+        self.assertEqual((self.destination / name).read_text(encoding="utf-8"), "literal pathname")
+        partial = self.root / "partial '$(touch SHOULD_NOT_EXIST)' ; [literal]"
+        partial.mkdir()
+        result = subprocess.run(
+            [sys.executable, str(RECOVERY), "files", "--backup", str(backup), "--backup-root", str(backup_root),
+             "--destination", str(partial), "--mode", "fake-super", "--relative", name],
+            cwd=self.root, text=True, capture_output=True, check=False, timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        folders = list(partial.glob("recovered-*"))
+        self.assertEqual(len(folders), 1)
+        self.assertEqual((folders[0] / name).read_text(encoding="utf-8"), "literal pathname")
+        self.assertFalse((self.root / "SHOULD_NOT_EXIST").exists())
+        self.assertFalse(any(ord(char) < 32 for path in self.root.iterdir() for char in path.name))
 
     def test_portable_archive_metadata_roundtrip(self) -> None:
         self.make_metadata_fixture()
@@ -372,6 +443,12 @@ tar "${options[@]}" --same-owner --same-permissions --delay-directory-restore -C
         self.assert_metadata_roundtrip(xattrs=True)
 
     def test_native_strict_preserves_file_capabilities(self) -> None:
+        self.assert_privileged_roundtrip("native-strict")
+
+    def test_fake_super_preserves_privileged_ownership_and_file_capabilities(self) -> None:
+        self.assert_privileged_roundtrip("fake-super")
+
+    def assert_privileged_roundtrip(self, mode: str) -> None:
         missing = [program for program in ("setcap", "getcap") if not shutil.which(program)]
         if missing:
             if REQUIRE_LINUX:
@@ -393,26 +470,32 @@ tar "${options[@]}" --same-owner --same-permissions --delay-directory-restore -C
             f"{name}={shlex.quote(str(value))}" for name, value in (
                 ("FIXTURE_ROOT", self.root), ("SOURCE", self.source),
                 ("COPY", self.copy), ("DESTINATION", self.destination),
+                ("METADATA_MODE", mode),
             )
         )
-        script = "set -euo pipefail\n" + assignments + "\n" + backend_function("rsync_metadata_options") + r'''
+        script = "set -euo pipefail\n" + assignments + "\n" + backend_function("rsync_metadata_options") + backend_function("rsync_destination") + r'''
 test "$FIXTURE_ROOT" != /
 test "$SOURCE" = "$FIXTURE_ROOT/source"
 test "$COPY" = "$FIXTURE_ROOT/copy"
 test "$DESTINATION" = "$FIXTURE_ROOT/restore"
+chown 1:1 "$SOURCE/payload"
 setcap cap_net_bind_service=ep "$SOURCE/payload"
-declare -a options=()
-while IFS= read -r option; do options+=("$option"); done < <(rsync_metadata_options native-strict backup)
-rsync "${options[@]}" "$SOURCE/" "$COPY/"
-rsync "${options[@]}" "$COPY/" "$DESTINATION/"
+declare -a options=() restore_options=()
+while IFS= read -r option; do options+=("$option"); done < <(rsync_metadata_options "$METADATA_MODE" backup)
+while IFS= read -r option; do restore_options+=("$option"); done < <(rsync_metadata_options "$METADATA_MODE" restore)
+rsync "${options[@]}" "$SOURCE/" "$(rsync_destination "$METADATA_MODE" "$COPY/")"
+test -f "$COPY/payload"
+rsync "${restore_options[@]}" "$COPY/" "$(rsync_destination "$METADATA_MODE" "$DESTINATION/")"
 getcap "$DESTINATION/payload"
 '''
         result = subprocess.run(
             privilege + ["bash", "--noprofile", "--norc", "-s"], input=script,
-            text=True, capture_output=True, check=False, timeout=60,
+            cwd=self.root, text=True, capture_output=True, check=False, timeout=60,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("cap_net_bind_service=ep", result.stdout)
+        self.assertEqual((self.destination / "payload").stat().st_uid, 1)
+        self.assertEqual((self.destination / "payload").stat().st_gid, 1)
         self.assertEqual(
             os.getxattr(self.destination / "payload", "security.capability"),
             os.getxattr(self.source / "payload", "security.capability"),
@@ -484,20 +567,30 @@ getcap "$DESTINATION/payload"
         (backup / "source-mounts.json").write_text(json.dumps([{"target": "/" + volume}]), encoding="utf-8")
         mapped = self.destination / "data"
         mapped.mkdir()
+        # This is an unprivileged path/link transformation test. Synthetic tar
+        # entries must have the current fixture's owner, including directories
+        # and links; privileged metadata roundtrips are covered separately.
+        owner = self.root.stat()
+
+        def fixture_member(name):
+            member = tarfile.TarInfo(name)
+            member.uid, member.gid = owner.st_uid, owner.st_gid
+            return member
+
         with tarfile.open(backup / "rootfs.tar", "w", format=tarfile.PAX_FORMAT) as archive:
             for directory in ("media", volume):
-                member = tarfile.TarInfo(directory)
+                member = fixture_member(directory)
                 member.type = tarfile.DIRTYPE
                 archive.addfile(member)
             for name, content in (("./" + volume + "/a.txt", b"alpha"), (volume + "/b.txt", b"beta")):
-                member = tarfile.TarInfo(name)
+                member = fixture_member(name)
                 member.size = len(content)
                 archive.addfile(member, io.BytesIO(content))
-            link = tarfile.TarInfo(volume + "/hardlink")
+            link = fixture_member(volume + "/hardlink")
             link.type = tarfile.LNKTYPE
             link.linkname = "./" + volume + "/a.txt"
             archive.addfile(link)
-            symlink = tarfile.TarInfo("./" + volume + "/symlink")
+            symlink = fixture_member("./" + volume + "/symlink")
             symlink.type = tarfile.SYMTYPE
             symlink.linkname = "a.txt"
             archive.addfile(symlink)
@@ -512,6 +605,8 @@ getcap "$DESTINATION/payload"
         self.assertEqual((mapped / "a.txt").read_bytes(), b"alpha")
         self.assertEqual((mapped / "b.txt").read_bytes(), b"beta")
         self.assertEqual((mapped / "a.txt").stat().st_ino, (mapped / "hardlink").stat().st_ino)
+        restored = (mapped / "a.txt").stat()
+        self.assertEqual((restored.st_uid, restored.st_gid), (owner.st_uid, owner.st_gid))
         self.assertEqual(os.readlink(mapped / "symlink"), "a.txt")
         self.assertFalse((self.destination / volume / "a.txt").exists())
 

@@ -28,6 +28,14 @@ der gesamten Installation, Konfiguration oder Cron-Regeln. Diese Schutzprüfung
 gilt für die Plugin-Helfer; gemeinsam genutzte LoxBerry-/Systembibliotheken und
 deren Updates bleiben Verantwortung der Plattform.
 
+Fake Super verwendet für die getrennte Behandlung von Sender und Empfänger
+einen festen lokalen rsync-Transport. Der Shellcode ist konstant, führt kein
+`eval` aus und stellt keine SSH-/Netzwerkverbindung her; Zielpfade werden nicht
+in ausführbaren Shelltext eingesetzt. Geschützte rsync-Argumentübertragung
+bewahrt Leerzeichen und Sonderzeichen in Pfaden. Diese Umgehung betrifft den
+[bekannten lokalen rsync-Fehler #505](https://github.com/RsyncProject/rsync/issues/505);
+Native Strict und Network Compatible behalten ihren lokalen Kopierweg.
+
 Locks, Task-State und bereits vom Backend angenommene Importdateien liegen unter
 `/var/lib/loxberryhostbackup` in Root-eigenen Verzeichnissen. Ein Web-Upload wird
 dorthin verschoben und als reguläre Datei mit genau einem Hardlink erneut

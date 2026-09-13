@@ -331,10 +331,18 @@ def copy_options(mode):
     if mode == "network-compatible":
         return ["-aHA", "--numeric-ids", "--sparse"]
     if mode == "fake-super":
-        return ["-aHAX", "--numeric-ids", "--sparse", "--fake-super", "-M--super"]
+        # Avoid rsync <= 3.2.7/popt 1.19 local -M destination corruption (#505).
+        # This fixed transport only execs a local receiver; it never uses a
+        # network shell or eval. --protect-args preserves paths via protocol.
+        return ["-aHAX", "--numeric-ids", "--sparse", "--fake-super", "-M--super",
+                "--whole-file", "--protect-args", "--rsh=/bin/sh -c 'shift; exec \"$@\"' hostbackup-local"]
     if mode == "native-strict":
         return ["-aHAX", "--numeric-ids", "--sparse"]
     raise RecoveryError("Unbekanntes Verzeichnis-Metadatenprofil.")
+
+
+def rsync_destination(mode, path):
+    return ("hostbackup-local:" if mode == "fake-super" else "") + path
 
 
 def stream_command(command):
@@ -418,7 +426,7 @@ def run_restore(plan, mode, storage_format, dry_run):
                            "--exclude-from=" + str(rules_file)]
                 if dry_run:
                     command.append("--dry-run")
-                prepared.append((part, command + [str(source) + "/", part["destination"].rstrip("/") + "/"], None))
+                prepared.append((part, command + [str(source) + "/", rsync_destination(mode, part["destination"].rstrip("/") + "/")], None))
         for part, command, members in prepared:
             print(f"{'Vorschau' if dry_run else 'Restore'}: {part['source']} -> {part['destination']}", flush=True)
             if dry_run and members is not None:
@@ -473,7 +481,7 @@ def restore_files(backup, backup_root, destination, relative, mode, storage_form
             exclude_file = Path(temp) / "excludes.txt"
             write_rules(exclude_file, rules)
             stream_command(["rsync", *copy_options(mode), "--one-file-system", "--relative", "--itemize-changes",
-                            "--exclude-from=" + str(exclude_file), str(base) + "/./" + relative, str(created) + "/"])
+                            "--exclude-from=" + str(exclude_file), str(base) + "/./" + relative, rsync_destination(mode, str(created) + "/")])
     print("Einzeldatei-Restore abgeschlossen; vorhandene Dateien am Ziel wurden nicht ersetzt.", flush=True)
 
 

@@ -46,6 +46,9 @@ Noch keine Änderungen nach 0.7.0-beta.
   gestreamt. Exportprüfung und Ausgabe verwenden denselben geöffneten Dateideskriptor.
 - Metadatenprobe führt eine echte Rückkopie durch; Snapshot-Wiederverwendung wird
   über identische Pfade mit übereinstimmendem Gerät/Inode gemessen.
+- Fake-Super-Transfers umgehen den in der Linux-Abnahme erkannten rsync-3.2.7-
+  Fehler lokaler `-M`-Optionen über einen fest definierten lokalen Transport
+  ohne SSH oder Netzwerkdienst. Zwischenkopie und Zielinhalt werden geprüft.
 
 ### Bedienung und Erweiterungen
 
