@@ -29,7 +29,15 @@ header fixture emits the CGI's actual head additions instead of injecting its
 own asset URLs. Tests prime an obsolete unversioned stylesheet in the browser
 cache, then verify that content-fingerprinted CSS/JavaScript are loaded. Overview
 checks cover matching white content areas, separated titles and values (also
-without CSS), two desktop columns, one mobile column and long paths/timestamps.
-Dedicated `overview-desktop.png` and `overview-mobile.png` screenshots supplement
-the full-page screenshots. The generic fixture styles are not a full LoxBerry
+without CSS), four desktop/two tablet/one mobile column and long paths/timestamps.
+The compact overview keeps four primary values visible and puts full IDs, target
+paths and report actions in a native disclosure. Tests exercise Enter/Space,
+initially closed state, preserved state during polling, no report request on
+expansion, and visible failure/recovery notices and loaded reports while closed.
+The suite currently emits 14 browser-check receipts. Dedicated
+`overview-desktop.png`, `overview-expanded.png`, `overview-mobile.png` and
+`overview-mobile-expanded.png` screenshots supplement the full-page screenshots.
+Storage calculation and runtime-check backend behavior are not validated by
+these UI fixtures; their known limitations are documented in the 0.7.1 release
+notes. The generic fixture styles are not a full LoxBerry
 theme or a substitute for testing the installed plugin on a real device.

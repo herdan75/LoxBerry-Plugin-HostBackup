@@ -9,6 +9,24 @@ validiert werden.
 
 ## [Unreleased]
 
+Noch keine weiteren Änderungen.
+
+## [0.7.1-beta] - 2026-09-13
+
+### Versionierung und Update
+
+- Interne Plugin-Version `0.7.1`, Pre-Release `v0.7.1-beta` und neues ZIP
+  `LoxBerryHostBackup_0.7.1.zip`. LoxBerry erkennt damit ein Update gegenüber
+  0.7.0 einschliesslich der manuellen Testpakete. Stable bleibt 0.5.8;
+  bestehende Release-Tags und Downloads werden nicht ersetzt.
+- Veröffentlicht den Programmstand `39254c6` mit angepassten Versionsdaten,
+  README, Release Notes, Prüfbericht, Sicherheits- und Testdokumentation.
+- Keine neue Basiskopie allein wegen des Updates von 0.7.0 auf 0.7.1;
+  die vorhandenen Referenz-/Profilprüfungen bleiben unverändert. Beim Umstieg
+  von 0.5.8 oder älter wird weiterhin zuerst eine vollständige Basiskopie benötigt.
+
+### Installation und Bedienung
+
 - Übersicht kompakter gestaltet: vier wichtige Statuswerte bleiben sichtbar;
   vollständige IDs, Zielpfad und Prüf-/Diagnoseaktionen liegen im standardmässig
   geschlossenen Bereich „Details und Prüfaktionen“. Auf-/Zuklappen ist auch per
@@ -30,9 +48,8 @@ validiert werden.
   Plattformbenutzer, Nachstellung des alten Kopierfehlers, Reparatur und erneute
   Installation derselben Version, unveränderte Einstellungen und alte Helferstände,
   Abweisung eines Startskripts als Backend und Schutz vor Symlink-Zielen.
-- Diese Nachbesserung wird zunächst nur als manuelles Testpaket mit interner
-  Version `0.7.0` bereitgestellt; das veröffentlichte Pre-Release bleibt bis zur
-  ausdrücklichen Freigabe unverändert.
+- Die zuvor separat unter interner Version `0.7.0` bereitgestellten
+  Testkorrekturen werden mit 0.7.1-beta als neues Pre-Release angeboten.
 - Übersicht und Live-Status verwenden weisse Inhaltsflächen passend zu den
   Einstellungen. Beschriftungen und Werte in der Übersicht sind getrennt und
   bleiben auch ohne CSS durch Doppelpunkt und Leerzeichen lesbar.
@@ -41,6 +58,17 @@ validiert werden.
   geladen; alte Browser-Caches müssen nicht manuell geleert werden.
 - Browserprüfung ergänzt um die tatsächlich vom CGI erzeugten Asset-Adressen,
   alte zwischengespeicherte Styles, weisse Flächen sowie Desktop-/Mobilabstände.
+
+### Prüfung und offene Punkte
+
+- Der zugrunde liegende Teststand `39254c6` bestand 191 Linux-Tests ohne Skips
+  und 14 Browser-Prüfblöcke. Der Release-Tag durchläuft die Linux-Prüfungen vor
+  Veröffentlichung erneut; Ergebnisse und Paketprüfsumme stehen beim Release.
+- Speicherberechnung ohne Zwischenfortschritt und die unverständliche
+  HTTP-500-Anzeige bei gesperrter Laufzeitdateien-Prüfung bleiben offen.
+  Die Fehlerkette wurde isoliert nachgestellt, nicht live auf dem Nutzergerät.
+- AP-14 bleibt ausgenommen. Vollständige Offline-Restore-/NAS-Hardwareabnahme
+  bleibt separat erforderlich; ein erfolgreicher CI-Lauf ersetzt sie nicht.
 
 ## [0.7.0-beta] - 2026-09-13
 
@@ -666,7 +694,8 @@ nicht überarbeitet worden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.7.0-beta...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.7.1-beta...develop
+[0.7.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.1-beta
 [0.7.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.0-beta
 [0.6.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.6.1-beta
 [0.6.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.6.0-beta

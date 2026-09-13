@@ -2,6 +2,12 @@
 
 Pre-Release vom 13.09.2026 · interne Plugin-Version 0.7.0 · Stable bleibt 0.5.8.
 
+> Historische Release Notes. Die weitergehende Update-/Launcher-Korrektur und
+> kompakte Übersicht werden als [0.7.1-beta](RELEASE-0.7.1-beta.md) angeboten.
+> Für aktuelle Updates die neue Version verwenden. Bei noch hängender alter
+> Installation keinen parallelen Wiederholungsversuch starten; zuerst die
+> laufende Installation klären. Die folgenden Angaben beschreiben 0.7.0.
+
 Diese Vorabversion erweitert 0.6.1-beta um abgesicherte Backup-/Restoreabläufe,
 eine robustere Bedienung und optionale Prüf-, Aufbewahrungs- und Diagnosefunktionen.
 Sie ist für freiwillige Tests vorgesehen, nicht als alleinige Absicherung

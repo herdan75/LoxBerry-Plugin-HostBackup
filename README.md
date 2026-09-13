@@ -1,36 +1,31 @@
 # LoxBerry Host Backup
 
-**Pre-Release: 0.7.0-beta · Stable: 0.5.8.**
-Die Vorabversion enthält die Sicherheits-, Wiederherstellungs- und
-Bedienungsverbesserungen aus der Analyse vom 13.09.2026 und ist für freiwillige
-Tests vorgesehen. Änderungen, Updatehinweise und Prüfgrenzen stehen in den
-[Release Notes](docs/RELEASE-0.7.0-beta.md); der stabile Kanal bleibt unverändert.
+**Pre-Release: 0.7.1-beta · Stable: 0.5.8.**
+Die Vorabversion veröffentlicht die Installationskorrektur und die kompakte
+Übersicht des zuvor separat bereitgestellten Teststands `39254c6` unter einer
+neuen Versionsnummer. Damit erkennt LoxBerry auch gegenüber `0.7.0` ein neues
+Pre-Release. Änderungen, Updatehinweise und Prüfgrenzen stehen in den
+[Release Notes](docs/RELEASE-0.7.1-beta.md); der stabile Kanal bleibt unverändert.
 
-**Installationskorrektur vom 13.09.2026, weiterhin 0.7.0-beta:** Das Paket
-unter demselben Downloadlink berücksichtigt nun LoxBerrys vorgesehenen
-`/etc/cron.d`-Symlink einschliesslich des gemeldeten Zielverzeichnisses mit
-`root:root 775`. Die erste Symlink-Korrektur hatte dieses Gruppenschreibrecht
-noch abgelehnt. Ausschliesslich die Gruppe `root` darf dieses vorgesehene
-Cron-Verzeichnis mitbeschreiben; Systemrechte werden nicht geändert.
-Ist bereits `0.7.0` eingetragen, erscheint wegen der unveränderten Versionsnummer
-kein höheres Versionsupdate.
+**Neu in 0.7.1-beta:** Der alte Plugin-Bin-Baum wird vor dem Update für
+LoxBerrys unprivilegierten Dateiaustausch vorbereitet, die Konfiguration vorher
+gesichert und das eigentliche Backup-Programm vor seiner Aktivierung geprüft.
+Ein zurückgebliebenes Weiterleitungs-Startskript wird nicht mehr als Backend
+übernommen. Die Zeitplan-Einrichtung ist auf 30 Sekunden plus höchstens
+5 Sekunden zum Beenden begrenzt. Die bereits vorhandene Unterstützung für
+LoxBerrys Cron-Symlink und `root:root 775` bleibt erhalten; gemeinsame
+Systemrechte werden nicht geändert.
 
 > [!WARNING]
-> Bei der erneuten Installation wurde ein weiterer Fehler im Dateiaustausch
-> festgestellt: Ein altes Startskript konnte anstelle des Backup-Programms
-> übernommen werden und Installation, Webanfragen sowie Cron-Aufrufe blockieren.
-> Bei einer hängenden Installation keinen zweiten Versuch starten und nicht
-> deinstallieren. Die Korrektur auf `develop` wird **zunächst nur als separates
-> manuelles Test-ZIP ohne Versionsänderung** bereitgestellt. Der oben beschriebene
-> veröffentlichte Download wird erst nach ausdrücklicher Freigabe ersetzt.
+> **Eine noch hängende alte Installation zuerst klären:** Keinen zweiten
+> Installationsversuch parallel starten und nicht deinstallieren. Ein neues
+> ZIP beendet bereits laufende fehlerhafte Altprozesse nicht automatisch.
+> Nach Wiederherstellung einer bedienbaren Plugin-Verwaltung auf 0.7.1-beta
+> aktualisieren. Die bisherigen 0.7.0-Downloads werden dafür nicht ersetzt.
 
-Der korrigierte Teststand bereitet das alte Plugin-Programmverzeichnis für
-LoxBerrys Dateiaustausch vor, sichert vorher die Konfiguration und prüft das
-eigentliche Backup-Programm vor seiner Aktivierung. Die geschützten
-Programmstände unter `/usr/libexec/loxberryhostbackup` bleiben erhalten.
-Zusätzlich wird die Zeitplan-Einrichtung zeitlich begrenzt. Die Tests bilden
-jetzt auch Löschen und Kopieren als unprivilegierter Plattformbenutzer nach;
-ein erfolgreiches Kopieren als Root allein reicht nicht als Update-Test.
+Die geschützten Programmstände unter `/usr/libexec/loxberryhostbackup` bleiben
+erhalten. Die Tests bilden Löschen und Kopieren als unprivilegierter
+Plattformbenutzer nach; Kopieren als Root allein reicht nicht als Update-Test.
 
 > [!IMPORTANT]
 > **Erst Einstellungen speichern, dann sichern.** Auch ausgewählte Optionen,
@@ -198,15 +193,32 @@ Der neue Arbeitsstand ergänzt Verhaltenstests für Importangriffe, Dienst-Neust
 Zeitpläne, Ausschlüsse beim Restore, Metadaten-Roundtrips, Downloads, Aufbewahrung,
 Inhaltsprüfung und Browserbedienung. Windows-Prüfungen ersetzen die separat
 erforderlichen Linux-, NAS- und Offline-Restoretests nicht. Die
-[Linux-Abnahme für 0.7.0-beta](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34753075077)
-bestand 187 Tests ohne Skips, alle zehn Browser-Prüfblöcke, Rechte-/Metadatenprüfungen
-und den ZIP-Build. Der lokale
+[Linux-Abnahme des Teststands 39254c6](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34759728463)
+bestand 191 Tests ohne Skips, alle 14 Browser-Prüfblöcke, Rechte-/Metadatenprüfungen
+und den ZIP-Build. 0.7.1-beta übernimmt diesen Programmstand mit aktualisierten
+Versionsdaten und Dokumenten; der Release-Tag durchläuft dieselben Prüfungen erneut. Der lokale
 Umsetzungs- und Prüfstand wird in [IMPLEMENTATION-2026-09.md](docs/IMPLEMENTATION-2026-09.md)
 geführt. Das Pre-Release-Paket wird nur nach erfolgreicher Linux-CI mit
 Integrations- und Browserprüfungen veröffentlicht; den zugehörigen Lauf und
-seine Ergebnisse nennt die [Release-Seite](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.0-beta).
+seine Ergebnisse nennt die [Release-Seite](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.1-beta).
 Eine echte LoxBerry-/NAS-/Offline-Hardwareabnahme ist damit nicht nachgewiesen
 und bleibt Voraussetzung für eine stabile Freigabe.
+
+### Bekannte offene Punkte in 0.7.1-beta
+
+- **Speicherbelegung berechnen:** durchsucht alle erkannten Backup-Dateien und
+  liefert erst am Ende ein Ergebnis, derzeit ohne Fortschrittsanzeige. Auf
+  grossen oder langsamen Zielen kann das lange dauern. Die Browser-Wartefrist
+  beträgt eine Stunde; ein Abbruch im Browser beendet den Backend-Aufruf nicht
+  zwingend. Ob der gemeldete konkrete Lauf hing oder noch rechnete, ist nicht
+  durch eine Live-Diagnose bestätigt.
+- **Laufzeitdateien prüfen:** kann während einer Speicherberechnung oder anderen
+  gesperrten Operation abgewiesen werden. Die Oberfläche zeigt dann derzeit
+  „Unerwartete Serverantwort (HTTP 500)“ statt der eigentlichen Belegtmeldung.
+  Dieser Ablauf wurde isoliert reproduziert, nicht auf dem betroffenen Gerät.
+  Prüfungen vorerst nacheinander ausführen; bei unklarem Status nicht wiederholt
+  starten. Die kompakte Übersicht behebt diese Funktionsprobleme noch nicht.
+- Die zurückgestellte AP-14 zur Mail-/Benachrichtigungssemantik bleibt ausgenommen.
 
 ## Installation
 
@@ -232,20 +244,21 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.5.8/
 Aktuelles Pre-Release-Paket:
 
 ```text
-https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.7.0-beta/LoxBerryHostBackup_0.7.0.zip
+https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.7.1-beta/LoxBerryHostBackup_0.7.1.zip
 ```
 
 Lokales Paket nach dem Build:
 
 ```text
-LoxBerryHostBackup_0.7.0.zip
+LoxBerryHostBackup_0.7.1.zip
 ```
 
-### Update auf 0.7.0-beta
+### Update auf 0.7.1-beta
 
 Für die Updateerkennung den Pre-Release-Kanal in der LoxBerry-Plugin-Verwaltung
 aktivieren und nach Plugin-Updates suchen. Die interne Plugin-Version lautet
-`0.7.0`; Tag und Vorabversion heissen `v0.7.0-beta` beziehungsweise `0.7.0-beta`.
+`0.7.1`; Tag und Vorabversion heissen `v0.7.1-beta` beziehungsweise `0.7.1-beta`.
+Auch Installationen des manuellen 0.7.0-Testpakets erkennen diese höhere Version.
 `prerelease.cfg` enthält den installierbaren ZIP-Link oben. Stable-Nutzer erhalten
 über `release.cfg` weiterhin Version 0.5.8.
 
@@ -262,7 +275,7 @@ benötigt nochmals eine vollständige Basiskopie, weil diesen alten Backups die
 Metadaten-Profilinformation fehlt. Erst ein nachfolgender erfolgreicher Lauf
 kann wieder Hardlinks verwenden. Genügend zusätzlichen freien Platz einplanen;
 das letzte brauchbare Backup wird nicht vorab zur Platzbeschaffung gelöscht.
-Ein Update von 0.6.x auf 0.7.0 erzwingt allein durch die Versionsnummer keine
+Ein Update von 0.6.x oder 0.7.0 auf 0.7.1 erzwingt allein durch die Versionsnummer keine
 neue Basiskopie: Entscheidend ist weiterhin eine verwendbare Referenz mit
 passendem Profil.
 
@@ -969,16 +982,16 @@ Update-Dateien:
 - `prerelease.cfg`: Pre-Release-Kanal mit neuer Vorabversion
 
 Das stabile installierbare ZIP wird über den Release-Kanal bereitgestellt. Der
-Pre-Release-Kanal zeigt für freiwillige Tests auf Version 0.7.0-beta. LoxBerry
+Pre-Release-Kanal zeigt für freiwillige Tests auf Version 0.7.1-beta. LoxBerry
 erkennt die Vorabversion über `prerelease.cfg`; das Paket liegt im zugehörigen
-GitHub-Pre-Release unter dem Tag `v0.7.0-beta`.
+GitHub-Pre-Release unter dem Tag `v0.7.1-beta`.
 
 GitHub Actions prüft den getaggten Stand unter Linux einschliesslich
 Integrations- und Browserprüfungen, erzeugt das Plugin-ZIP und hängt es erst
 nach erfolgreichen Prüfungen als Release-Asset an. Der automatische
 Updateverweis darf erst dann auf das neue Paket umgestellt werden, wenn dieses
 verfügbar ist. Die zurückgestellte AP-14 zur Mail-/Benachrichtigungssemantik ist
-nicht Teil von 0.7.0-beta.
+nicht Teil von 0.7.1-beta.
 
 Paket lokal bauen:
 

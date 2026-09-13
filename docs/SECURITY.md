@@ -1,5 +1,12 @@
 # Sicherheitsmodell
 
+Stand: 0.7.1-beta. Der freigegebene Pre-Release enthält die Absicherung des
+unprivilegierten Update-Dateiaustauschs und die Launcher-/Backend-Trennung.
+Die kompakte Übersicht verändert keine Berechtigungen, Locks oder
+Bestätigungsanforderungen. Die noch offene HTTP-500-Darstellung bei gesperrter
+Laufzeitprüfung ist kein Anlass, den Sperrschutz abzuschalten; siehe
+[bekannte Grenzen](RELEASE-0.7.1-beta.md#bekannte-offene-punkte).
+
 ## Privilegierte Grenze
 
 Die Weboberfläche ruft nicht mehr direkt ein per Wildcard freigegebenes

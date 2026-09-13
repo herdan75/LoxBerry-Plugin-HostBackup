@@ -1,11 +1,37 @@
 # Umsetzung der Analyse vom 13.09.2026
 
 Entwicklungsbasis: develop, da9aa80. Reihenfolge: Sicherheit, Betrieb, Bedienung,
-Erweiterungen. Zielstand: **0.7.0-beta**, interne Plugin-Version **0.7.0**.
+Erweiterungen. Aktueller Zielstand: **0.7.1-beta**, interne Plugin-Version **0.7.1**.
 Die bisher zurückgestellte AP-14 zur Mail-/Benachrichtigungssemantik ist ausgenommen.
 Der Stand wird als neues Pre-Release mit eigenem ZIP und Updateeintrag
 bereitgestellt; der stabile Kanal bleibt auf 0.5.8. Die
-[Release Notes](RELEASE-0.7.0-beta.md) beschreiben Update und Prüfgrenzen.
+[Release Notes](RELEASE-0.7.1-beta.md) beschreiben Update und Prüfgrenzen.
+Die ursprüngliche Analyse wurde mit 0.7.0-beta veröffentlicht; historische
+Prüfläufe darunter behalten ihre damaligen Versions- und Commitangaben.
+
+## Ergänzungen für 0.7.1-beta
+
+- Übernimmt den Programmstand `39254c6` des manuellen Testpakets unverändert;
+  Versionsdaten, Updateverweis und Dokumentation werden auf 0.7.1 angepasst.
+- Repariert den unprivilegierten Dateiaustausch bei Updates und erkennt einen
+  zurückgebliebenen Launcher vor Aktivierung beziehungsweise Ausführung.
+  Der Abschlussaufruf für die Zeitplaninstallation ist zeitlich begrenzt.
+- Vier kompakte Statuswerte bleiben sichtbar. Vollständige IDs, Zielpfad und
+  Prüfaktionen sind aufklappbar; Fehler, offene Dienst-Wiederanläufe und geladene
+  Ergebnisse bleiben ausserhalb. Der Aufklappzustand überlebt Aktualisierungen.
+- [Linux-Lauf 34759728463](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34759728463)
+  prüfte den zugrunde liegenden Commit `39254c6fef422bad251ec75f043ce966bf9ce37a`:
+  191 Tests ohne Skips, 14 Browser-Prüfblöcke, Rechte-/Syntaxprüfungen und ZIP-Build
+  erfolgreich. Der neue Release-Tag wird vor Veröffentlichung erneut geprüft;
+  die Release-Seite erhält dessen CI-Nachweis und Paketprüfsumme.
+- Offen bleiben Speicherberechnung ohne Zwischenfortschritt und die generische
+  HTTP-500-Anzeige bei einer gesperrten Laufzeitdateien-Prüfung. Die synchrone
+  Speicherberechnung hält eine gemeinsame Operationssperre; die Laufzeitvorschau
+  verlangt eine exklusive Sperre. Die resultierende Belegtmeldung geht derzeit
+  bei der CGI-/Browser-Fehlerdarstellung verloren. Isoliert nachgestellt,
+  keine bestätigte Live-Diagnose der Laufdauer auf dem betroffenen Gerät.
+- AP-14, vollständiger Offline-Restore und die reale NAS-/Hardwareabnahme
+  bleiben wie bisher gesondert offen.
 
 ## Nachverfolgung
 
@@ -97,12 +123,13 @@ ausserhalb des Plugin-Bin-Baums bleiben geschützt. Der Test läuft nur unter
 Linux mit Root-Rechten und wird von der vorhandenen Linux-CI verpflichtend
 ausgeführt; ein Windows-Skip gilt nicht als bestandene Plattformprüfung.
 
-Die Änderungen bleiben zunächst auf `develop` und in einem separaten manuellen
-Testpaket. Version, Release-Tag und veröffentlichtes ZIP werden dafür nicht
-geändert. Eine erneute Prüfung über den echten LoxBerry-Pluginmanager bleibt
-zusätzlich notwendig.
+Die Änderungen wurden zunächst auf `develop` und in einem separaten manuellen
+0.7.0-Testpaket bereitgestellt. Mit 0.7.1-beta erhalten sie einen eigenen
+Release-Tag, eine höhere Updateversion und einen neuen Download; das alte
+veröffentlichte ZIP bleibt unverändert. Eine erneute Prüfung über den echten
+LoxBerry-Pluginmanager bleibt zusätzlich notwendig.
 
-### Nachbesserung der LoxBerry-Installation, weiterhin 0.7.0-beta
+### Historie: Nachbesserung der LoxBerry-Installation unter 0.7.0-beta
 
 Das anschliessende reale Installationsprotokoll meldete
 `Unsafe trusted directory: /etc/cron.d`. LoxBerry verknüpft dieses Verzeichnis
@@ -155,7 +182,7 @@ Die auf Windows übersprungenen Bereiche sind durch die obige Linux-CI abgedeckt
 Die Veröffentlichung des Pre-Release-Pakets ist an erfolgreiche Linux-CI
 einschliesslich Integrations- und Browserprüfungen gebunden. Der zugehörige Lauf
 und seine tatsächlichen Ergebnisse werden auf der
-[Release-Seite](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.0-beta)
+[Release-Seite](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.1-beta)
 nachgeführt.
 Vor einer stabilen Freigabe sind zusätzlich
 die Szenarien in `DR-TESTPLAN.md` einschliesslich realem Neustart, Zielverlust,
@@ -163,8 +190,8 @@ NAS-Profilen und vollständigem Offline-Systemstart abzuarbeiten.
 
 ## Veröffentlichung
 
-- Pre-Release: `v0.7.0-beta`, Plugin-Version `0.7.0`.
-- Paket: `LoxBerryHostBackup_0.7.0.zip` im zugehörigen GitHub-Pre-Release.
+- Pre-Release: `v0.7.1-beta`, Plugin-Version `0.7.1`.
+- Paket: `LoxBerryHostBackup_0.7.1.zip` im zugehörigen GitHub-Pre-Release.
 - `prerelease.cfg` wird für die LoxBerry-Updateerkennung auf dieses Paket
   umgestellt, nachdem es verfügbar ist; `release.cfg` bleibt bei 0.5.8.
 - Produktänderungen und zugehörige Dokumentation werden auf `develop` versioniert.

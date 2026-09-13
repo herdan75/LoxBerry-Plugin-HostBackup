@@ -5,6 +5,31 @@ bei Änderungen an rsync-/tar-Optionen, Mount-Prüfung, Import, Restore oder
 Retention auszuführen. Produktive Daten werden durch synthetische Marker und
 Testdienste ersetzt.
 
+## Ergänzende Upgrade- und Bedienungsabnahme für 0.7.1-beta
+
+Diese Szenarien sind ein Prüfplan, kein Nachweis bereits bestandener Hardwaretests:
+
+1. Auf einem isolierten LoxBerry von 0.7.0 einschliesslich des manuellen
+   Testpakets auf 0.7.1-beta aktualisieren. Vorher Konfiguration exportieren und
+   alle aktiven Aufgaben beenden lassen; keinen zweiten Installer parallel starten.
+2. Ziel, Aufbewahrung, Profil, Ausschlüsse, ausgewählte Dienste und Zeitplan vor
+   und nach dem Update vergleichen. Alte Backups und geschützte Helferstände
+   müssen erhalten bleiben; danach UI und gespeicherten Zeitplan prüfen.
+3. Dateiaustausch durch den echten unprivilegierten Plattformbenutzer und
+   anschliessende POSTROOT-Aktivierung prüfen. Ein übriggebliebener Launcher als
+   Backend muss abgewiesen werden; der gültige vorherige Verweis darf bei dieser
+   Abweisung nicht ersetzt werden. Keine rekursive Startschleife akzeptieren.
+4. Erneute Installation derselben neuen Version und anschliessenden Neustart
+   prüfen; die Zeitplaninstallation darf nicht unbegrenzt warten.
+5. Kompakte Übersicht bei Desktop-, Tablet- und Mobilbreite prüfen: vier/zwei/eine
+   Spalte, vollständige Daten im Detailbereich, Enter/Leertaste zum Aufklappen,
+   kein automatischer Prüfstart und unveränderter Aufklappzustand beim Nachladen.
+   Fehler, offene Dienst-Wiederanläufe und geladene Ergebnisse bleiben sichtbar.
+6. Speicherberechnung und Laufzeitdateien-Prüfung zunächst getrennt beobachten.
+   Dauer, Prozessstatus und eventuelle HTTP-Fehler protokollieren. Die fehlende
+   Fortschrittsanzeige und der bekannte Sperrkonflikt mit generischer HTTP-500-
+   Meldung sind in 0.7.1-beta noch offen, nicht als behoben zu bewerten.
+
 ## Testmatrix
 
 | Ziel | Profil | Backup-Modus | Erwartung |
