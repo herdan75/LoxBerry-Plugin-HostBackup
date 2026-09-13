@@ -1654,7 +1654,7 @@ a.button-link:hover {
   color: #526173;
 }
 
-.terminal {
+#hostbackup-app pre.terminal {
   background: #111820;
   border-radius: 6px;
   color: #d9f2df;
@@ -1665,6 +1665,51 @@ a.button-link:hover {
   padding: 14px;
   white-space: pre;
   word-break: normal;
+}
+
+/* Local specificity wins over the LoxBerry theme, including its pre-wrap rule. */
+#hostbackup-app [hidden] { display: none !important; }
+#hostbackup-app pre.terminal {
+  white-space: pre;
+  overflow: auto;
+  overflow-wrap: normal;
+  word-break: normal;
+  max-width: 100%;
+  tab-size: 4;
+}
+#hostbackup-app .overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+#hostbackup-app .overview-grid > div { display: flex; flex-direction: column; gap: 6px; padding: 12px; background: #f3f6f8; border-radius: 6px; overflow-wrap: anywhere; }
+#hostbackup-app .task-history-label { max-width: 100%; margin-bottom: 12px; }
+#hostbackup-app .task-history-label select { max-width: 100%; width: 100%; }
+#hostbackup-app .backup-extra-actions { min-width: 150px; }
+#hostbackup-app .backup-extra-actions form { margin-top: 8px; }
+#hostbackup-app .restore-test-record { max-width: 420px; }
+#hostbackup-app .restore-test-record > p { font-size: 12px; }
+#hostbackup-app .restore-test-form { display: grid; gap: 8px; width: 100%; }
+#hostbackup-app .restore-test-form label { display: flex; flex-direction: column; gap: 4px; }
+#hostbackup-app .restore-test-form input, #hostbackup-app .restore-test-form select, #hostbackup-app .restore-test-form textarea { width: 100%; min-width: 0; }
+#hostbackup-app .maintenance-card { margin-top: 20px; padding: 16px; }
+#hostbackup-app .maintenance-card > summary { cursor: pointer; font-weight: 600; }
+#hostbackup-app .maintenance-card fieldset { width: 100%; box-sizing: border-box; }
+#hostbackup-app .settings-change-popup { max-height: min(55vh, 430px); overflow: auto; }
+#hostbackup-app .settings-change-list { max-height: 220px; overflow: auto; }
+#hostbackup-app .settings-change-popup-header { align-items: center; gap: 12px; }
+#hostbackup-app .settings-change-popup-header button { flex-shrink: 0; }
+#hostbackup-app .info-help.is-open .info-bubble { display: block; opacity: 1; visibility: visible; pointer-events: auto; }
+#hostbackup-app .info-button:focus-visible, #hostbackup-app button:focus-visible, #hostbackup-app a:focus-visible { outline: 3px solid #14769a; outline-offset: 3px; }
+#hostbackup-app #operation-result { margin-top: 16px; overflow-wrap: anywhere; }
+#hostbackup-app .report-table { width: 100%; }
+#hostbackup-app [aria-busy="true"] { outline: 1px dashed #7998aa; }
+@media (max-width: 780px) {
+  #hostbackup-app fieldset { min-width: 0; max-width: 100%; }
+  #hostbackup-app .settings-form, #hostbackup-app .nested-settings, #hostbackup-app .settings-load-guard { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+  #hostbackup-app .settings-form > *, #hostbackup-app .nested-settings > * { min-width: 0; }
+  #hostbackup-app .overview-grid { grid-template-columns: minmax(0, 1fr); }
+  #hostbackup-app td[data-label]::before { content: attr(data-label); display: block; font-weight: 600; color: #375368; margin-bottom: 4px; }
+  #hostbackup-app td { overflow-wrap: anywhere; }
+  #hostbackup-app .settings-change-popup { left: 12px; right: 12px; bottom: 12px; width: auto; max-width: none; }
+  #hostbackup-app .settings-change-popup-header { flex-wrap: wrap; }
+  #hostbackup-app .info-button { min-width: 28px; min-height: 28px; }
 }
 
 .empty {

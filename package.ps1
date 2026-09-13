@@ -44,7 +44,7 @@ try {
     $path = Join-Path $root $item
     if (Test-Path -LiteralPath $path -PathType Container) {
       Get-ChildItem -LiteralPath $path -Recurse -File |
-        Where-Object { $_.Extension -notin @('.pyc', '.pyo') -and $_.FullName -notmatch '[\\/]__pycache__[\\/]' } |
+        Where-Object { $_.Name -ne 'runtime-version' -and $_.Extension -notin @('.pyc', '.pyo') -and $_.FullName -notmatch '[\\/]__pycache__[\\/]' } |
         ForEach-Object {
         $relative = $_.FullName.Substring($rootPrefix.Length).Replace('\', '/')
         $entry = [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $_.FullName, $relative, [System.IO.Compression.CompressionLevel]::Optimal)
@@ -56,6 +56,15 @@ try {
       $entry = [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $path, $relative, [System.IO.Compression.CompressionLevel]::Optimal)
       $entry.ExternalAttributes = if ($relative -match '(\.sh|\.cgi|\.py)$') { -2115174400 } else { -2119958528 }
     }
+  }
+  $versionEntry = $archive.CreateEntry('bin/runtime-version', [System.IO.Compression.CompressionLevel]::Optimal)
+  $versionEntry.ExternalAttributes = -2119958528
+  $versionStream = $versionEntry.Open()
+  try {
+    $versionBytes = [System.Text.Encoding]::UTF8.GetBytes($version + "`n")
+    $versionStream.Write($versionBytes, 0, $versionBytes.Length)
+  } finally {
+    $versionStream.Dispose()
   }
 } finally {
   $archive.Dispose()

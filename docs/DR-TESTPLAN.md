@@ -57,6 +57,39 @@ Hardlinks und Symlinks müssen trotzdem übereinstimmen.
 
 ## Fehler- und Abbruchtests
 
+- Offline-Ziel mit nicht gesicherten Benutzerdaten unter einem gespeicherten
+  Ausschlusspfad vorbereiten: rsync `--delete` und Portable Restore müssen sie
+  unverändert lassen; fehlende Ausschlussdatei muss vor Dienst-Stopp blockieren.
+- Zwei aufgezeichnete Daten-Volumes und einen Backup-Datenträger verwenden:
+  ohne Zuordnung bleibt ein Daten-Volume ausgelassen und wird so angezeigt;
+  mit Zuordnung wird nur das beabsichtigte Ziel beschrieben. Backup-Medium,
+  fremd beschreibbare Pfadkomponenten und überlappende Zuordnungen sind gesperrt.
+- Teilrestore einer Datei, eines Verzeichnisses, Hardlinks und Symlinks in einen
+  neuen Unterordner prüfen; gleichnamige vorhandene Daten bleiben unverändert.
+- Root/Webuser-Rollen prüfen: Webuser kann weder Helfer noch Helfer-Elternpfade
+  ersetzen, aber einen geprüften Export und das vollständige Log herunterladen.
+  Nach zwei Helferaufrufen und einem Update dürfen keine Python-Caches den Start stören.
+- Backup nach Dienst-Stopp unterbrechen, Backup-Medium entfernen und Host neu
+  starten: lokale Journale müssen übrigbleiben, früh gestartetes Cron darf beim
+  ersten noch nicht bereiten Docker fehlschlagen und später erfolgreich nachholen.
+- Alle Zeitplanarten mit ok/warning/error sowie konkurrierendem Auftrag prüfen:
+  Warnung läuft autonom, Fehler blockiert, jeder echte Startversuch bleibt sichtbar.
+- Pin, GFS, letzte gute Sicherung und veraltete Bereinigungsvorschau testen.
+  Änderung zwischen Vorschau und Bestätigung darf keine unerwartete Datei entfernen.
+- Inhaltsprüfbasis erfassen, danach Inhalt mit gleicher Dateigrösse verändern:
+  Vergleich muss den Schaden erkennen. Erster Lauf bleibt `baseline_created`,
+  niemals `restore_tested`. Bericht muss nach Manifeständerung als veraltet gelten.
+- Einen externen Restoretest persönlich dokumentieren: Datum, Ergebnis und Notiz
+  müssen als Benutzerangabe erscheinen, ohne Backupstatus oder Restore-Freigabe
+  zu verändern. Ein späterer fehlgeschlagener Test und eine Manifeständerung
+  dürfen nicht als aktueller erfolgreicher Nachweis erscheinen.
+- Browser mit schmalem Fenster/Zoom und Tastatur prüfen: Profil-, Checkbox-, Text-,
+  Dienst-/Containeränderung aktiviert Speicherhinweis; Save-Fehler, Tokenablauf und
+  Taskabschluss verwerfen keine Änderungen. Lange Logzeilen umbrechen nicht,
+  nach oben gescrolltes Log bleibt dort, dynamisch geladene Hilfen bleiben lesbar.
+- Multipart-Upload über Grössen-/Platzgrenze vor dem CGI-Parser abweisen;
+  temporären Verbrauch und Reste auf dem echten LoxBerry kontrollieren.
+
 - NAS während der Kopie aushängen: Task muss fehlschlagen; lokaler Fallback darf
   nicht verwendet werden.
 - Backup während Dienst-Stopp, Kopie, Validierung und Export mit `TERM` stoppen:

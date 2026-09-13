@@ -4,26 +4,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-bash -n \
-  bin/hostbackup.sh \
-  bin/hostbackup-sudo.sh \
-  bin/restore-hostbackup.sh \
-  preroot.sh \
-  postinstall.sh \
-  postroot.sh \
-  uninstall/uninstall.sh \
-  package.sh \
-  tests/run.sh
-
-python3 -m py_compile bin/validate-import-archive.py tests/test_archive_validator.py tests/test_install_hooks.py tests/test_web_security.py
-python3 -m unittest discover -s tests -p 'test_*.py' -v
-
-perl_lib="$ROOT/tests/perl"
-if ! perl -MCGI -e 1 >/dev/null 2>&1; then
-  perl_lib="$ROOT/tests/perl-stub:$perl_lib"
-fi
-PERL5LIB="$perl_lib${PERL5LIB:+:$PERL5LIB}" perl -c webfrontend/htmlauth/index.cgi
-
 tmp="$(mktemp -d)"
 cleanup_tmp() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -35,6 +15,30 @@ cleanup_tmp() {
   fi
 }
 trap cleanup_tmp EXIT
+export PYTHONPYCACHEPREFIX="$tmp/pycache"
+
+for shell_script in \
+  bin/hostbackup.sh \
+  bin/hostbackup-sudo.sh \
+  bin/hostbackup-launcher.sh \
+  bin/restore-hostbackup.sh \
+  preroot.sh \
+  postinstall.sh \
+  postroot.sh \
+  uninstall/uninstall.sh \
+  package.sh \
+  tests/run.sh; do
+  bash -n "$shell_script"
+done
+
+python3 -m py_compile bin/*.py tests/test_*.py
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+
+perl_lib="$ROOT/tests/perl"
+if ! perl -MCGI -e 1 >/dev/null 2>&1; then
+  perl_lib="$ROOT/tests/perl-stub:$perl_lib"
+fi
+PERL5LIB="$perl_lib${PERL5LIB:+:$PERL5LIB}" perl -c webfrontend/htmlauth/index.cgi
 
 if command -v node >/dev/null 2>&1; then
   mkdir -p "$tmp/render-data"
@@ -47,8 +51,9 @@ if command -v node >/dev/null 2>&1; then
   REMOTE_ADDR=127.0.0.1 \
   HTTP_USER_AGENT=hostbackup-test \
     perl webfrontend/htmlauth/index.cgi 2>/dev/null \
-    | python3 -c 'import re, sys; html = sys.stdin.read(); match = re.search(r"<script>\s*(.*?)\s*</script>", html, re.S); assert match, "rendered JavaScript missing"; sys.stdout.write(match.group(1))' \
-    | node --check -
+    | python3 -c 'import sys; html = sys.stdin.read(); assert "assets/hostbackup.js" in html, "rendered JavaScript asset missing"'
+  node --check webfrontend/htmlauth/assets/hostbackup.js
+  node tests/test_web_behavior.cjs
 fi
 
 mkdir -p "$tmp/config" "$tmp/data" "$tmp/log"

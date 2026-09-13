@@ -6,6 +6,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CGI = (ROOT / "webfrontend" / "htmlauth" / "index.cgi").read_text(encoding="utf-8")
+JS = (ROOT / "webfrontend" / "htmlauth" / "assets" / "hostbackup.js").read_text(encoding="utf-8")
 BACKEND = (ROOT / "bin" / "hostbackup.sh").read_text(encoding="utf-8")
 STYLE = (ROOT / "webfrontend" / "htmlauth" / "assets" / "style.css").read_text(
     encoding="utf-8"
@@ -19,10 +20,10 @@ class WebSecurityTests(unittest.TestCase):
         )
         self.assertGreaterEqual(len(forms), 10)
         for form in forms:
-            self.assertRegex(form, r"\$(?:csrf|csrf_html)\b")
+            self.assertRegex(form, r"\$(?:csrf|csrf_html|native_csrf)\b")
 
     def test_dynamic_delete_form_contains_csrf(self) -> None:
-        self.assertIn("csrf.name = 'csrf_token'", CGI)
+        self.assertIn("input.name = 'csrf_token'", JS)
         self.assertIn("data-csrf-token=", CGI)
 
     def test_restore_has_typed_challenge_and_degraded_gate(self) -> None:
@@ -99,7 +100,7 @@ class WebSecurityTests(unittest.TestCase):
             "window.innerWidth",
             "info-bubble-above",
         ):
-            self.assertIn(marker, CGI)
+            self.assertIn(marker.replace("window.innerWidth", "root.innerWidth"), JS)
 
     def test_preflight_confirmation_only_appears_after_a_warning(self) -> None:
         self.assertIn("my $preflight_warning = '';", CGI)
@@ -126,60 +127,45 @@ class WebSecurityTests(unittest.TestCase):
         self.assertIn('elif [ "$baseline_space_ok" != "true" ]; then', body)
         self.assertIn('"full_baseline_required": $full_baseline_required', body)
 
-    def test_live_log_keeps_all_updates_without_wrapping_lines(self) -> None:
-        self.assertIn("function normalizeLogForDisplay(value)", CGI)
-        self.assertIn("String.fromCharCode(13, 10)", CGI)
-        self.assertIn("String.fromCharCode(13)", CGI)
-        self.assertIn("String.fromCharCode(27)", CGI)
-        self.assertIn("normalizeLogForDisplay(decodeLog(data.content_b64))", CGI)
-        terminal = re.search(r"\.terminal\s*\{(?P<body>.*?)\n\}", STYLE, flags=re.DOTALL)
-        self.assertIsNotNone(terminal)
-        self.assertIn("overflow: auto", terminal.group("body"))
-        self.assertIn("overflow-wrap: normal", terminal.group("body"))
-        self.assertIn("white-space: pre", terminal.group("body"))
-        self.assertIn("word-break: normal", terminal.group("body"))
+    def test_live_log_keeps_updates_and_scroll_position(self) -> None:
+        self.assertIn("function normalizeLogForDisplay(value)", JS)
+        self.assertIn("logViewport(log.scrollTop", JS)
+        self.assertIn("log.scrollLeft = left", JS)
+        self.assertIn("log.scrollTop = atEnd ? log.scrollHeight : top", JS)
+        self.assertIn("#hostbackup-app pre.terminal", STYLE)
+        self.assertIn("white-space: pre;", STYLE)
+        self.assertIn("overflow-wrap: normal;", STYLE)
+        self.assertNotIn("redirectWithMessage", JS)
 
-    def test_export_download_rejects_symlinks(self) -> None:
-        self.assertRegex(CGI, r"!-f \$archive \|\| -l \$archive")
+    def test_downloads_are_privileged_streams_not_direct_file_access(self) -> None:
+        self.assertIn("sub relay_backend_download", CGI)
+        self.assertIn("relay_backend_download($action", CGI)
+        self.assertNotIn("open my $fh, '<:raw', $archive", CGI)
 
-    def test_settings_change_popup_tracks_all_setting_types(self) -> None:
+    def test_settings_change_popup_tracks_delegated_settings(self) -> None:
         self.assertIn('id="settings-change-popup"', CGI)
-        self.assertIn('aria-hidden="true"', CGI)
-        self.assertIn(
-            'form="settings-save-form"$config_action_disabled>Änderungen speichern', CGI
-        )
-        self.assertIn("form.addEventListener('input'", CGI)
-        self.assertIn("form.addEventListener('change'", CGI)
-        for name in (
-            "backup_root",
-            "keep_backups",
-            "metadata_mode",
-            "backup_mode",
-            "schedule_enabled",
-            "schedule_mode",
-            "schedule_time",
-            "schedule_weekdays",
-            "schedule_monthdays",
-            "schedule_months",
-            "pre_backup_hook",
-            "post_backup_hook",
-            "rsync_extra_excludes",
-            "root_permission_ack",
-            "mail_notify_enabled",
-            "mail_notify_to",
-            "mail_notify_success",
-            "mail_notify_failure",
-            "mail_notify_stopped",
-            "mail_notify_restore",
-            "stop_targets",
-            "create_export_after_backup",
-        ):
-            self.assertRegex(CGI, rf"\b{re.escape(name)}:\s*'")
-        self.assertIn("changedAt[name] = new Date()", CGI)
-        self.assertIn("delete changedAt[name]", CGI)
-        self.assertIn("refreshName('stop_targets')", CGI)
-        self.assertIn("valueSeparator = String.fromCharCode(31)", CGI)
-        self.assertIn(r"state.split(/\\r?\\n/)", CGI)
+        self.assertIn("document.addEventListener('input', onSettingChange)", JS)
+        self.assertIn("document.addEventListener('change', onSettingChange)", JS)
+        self.assertIn("updateDirty(initial, changed, 'stop_targets'", JS)
+        self.assertIn("function requireSaved()", JS)
+        self.assertIn("function refreshCSRF()", JS)
+        self.assertIn("X-CSRF-Token", JS)
+        self.assertIn("updateDirty(initial, changed, name, controlState", JS)
+        self.assertIn("Deine Eingaben wurden nicht verworfen.", JS)
+
+    def test_upload_limits_are_set_before_eager_cgi_parsing(self) -> None:
+        boundary = CGI.index("$q = CGI->new")
+        for marker in ("$CGI::POST_MAX", "CONTENT_LENGTH", "same_origin_request()", "HTTP_X_CSRF_TOKEN", "available_bytes(File::Spec->tmpdir())"):
+            self.assertLess(CGI.index(marker), boundary)
+        self.assertIn('action="?action=import-config"', CGI)
+
+    def test_manual_restore_history_is_explicitly_not_automatic_proof(self) -> None:
+        self.assertIn('name="action" value="record-restore-test"', CGI)
+        self.assertIn('type="datetime-local" name="tested_at" required', CGI)
+        self.assertIn('name="note" maxlength="2000"', CGI)
+        self.assertIn("testDate.toISOString()", JS)
+        self.assertIn("Vom Plugin nicht überprüft.", JS)
+        self.assertIn("Persönliche Testeinträge ändern keine Restore-Freigaben.", JS)
 
     def test_failed_config_load_cannot_overwrite_saved_settings(self) -> None:
         self.assertIn("my $config_loaded = 0;", CGI)

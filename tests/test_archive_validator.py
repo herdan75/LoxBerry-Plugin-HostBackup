@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
 import io
+import importlib.util
 import json
+import os
 import pathlib
 import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "bin" / "validate-import-archive.py"
 LIMIT = str(16 * 1024 * 1024)
+SPEC = importlib.util.spec_from_file_location("archive_validator", VALIDATOR)
+VALIDATOR_MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(VALIDATOR_MODULE)
 
 
 def add_bytes(tf: tarfile.TarFile, name: str, data: bytes = b"x") -> None:
@@ -33,6 +39,7 @@ class ArchiveValidatorTests(unittest.TestCase):
             text=True,
             capture_output=True,
             check=False,
+            timeout=15,
         )
 
     def make_outer(self, mutate=None, portable: bytes | None = None) -> pathlib.Path:
@@ -47,6 +54,8 @@ class ArchiveValidatorTests(unittest.TestCase):
                 add_dir(tf, "backup-1/rootfs")
                 add_dir(tf, "backup-1/rootfs/etc")
                 add_dir(tf, "backup-1/rootfs/opt/loxberry")
+                add_bytes(tf, "backup-1/rootfs/etc/hosts", b"127.0.0.1 localhost\n")
+                add_bytes(tf, "backup-1/rootfs/opt/loxberry/system.txt", b"fixture\n")
             else:
                 add_bytes(tf, "backup-1/rootfs.tar", portable)
             if mutate:
@@ -132,7 +141,7 @@ class ArchiveValidatorTests(unittest.TestCase):
             add_dir(tf, "backup-1/rootfs")
         result = self.run_validator(archive)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("missing rootfs, manifest or validation", result.stderr)
+        self.assertIn("control files must be regular", result.stderr)
 
     def test_valid_portable_rootfs(self) -> None:
         rootfs = self.make_rootfs_tar()
@@ -152,6 +161,186 @@ class ArchiveValidatorTests(unittest.TestCase):
         result = self.run_validator(self.make_rootfs_tar(mutate), "--rootfs-tar")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("symlink", result.stderr)
+
+    def test_rejects_all_linked_sidecars_and_preserves_outside_sentinel(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            sentinel = pathlib.Path(temporary) / "sentinel"
+            sentinel.write_bytes(b"must not change")
+            for name in ("import-source.sha256", ".loxberry-hostbackup-backup",
+                         "rsync-excludes.txt", "import-validation.json", "restart.done"):
+                for kind in (tarfile.SYMTYPE, tarfile.LNKTYPE):
+                    with self.subTest(name=name, kind=kind):
+                        def mutate(tf):
+                            link = tarfile.TarInfo(f"backup-1/{name}")
+                            link.type = kind
+                            link.linkname = str(sentinel) if kind == tarfile.SYMTYPE else "backup-1/rootfs/etc/hosts"
+                            tf.addfile(link)
+                        result = self.run_validator(self.make_outer(mutate))
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn("control files must be regular", result.stderr)
+                        self.assertEqual(sentinel.read_bytes(), b"must not change")
+
+    def test_accepts_regular_generated_sidecar_for_reexport(self) -> None:
+        result = self.run_validator(self.make_outer(
+            lambda tf: add_bytes(tf, "backup-1/import-source.sha256", b"a" * 64 + b"  original.tar.gz\n")
+        ))
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_child_before_symlink_parent(self) -> None:
+        def mutate(tf):
+            add_bytes(tf, "backup-1/rootfs/link/payload")
+            link = tarfile.TarInfo("backup-1/rootfs/link")
+            link.type, link.linkname = tarfile.SYMTYPE, "/tmp"
+            tf.addfile(link)
+        result = self.run_validator(self.make_outer(mutate))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("symlink", result.stderr)
+
+    def test_rejects_hardlink_to_symlink(self) -> None:
+        def mutate(tf):
+            link = tarfile.TarInfo("backup-1/rootfs/link")
+            link.type, link.linkname = tarfile.SYMTYPE, "/etc/passwd"
+            tf.addfile(link)
+            hardlink = tarfile.TarInfo("backup-1/rootfs/hardlink")
+            hardlink.type, hardlink.linkname = tarfile.LNKTYPE, "backup-1/rootfs/link"
+            tf.addfile(hardlink)
+        result = self.run_validator(self.make_outer(mutate))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must refer to a regular file", result.stderr)
+
+    def test_prefix_validation_scales_with_entries(self) -> None:
+        def members():
+            for number in range(20000):
+                info = tarfile.TarInfo(f"backup-1/rootfs/data/file-{number}")
+                info.size = 1
+                yield info
+            for number in range(2000):
+                info = tarfile.TarInfo(f"backup-1/rootfs/links/link-{number}")
+                info.type, info.linkname = tarfile.SYMTYPE, "/usr/bin/example"
+                yield info
+        started = time.monotonic()
+        result = VALIDATOR_MODULE.validate_members(members(), int(LIMIT), "backup-1")
+        self.assertEqual(len(result["symlinks"]), 2000)
+        # The previous per-symlink full scan took ~19 s for this fixture.
+        self.assertLess(time.monotonic() - started, 8.0)
+
+    def make_backup_directory(self, portable=False):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        directory = pathlib.Path(temporary.name) / "backup-1"
+        directory.mkdir()
+        if portable:
+            container = self.make_rootfs_tar()
+            (directory / "rootfs.tar").write_bytes(container.read_bytes())
+            with tarfile.open(container) as tf:
+                count = len(tf.getmembers())
+        else:
+            (directory / "rootfs/etc").mkdir(parents=True)
+            (directory / "rootfs/opt/loxberry").mkdir(parents=True)
+            (directory / "rootfs/etc/hosts").write_bytes(b"127.0.0.1 localhost\n")
+            (directory / "rootfs/opt/loxberry/system.txt").write_bytes(b"fixture\n")
+            count = 2
+        manifest = {
+            "schema_version": 2, "backup_id": directory.name, "status": "complete",
+            "size_bytes": 10240, "files_count": count,
+            "backup": {"mode": "full", "storage_format": "portable-tar" if portable else "directory"},
+            "metadata": {"mode": "portable-archive" if portable else "native-strict"},
+        }
+        (directory / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        (directory / "backup-validation.json").write_text('{"status":"ok"}', encoding="utf-8")
+        return directory
+
+    def test_locally_inspects_real_directory_payload(self) -> None:
+        result = self.run_validator(self.make_backup_directory(), "--backup-dir", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["validation_source"], "local-import-inspection")
+        self.assertEqual(report["files_count"], 2)
+        self.assertEqual(report["status"], "warning")
+        self.assertGreater(report["logical_bytes"], 0)
+        self.assertFalse(report["content_hashes_verified"])
+        self.assertFalse(report["restore_tested"])
+
+    def test_empty_data_cannot_inherit_source_ok_status(self) -> None:
+        directory = self.make_backup_directory()
+        for path in directory.glob("rootfs/**/*"):
+            if path.is_file():
+                path.unlink()
+        result = self.run_validator(directory, "--backup-dir")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no regular file content", result.stderr)
+
+    def test_missing_file_is_rejected_by_manifest_count(self) -> None:
+        directory = self.make_backup_directory()
+        manifest_path = directory / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["files_count"] = 3
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        result = self.run_validator(directory, "--backup-dir")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("file count mismatch", result.stderr)
+
+    def test_rejects_invalid_schema_and_profile_format(self) -> None:
+        for change in ({"schema_version": 999}, {"schema_version": True},
+                       {"files_count": "2"}, {"backup_id": "different"},
+                       {"metadata": {"mode": "unknown"}},
+                       {"metadata": {"mode": "portable-archive"}}):
+            with self.subTest(change=change):
+                directory = self.make_backup_directory()
+                path = directory / "manifest.json"
+                manifest = json.loads(path.read_text())
+                manifest.update(change)
+                path.write_text(json.dumps(manifest), encoding="utf-8")
+                self.assertNotEqual(self.run_validator(directory, "--backup-dir").returncode, 0)
+
+    def test_locally_inspects_portable_member_count(self) -> None:
+        result = self.run_validator(self.make_backup_directory(portable=True), "--backup-dir")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["files_count"], 2)
+        self.assertEqual(report["manifest_count"], 4)
+
+    def test_rejects_truncated_portable_container(self) -> None:
+        container = self.make_rootfs_tar()
+        container.write_bytes(container.read_bytes()[:1300])
+        result = self.run_validator(container, "--rootfs-tar")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("truncated", result.stderr)
+
+    def test_valid_portable_sparse_data_uses_physical_extent_size(self) -> None:
+        def mutate(tf):
+            info = tarfile.TarInfo("./var/lib/sparse-data")
+            info.size = 1
+            info.pax_headers = {"GNU.sparse.map": "0,1", "GNU.sparse.size": "1048576"}
+            tf.addfile(info, io.BytesIO(b"x"))
+        container = self.make_rootfs_tar(mutate)
+        with tarfile.open(container) as tf:
+            member = tf.getmember("./var/lib/sparse-data")
+            self.assertEqual(member.size, 1048576)
+            self.assertEqual(member.sparse, [(0, 1)])
+        result = self.run_validator(container, "--rootfs-tar")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_locally_hardlinked_control_file(self) -> None:
+        directory = self.make_backup_directory()
+        os.link(directory / "manifest.json", directory / "import-source.sha256")
+        result = self.run_validator(directory, "--backup-dir")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Unsafe control file", result.stderr)
+
+    def test_legacy_metadata_uncertainty_remains_visible(self) -> None:
+        directory = self.make_backup_directory()
+        path = directory / "manifest.json"
+        manifest = json.loads(path.read_text())
+        manifest["schema_version"] = 1
+        del manifest["metadata"]
+        del manifest["backup"]["storage_format"]
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        result = self.run_validator(directory, "--backup-dir")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["status"], "warning")
+        self.assertEqual(report["metadata_mode"], "legacy-unknown")
 
 
 if __name__ == "__main__":

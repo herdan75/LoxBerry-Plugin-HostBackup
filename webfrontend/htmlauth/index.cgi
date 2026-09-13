@@ -5,10 +5,13 @@ use CGI qw(:standard escapeHTML);
 use File::Temp qw(tempfile);
 use File::Basename qw(basename);
 use File::Path qw(make_path);
+use File::Spec ();
 use JSON::PP;
 use Encode qw(encode);
 use Digest::SHA qw(hmac_sha256_hex);
 use Fcntl qw(:DEFAULT :flock);
+use POSIX qw(strftime);
+use Time::Local qw(timelocal);
 use LoxBerry::Web;
 
 my $plugin = 'loxberryhostbackup';
@@ -16,10 +19,39 @@ my $lbhome = $ENV{LBHOMEDIR} || '/opt/loxberry';
 my $bindir = $ENV{LBPBINDIR} || "$lbhome/bin/plugins/$plugin";
 my $datadir = $ENV{LBPDATADIR} || $ENV{LBPDATA} || "$lbhome/data/plugins/$plugin";
 my $backend = $ENV{HOSTBACKUP_SUDO_DISPATCHER} || '/usr/local/sbin/loxberryhostbackup-sudo';
-my $q = CGI->new;
+my $q;
 my $csrf_token = '';
 my $MAX_CONFIG_UPLOAD = 1024 * 1024;
 my $MAX_BACKUP_UPLOAD = 64 * 1024 * 1024 * 1024;
+my $ajax_request = ($ENV{HTTP_X_HOSTBACKUP_REQUEST} || '') eq '1';
+my $pending_settings = 0;
+
+# CGI parses multipart data eagerly. Bound it before creating the CGI object.
+if (($ENV{REQUEST_METHOD} || 'GET') eq 'POST') {
+  my $length = $ENV{CONTENT_LENGTH} // '';
+  my $multipart = ($ENV{CONTENT_TYPE} || '') =~ m{^multipart/form-data(?:;|$)}i;
+  my $config_upload = ($ENV{QUERY_STRING} || '') =~ /(?:^|&)action=import-config(?:&|$)/;
+  my $limit = $multipart && !$config_upload ? $MAX_BACKUP_UPLOAD + 1048576 : $MAX_CONFIG_UPLOAD + 1048576;
+  $CGI::POST_MAX = $limit;
+  reject_request('400 Bad Request', 'Ungueltige Upload-Laenge.') unless $length =~ /^\d+$/;
+  reject_request('413 Payload Too Large', 'Die Anfrage ist groesser als das erlaubte Limit.') if $length > $limit;
+  reject_request('403 Forbidden', 'Die Anfrage stammt nicht von dieser LoxBerry-Seite.') unless same_origin_request();
+  if (length($ENV{HTTP_X_CSRF_TOKEN} || '')) {
+    my $provided = $ENV{HTTP_X_CSRF_TOKEN};
+    my $bucket = int(time() / 3600);
+    reject_request('403 Forbidden', 'Sitzungsbestaetigung abgelaufen. Bitte erneut versuchen.')
+      unless constant_time_equal($provided, csrf_for_bucket($bucket)) || constant_time_equal($provided, csrf_for_bucket($bucket - 1));
+  }
+  if ($multipart) {
+    my $free = available_bytes(File::Spec->tmpdir());
+    reject_request('507 Insufficient Storage', 'Fuer den Upload ist im temporaeren Verzeichnis nicht genug Speicher frei.')
+      unless $free && $length + 536870912 < $free;
+  }
+}
+$q = CGI->new;
+if ($q->can('cgi_error') && $q->cgi_error) {
+  reject_request('400 Bad Request', 'Die Anfrage konnte nicht vollstaendig eingelesen werden.');
+}
 
 my $action = $q->param('action') || '';
 my $backup_id = $q->param('backup_id') || '';
@@ -39,6 +71,20 @@ sub url_escape {
   my $bytes = encode('UTF-8', $value);
   $bytes =~ s/([^A-Za-z0-9_.~-])/sprintf("%%%02X", ord($1))/ge;
   return $bytes;
+}
+
+sub reject_request {
+  my ($status, $message) = @_;
+  print header(-type => ($ajax_request ? 'application/json' : 'text/plain'), -charset => 'utf-8', -status => $status, -Cache_Control => 'no-store');
+  print $ajax_request ? encode_json({ ok => JSON::PP::false, error => $message }) : "$message\n";
+  exit;
+}
+
+sub json_response {
+  my ($value, $status) = @_;
+  print header(-type => 'application/json', -charset => 'utf-8', -status => ($status || '200 OK'), -Cache_Control => 'no-store');
+  print encode_json($value);
+  exit;
 }
 
 sub secure_random_hex {
@@ -97,6 +143,7 @@ sub constant_time_equal {
 }
 
 sub same_origin_request {
+  return 0 if ($ENV{HTTP_SEC_FETCH_SITE} || '') eq 'cross-site';
   my $origin = $ENV{HTTP_ORIGIN} || '';
   return 1 unless length $origin;
   my $scheme = (($ENV{HTTPS} || '') =~ /^(?:on|1)$/i) ? 'https' : 'http';
@@ -105,7 +152,7 @@ sub same_origin_request {
 }
 
 sub valid_csrf_request {
-  my $provided = $q->param('csrf_token') || '';
+  my $provided = $ENV{HTTP_X_CSRF_TOKEN} || $q->param('csrf_token') || '';
   return 0 unless same_origin_request();
   my $bucket = int(time() / 3600);
   return constant_time_equal($provided, csrf_for_bucket($bucket))
@@ -153,6 +200,7 @@ sub redirect_with {
   }
   my $uri = page_url_without_query();
   $uri .= '?' . join('&', @parts) if @parts;
+  json_response({ ok => JSON::PP::true, redirect => $uri, message => ($params{msg} || '') }) if $ajax_request;
   print redirect(-uri => $uri);
   exit;
 }
@@ -211,6 +259,38 @@ sub run_shell {
   my $output = `$cmd 2>&1`;
   my $status = $? >> 8;
   return ($status, $output);
+}
+
+sub relay_backend_download {
+  my (@args) = @_;
+  open my $stream, '-|', 'sudo', '-n', $backend, @args
+    or reject_request('500 Internal Server Error', 'Download konnte nicht gestartet werden.');
+  binmode $stream;
+  my @headers;
+  my $bytes = 0;
+  my $ready = 0;
+  my $line = '';
+  # Bound the read itself: an unterminated backend diagnostic must not allocate
+  # an unlimited header line before its length can be checked.
+  while ($bytes < 16384 && read($stream, my $byte, 1)) {
+    $bytes++;
+    $line .= $byte;
+    next unless $byte eq "\n";
+    if ($line =~ /^\r?\n$/) { $ready = 1; last; }
+    last unless $line =~ /^(?:Status|Content-Type|Content-Disposition|Content-Length|Cache-Control|X-Content-Type-Options):[^\r\n]*\r?\n$/i;
+    push @headers, $line;
+    $line = '';
+  }
+  if (!$ready || !grep(/^Content-Type:/i, @headers)) {
+    close $stream;
+    reject_request('409 Conflict', 'Der Download ist nicht verfuegbar oder konnte nicht sicher gelesen werden. Bitte Task-Status pruefen.');
+  }
+  binmode STDOUT;
+  print @headers, "\r\n";
+  my $buffer;
+  while (read($stream, $buffer, 65536)) { print $buffer; }
+  close $stream;
+  exit;
 }
 
 sub checked_attr {
@@ -326,63 +406,115 @@ if ($action eq 'download-config') {
   exit;
 }
 
-if ($action eq 'download-export') {
-  my $download_id = $q->param('backup_id') || '';
+if ($action eq 'download-export' || $action eq 'download-log' || $action eq 'recovery-sheet' || $action eq 'diagnostics') {
+  my $identifier = $action eq 'download-log' || $action eq 'diagnostics' ? $task : $backup_id;
+  reject_request('400 Bad Request', 'Ungueltiger Download-Bezeichner.')
+    if length($identifier) && $identifier !~ /^[A-Za-z0-9._-]+$/;
+  relay_backend_download($action, (length($identifier) ? ($identifier) : ()));
+}
 
-  if ($download_id !~ /^[A-Za-z0-9._-]+$/) {
-    print header(-type => 'text/plain', -charset => 'utf-8', -status => '400 Bad Request');
-    print "Ungültige Backup-ID.\n";
-    exit;
+if ($action eq 'csrf-token') {
+  json_response({ csrf_token => $csrf_token, expires_at => (int(time() / 3600) + 2) * 3600 });
+}
+
+if ($action eq 'restore-plan') {
+  reject_request('400 Bad Request', 'Ungueltige Backup-ID.') unless $backup_id =~ /^[A-Za-z0-9._-]+$/;
+  my ($status, $out) = run_shell(backend_cmd('restore-plan', $backup_id, $q->param('destination') || '/', $q->param('volume_map') || '[]'));
+  reject_request('400 Bad Request', $out || 'Restore-Vorschau fehlgeschlagen.') if $status != 0;
+  json_response({ ok => JSON::PP::true, text => $out });
+}
+
+if ($action =~ /^(?:task-overview|backup-preview|storage-info|verification-report|inspect-backup|runtime-cleanup-preview)$/) {
+  my @args = ($action);
+  if ($action eq 'verification-report' || $action eq 'inspect-backup') {
+    reject_request('400 Bad Request', 'Ungueltige Backup-ID.') unless $backup_id =~ /^[A-Za-z0-9._-]+$/;
+    push @args, $backup_id;
   }
-
-  my ($status, $out) = run_shell(backend_cmd('export-info', $download_id));
-
-  if ($status != 0) {
-    print header(-type => 'text/plain', -charset => 'utf-8', -status => '500 Internal Server Error');
-    print $out;
-    exit;
-  }
-
-  my $info = eval { decode_json($out) } || {};
-  my $archive = $info->{archive} || '';
-
-  if (($info->{status} || '') ne 'available' || !$archive || !-r $archive || !-f $archive || -l $archive) {
-    print header(-type => 'text/plain', -charset => 'utf-8', -status => '404 Not Found');
-    print "Export-Archiv ist noch nicht vorhanden oder konnte nicht gelesen werden.\n";
-    exit;
-  }
-
-  my $filename = basename($archive);
-  my $size = -s $archive;
-
-  print header(
-    -type => 'application/gzip',
-    -attachment => $filename,
-    -Content_length => $size,
-  );
-
-  open my $fh, '<', $archive or do {
-    print "Export-Archiv konnte nicht geöffnet werden.\n";
-    exit;
-  };
-  binmode $fh;
-  binmode STDOUT;
-  my $buffer;
-  while (read($fh, $buffer, 65536)) {
-    print $buffer;
-  }
-  close $fh;
-  exit;
+  my ($status, $out) = run_shell(backend_cmd(@args));
+  my $data = eval { decode_json($out) };
+  reject_request('500 Internal Server Error', $out || 'Die Daten konnten nicht geladen werden.') if $status != 0 || !$data;
+  json_response($data);
 }
 
 if ($q->request_method eq 'POST') {
   if (!valid_csrf_request()) {
-    print header(-type => 'text/plain', -charset => 'utf-8', -status => '403 Forbidden');
-    print "Ungueltige oder abgelaufene CSRF-Bestaetigung. Seite neu laden.\n";
-    exit;
+    reject_request('403 Forbidden', 'Sitzungsbestaetigung abgelaufen. Die Eingaben bleiben erhalten; bitte erneut versuchen.') if $ajax_request;
+    $error = 'Die Sitzungsbestaetigung ist abgelaufen. Die Eingaben bleiben erhalten; bitte erneut speichern.';
   }
 
-  if ($action eq 'import-config') {
+  if ($error) {
+    # Render a fresh token without discarding a submitted settings draft.
+  }
+  elsif ($action =~ /^(?:protect-backup|verify-backup|record-restore-test|restore-files|maintenance-config|maintenance-preview|maintenance-run|runtime-cleanup-run|recover-services)$/) {
+    my @args = ($action);
+    if ($action eq 'maintenance-config') {
+      my $policy = $q->param('policy_json');
+      if (!defined $policy) {
+        my %values = (retention_mode => ($q->param('retention_mode') || 'count'), integrity_enabled => ($q->param('integrity_enabled') ? JSON::PP::true : JSON::PP::false));
+        for my $key (qw(keep_daily keep_weekly keep_monthly log_retention_days quarantine_retention_days integrity_interval_days)) {
+          my $value = $q->param($key) // '';
+          $error = 'Bitte die Wartungseinstellungen vollständig mit gültigen Zahlen ausfüllen.' unless $value =~ /^\d+$/;
+          $values{$key} = 0 + $value if $value =~ /^\d+$/;
+        }
+        $policy = encode_json(\%values);
+      }
+      push @args, $policy;
+    } elsif ($action eq 'maintenance-run' || $action eq 'runtime-cleanup-run') {
+      push @args, $q->param('preview_digest') || '';
+    } elsif ($action ne 'maintenance-preview' && $action ne 'recover-services') {
+      my $id = $q->param('backup_id') || '';
+      if ($id !~ /^[A-Za-z0-9._-]+$/) {
+        $error = 'Ungueltige Backup-ID.';
+      } else {
+        push @args, $id;
+        push @args, ($q->param('protected') ? 'true' : 'false') if $action eq 'protect-backup';
+        push @args, ($q->param('path') || ''), ($q->param('destination') || '') if $action eq 'restore-files';
+        if ($action eq 'record-restore-test') {
+          my $result = $q->param('result') || '';
+          my $tested_at = $q->param('tested_at') || '';
+          my $note = $q->param('note') || '';
+          if ($tested_at =~ /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/) {
+            # Native-form fallback: datetime-local uses the LoxBerry timezone.
+            # JavaScript submits an explicit UTC instant from the browser zone.
+            my ($year, $month, $day, $hour, $minute, $second) = ($1, $2, $3, $4, $5, $6 || 0);
+            my $epoch = eval { timelocal($second, $minute, $hour, $day, $month - 1, $year) };
+            if (!defined $epoch || strftime('%Y-%m-%dT%H:%M', localtime($epoch)) ne substr($tested_at, 0, 16)) {
+              $error = 'Der Testzeitpunkt ist in der lokalen Zeitzone nicht gültig.';
+            } else {
+              $tested_at = strftime('%Y-%m-%dT%H:%M:%SZ', gmtime($epoch));
+            }
+          }
+          $error = 'Bitte Ergebnis, Testzeitpunkt und höchstens 2000 Zeichen Notiz angeben.'
+            unless $result =~ /^(?:passed|failed)$/ && length($tested_at) && length($tested_at) <= 40 && length($note) <= 2000;
+          push @args, $result, $tested_at, $note;
+        }
+      }
+    }
+    if (!$error) {
+      my ($status, $out) = run_shell(backend_cmd(@args));
+      if ($status != 0) {
+        $error = escapeHTML($out);
+      } elsif ($action eq 'verify-backup' || $action eq 'restore-files') {
+        my ($new_task) = $out =~ /^([A-Za-z0-9._-]+\.log)\s*$/m;
+        redirect_with(msg => 'task_started', active_task => ($new_task || ''));
+      } elsif ($ajax_request) {
+        my $data = eval { decode_json($out) };
+        json_response({ ok => JSON::PP::true, data => $data, message => ($action eq 'recover-services' ? $out : 'Aktion abgeschlossen.') });
+      } else {
+        $message = 'Aktion abgeschlossen.';
+        if ($action eq 'maintenance-preview') {
+          my $preview = eval { decode_json($out) };
+          $message = '<strong>Löschvorschau – noch nichts gelöscht:</strong><pre>' . escapeHTML($out) . '</pre>';
+          if ($preview && ($preview->{preview_digest} || '') =~ /^[a-f0-9]{64}$/) {
+            my $digest = escapeHTML($preview->{preview_digest});
+            my $native_csrf = csrf_field();
+            $message .= qq{<form data-ajax="false" method="post">$native_csrf<input type="hidden" name="action" value="maintenance-run"><input type="hidden" name="preview_digest" value="$digest"><button type="submit" class="danger">Genau diese Löschvorschau ausführen</button></form>};
+          }
+        }
+      }
+    }
+  }
+  elsif ($action eq 'import-config') {
 
     my $upload = $q->upload('settings_file');
 
@@ -395,7 +527,7 @@ if ($q->request_method eq 'POST') {
         $error = escapeHTML($@);
         $settings_json = '';
       }
-      my $imported = eval { decode_json($settings_json) };
+        my $imported = eval { decode_json($settings_json) };
 
       if (!$imported || ref($imported) ne 'HASH') {
         $error ||= 'Einstellungsdatei konnte nicht gelesen werden. Erwartet wird eine JSON-Datei aus diesem Plugin.';
@@ -477,12 +609,15 @@ if ($q->request_method eq 'POST') {
     my $schedule_mode = $q->param('schedule_mode') || 'daily';
     my $schedule_time = $q->param('schedule_time') || '02:00';
     my @schedule_weekdays = $q->param('schedule_weekdays');
+    $error = 'Bitte mindestens einen Wochentag auswaehlen.' if $schedule_enabled eq 'true' && $schedule_mode eq 'weekly' && !@schedule_weekdays;
     @schedule_weekdays = ('0') unless @schedule_weekdays;
     my $schedule_weekdays = join(',', @schedule_weekdays);
     my @schedule_monthdays = $q->param('schedule_monthdays');
+    $error = 'Bitte mindestens einen Monatstag auswaehlen.' if $schedule_enabled eq 'true' && $schedule_mode eq 'monthly' && !@schedule_monthdays;
     @schedule_monthdays = ('1') unless @schedule_monthdays;
     my $schedule_monthdays = join(',', @schedule_monthdays);
     my @schedule_months = $q->param('schedule_months');
+    $error = 'Bitte mindestens einen Monat auswaehlen.' if $schedule_enabled eq 'true' && $schedule_mode eq 'monthly' && !@schedule_months;
     @schedule_months = ('*') unless @schedule_months;
     my $schedule_months = join(',', @schedule_months);
 
@@ -500,6 +635,7 @@ if ($q->request_method eq 'POST') {
     my $mail_notify_restore = $q->param('mail_notify_restore') ? 'true' : 'false';
 
     my $root_permission_ack = $q->param('root_permission_ack') ? 'true' : 'false';
+    $error = 'Portable Archive ist nur mit Vollbackup moeglich.' if $metadata_mode eq 'portable-archive' && $backup_mode eq 'snapshot';
     my $stop_targets = '';
 
     if ($q->param('stop_targets_loaded')) {
@@ -513,7 +649,7 @@ if ($q->request_method eq 'POST') {
       }
     }
 
-    my ($status, $out) = run_shell(
+    my ($status, $out) = $error ? (1, $error) : run_shell(
       backend_cmd(
         'save-config',
         $backup_root,
@@ -732,6 +868,8 @@ if ($q->request_method eq 'POST') {
     my $confirm_restore = $q->param('confirm_restore') ? 1 : 0;
     my $restore_challenge = $q->param('restore_challenge') || '';
     my $confirm_degraded = $q->param('confirm_degraded') ? 'confirm-degraded' : '';
+    my $destination = $q->param('restore_destination') || '/';
+    my $volume_map = $q->param('restore_volume_map') || '[]';
 
     if ($restore_backup_id !~ /^[A-Za-z0-9._-]+$/) {
       $error = 'Ungültige Backup-ID.';
@@ -750,7 +888,7 @@ if ($q->request_method eq 'POST') {
       } elsif ($check->{requires_degraded_confirmation} && $confirm_degraded ne 'confirm-degraded') {
         $error = 'Vor dem Restore muss der Hinweis zu den bewusst ausgelassenen Metadaten bestätigt werden.';
       } else {
-        my ($status, $out) = run_shell(backend_cmd('start-restore', $restore_backup_id, $confirm_degraded));
+        my ($status, $out) = run_shell(backend_cmd('start-restore', $restore_backup_id, $confirm_degraded, $destination, $volume_map));
 
         if ($status == 0) {
           redirect_with(msg => 'restore_started', active_task => "restore-$restore_backup_id.log");
@@ -759,6 +897,11 @@ if ($q->request_method eq 'POST') {
         }
       }
     }
+  }
+  if ($ajax_request) {
+    json_response({ ok => JSON::PP::false, error => $error }, '400 Bad Request') if $error;
+    json_response({ ok => JSON::PP::false, warning => $preflight_warning, requires_confirmation => JSON::PP::true }) if $preflight_warning;
+    json_response({ ok => JSON::PP::true, message => 'Aktion abgeschlossen.' });
   }
 }
 
@@ -777,6 +920,32 @@ if ($config_status == 0) {
   }
 } else {
   $error ||= escapeHTML($config_json || 'Die Plugin-Konfiguration konnte nicht geladen werden.');
+}
+
+if ($action eq 'save-config' && $error && $config_loaded) {
+  $pending_settings = 1;
+  for my $name (qw(backup_root backup_mode metadata_mode keep_backups schedule_mode schedule_time pre_backup_hook post_backup_hook mail_notify_to)) {
+    $config->{$name} = $q->param($name) // '';
+  }
+  for my $name (qw(schedule_enabled root_permission_ack create_export_after_backup mail_notify_enabled mail_notify_success mail_notify_failure mail_notify_stopped mail_notify_restore stop_docker_before_backup)) {
+    $config->{$name} = $q->param($name) ? JSON::PP::true : JSON::PP::false;
+  }
+  for my $name (qw(schedule_weekdays schedule_monthdays schedule_months)) {
+    my @values = $q->param($name);
+    $config->{$name} = \@values;
+  }
+  $config->{rsync_extra_excludes} = [split /\r?\n/, ($q->param('rsync_extra_excludes') || '')];
+  if ($q->param('stop_targets_loaded')) {
+    my @targets = $q->param('stop_targets');
+    $config->{stop_targets} = [map { my ($type, $name) = split /:/, $_, 2; { type => $type, name => $name } } @targets];
+  }
+}
+if ($action eq 'maintenance-config' && $error && $config_loaded) {
+  $pending_settings = 1;
+  for my $name (qw(retention_mode keep_daily keep_weekly keep_monthly log_retention_days quarantine_retention_days integrity_interval_days)) {
+    $config->{$name} = $q->param($name) // $config->{$name};
+  }
+  $config->{integrity_enabled} = $q->param('integrity_enabled') ? JSON::PP::true : JSON::PP::false;
 }
 
 if ($restore_id !~ /^[A-Za-z0-9._-]+$/) {
@@ -803,12 +972,7 @@ if ($restore_id) {
     $restore_error = escapeHTML($check_json);
   }
 
-  my ($plan_status, $plan_text) = run_shell(backend_cmd('restore-plan', $restore_id));
-  if ($plan_status == 0) {
-    $restore_plan = escapeHTML($plan_text);
-  } elsif (!$restore_error) {
-    $restore_error = escapeHTML($plan_text);
-  }
+  $restore_plan = 'Ziel und gegebenenfalls Volume-Zuordnung pruefen; danach die Restore-Vorschau anfordern. Dabei werden noch keine Dateien veraendert.';
 }
 
 my $browse_data = undef;
@@ -828,6 +992,11 @@ my $cfg_backup_mode = $config->{backup_mode} || 'full';
 my $cfg_metadata_mode = $config->{metadata_mode} || 'native-strict';
 $cfg_metadata_mode = 'native-strict' unless $cfg_metadata_mode =~ /^(?:native-strict|network-compatible|fake-super|portable-archive)$/;
 my $cfg_keep = escapeHTML($config->{keep_backups} || '10');
+my %maintenance_defaults = (keep_daily => 7, keep_weekly => 4, keep_monthly => 6, log_retention_days => 30, quarantine_retention_days => 7, integrity_interval_days => 7);
+my %maintenance_values = map { $_ => escapeHTML(defined $config->{$_} ? $config->{$_} : $maintenance_defaults{$_}) } keys %maintenance_defaults;
+my $retention_count_selected = ($config->{retention_mode} || 'count') eq 'count' ? ' selected' : '';
+my $retention_gfs_selected = ($config->{retention_mode} || '') eq 'gfs' ? ' selected' : '';
+my $integrity_checked = checked_attr($config->{integrity_enabled});
 my $cfg_pre_hook = escapeHTML($config->{pre_backup_hook} || '');
 my $cfg_post_hook = escapeHTML($config->{post_backup_hook} || '');
 my $cfg_excludes = escapeHTML(join "\n", @{$config->{rsync_extra_excludes} || []});
@@ -875,7 +1044,7 @@ my $info_metadata_native = info_button('Standardprofil bei einer Neuinstallation
 my $info_metadata_network = info_button('Für CIFS/NFS und viele NAS-Systeme, die Linux-xattrs nicht vollständig unterstützen. Network Compatible verwendet rsync ohne das X-Flag. Dateien, Verzeichnisse, symbolische Links, Besitzer, Gruppen, Rechte, Zeitstempel, ACLs, Hardlinks und Sparse-Dateien werden weiterhin gesichert; xattrs und File Capabilities werden bewusst ausgelassen. Das erzeugt nur einen neutralen Hinweis und blockiert auch zeitgesteuerte Backups nicht. Vor einem Restore muss die reduzierte Metadatentreue bestätigt werden.');
 my $info_metadata_fake_super = info_button('Für Ziele, die user-xattrs zuverlässig unterstützen, aber native Unix-Besitzer oder privilegierte Metadaten nicht direkt speichern können. rsync --fake-super legt diese Angaben in Attributen unter user.rsync.* ab und liest sie beim Restore wieder aus. Das Profil hilft nicht, wenn das Ziel auch user-xattrs ablehnt. Deshalb nur verwenden, wenn die automatische Zielprüfung erfolgreich ist.');
 my $info_metadata_portable = info_button('Für Ziele ohne geeignete Linux-Metadatenfunktionen. Portable Archive schreibt statt eines normalen rsync-Dateibaums einen pax-kompatiblen rootfs.tar-Container mit numerischen Besitzern, ACLs, xattrs, SELinux-Informationen und Sparse-Dateien. Dadurch liegen die Metadaten innerhalb des Archivs. Inkrementelle Snapshots sind nicht möglich; die Wiederherstellung erfolgt ausschließlich mit dem Offline-Helper aus einer Rescue- oder Offline-Umgebung.');
-my $info_retention = info_button('Legt fest, wie viele fertige Backups behalten werden. Erlaubt sind 1 bis 10. Bei inkrementellen Snapshots ist das Löschen alter Backups sicher: unveränderte Dateien sind per Hardlink in jedem Snapshot sichtbar. Wird ein alter Snapshot entfernt, bleiben Dateien erhalten, solange sie noch von einem jüngeren Snapshot referenziert werden. Sobald nach einem erfolgreichen Backup mehr Backups vorhanden sind als erlaubt, entfernt das Plugin automatisch das älteste fertige Backup und das passende Export-Archiv.');
+my $info_retention = info_button('Standard-Aufbewahrung: Anzahl fertiger Backups, erlaubt 1 bis 3650. Unter Erweiterte Aufbewahrung sind alternativ Tages-, Wochen- und Monatsstände möglich. Geschützte Backups und die letzte geeignete Sicherung bleiben erhalten; deshalb kann die tatsächliche Anzahl höher sein. Die Löschvorschau erklärt, was behalten oder entfernt würde. Nach einem erfolgreichen Backup wird die gespeicherte Aufbewahrungsregel angewendet. Hardlinks erhalten die Dateien verbleibender Snapshots; das Löschen einer Referenz löscht nicht deren weiterhin verwendete Daten.');
 my $info_schedule = info_button('Der Zeitplan erstellt Backups automatisch per Cron. Täglich bedeutet jeden Tag zur Startzeit. Wöchentlich bedeutet an den gewählten Wochentagen zur Startzeit. Monatlich bedeutet an den gewählten Tagen in den gewählten Monaten zur Startzeit.');
 my $info_time = info_button('Diese Uhrzeit gilt für alle Zeitplanarten. Bei täglich ist sie die einzige zeitliche Einstellung. Bei wöchentlich und monatlich wird sie mit den gewählten Tagen kombiniert.');
 my $info_weekdays = info_button('Nur bei wöchentlichen Backups relevant. Du kannst einen oder mehrere Wochentage auswählen, zum Beispiel Montag und Freitag. An jedem gewählten Tag startet ein Backup zur angegebenen Startzeit.');
@@ -1180,6 +1349,10 @@ sub render_backup_rows {
       $validation_label = '<small class="backup-health warning">Unvollst&auml;ndig: bei Bedarf l&ouml;schen</small>';
     }
     my $active_task_hidden = hidden_active_task();
+    my $pinned = $backup->{pinned} || $backup->{protected};
+    my $pin_value = $pinned ? '' : '1';
+    my $pin_label = $pinned ? 'Schutz aufheben' : 'Vor Löschung schützen';
+    my $delete_disabled = $pinned ? ' disabled title="Zuerst den Backup-Schutz aufheben"' : '';
     my $backup_actions;
     my $export_action = '';
 
@@ -1238,6 +1411,23 @@ $active_task_hidden
 <button data-role="none" type="submit">Restore</button>$info_restore
 </form>
 $export_action
+<details class="backup-extra-actions"><summary>Prüfen und schützen</summary>
+<form data-ajax="false" method="get" class="inline-form operation-form"><input data-role="none" type="hidden" name="action" value="inspect-backup"><input data-role="none" type="hidden" name="backup_id" value="$id"><button data-role="none" type="submit">Backup-Struktur prüfen</button></form>
+<form data-ajax="false" method="post" class="inline-form">$csrf<input data-role="none" type="hidden" name="action" value="verify-backup"><input data-role="none" type="hidden" name="backup_id" value="$id"><button data-role="none" type="submit">Dateiinhalte prüfen</button></form>
+<form data-ajax="false" method="get" class="inline-form operation-form"><input data-role="none" type="hidden" name="action" value="verification-report"><input data-role="none" type="hidden" name="backup_id" value="$id"><button data-role="none" type="submit">Prüfbericht</button></form>
+<form data-ajax="false" method="get" class="inline-form"><input data-role="none" type="hidden" name="action" value="recovery-sheet"><input data-role="none" type="hidden" name="backup_id" value="$id"><button data-role="none" type="submit">Wiederherstellungsblatt</button></form>
+<form data-ajax="false" method="post" class="inline-form">$csrf<input data-role="none" type="hidden" name="action" value="protect-backup"><input data-role="none" type="hidden" name="backup_id" value="$id"><input data-role="none" type="hidden" name="protected" value="$pin_value"><button data-role="none" type="submit">$pin_label</button></form>
+<details class="restore-test-record"><summary>Externen Restoretest dokumentieren</summary>
+<p>Dokumentiere nur einen von dir tatsächlich durchgeführten Test. Das ist deine persönliche Aufzeichnung; das Plugin bestätigt damit weder den Restore-Erfolg noch die Wiederherstellbarkeit und ändert keine Restore-Freigabe.</p>
+<form data-ajax="false" method="post" class="restore-test-form">$csrf
+<input data-role="none" type="hidden" name="action" value="record-restore-test"><input data-role="none" type="hidden" name="backup_id" value="$id">
+<label><span>Ergebnis des externen Tests</span><select data-role="none" name="result" required><option value="">Bitte wählen</option><option value="passed">Erfolgreich</option><option value="failed">Fehlgeschlagen</option></select></label>
+<label><span>Datum und Uhrzeit des Tests</span><input data-role="none" type="datetime-local" name="tested_at" required></label>
+<p class="muted">Es gilt die Zeitzone deines Browsers; ohne JavaScript die Zeitzone des LoxBerry. Gespeichert wird der eindeutige UTC-Zeitpunkt.</p>
+<label><span>Notiz: Testumgebung, Umfang und Beobachtung (optional)</span><textarea data-role="none" name="note" maxlength="2000" rows="3"></textarea></label>
+<button data-role="none" type="submit">Persönlichen Testeintrag speichern</button>
+</form></details>
+</details>
 };
     } else {
       $backup_actions = qq{
@@ -1247,14 +1437,14 @@ $export_action
 
     $html .= qq{
 <tr>
-<td><code>$id</code></td>
-<td>$status$validation_label</td>
-<td>$host</td>
-<td>${size} MB</td>
-<td>$files</td>
-<td>$finished</td>
-<td>$export</td>
-<td>
+<td data-label="ID"><code>$id</code></td>
+<td data-label="Status">$status$validation_label</td>
+<td data-label="Host">$host</td>
+<td data-label="Grösse">${size} MB</td>
+<td data-label="Dateien">$files</td>
+<td data-label="Fertiggestellt">$finished</td>
+<td data-label="Export">$export</td>
+<td data-label="Aktionen">
 <div class="row-actions">
 $backup_actions
 <form data-ajax="false" method="post" class="inline-form delete-backup-form">
@@ -1262,7 +1452,7 @@ $csrf
 <input data-role="none" type="hidden" name="action" value="delete-backup">
 <input data-role="none" type="hidden" name="backup_id" value="$id">
 $active_task_hidden
-<button data-role="none" class="danger" type="submit">$delete_label</button>$info_delete
+<button data-role="none" class="danger" type="submit"$delete_disabled>$delete_label</button>$info_delete
 </form>
 </div>
 </td>
@@ -1386,6 +1576,7 @@ my $target_notice = render_target_notice(undef);
 my $backup_target_picker = render_backup_target_picker($config->{backup_root} || '');
 my $csrf_html = csrf_field();
 my $csrf_attr = escapeHTML($csrf_token);
+my $draft_stops_attr = escapeHTML(encode_json([map { ref($_) eq 'HASH' ? (($_->{type} || '') . ':' . ($_->{name} || '')) : $_ } @{$config->{stop_targets} || []}]));
 my $preflight_accept_control = '';
 if (length $preflight_warning) {
   $preflight_accept_control = '<label class="checkline preflight-confirm"><input data-role="none" type="checkbox" name="accept_preflight_warnings" value="1" required><span>Backup trotz dieser Warnhinweise starten</span></label>';
@@ -1410,7 +1601,8 @@ print <<HTML;
 </div>
 </div>
 
-<main class="page" id="hostbackup-app" data-enhance="false" data-csrf-token="$csrf_attr">
+<main class="page" id="hostbackup-app" data-enhance="false" data-csrf-token="$csrf_attr" data-pending-settings="$pending_settings" data-draft-stops="$draft_stops_attr">
+<noscript><section class="notice">JavaScript ist deaktiviert. Bitte geänderte Einstellungen ausdrücklich über „Plugineinstellungen speichern“ sichern, bevor du eine andere Aktion ausführst. Live-Status und komfortable Speicherhinweise sind ohne JavaScript nicht verfügbar.</section></noscript>
 
 <header class="topbar">
 <div class="brand">
@@ -1430,6 +1622,7 @@ $preflight_accept_control
 </form>
 </div>
 </header>
+<section class="notice" id="action-feedback" role="status" aria-live="polite" hidden></section>
 HTML
 
 if ($message) {
@@ -1466,8 +1659,28 @@ print <<HTML;
 </details>
 </section>
 
+<section class="panel" id="operational-overview">
+<h2>Übersicht</h2>
+<div class="overview-grid" id="overview-values"><p>Letztes Backup und nächster Termin werden geladen...</p></div>
+<div class="config-actions">
+<button data-role="none" type="button" data-load-action="backup-preview">Nächstes Backup prüfen</button>
+<button data-role="none" type="button" data-load-action="storage-info">Speicherbelegung berechnen</button>
+<button data-role="none" type="button" data-load-action="runtime-cleanup-preview">Laufzeitdateien prüfen</button>
+<a data-ajax="false" class="button-link" href="?action=diagnostics">Diagnosepaket herunterladen</a>
+</div>
+<form data-ajax="false" method="post" id="recover-services-form" hidden>
+$csrf_html
+<input data-role="none" type="hidden" name="action" value="recover-services">
+<p>Ein Dienst-Wiederanlauf ist noch offen. Bitte zuerst die Journal-/Loghinweise prüfen.</p>
+<button data-role="none" type="submit">Offene Dienste wieder starten</button>
+</form>
+<p class="muted">Vorschau und Zeitplan verwenden die gespeicherten Einstellungen. Eine Speicherberechnung kann bei grossen Backups länger dauern.</p>
+<div id="operation-result" hidden></div>
+</section>
+
 <section class="panel task-monitor" id="task-monitor" data-active-task="$active_task_attr">
 <h2>Live-Status</h2>
+<label class="task-history-label"><span>Aktuelle und letzte Vorgänge</span><select data-role="none" id="task-history"><option value="">Noch kein Vorgang ausgewählt</option></select></label>
 <div class="task-actions">
 <span class="task-state state-running" id="task-state">Kein laufender Task ausgewählt</span>
 <span class="task-heartbeat" id="task-heartbeat">Nach einem gestarteten Backup werden hier Status und Log angezeigt.</span>
@@ -1479,6 +1692,8 @@ $csrf_html
 </form>
 </div>
 <pre class="terminal" id="task-log">Noch keine Live-Ausgabe vorhanden.</pre>
+<div class="task-actions"><button data-role="none" type="button" id="log-follow">Zum Ende des Logs</button><a data-ajax="false" class="button-link" id="download-task-log" hidden>Vollständiges Log herunterladen</a></div>
+<p class="muted">Die Live-Ansicht zeigt den letzten Log-Ausschnitt. Das vollständige Original steht als Download bereit. Beim Hochscrollen bleibt deine Leseposition erhalten.</p>
 </section>
 
 <section class="panel settings-panel">
@@ -1511,7 +1726,7 @@ $backup_target_picker
 
 <label>
 <span>Anzahl Backups behalten $info_retention</span>
-<input data-role="none" name="keep_backups" type="number" min="1" max="10" value="$cfg_keep">
+<input data-role="none" name="keep_backups" type="number" min="1" max="3650" value="$cfg_keep">
 </label>
 
 </div>
@@ -1713,16 +1928,46 @@ $backup_target_picker
 
 </form>
 
-<aside class="settings-change-popup" id="settings-change-popup" role="dialog" aria-modal="false" aria-hidden="true" aria-labelledby="settings-change-title">
+<aside class="settings-change-popup" id="settings-change-popup" role="region" aria-live="polite" aria-hidden="true" aria-labelledby="settings-change-title">
 <div class="settings-change-popup-header">
 <div>
 <strong id="settings-change-title">Ungespeicherte Änderungen</strong>
 <span>Diese Einstellungen wurden noch nicht übernommen.</span>
 </div>
+<button data-role="none" type="button" id="settings-change-toggle" aria-expanded="false" aria-controls="settings-change-list">Details anzeigen</button>
 </div>
-<ul id="settings-change-list" class="settings-change-list"></ul>
+<ul id="settings-change-list" class="settings-change-list" hidden></ul>
 <button data-role="none" class="primary settings-change-save" type="submit" form="settings-save-form"$config_action_disabled>Änderungen speichern</button>
 </aside>
+
+<details class="schedule-card maintenance-card">
+<summary>Erweiterte Aufbewahrung und Integritätsprüfung</summary>
+<p>Standard ist die Anzahl oben unter „Anzahl Backups behalten“. Optional können Tages-, Wochen- und Monatsstände aufbewahrt werden. Geschützte Backups und die letzte geeignete Sicherung bleiben erhalten.</p>
+<form data-ajax="false" method="post" id="maintenance-settings-form" class="settings-form">
+$csrf_html
+<input data-role="none" type="hidden" name="action" value="maintenance-config">
+<fieldset class="settings-load-guard"$config_action_disabled>
+<div class="settings-form nested-settings">
+<label><span>Aufbewahrungsart</span><select data-role="none" name="retention_mode"><option value="count"$retention_count_selected>Anzahl Backups (Standard)</option><option value="gfs"$retention_gfs_selected>Tages-, Wochen- und Monatsstände</option></select></label>
+<label><span>Tagesstände behalten</span><input data-role="none" name="keep_daily" type="number" min="0" max="3650" required value="$maintenance_values{keep_daily}"></label>
+<label><span>Wochenstände behalten</span><input data-role="none" name="keep_weekly" type="number" min="0" max="520" required value="$maintenance_values{keep_weekly}"></label>
+<label><span>Monatsstände behalten</span><input data-role="none" name="keep_monthly" type="number" min="0" max="120" required value="$maintenance_values{keep_monthly}"></label>
+<label><span>Task-Logs aufbewahren (Tage)</span><input data-role="none" name="log_retention_days" type="number" min="1" max="3650" required value="$maintenance_values{log_retention_days}"></label>
+<label><span>Quarantäne aufbewahren (Tage)</span><input data-role="none" name="quarantine_retention_days" type="number" min="1" max="3650" required value="$maintenance_values{quarantine_retention_days}"></label>
+<label class="checkline"><input data-role="none" name="integrity_enabled" type="checkbox" value="1"$integrity_checked><span>Regelmässige Prüfsummenprüfung aktivieren (Standard: aus)</span></label>
+<label><span>Prüfintervall (Tage)</span><input data-role="none" name="integrity_interval_days" type="number" min="1" max="365" required value="$maintenance_values{integrity_interval_days}"></label>
+</div>
+<p class="muted">Prüfsummen erkennen Änderungen seit ihrer ersten Erfassung; sie beweisen keinen erfolgreichen Restore. Die erste Prüfung erstellt nur die Vergleichsbasis. Prüfungen verursachen zusätzliche Lesezugriffe.</p>
+<button data-role="none" type="submit">Wartungseinstellungen speichern</button>
+</fieldset>
+</form>
+<form data-ajax="false" method="post" class="maintenance-preview-form">
+$csrf_html
+<input data-role="none" type="hidden" name="action" value="maintenance-preview">
+<button data-role="none" type="submit"$config_action_disabled>Löschvorschau anzeigen</button>
+</form>
+<p class="muted">Die Vorschau löscht nichts. Erst die separate Bestätigung führt genau die geprüfte Auswahl aus; bei zwischenzeitlichen Änderungen muss neu geprüft werden.</p>
+</details>
 
 <fieldset class="schedule-card wide settings-group config-card">
 <legend>Konfiguration verwalten</legend>
@@ -1743,7 +1988,7 @@ $backup_target_picker
 $info_config_export
 </form>
 
-<form data-ajax="false" method="post" enctype="multipart/form-data" class="inline-form">
+<form data-ajax="false" method="post" action="?action=import-config" enctype="multipart/form-data" class="inline-form">
 $csrf_html
 <input data-role="none" type="hidden" name="action" value="import-config">
 <input data-role="none" class="config-file" type="file" name="settings_file" accept="application/json,.json">
@@ -1762,7 +2007,7 @@ $info_config_import
 <fieldset class="backup-content">
 <legend>Verwaltung Backups</legend>
 
-<form data-ajax="false" class="import" method="post" enctype="multipart/form-data">
+<form data-ajax="false" class="import" method="post" action="?action=import" enctype="multipart/form-data">
 
 $csrf_html
 <input data-role="none" type="hidden" name="action" value="import">
@@ -1811,6 +2056,13 @@ if ($browse_id) {
 <a data-ajax="false" data-skip-scroll-save="1" class="button-link" href="$close_browse_url">Ansicht schliessen</a>
 </div>
 <p>Pfad: <code>$safe_browse_path</code></p>
+<details><summary>Datei oder Ordner getrennt wiederherstellen</summary>
+<form data-ajax="false" method="post" class="partial-restore-form">$csrf_html
+<input data-role="none" type="hidden" name="action" value="restore-files"><input data-role="none" type="hidden" name="backup_id" value="$safe_browse_id">
+<label><span>Pfad innerhalb des Backups, ohne führenden Schrägstrich</span><input data-role="none" type="text" name="path" required placeholder="etc/hostname"></label>
+<label><span>Bestehendes Zielverzeichnis</span><input data-role="none" type="text" name="destination" required placeholder="/media/usb/Daten/Wiederherstellung"></label>
+<p>Die Dateien werden in einen neuen, eindeutig benannten Unterordner geschrieben. Vorhandene Dateien werden dabei nicht überschrieben.</p>
+<button data-role="none" type="submit">Getrennte Wiederherstellung starten</button></form></details>
 <section class="inline-notice warning">Der Datei-Explorer dient nur zur Ansicht des Backup-Inhalts. F&uuml;r eine vollst&auml;ndige Wiederherstellung bitte den Restore-Button des gew&uuml;nschten Backups verwenden. Bei inkrementellen Snapshots sind kleine Gr&ouml;ssen normal: Unver&auml;nderte Dateien werden per Hardlink geteilt und belegen nicht mehrfach Speicher.</section>
 };
 
@@ -1877,11 +2129,12 @@ if ($restore_id) {
   my $degraded_confirmation = '';
   my $offline_notice = '';
   my $restore_submit_disabled = '';
-  if ($restore_check && $restore_check->{requires_degraded_confirmation}) {
+  if ($restore_check) {
+    my $degraded_required = $restore_check->{requires_degraded_confirmation} ? ' required' : '';
     $degraded_confirmation = qq{
 <label class="checkline root-confirm">
-<input data-role="none" type="checkbox" name="confirm_degraded" value="1" required>
-<span>Ich habe den Hinweis verstanden: xattrs und File Capabilities sind in diesem Backup bewusst nicht enthalten.</span>
+<input data-role="none" type="checkbox" name="confirm_degraded" value="1"$degraded_required>
+<span>Nur bei einem entsprechenden Prüfergebnis: Ich akzeptiere die in der Restore-Vorschau genannten Einschränkungen, etwa fehlende xattrs/File Capabilities oder andere unvollständige Metadaten.</span>
 </label>};
   }
   if ($restore_check && $restore_check->{requires_offline_restore}) {
@@ -1950,6 +2203,11 @@ $csrf_html
 <input data-role="none" type="hidden" name="backup_id" value="$safe_restore_id">
 $offline_notice
 $degraded_confirmation
+<label><span>Restore-Ziel (bestehendes Verzeichnis)</span><input data-role="none" type="text" name="restore_destination" value="/" required></label>
+<p class="muted">Mit / wird das aktuelle System wiederhergestellt. Für einen vorbereiteten Offline-Datenträger dessen Einhängepfad eintragen. Separate Daten-Volumes werden nur mit ausdrücklicher Zuordnung wiederhergestellt.</p>
+<details><summary>Volume-Zuordnung für zusätzliche Datenträger</summary><label><span>Zuordnung als JSON-Liste; leer lassen mit []</span><textarea data-role="none" name="restore_volume_map" rows="3">[]</textarea></label><p class="muted">Beispiel: [&#123;&quot;source&quot;:&quot;/media/usb/Daten&quot;,&quot;destination&quot;:&quot;/mnt/recovery-root/media/usb/Daten&quot;&#125;]. Beide Ziele müssen bereits eingehängt beziehungsweise angelegt sein.</p></details>
+<button data-role="none" type="button" data-restore-preview>Restore-Vorschau erstellen</button>
+<pre id="restore-plan-output" class="terminal" hidden></pre>
 <label>
 <span>Backup-ID zur Sicherheitsbestätigung eingeben</span>
 <input data-role="none" type="text" name="restore_challenge" value="" autocomplete="off" required pattern="[A-Za-z0-9._-]+" placeholder="$safe_restore_id">
@@ -1970,806 +2228,7 @@ print <<HTML;
 
 </main>
 
-<script>
-function hostbackupEach(nodes, callback) {
-  if (!nodes) return;
-  for (var i = 0; i < nodes.length; i += 1) {
-    callback(nodes[i], i);
-  }
-}
-
-function hostbackupClosest(node, selector) {
-  while (node && node.nodeType !== 1) {
-    node = node.parentElement || node.parentNode;
-  }
-  while (node && node.nodeType === 1) {
-    if (node.matches && node.matches(selector)) return node;
-    node = node.parentElement;
-  }
-  return null;
-}
-
-(function () {
-  var edgePadding = 12;
-  var helpers = document.querySelectorAll('.info-help');
-
-  function positionInfoBubble(help) {
-    var bubble = help ? help.querySelector('.info-bubble') : null;
-    if (!bubble) return;
-
-    bubble.style.marginLeft = '0px';
-    bubble.classList.remove('info-bubble-above');
-
-    var rect = bubble.getBoundingClientRect();
-    var shift = 0;
-    if (rect.right > window.innerWidth - edgePadding) {
-      shift -= rect.right - (window.innerWidth - edgePadding);
-    }
-    if (rect.left + shift < edgePadding) {
-      shift += edgePadding - (rect.left + shift);
-    }
-    bubble.style.marginLeft = shift + 'px';
-
-    rect = bubble.getBoundingClientRect();
-    var helpRect = help.getBoundingClientRect();
-    if (rect.bottom > window.innerHeight - edgePadding && helpRect.top > rect.height + edgePadding) {
-      bubble.classList.add('info-bubble-above');
-    }
-  }
-
-  hostbackupEach(helpers, function (help) {
-    help.addEventListener('mouseenter', function () { positionInfoBubble(help); });
-    help.addEventListener('focusin', function () { positionInfoBubble(help); });
-    help.addEventListener('click', function (event) {
-      var button = help.querySelector('.info-button');
-      event.preventDefault();
-      event.stopPropagation();
-      if (button) button.focus();
-      positionInfoBubble(help);
-    });
-  });
-
-  window.addEventListener('resize', function () {
-    hostbackupEach(helpers, function (help) {
-      if (help.matches && (help.matches(':hover') || help.contains(document.activeElement))) {
-        positionInfoBubble(help);
-      }
-    });
-  });
-}());
-
-(function () {
-  var input = document.getElementById('backup-root-input');
-  if (!input) return;
-
-  function setBackupRoot(path) {
-    if (!path) return;
-    input.value = path;
-    try {
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    } catch (e) {}
-    input.focus();
-  }
-
-  document.addEventListener('click', function (event) {
-    var button = hostbackupClosest(event.target, '[data-backup-root]');
-    if (!button) return;
-    event.preventDefault();
-    setBackupRoot(button.getAttribute('data-backup-root') || '');
-  });
-
-  document.addEventListener('keydown', function (event) {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    var button = hostbackupClosest(event.target, '[data-backup-root]');
-    if (!button) return;
-    event.preventDefault();
-    setBackupRoot(button.getAttribute('data-backup-root') || '');
-  });
-
-  document.addEventListener('dragstart', function (event) {
-    var button = hostbackupClosest(event.target, '[data-backup-root]');
-    if (!button || !event.dataTransfer) return;
-    event.dataTransfer.setData('text/plain', button.getAttribute('data-backup-root') || '');
-  });
-
-  input.addEventListener('dragover', function (event) {
-    event.preventDefault();
-  });
-
-  input.addEventListener('drop', function (event) {
-    event.preventDefault();
-    var path = event.dataTransfer ? event.dataTransfer.getData('text/plain') : '';
-    setBackupRoot(path);
-  });
-}());
-
-(function () {
-  var key = 'loxberryhostbackup-scroll';
-
-  function saveScroll(targetId) {
-    try {
-      sessionStorage.setItem(key, JSON.stringify({
-        y: window.pageYOffset || document.documentElement.scrollTop || 0,
-        target: targetId || ''
-      }));
-    } catch (e) {}
-  }
-
-  function restoreScroll() {
-    var data = null;
-    try {
-      data = JSON.parse(sessionStorage.getItem(key) || 'null');
-      sessionStorage.removeItem(key);
-    } catch (e) {
-      data = null;
-    }
-
-    var hashTarget = window.location.hash ? window.location.hash.replace(/^#/, '') : '';
-    var targetId = hashTarget || (data && data.target ? data.target : '');
-    var y = data && typeof data.y === 'number' ? data.y : null;
-
-    window.setTimeout(function () {
-      var target = targetId ? document.getElementById(targetId) : null;
-      if (target) {
-        target.scrollIntoView({ block: 'start' });
-      } else if (y !== null) {
-        window.scrollTo(0, y);
-      }
-    }, 80);
-
-    window.setTimeout(function () {
-      if (!targetId && y !== null) {
-        window.scrollTo(0, y);
-      }
-    }, 450);
-  }
-
-  document.addEventListener('submit', function (event) {
-    var form = hostbackupClosest(event.target, 'form');
-    if (!form) return;
-    saveScroll(form.getAttribute('data-return-anchor') || '');
-  }, true);
-
-  document.addEventListener('click', function (event) {
-    var link = hostbackupClosest(event.target, 'a');
-    if (!link) return;
-    if (link.getAttribute('data-skip-scroll-save') === '1') return;
-    var href = link.getAttribute('href') || '';
-    if (!href || href.indexOf('javascript:') === 0 || href.indexOf('#') === 0) return;
-    if (link.hostname && link.hostname !== window.location.hostname) return;
-    saveScroll('');
-  }, true);
-
-  restoreScroll();
-}());
-
-(function () {
-  var overlay = document.getElementById('loading-overlay');
-  var loadingText = document.getElementById('loading-text');
-
-  function showLoading(text) {
-    if (loadingText) loadingText.textContent = text || 'Aktion wird ausgeführt...';
-    if (overlay) overlay.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('is-loading');
-  }
-
-  window.hostbackupShowLoading = showLoading;
-
-  hostbackupEach(document.querySelectorAll('form'), function (form) {
-    form.addEventListener('submit', function (event) {
-      if (form.hasAttribute('data-skip-loading')) return;
-      if ((form.getAttribute('method') || 'get').toLowerCase() !== 'post') return;
-      var actionInput = form.querySelector('input[name="action"]');
-      var action = actionInput ? actionInput.value : '';
-      var messages = {
-        'save-config': 'Einstellungen werden gespeichert...',
-        'import-config': 'Einstellungen werden importiert...',
-        'import': 'Backup-Import wird gestartet...',
-        'start-export': 'Export wird im Hintergrund gestartet...',
-        'delete-export': 'Export-Archiv wird gelöscht...',
-        'delete-backup': 'Backup wird gelöscht. Bei grossen Backups kann das einige Minuten dauern...',
-        'download-export': 'Export wird vorbereitet...',
-        'restore-backup': 'Restore wird vorbereitet...',
-        'stop-backup': 'Backup wird gestoppt...',
-        'download-config': 'Einstellungen werden exportiert...'
-      };
-      if (action === 'backup') return;
-      window.setTimeout(function () {
-        if (!event.defaultPrevented) {
-          showLoading(messages[action] || 'Aktion wird ausgeführt...');
-        }
-      }, 0);
-    });
-  });
-}());
-
-(function () {
-  var targetNotice = document.getElementById('target-notice');
-  var backupListBody = document.getElementById('backup-list-body');
-  var stopTargetsList = document.getElementById('stop-targets-list');
-  var monitor = document.getElementById('task-monitor');
-  var activeTask = monitor ? monitor.getAttribute('data-active-task') : '';
-  var fragmentBaseUrl = window.location.pathname;
-
-  function fragmentUrl(action, extra) {
-    return fragmentBaseUrl + '?action=' + encodeURIComponent(action) + (extra || '') + '&_=' + Date.now();
-  }
-
-  function loadFragment(url, target, fallback) {
-    if (!target) return;
-
-    fetch(url, { cache: 'no-store' })
-      .then(function (response) {
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        return response.text();
-      })
-      .then(function (html) {
-        target.innerHTML = html;
-      })
-      .catch(function () {
-        target.innerHTML = fallback;
-      });
-  }
-
-  loadFragment(
-    fragmentUrl('target-notice', ''),
-    targetNotice,
-    '<section class="inline-notice error"><strong>Technischer Fehler:</strong> Dateisystem-Pr&uuml;fung konnte nicht geladen werden.</section>'
-  );
-
-  loadFragment(
-    fragmentUrl('backup-list', activeTask ? '&active_task=' + encodeURIComponent(activeTask) : ''),
-    backupListBody,
-    '<tr><td colspan="8" class="empty">Backup-Liste konnte nicht geladen werden.</td></tr>'
-  );
-
-  loadFragment(
-    fragmentUrl('stop-targets', ''),
-    stopTargetsList,
-    '<p class="empty">Dienste und Container konnten nicht geladen werden.</p>'
-  );
-}());
-
-(function () {
-  var stopTargetsList = document.getElementById('stop-targets-list');
-  if (!stopTargetsList) return;
-
-  stopTargetsList.addEventListener('click', function (event) {
-    var node = event.target;
-
-    while (node && node !== stopTargetsList) {
-      if (node.getAttribute && node.getAttribute('data-stop-target-preset')) {
-        var mode = node.getAttribute('data-stop-target-preset');
-        var boxes = stopTargetsList.querySelectorAll('input[name="stop_targets"]');
-
-        hostbackupEach(boxes, function (box) {
-          box.checked = mode === 'recommended'
-            ? box.getAttribute('data-recommended') === '1'
-            : false;
-        });
-
-        if (mode === 'recommended') {
-          hostbackupEach(stopTargetsList.querySelectorAll('details.stop-target-group'), function (detail) {
-            detail.open = !!detail.querySelector('input[name="stop_targets"]:checked');
-          });
-        }
-
-        return;
-      }
-
-      node = node.parentNode;
-    }
-  });
-}());
-
-(function () {
-  document.addEventListener('submit', function (event) {
-    var deleteForm = hostbackupClosest(event.target, '.delete-backup-form');
-    if (deleteForm) {
-      var idInput = deleteForm.querySelector('input[name="backup_id"]');
-      var backupId = idInput ? idInput.value : 'dieses Backup';
-      if (!window.confirm('Backup ' + backupId + ' wirklich dauerhaft löschen?\\n\\nBei grossen Backups oder langsamen Datenträgern kann das Löschen mehrere Minuten dauern. Bitte danach warten, bis die Aktion abgeschlossen ist.')) {
-        event.preventDefault();
-      } else if (window.hostbackupShowLoading) {
-        window.hostbackupShowLoading('Backup wird gelöscht. Bei grossen Backups kann das einige Minuten dauern...');
-      }
-      return;
-    }
-
-    var deleteExportForm = hostbackupClosest(event.target, '.delete-export-form');
-    if (deleteExportForm) {
-      var exportIdInput = deleteExportForm.querySelector('input[name="backup_id"]');
-      var exportBackupId = exportIdInput ? exportIdInput.value : 'dieses Backup';
-      if (!window.confirm('Nur das tar.gz-Exportarchiv von Backup ' + exportBackupId + ' löschen?\\n\\nDer eigentliche Backup-Snapshot bleibt erhalten und kann später erneut exportiert werden.')) {
-        event.preventDefault();
-      } else if (window.hostbackupShowLoading) {
-        window.hostbackupShowLoading('Export-Archiv wird gelöscht...');
-      }
-      return;
-    }
-
-    var restoreForm = hostbackupClosest(event.target, '.restore-start-form');
-    if (restoreForm) {
-      var restoreInput = restoreForm.querySelector('input[name="backup_id"]');
-      var restoreId = restoreInput ? restoreInput.value : 'dieses Backup';
-      if (!window.confirm('Restore von Backup ' + restoreId + ' wirklich starten? Das schreibt Systemdateien zurueck.')) {
-        event.preventDefault();
-      } else if (window.hostbackupShowLoading) {
-        window.hostbackupShowLoading('Restore wird vorbereitet...');
-      }
-    }
-  });
-}());
-
-(function () {
-  var modeInputs = document.querySelectorAll('input[name="schedule_mode"]');
-  var panels = document.querySelectorAll('[data-schedule-panel]');
-  var allMonths = document.querySelector('input[name="schedule_months"][value="*"]');
-  var monthInputs = document.querySelectorAll('input[name="schedule_months"]:not([value="*"])');
-
-  function selectedMode() {
-    var checked = document.querySelector('input[name="schedule_mode"]:checked');
-    return checked ? checked.value : 'daily';
-  }
-
-  function updateSchedulePanels() {
-    var mode = selectedMode();
-    hostbackupEach(panels, function (panel) {
-      panel.classList.toggle('schedule-hidden', panel.getAttribute('data-schedule-panel') !== mode);
-    });
-  }
-
-  function updateMonthSelection() {
-    if (!allMonths) return;
-    hostbackupEach(monthInputs, function (input) {
-      input.disabled = allMonths.checked;
-      if (allMonths.checked) input.checked = false;
-    });
-  }
-
-  hostbackupEach(modeInputs, function (input) {
-    input.addEventListener('change', updateSchedulePanels);
-  });
-  if (allMonths) {
-    allMonths.addEventListener('change', updateMonthSelection);
-  }
-  hostbackupEach(monthInputs, function (input) {
-    input.addEventListener('change', function () {
-      if (input.checked && allMonths) {
-        allMonths.checked = false;
-        updateMonthSelection();
-      }
-    });
-  });
-
-  updateSchedulePanels();
-  updateMonthSelection();
-}());
-
-(function () {
-  var form = document.getElementById('settings-save-form');
-  var popup = document.getElementById('settings-change-popup');
-  var changeList = document.getElementById('settings-change-list');
-  var stopTargetsList = document.getElementById('stop-targets-list');
-  if (!form || !popup || !changeList) return;
-
-  var ignoredNames = {
-    action: true,
-    csrf_token: true,
-    stop_docker_before_backup: true,
-    stop_targets_loaded: true
-  };
-  var initialStates = {};
-  var changedAt = {};
-  var valueSeparator = String.fromCharCode(31);
-  var fieldLabels = {
-    backup_root: 'Backup-Verzeichnis',
-    keep_backups: 'Anzahl Backups behalten',
-    metadata_mode: 'Metadaten-Profil',
-    backup_mode: 'Backup-Modus',
-    schedule_enabled: 'Automatische Backups',
-    schedule_mode: 'Zeitplan',
-    schedule_time: 'Startzeit',
-    schedule_weekdays: 'Wochentage',
-    schedule_monthdays: 'Monatstage',
-    schedule_months: 'Monate',
-    pre_backup_hook: 'Skript vor dem Backup',
-    post_backup_hook: 'Skript nach dem Backup',
-    rsync_extra_excludes: 'Zusätzliche Ausschlüsse',
-    root_permission_ack: 'Root-Freigabe',
-    mail_notify_enabled: 'Mailbenachrichtigung',
-    mail_notify_to: 'Mailadresse',
-    mail_notify_success: 'Mail bei Erfolg',
-    mail_notify_failure: 'Mail bei Fehler',
-    mail_notify_stopped: 'Mail bei Abbruch',
-    mail_notify_restore: 'Mail bei Restore',
-    stop_targets: 'Zu stoppende Dienste/Container',
-    create_export_after_backup: 'Export nach dem Backup'
-  };
-  var valueLabels = {
-    metadata_mode: {
-      'native-strict': 'Native Strict',
-      'network-compatible': 'Network Compatible',
-      'fake-super': 'Fake Super',
-      'portable-archive': 'Portable Archive'
-    },
-    backup_mode: {
-      full: 'Volles Backup',
-      snapshot: 'Inkrementeller Snapshot'
-    },
-    schedule_mode: {
-      daily: 'Täglich',
-      weekly: 'Wöchentlich',
-      monthly: 'Monatlich'
-    }
-  };
-  var booleanNames = {
-    schedule_enabled: true,
-    root_permission_ack: true,
-    mail_notify_enabled: true,
-    mail_notify_success: true,
-    mail_notify_failure: true,
-    mail_notify_stopped: true,
-    mail_notify_restore: true,
-    create_export_after_backup: true
-  };
-  var weekdayLabels = {
-    '0': 'So', '1': 'Mo', '2': 'Di', '3': 'Mi', '4': 'Do', '5': 'Fr', '6': 'Sa'
-  };
-  var monthLabels = {
-    '1': 'Jan', '2': 'Feb', '3': 'Mär', '4': 'Apr', '5': 'Mai', '6': 'Jun',
-    '7': 'Jul', '8': 'Aug', '9': 'Sep', '10': 'Okt', '11': 'Nov', '12': 'Dez'
-  };
-
-  function namedControls(name) {
-    var controls = form.querySelectorAll('[name]');
-    var matches = [];
-    hostbackupEach(controls, function (control) {
-      if (control.name === name) matches.push(control);
-    });
-    return matches;
-  }
-
-  function relevantName(control) {
-    if (!control || !control.name || ignoredNames[control.name]) return '';
-    if (control.type === 'hidden' || control.type === 'submit' || control.type === 'button' || control.type === 'file') return '';
-    return control.name;
-  }
-
-  function stateFor(name) {
-    var controls = namedControls(name);
-    if (!controls.length) return '';
-    var type = (controls[0].type || '').toLowerCase();
-    if (type === 'radio') {
-      var selected = '';
-      hostbackupEach(controls, function (control) {
-        if (control.checked) selected = control.value;
-      });
-      return selected;
-    }
-    if (type === 'checkbox') {
-      if (controls.length === 1) return controls[0].checked ? '1' : '0';
-      var selectedValues = [];
-      hostbackupEach(controls, function (control) {
-        if (control.checked) selectedValues.push(control.value);
-      });
-      selectedValues.sort();
-      return selectedValues.join(valueSeparator);
-    }
-    return controls[0].value || '';
-  }
-
-  function captureInitialState(name) {
-    if (!name || Object.prototype.hasOwnProperty.call(initialStates, name)) return;
-    initialStates[name] = stateFor(name);
-  }
-
-  function captureCurrentControls() {
-    hostbackupEach(form.querySelectorAll('[name]'), function (control) {
-      captureInitialState(relevantName(control));
-    });
-  }
-
-  function selectedValues(state) {
-    return state ? state.split(valueSeparator) : [];
-  }
-
-  function displayValue(name, state) {
-    if (valueLabels[name] && valueLabels[name][state]) return valueLabels[name][state];
-    if (booleanNames[name]) return state === '1' ? 'Aktiviert' : 'Deaktiviert';
-    if (name === 'schedule_weekdays') {
-      return selectedValues(state).map(function (value) { return weekdayLabels[value] || value; }).join(', ') || 'Keine Auswahl';
-    }
-    if (name === 'schedule_monthdays') {
-      return selectedValues(state).join(', ') || 'Keine Auswahl';
-    }
-    if (name === 'schedule_months') {
-      if (state === '*') return 'Alle Monate';
-      return selectedValues(state).map(function (value) { return monthLabels[value] || value; }).join(', ') || 'Keine Auswahl';
-    }
-    if (name === 'stop_targets') {
-      var targetCount = selectedValues(state).length;
-      return targetCount === 1 ? '1 Ziel ausgewählt' : targetCount + ' Ziele ausgewählt';
-    }
-    if (name === 'rsync_extra_excludes') {
-      var excludeCount = state.split(/\\r?\\n/).filter(function (line) { return line.trim() !== ''; }).length;
-      return excludeCount === 1 ? '1 Eintrag' : excludeCount + ' Einträge';
-    }
-    if (name === 'pre_backup_hook' || name === 'post_backup_hook') return state ? 'Eingetragen' : 'Leer';
-    if (!state) return 'Leer';
-    return state.length > 80 ? state.substring(0, 77) + '...' : state;
-  }
-
-  function formatTime(date) {
-    function pad(number) { return number < 10 ? '0' + number : String(number); }
-    return pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds());
-  }
-
-  function renderPopup() {
-    var names = Object.keys(changedAt).sort(function (left, right) {
-      return changedAt[left].getTime() - changedAt[right].getTime();
-    });
-    changeList.innerHTML = '';
-
-    hostbackupEach(names, function (name) {
-      var item = document.createElement('li');
-      var copy = document.createElement('span');
-      var label = document.createElement('strong');
-      var value = document.createElement('small');
-      var time = document.createElement('time');
-      label.textContent = fieldLabels[name] || name;
-      value.textContent = displayValue(name, stateFor(name));
-      time.textContent = 'geändert ' + formatTime(changedAt[name]);
-      time.setAttribute('datetime', changedAt[name].toISOString());
-      copy.appendChild(label);
-      copy.appendChild(value);
-      item.appendChild(copy);
-      item.appendChild(time);
-      changeList.appendChild(item);
-    });
-
-    var visible = names.length > 0;
-    popup.classList.toggle('is-visible', visible);
-    popup.setAttribute('aria-hidden', visible ? 'false' : 'true');
-  }
-
-  function refreshName(name) {
-    if (!name) return;
-    captureInitialState(name);
-    if (stateFor(name) === initialStates[name]) {
-      delete changedAt[name];
-    } else {
-      changedAt[name] = new Date();
-    }
-    renderPopup();
-  }
-
-  captureCurrentControls();
-
-  form.addEventListener('input', function (event) {
-    refreshName(relevantName(event.target));
-  });
-  form.addEventListener('change', function (event) {
-    refreshName(relevantName(event.target));
-  });
-
-  if (stopTargetsList && window.MutationObserver) {
-    new MutationObserver(function () {
-      captureInitialState('stop_targets');
-    }).observe(stopTargetsList, { childList: true, subtree: true });
-  }
-
-  document.addEventListener('click', function (event) {
-    if (!hostbackupClosest(event.target, '[data-stop-target-preset]')) return;
-    window.setTimeout(function () { refreshName('stop_targets'); }, 0);
-  });
-}());
-
-(function () {
-  var monitor = document.getElementById('task-monitor');
-  if (!monitor) return;
-
-  var task = monitor.getAttribute('data-active-task');
-  var stateEl = document.getElementById('task-state');
-  var heartbeatEl = document.getElementById('task-heartbeat');
-  var logEl = document.getElementById('task-log');
-  var stopForm = document.getElementById('stop-task-form');
-  var page = document.getElementById('hostbackup-app');
-  var csrfToken = page ? (page.getAttribute('data-csrf-token') || '') : '';
-  var timer = null;
-  var refreshScheduled = false;
-  var inFlight = false;
-  var pollFailures = 0;
-
-  function setState(state, text) {
-    stateEl.className = 'task-state state-' + state;
-    stateEl.textContent = text;
-  }
-
-  function decodeLog(value) {
-    if (!value) return '';
-    try {
-      return decodeURIComponent(escape(window.atob(value)));
-    } catch (e) {
-      try {
-        return window.atob(value);
-      } catch (ignored) {
-        return '';
-      }
-    }
-  }
-
-  function normalizeLogForDisplay(value) {
-    var text = String(value || '');
-    var newline = String.fromCharCode(10);
-    text = text.split(String.fromCharCode(13, 10)).join(newline);
-    text = text.split(String.fromCharCode(13)).join(newline);
-    return text.replace(new RegExp(String.fromCharCode(27) + '\\\\[[0-?]*[ -/]*[@-~]', 'g'), '');
-  }
-
- function backupIdFromTask() {
-   var value = task || '';
-   if (value.indexOf('backup-') !== 0) return '';
-   if (value.slice(-4) !== '.log') return '';
-   return value.slice(7, -4);
- }
-
-  function taskKind() {
-    if ((task || '').indexOf('restore-') === 0) return 'restore';
-    if ((task || '').indexOf('export-') === 0) return 'export';
-    if ((task || '').indexOf('import-') === 0) return 'import';
-    return 'backup';
-  }
-
-  function taskName() {
-    var kind = taskKind();
-    if (kind === 'restore') return 'Restore';
-    if (kind === 'export') return 'Export';
-    if (kind === 'import') return 'Import';
-    return 'Backup';
-  }
-
-  function redirectWithMessage(message) {
-    window.location.href = window.location.pathname + '?msg=' + encodeURIComponent(message);
-  }
-
-  function deleteStoppedBackup(backupId) {
-    var form = document.createElement('form');
-    var action = document.createElement('input');
-    var id = document.createElement('input');
-    var csrf = document.createElement('input');
-    form.method = 'post';
-    form.action = window.location.pathname;
-    action.type = 'hidden';
-    action.name = 'action';
-    action.value = 'delete-backup';
-    id.type = 'hidden';
-    id.name = 'backup_id';
-    id.value = backupId;
-    csrf.type = 'hidden';
-    csrf.name = 'csrf_token';
-    csrf.value = csrfToken;
-    form.appendChild(action);
-    form.appendChild(id);
-    form.appendChild(csrf);
-    document.body.appendChild(form);
-    if (window.hostbackupShowLoading) {
-      window.hostbackupShowLoading('Unfertiges Backup wird gelöscht. Bei grossen Backups kann das einige Minuten dauern...');
-    }
-    form.submit();
-  }
-
-  function renderStatus(data) {
-    pollFailures = 0;
-    inFlight = false;
-    var state = data.state || 'running';
-    var labels = {
-      running: task.indexOf('restore-') === 0 ? 'Restore läuft' : 'Backup läuft',
-      finished: 'Backup abgeschlossen',
-      failed: 'Backup fehlgeschlagen',
-      cleanup_failed: 'Backup fehlgeschlagen; Wiederanlauf unvollständig',
-      stopped: 'Backup gestoppt',
-      stale: 'Keine neue Logausgabe',
-      error: 'Status nicht verfügbar'
-    };
-
-    if (task.indexOf('restore-') === 0) {
-      labels.finished = 'Restore abgeschlossen';
-      labels.failed = 'Restore fehlgeschlagen';
-    }
-
-    labels.running = taskName() + ' läuft';
-    labels.finished = taskName() + ' abgeschlossen';
-    labels.failed = taskName() + ' fehlgeschlagen';
-    labels.cleanup_failed = taskName() + ' fehlgeschlagen; Wiederanlauf unvollständig';
-    labels.stopped = taskName() + ' gestoppt';
-    setState(state, labels[state] || state);
-
-    if (state === 'finished') {
-      heartbeatEl.textContent = taskName() + ' abgeschlossen. Die Ansicht wird aktualisiert.';
-    } else if (state === 'failed' || state === 'cleanup_failed') {
-      heartbeatEl.textContent = taskName() + ' fehlgeschlagen. Bitte Logausgabe und Cleanup-Status prüfen.';
-    } else if (state === 'stopped') {
-      heartbeatEl.textContent = taskName() + ' gestoppt. Der Wiederanlauf wurde geprüft; Details stehen im Log.';
-    } else if (data.now && data.mtime) {
-      var age = Math.max(0, Number(data.now) - Number(data.mtime));
-      heartbeatEl.textContent = (data.phase ? 'Phase: ' + data.phase + '. ' : '') + 'Letzte Log-Aktualisierung vor ' + age + ' Sekunden.';
-    } else {
-      heartbeatEl.textContent = 'Warte auf Logausgabe für ' + taskName() + '.';
-    }
-
-    if (data.error) {
-      logEl.textContent = data.error;
-    } else {
-      logEl.textContent = normalizeLogForDisplay(decodeLog(data.content_b64)) || taskName() + ' wurde gestartet. Die Logdatei wird vorbereitet...';
-    }
-
-    logEl.scrollTop = logEl.scrollHeight;
-
-    if (state === 'finished' || state === 'failed' || state === 'cleanup_failed' || state === 'stopped') {
-      if (stopForm) stopForm.classList.add('task-monitor-idle');
-      window.clearInterval(timer);
-      if (!refreshScheduled) {
-        refreshScheduled = true;
-        if (state === 'finished' || state === 'stopped') {
-          window.setTimeout(function () {
-            var backupId = backupIdFromTask();
-            if (state === 'stopped' && backupId) {
-              if (window.confirm('Das Backup wurde gestoppt und ist unvollständig. Soll dieses unfertige Backup jetzt gelöscht werden?\\n\\nBei grossen Backups oder langsamen Datenträgern kann das Löschen mehrere Minuten dauern.')) {
-                deleteStoppedBackup(backupId);
-              } else {
-                redirectWithMessage('backup_stop_requested');
-              }
-              return;
-            }
-            var kind = taskKind();
-            redirectWithMessage(kind === 'restore' ? 'restore_finished' : kind === 'export' ? 'export_finished' : kind === 'import' ? 'import_finished' : 'backup_finished');
-          }, 2500);
-        }
-      }
-    }
-  }
-
-  if (stopForm) {
-    stopForm.addEventListener('submit', function (event) {
-      if (!window.confirm('Backup wirklich stoppen? Dienste und Docker-Container, die dieses Backup bereits gestoppt hat, werden anschliessend anhand der Restart-Liste wieder gestartet.')) {
-        event.preventDefault();
-      }
-    });
-  }
-
-  function poll() {
-    if (inFlight) return;
-    inFlight = true;
-    fetch('?action=task-status&task=' + encodeURIComponent(task) + '&_=' + Date.now(), { cache: 'no-store' })
-      .then(function (response) { return response.text(); })
-      .then(function (text) {
-        renderStatus(JSON.parse(text));
-      })
-      .catch(function () {
-        inFlight = false;
-        pollFailures += 1;
-        setState(pollFailures >= 3 ? 'error' : 'stale', pollFailures >= 3 ? 'Status nicht verfügbar' : 'Status wird erneut gelesen');
-        heartbeatEl.textContent = 'Der Live-Status für ' + taskName() + ' konnte gerade nicht gelesen werden. Der Task kann trotzdem weiterlaufen; es wird automatisch erneut versucht.';
-      });
-  }
-
-  if (!task) {
-    monitor.classList.add('task-monitor-idle');
-    if (stopForm) stopForm.classList.add('task-monitor-idle');
-    return;
-  }
-
-  monitor.classList.remove('task-monitor-idle');
-  if (stopForm && taskKind() !== 'backup') stopForm.classList.add('task-monitor-idle');
-  heartbeatEl.textContent = 'Live-Status wird geladen...';
-  setState('running', taskName() + ' läuft');
-  logEl.textContent = taskName() + ' wurde gestartet. Warte auf erste Logausgabe...';
-  poll();
-  timer = window.setInterval(poll, 5000);
-}());
-</script>
+<script src="assets/hostbackup.js" defer></script>
 
 HTML
 

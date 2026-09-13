@@ -44,4 +44,13 @@ zip -r "$ZIP_PATH" \
   LICENSE \
   -x '*/__pycache__/*' '*.pyc' '*.pyo'
 
+# Embed the package version without modifying the source checkout. The trusted
+# installer copies this generated file beside the executable helper release.
+version_stage="$(mktemp -d)"
+trap 'rm -f -- "$version_stage/bin/runtime-version"; rmdir -- "$version_stage/bin" "$version_stage"' EXIT
+mkdir "$version_stage/bin"
+printf '%s\n' "$VERSION" > "$version_stage/bin/runtime-version"
+chmod 0644 "$version_stage/bin/runtime-version"
+( cd "$version_stage"; zip "$ZIP_PATH" bin/runtime-version )
+
 printf '%s\n' "$ZIP_PATH"

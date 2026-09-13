@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - develop
+      - 'codex/release-*'
     tags:
       - 'v*'
   pull_request:
@@ -27,10 +28,29 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install validation tools
-        run: sudo apt-get update && sudo apt-get install -y zip libcgi-pm-perl php-cli python3 rsync acl attr sudo shellcheck
+        run: sudo apt-get update && sudo apt-get install -y zip libcgi-pm-perl php-cli python3 rsync acl attr libcap2-bin sudo shellcheck
 
       - name: Run automated tests
+        env:
+          HOSTBACKUP_REQUIRE_LINUX_INTEGRATION: '1'
         run: bash tests/run.sh
+
+      - name: Set up Node for mandatory browser regressions
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tests/browser/package-lock.json
+
+      - name: Install locked browser test dependencies
+        working-directory: tests/browser
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+
+      - name: Test rendered CGI in a real browser
+        working-directory: tests/browser
+        run: npm test
 
       - name: Validate privileged entry points
         run: |

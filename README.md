@@ -1,9 +1,15 @@
 # LoxBerry Host Backup
 
-**Status:** Vorabversion 0.6.1-beta aus `develop`. Dieser Stand enthält
-zusätzliche Sicherheits-, Metadaten- und Restore-Härtungen und wird über den
-Pre-Release-Kanal für Tests bereitgestellt. Der stabile Release-Kanal bleibt
-weiterhin auf Version 0.5.8.
+**Pre-Release: 0.7.0-beta · Stable: 0.5.8.**
+Die Vorabversion enthält die Sicherheits-, Wiederherstellungs- und
+Bedienungsverbesserungen aus der Analyse vom 13.09.2026 und ist für freiwillige
+Tests vorgesehen. Änderungen, Updatehinweise und Prüfgrenzen stehen in den
+[Release Notes](docs/RELEASE-0.7.0-beta.md); der stabile Kanal bleibt unverändert.
+
+> [!IMPORTANT]
+> **Erst Einstellungen speichern, dann sichern.** Auch ausgewählte Optionen,
+> Dienste, Container und Zeitpläne gelten erst nach **Änderungen speichern**.
+> Automatische Backups verwenden ausschliesslich die zuletzt gespeicherten Werte.
 
 Dieses Plugin wurde bereits auf einem LoxBerry-/DietPi-Testsystem installiert,
 konfiguriert und für echte Vollbackups sowie inkrementelle Snapshot-Backups
@@ -142,7 +148,8 @@ Dateien parallel aktiv sein können.
 
 ## Aktueller Validierungsstand
 
-Geprüft:
+Bisherige veröffentlichte Stände wurden wie folgt geprüft. Diese historischen
+Praxistests sind **kein** Hardware-Nachweis für den neuen Entwicklungsstand:
 
 - Bash-Syntax für Backend, Postinstall, Restore-Helper und Uninstall
 - Perl/CGI-Syntax mit lokalem `CGI.pm`-Stub
@@ -160,6 +167,17 @@ Noch nicht produktiv validiert:
 - echter Restore auf ein frisch installiertes Zielsystem
 - Docker-/Datenbank-Konsistenz in allen produktiven Anwendungsszenarien
 - Migration zwischen unterschiedlichen CPU-Architekturen
+
+Der neue Arbeitsstand ergänzt Verhaltenstests für Importangriffe, Dienst-Neustart,
+Zeitpläne, Ausschlüsse beim Restore, Metadaten-Roundtrips, Downloads, Aufbewahrung,
+Inhaltsprüfung und Browserbedienung. Windows-Prüfungen ersetzen die separat
+erforderlichen Linux-, NAS- und Offline-Restoretests nicht. Der lokale
+Umsetzungs- und Prüfstand wird in [IMPLEMENTATION-2026-09.md](docs/IMPLEMENTATION-2026-09.md)
+geführt. Das Pre-Release-Paket wird nur nach erfolgreicher Linux-CI mit
+Integrations- und Browserprüfungen veröffentlicht; den zugehörigen Lauf und
+seine Ergebnisse nennt die [Release-Seite](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.0-beta).
+Eine echte LoxBerry-/NAS-/Offline-Hardwareabnahme ist damit nicht nachgewiesen
+und bleibt Voraussetzung für eine stabile Freigabe.
 
 ## Installation
 
@@ -185,14 +203,39 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.5.8/
 Aktuelles Pre-Release-Paket:
 
 ```text
-https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.6.1-beta/LoxBerryHostBackup_0.6.1.zip
+https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.7.0-beta/LoxBerryHostBackup_0.7.0.zip
 ```
 
 Lokales Paket nach dem Build:
 
 ```text
-LoxBerryHostBackup_0.6.1.zip
+LoxBerryHostBackup_0.7.0.zip
 ```
+
+### Update auf 0.7.0-beta
+
+Für die Updateerkennung den Pre-Release-Kanal in der LoxBerry-Plugin-Verwaltung
+aktivieren und nach Plugin-Updates suchen. Die interne Plugin-Version lautet
+`0.7.0`; Tag und Vorabversion heissen `v0.7.0-beta` beziehungsweise `0.7.0-beta`.
+`prerelease.cfg` enthält den installierbaren ZIP-Link oben. Stable-Nutzer erhalten
+über `release.cfg` weiterhin Version 0.5.8.
+
+Vor dem Update laufende Backup-/Restoreaufgaben beenden lassen und die
+Plugin-Einstellungen exportieren. Vorhandene Einstellungen und Backupdaten
+werden beim Update nicht absichtlich zurückgesetzt oder gelöscht. Nach dem
+Update Ziel, Ausschlüsse, Profil und Zeitplan kontrollieren, geänderte Werte
+**speichern** und zunächst ein manuelles Testbackup ausführen. Neue optionale
+Inhaltsprüfungen und Aufbewahrungsregeln bewusst konfigurieren; Inhaltsprüfungen
+benötigen zusätzlichen Speicher und Zeit.
+
+**Wichtig beim Umstieg von 0.5.8 und älter:** Der erste inkrementelle Lauf
+benötigt nochmals eine vollständige Basiskopie, weil diesen alten Backups die
+Metadaten-Profilinformation fehlt. Erst ein nachfolgender erfolgreicher Lauf
+kann wieder Hardlinks verwenden. Genügend zusätzlichen freien Platz einplanen;
+das letzte brauchbare Backup wird nicht vorab zur Platzbeschaffung gelöscht.
+Ein Update von 0.6.x auf 0.7.0 erzwingt allein durch die Versionsnummer keine
+neue Basiskopie: Entscheidend ist weiterhin eine verwendbare Referenz mit
+passendem Profil.
 
 ## Erste Tests Auf LoxBerry
 
@@ -231,7 +274,7 @@ Empfohlene Reihenfolge:
 - zeitgesteuerte Backups per Cron
 - tägliche, wöchentliche und monatliche Zeitpläne
 - Monatsende-Fallback bei monatlichen Backups am 29., 30. oder 31.
-- Aufbewahrungsregel für 1 bis 10 Backups
+- Anzahlaufbewahrung für 1 bis 3650 Backups oder tägliche/wöchentliche/monatliche Aufbewahrung mit Schutz einzelner Sicherungen
 - Pre-/Post-Backup-Hooks
 - Manifest pro Backup mit Host-, LoxBerry- und Inventardaten
 - sichtbare Ladeanzeige bei längeren Formularaktionen
@@ -331,15 +374,13 @@ Backup-Verzeichnis:
 /media/usb/PI_Backup/loxberry-hostbackup
 
 Vom Backup ausschliessen:
-/media/usb/PI_Backup/dietpi-backup
-/media/usb/PI_Backup/dietpi-sync
-/media/usb/PI_Backup/Bookworm
-/media/usb/USB_Loxberry
+/media/usb/PI_Backup
 ```
 
-Damit wird das neue HostBackup auf `/media/usb/PI_Backup/loxberry-hostbackup`
-gespeichert, während alte DietPi-Backups, Images und der zweite USB-Stick nicht
-mitgesichert werden.
+In diesem Beispiel enthält `PI_Backup` ausschliesslich Sicherungen. Das neue
+HostBackup wird dort unter `loxberry-hostbackup` gespeichert, ohne diesen
+Datenträger einschliesslich alter DietPi-Backups und Images nochmals zu sichern.
+Nutzdaten unter `/media/usb/USB_Loxberry` bleiben dagegen eingeschlossen.
 
 ### Backup-Modus
 
@@ -439,11 +480,25 @@ Der Zeitplan wird installiert als:
 
 Der Cron-Eintrag wird bei der Deinstallation wieder entfernt.
 
+Im neuen Entwicklungsstand verwenden alle Zeitplanarten denselben Startweg:
+übergehbare Preflight-Warnungen werden für den automatischen Lauf akzeptiert,
+echte Fehler blockieren. Auch ein abgewiesener Start bleibt als fehlgeschlagener
+Versuch mit Protokoll sichtbar. Ein leeres Wochen-/Monatsraster wird nicht
+stillschweigend als Sonntag, Monatserster oder alle Monate gespeichert.
+
 ### Backups Behalten
 
-Die Anzahl zu behaltender Backups ist auf 1 bis 10 begrenzt. Sobald das Limit
-überschritten wird, entfernt das Plugin nach einem erfolgreichen Backup das
-älteste vollständig abgeschlossene Backup.
+Standard bleibt die Anzahlaufbewahrung mit 10 Backups; im Entwicklungsstand sind
+1 bis 3650 auswählbar. Alternativ lässt sich tägliche, wöchentliche und monatliche
+Aufbewahrung kombinieren (GFS: standardmässig 7/4/6 Zeitgruppen). Pro Zeitgruppe
+bleibt die jüngste passende Sicherung erhalten. Nach einem erfolgreichen Backup
+wird diese gespeicherte Regel angewendet.
+
+Einzeln geschützte Sicherungen und die jüngste brauchbare Sicherung bleiben immer
+erhalten. Schutz kann die konfigurierte Anzahl überschreiten. Vor einer manuellen
+Bereinigung zeigt die Vorschau die betroffenen Sicherungen und Gründe; verändert
+sich die Grundlage, muss die Vorschau erneuert werden. Das letzte gute Backup
+wird nicht vor einer neuen Basiskopie zur Platzbeschaffung gelöscht.
 
 Bei inkrementellen Snapshots ist das sicher, weil jeder Snapshot als eigener
 Backup-Ordner sichtbar bleibt. Unveränderte Dateien sind per Hardlink mehrfach
@@ -452,10 +507,11 @@ Verzeichniseinträge; Datei-Inhalte bleiben erhalten, solange sie noch von einem
 jüngeren Snapshot referenziert werden. Erst wenn kein verbleibender Snapshot
 mehr auf einen Datei-Inhalt zeigt, wird der Speicher freigegeben.
 
-Hinweis zur angezeigten Grösse: Bei inkrementellen Snapshots kann ein neuer
-Snapshot sehr klein wirken. Das ist normal. Unveränderte Dateien werden per
-Hardlink geteilt und belegen auf dem Datenträger nicht nochmals denselben
-Speicherplatz.
+Logische Dateigrösse, belegte Blöcke und gemeinsam genutzte Hardlinks sind
+verschiedene Werte. Die zusätzliche Speicherübersicht misst diese ausdrücklich
+auf Anforderung; bei grossen NAS-Zielen kann das dauern. Einzelwerte mehrerer
+Snapshots dürfen wegen gemeinsamer Inodes nicht einfach addiert werden.
+Eine Belegungsmessung ist keine Prognose für das nächste Backup.
 
 Laufende, fehlgeschlagene oder unvollständige Backup-Verzeichnisse werden dabei
 nicht als reguläre Backups gezählt. Sie müssen bei Bedarf manuell geprüft und
@@ -472,11 +528,15 @@ Backups sein sollen.
 Beispiel:
 
 ```text
-/media/usb/PI_Backup/dietpi-backup
-/media/usb/PI_Backup/dietpi-sync
-/media/usb/USB_Loxberry
+/media/usb/PI_Backup
 /var/cache/apt
 ```
+
+In diesem Beispiel enthält `PI_Backup` ausschliesslich Backups und wird deshalb
+vollständig ausgeschlossen. Ein separater Datenpfad wie
+`/media/usb/USB_Loxberry` bleibt eingeschlossen, sofern seine Daten mitgesichert
+werden sollen. Nicht pauschal alle USB-Mounts ausschliessen. Die Sicherungsvorschau
+zeigt gespeicherte Regeln, erkannte Volumes und eine verwendbare Snapshot-Referenz.
 
 ### Dienste Und Container Anhalten
 
@@ -500,12 +560,16 @@ werden in der Auswahl nicht angeboten. LoxBerry-Plugins ohne eigenen
 systemd-Dienst werden nicht hart beendet; dafür sind Pre-/Post-Backup-Hooks
 der sicherere Weg.
 
-Die tatsächlich gestoppten Container und Dienste werden im Backup-Verzeichnis
-protokolliert und zusätzlich im `manifest.json` festgehalten. Auch bei einem
-manuellen Abbruch wird diese Restart-Liste verwendet, damit bereits gestoppte
-Ziele wieder gestartet werden. Ein abgebrochenes Backup wird als `stopped`
-markiert; die Weboberfläche fragt danach, ob das unvollständige Backup gelöscht
-werden soll.
+Die Wiederanlaufliste liegt dauerhaft im lokalen, root-geschützten Verzeichnis
+`/var/lib/loxberryhostbackup/restart-journals/`, unabhängig vom Backup-Medium.
+Der Eintrag wird vor dem Stoppen eines zuvor laufenden Ziels synchronisiert.
+Auch bei Abbruch oder fehlendem Backup-Medium können offene Wiederanläufe dadurch
+nachgeholt werden. Die separate Cron-Regel versucht dies beim Boot und alle fünf
+Minuten erneut; noch laufende Aufgaben werden nicht gestört. Diese Wiederanläufe
+gelten nur für zuvor vom Plugin ausgewählte Stop-Ziele, nicht für beliebige Dienste.
+Das Manifest hält zusätzlich die Stop-Ziele fest. Ein abgebrochenes Backup wird
+als `stopped` markiert; schlägt der Wiederanlauf fehl, bleibt ein Fehlerzustand
+mit offenem Journal sichtbar. Unvollständige Backups vor einer Löschung prüfen.
 
 Für Datenbanken oder Anwendungen mit eigenen Backup-Mechanismen können
 zusätzliche Pre-/Post-Backup-Hooks sinnvoll sein.
@@ -575,12 +639,17 @@ erstellt, geprüft oder importiert wird.
 
 Die Webanzeige stellt die von `rsync` verwendeten Wagenrückläufe als echte
 Zeilenenden dar und entfernt reine Terminal-Steuerzeichen. Alle
-Fortschrittsmeldungen bleiben sichtbar. Lange Einzelzeilen werden nicht mitten
-im Text umgebrochen, sondern können horizontal gescrollt werden. Die
-gespeicherte Original-Logdatei bleibt unverändert.
+Meldungen des angezeigten Ausschnitts bleiben getrennt lesbar. Lange Einzelzeilen
+werden nicht mitten im Text umgebrochen, sondern können horizontal gescrollt
+werden. Die Liveanzeige ist bewusst begrenzt; das **vollständige Originalprotokoll**
+kann separat heruntergeladen werden und bleibt unverändert. Wer nach oben
+scrollt, wird durch Aktualisierungen nicht wieder ans Ende versetzt.
 
 Nach Abschluss stoppt die Anzeige der letzten Log-Aktualisierung. Die
 Backup-Liste wird anschliessend aktualisiert.
+Ungespeicherte Einstellungen werden dabei nicht durch eine automatische
+Seitennavigation verworfen. Auch ohne Start-Link erkennt die Übersicht laufende
+Zeitplanaufträge und bietet die Auftragshistorie an.
 
 ### Verhalten Nach Einem LoxBerry-Neustart
 
@@ -599,6 +668,14 @@ Root-Dispatcher. Die gespeicherte Konfiguration bleibt unabhängig davon unter
 Konfiguration aus einem anderen technischen Grund nicht geladen werden, werden
 Speichern und Backup-Start gesperrt. Sichtbare Ersatzwerte können dadurch nicht
 versehentlich über die vorhandenen Einstellungen geschrieben werden.
+
+Zusätzlich liegen Dienst-Neustartjournale unter
+`/var/lib/loxberryhostbackup/restart-journals/`. Vor einem Dienst-Stopp wird dort
+dauerhaft festgehalten, was gegebenenfalls neu gestartet werden muss. Das
+funktioniert auch bei verschwundenem Backup-Medium. Offene Neustarts werden
+beim Booten, danach alle fünf Minuten und vor einem neuen Backup erneut versucht.
+Laufende Aufträge bleiben unberührt; nur im Journal festgehaltene Dienste oder
+Container werden behandelt. Misslingt ein Neustart, bleibt das Journal erhalten.
 
 ## Backup-Liste Und Aktionen
 
@@ -626,13 +703,17 @@ einem anderen Speicherort wieder in das Plugin geholt werden soll.
 
 ## Restore
 
-Ein Restore schreibt das Backup zurück nach `/` und kann das Zielsystem
-überschreiben.
+Ein vollständiger Restore schreibt entweder nach `/` (laufender Host, riskant)
+oder in ein ausdrücklich gewähltes Offline-Zielverzeichnis. Bestehende Dateien
+im freigegebenen Zielbereich können ersetzt und beim rsync-Restore gelöscht werden.
+Die zum Backup gespeicherten Ausschlüsse bleiben beim Restore geschützt;
+fehlende oder unsichere Ausschlussdateien blockieren den Vorgang.
 
 Der Restore ist deshalb absichtlich mehrstufig:
 
 1. In der Backup-Liste beim gewünschten Backup `Restore` wählen.
-2. Restore-Check und Restore-Plan im eingeblendeten Restore-Bereich prüfen.
+2. Ziel und gegebenenfalls Volume-Zuordnungen angeben; Restore-Check und echte
+   Datei-/Löschvorschau im Restore-Bereich prüfen.
 3. Die vollständige Backup-ID als Sicherheits-Challenge eingeben.
 4. Restore per Checkbox ausdrücklich bestätigen.
 5. Bei einem degradierten Backup den Metadatenverlust separat akzeptieren.
@@ -650,6 +731,70 @@ global und pro Backup gesperrt, und ein Restore wertet nur Exit-Code 0 als
 Erfolg. Portable Archive ist in der Weboberfläche absichtlich nicht startbar;
 hierfür ist der Offline-Helper vorgesehen.
 
+Separate Quell-Volumes werden nicht stillschweigend auf das Root-Dateisystem
+zurückkopiert. Sie benötigen eine ausdrückliche Zuordnung zu vorhandenen,
+sicheren Zielverzeichnissen; die Vorschau benennt ausgelassene Volumes. Portable
+Archive erfordert zusätzlich ein Offline-Ziel ungleich `/`, respektiert dieselben
+Ausschlüsse und löscht keine am Ziel zusätzlich vorhandenen Dateien.
+
+Einzelne Dateien oder Ordner lassen sich in einen **neu angelegten**
+`recovered-…`-Unterordner an einem alternativen Ort zurückholen. Dieser Weg
+überschreibt keine dort vorhandenen Benutzerdateien und stoppt keine Dienste.
+Ein unvollständiger Wiederherstellungsordner bleibt bei Fehlern zur Prüfung
+erhalten. Symbolische Links werden als Links wiederhergestellt, nicht verfolgt.
+Das je Backup herunterladbare Recovery-Blatt enthält die dazu passenden
+Offline-Schritte; Bootpartition, Bootloader und Systemtest bleiben eigene Schritte.
+
+## Inhaltsprüfung, Wartung und Diagnose
+
+Die optionale Inhaltsprüfung ist standardmässig ausgeschaltet. Bei Aktivierung
+wird nach einem erfolgreichen neuen Backup eine Prüfbasis aufgezeichnet. Ein
+späterer Vergleich erkennt Änderungen und fehlende Dateien. Für vorhandene
+Sicherungen bedeutet der erste Lauf nur **Prüfbasis erstellt**, nicht nachträglich
+bewiesene Originaltreue. Die automatische Prüfung kontrolliert stündlich, ob nach
+dem gespeicherten Intervall (Standard: 7 Tage) eine Sicherung fällig ist, und prüft
+höchstens eine fällige Sicherung pro Aufruf. Ein Prüfbericht kann heruntergeladen werden.
+
+`Kopie abgeschlossen`, `Struktur geprüft`, `Inhalt mit Prüfbasis verglichen` und
+`vollständiger Restore getestet` sind ausdrücklich unterschiedliche Nachweise.
+Eine Inhaltsprüfung ersetzt keinen Teststart des wiederhergestellten Systems.
+Einen selbst durchgeführten Praxistest kannst du je Backup über
+**Externen Restoretest dokumentieren** mit Datum, Ergebnis und kurzer Notiz
+festhalten. Diese lokale Historie ist ausdrücklich eine persönliche Angabe,
+keine vom Plugin überprüfte Boot-/Funktionsbestätigung. Sie ändert weder den
+Backupstatus noch die Sicherheitsfreigabe für einen Restore. Geänderte Manifeste
+entwerten die Zuordnung eines früheren Testnachweises zum aktuellen Stand.
+Ohne dokumentierten Praxistest bleibt die Wiederherstellung nicht nachgewiesen.
+Notizen können sensible Angaben enthalten und gehören nicht ungeprüft in
+einen öffentlich geteilten Prüfbericht. Bis zu 20 Testeinträge bleiben erhalten.
+Prüfbasis und Schutzmarkierungen liegen im lokalen root-geschützten Pluginstatus;
+sie werden nicht als unabhängig vertrauenswürdiger Nachweis aus einem fremden
+Import übernommen. Umfangreiche Inhaltsprüfungen lesen alle betreffenden Daten
+und können auf einem NAS lange dauern.
+
+Die Prüfbasis benötigt zusätzlich lokalen Speicher unter
+`/var/lib/loxberryhostbackup/integrity/`, auch wenn das Backup auf einem NAS liegt.
+Der Platzbedarf wächst mit Dateizahl, Pfadlängen und Metadaten je Sicherung;
+ein Vergleich benötigt vorübergehend einen zweiten Index. Je Prüflauf gelten
+maximal 2 GiB Indexplatz und mindestens 256 MiB freie Reserve für lokalen Status.
+Reicht der Platz nicht, schlägt die optionale Prüfung mit einem Fehler fehl;
+eine vorhandene Prüfbasis wird nicht stillschweigend ersetzt. Die Speicherübersicht
+weist lokalen Platz für Prüfindizes, Logs und Quarantäne getrennt aus. Beim
+bestätigten Löschen einer Sicherung entfernt das Plugin auch deren zugehörige
+lokale Prüfbasis und Bericht. Schlägt nur diese Nachbereinigung fehl, wird das
+gemeldet; die bereits gelöschte Sicherung wird dadurch nicht wiederhergestellt.
+
+Fehlgeschlagene Backups bleiben zur bewussten Sichtung und Löschung erhalten.
+Alte Aufgabenprotokolle und quarantänisierte Importe lassen sich separat mit
+Vorschau bereinigen (Standardalter 30 beziehungsweise 7 Tage). Offene Neustartjournale
+werden dabei niemals entfernt. Bereinigung ist endgültig und nicht rückgängig zu machen.
+
+Ein Diagnose-ZIP enthält Version, ausgewählten Taskstatus, anonymisierte
+Konfiguration und Mountinformationen. Das optional ausgewählte Originalprotokoll
+ist vollständig und kann weiterhin private Pfade oder Adressen enthalten:
+**vor dem Weitergeben prüfen**. Pro Diagnosepaket sind maximal 100 MiB Logdaten
+vorgesehen; grössere Originalprotokolle separat herunterladen.
+
 ## Docker Und Datenbanken
 
 Laufende Container und Datenbanken können während eines Live-Backups
@@ -663,30 +808,32 @@ Für wichtige Dienste sollten daher entweder:
 
 ## Kommandozeile
 
-Nach der Installation liegt das Backend typischerweise hier:
+Als root den vertrauenswürdigen Einstieg verwenden:
 
 ```sh
-/opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh
+/usr/local/sbin/loxberryhostbackup
 ```
 
 Wichtige Backend-Kommandos:
 
 ```sh
-/opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh list
-/opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh preflight-backup
-/opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh start
-/opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh task-status backup-YYYYMMDD-HHMMSS.log
-/opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh browse BACKUP_ID
-/opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh export BACKUP_ID
-/opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh delete BACKUP_ID
-/opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh preflight-restore BACKUP_ID
-/opt/loxberry/bin/plugins/loxberryhostbackup/hostbackup.sh restore-plan BACKUP_ID
+/usr/local/sbin/loxberryhostbackup task-overview
+/usr/local/sbin/loxberryhostbackup backup-preview
+/usr/local/sbin/loxberryhostbackup start
+/usr/local/sbin/loxberryhostbackup task-status backup-YYYYMMDD-HHMMSS.log
+/usr/local/sbin/loxberryhostbackup browse BACKUP_ID
+/usr/local/sbin/loxberryhostbackup export BACKUP_ID
+/usr/local/sbin/loxberryhostbackup inspect-backup BACKUP_ID
+/usr/local/sbin/loxberryhostbackup verify-backup BACKUP_ID
+/usr/local/sbin/loxberryhostbackup storage-info
+/usr/local/sbin/loxberryhostbackup maintenance-preview
+/usr/local/sbin/loxberryhostbackup restore-plan BACKUP_ID /mnt/recovery-root
 ```
 
 Offline-Restore eines Portable Archive:
 
 ```sh
-HOSTBACKUP_OFFLINE_RESTORE=1 /opt/loxberry/bin/plugins/loxberryhostbackup/restore-hostbackup.sh BACKUP_ID
+ALLOW_RESTORE=1 HOSTBACKUP_OFFLINE_RESTORE=1 /usr/local/sbin/loxberryhostbackup restore BACKUP_ID confirm-degraded /mnt/recovery-root
 ```
 
 Weitere Backend-Kommandos wie `cat-file` oder `move` sind vorhanden, werden in
@@ -717,8 +864,18 @@ Systemdateien:
 /opt/loxberry/system/sudoers/LoxBerryHostBackup
 /etc/cron.d/loxberryhostbackup
 /usr/local/sbin/loxberryhostbackup-sudo
+/usr/local/sbin/loxberryhostbackup
+/usr/libexec/loxberryhostbackup/releases/
+/usr/libexec/loxberryhostbackup/current
+/etc/cron.d/loxberryhostbackup-recovery
 /var/lib/loxberryhostbackup
 ```
+
+Der Root-Einstieg bindet jeden Aufruf an eine unveränderliche, root-eigene
+Helferversion. Ein Update schaltet den Verweis `current` atomar um; bereits
+laufende Aufgaben verwenden weiterhin ihre bisherige Helferversion. Python-Caches
+werden dort nicht angelegt. Alte Helferversionen werden nicht während laufender
+Aufgaben entfernt.
 
 ## Deinstallation
 
@@ -764,12 +921,16 @@ Update-Dateien:
 - `prerelease.cfg`: Pre-Release-Kanal mit neuer Vorabversion
 
 Das stabile installierbare ZIP wird über den Release-Kanal bereitgestellt. Der
-Pre-Release-Kanal zeigt für freiwillige Tests auf Version 0.6.1-beta. LoxBerry
+Pre-Release-Kanal zeigt für freiwillige Tests auf Version 0.7.0-beta. LoxBerry
 erkennt die Vorabversion über `prerelease.cfg`; das Paket liegt im zugehörigen
-GitHub-Pre-Release unter dem Tag `v0.6.1-beta`.
+GitHub-Pre-Release unter dem Tag `v0.7.0-beta`.
 
-GitHub Actions erzeugt das Plugin-ZIP automatisch und hängt es bei
-GitHub-Releases als Asset an.
+GitHub Actions prüft den getaggten Stand unter Linux einschliesslich
+Integrations- und Browserprüfungen, erzeugt das Plugin-ZIP und hängt es erst
+nach erfolgreichen Prüfungen als Release-Asset an. Der automatische
+Updateverweis darf erst dann auf das neue Paket umgestellt werden, wenn dieses
+verfügbar ist. Die zurückgestellte AP-14 zur Mail-/Benachrichtigungssemantik ist
+nicht Teil von 0.7.0-beta.
 
 Paket lokal bauen:
 

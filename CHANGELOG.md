@@ -9,6 +9,78 @@ validiert werden.
 
 ## [Unreleased]
 
+Noch keine Änderungen nach 0.7.0-beta.
+
+## [0.7.0-beta] - 2026-09-13
+
+### Versionierung und Update
+
+- Neuer Pre-Release-Kanalstand mit interner Plugin-Version `0.7.0`, Tag
+  `v0.7.0-beta` und Paket `LoxBerryHostBackup_0.7.0.zip`. LoxBerry kann ihn
+  über `prerelease.cfg` als neues Update erkennen; Stable bleibt auf 0.5.8.
+- Paketveröffentlichung nach erfolgreicher Linux-CI; vorhandene Release-ZIPs
+  bleiben unverändert. Ausführliche Updatehinweise in `docs/RELEASE-0.7.0-beta.md`.
+- Einstellungen vor dem Update exportieren und danach kontrollieren.
+  Änderungen stets vor manuellen und automatischen Backups speichern.
+- Beim Umstieg von 0.5.8 und älter bleibt eine neue vollständige Basiskopie
+  erforderlich; erst danach ist wieder inkrementelle Hardlink-Nutzung möglich.
+  Eine vorhandene passende 0.6.x-Referenz wird nicht allein wegen der neuen
+  Versionsnummer ausgeschlossen.
+
+### Daten- und Wiederherstellungssicherheit
+
+- Restore übernimmt die beim Backup gespeicherten Ausschlüsse; rsync-Löschungen
+  können ausgeschlossene Nutzdaten nicht mehr unabsichtlich entfernen.
+- Echte Restore-Vorschau, ausdrückliches Offline-Ziel und Volume-Zuordnungen;
+  Portable-Archive-Restore berücksichtigt Ausschlüsse und meldet Auslassungen.
+- Dauerhafte lokale Dienst-Neustartjournale mit Eintrag vor dem Stoppen,
+  Wiederanlauf bei fehlendem Backup-Medium, Boot-/Fünfminuten-Retry und Schutz
+  vor verspäteten Stopps bereits abgeschlossener Backups.
+- Privilegierte Helfer in atomar aktivierte, root-eigene Versionsverzeichnisse
+  verschoben; Webaktionen bleiben über eine begrenzte Befehlsliste zugänglich.
+- Import-Sidecars gegen Linkangriffe geschützt, Archivpfade effizient geprüft
+  und importierte Strukturen/Manifestangaben lokal erneut plausibilisiert.
+- Speichervergleich für eine neue Snapshot-Basiskopie und volle Inodes korrigiert;
+  tägliche, wöchentliche und monatliche Starts verwenden denselben Prüfweg.
+- Export-/Logdownloads werden aus root-geschützten Dateien über das Backend
+  gestreamt. Exportprüfung und Ausgabe verwenden denselben geöffneten Dateideskriptor.
+- Metadatenprobe führt eine echte Rückkopie durch; Snapshot-Wiederverwendung wird
+  über identische Pfade mit übereinstimmendem Gerät/Inode gemessen.
+
+### Bedienung und Erweiterungen
+
+- Speicherhinweis, Absicherung ungespeicherter Änderungen, erneuerbare CSRF-Tokens,
+  Prüfung widersprüchlicher Profil-/Zeitplaneinstellungen und frühe Uploadgrenzen.
+- Startübersicht, Auftragshistorie und Sicherungsvorschau der gespeicherten
+  Einstellungen mit Volumes, Ausschlüssen und Snapshot-Referenz.
+- Lesbare, nicht umbrechende Live-Logzeilen, kontrolliertes Scrollen und vollständiger
+  Logdownload; Hilfen und Bedienelemente funktionieren auch in nachgeladenen Ansichten.
+- Speicherübersicht unterscheidet logische Grösse, Belegung, Hardlinks und Exporte.
+- Einzeldatei-/Ordner-Restore in einen neuen Unterordner und Recovery-Blatt je Backup.
+- Optionale Inhaltsprüfbasis, zeitgesteuerte Vergleichsprüfung und exportierbarer
+  Prüfbericht; Prüfbasis, Inhaltsvergleich und echter Restoretest bleiben getrennt.
+- Eigene externe Restoretests mit Datum, Ergebnis und Notiz lokal dokumentieren;
+  eindeutig als persönliche Angabe gekennzeichnet, ohne Änderung der Restore-Freigabe.
+- Anzahlaufbewahrung bis 3650 oder tägliche/wöchentliche/monatliche Aufbewahrung,
+  Schutz einzelner Sicherungen und bestätigte Bereinigung mit Vorschau.
+- Gesonderte Bereinigung alter Logs/Quarantäne und Diagnosepaket mit anonymisierter
+  Konfiguration; ausgewählte Originalprotokolle müssen vor Weitergabe geprüft werden.
+
+### Qualität und Abgrenzung
+
+- Verhaltenstests für Sicherheitsgrenzen, Abbrüche, Restore, Metadaten, Downloads,
+  Wartung und Browserinteraktionen ergänzt; Linux-Integration in CI verpflichtend.
+- README, Release Notes, Umsetzungsbericht und Disaster-Recovery-Testplan
+  aktualisiert. Lokaler Gesamtlauf: 176 Tests mit 13 Windows-bedingten Skips;
+  zehn echte Browser-Prüfblöcke und ShellCheck erfolgreich.
+- Echte NAS- und vollständige Offline-Hardwaretests bleiben vor stabiler
+  Freigabe erforderlich. Die Linux-CI-Ergebnisse stehen beim jeweiligen Release;
+  automatisierte Fixtures ersetzen keinen realen System-Restore.
+- `Network Compatible` bleibt ein bewusstes Profil ohne xattrs und File
+  Capabilities: Der Hinweis blockiert weder manuelle noch zeitgesteuerte
+  Backups und erfordert keine zusätzliche Startbestätigung.
+- Die zurückgestellte AP-14 zur Mail-/Benachrichtigungssemantik bleibt unverändert.
+
 ## [0.6.1-beta] - 2026-08-02
 
 ### Versionierung
@@ -528,7 +600,8 @@ nicht überarbeitet worden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.6.1-beta...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.7.0-beta...develop
+[0.7.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.0-beta
 [0.6.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.6.1-beta
 [0.6.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.6.0-beta
 [0.5.8]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.5.8

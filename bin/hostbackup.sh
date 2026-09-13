@@ -1,17 +1,21 @@
 #!/bin/bash
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 PLUGIN_NAME="loxberryhostbackup"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 PLUGIN_FOLDER="$(basename "$SCRIPT_DIR")"
 if [[ "$SCRIPT_DIR" == */bin/plugins/* ]]; then
   DETECTED_LBHOMEDIR="${SCRIPT_DIR%/bin/plugins/$PLUGIN_FOLDER}"
 else
   DETECTED_LBHOMEDIR="/opt/loxberry"
-  PLUGIN_FOLDER="$PLUGIN_NAME"
+  PLUGIN_FOLDER="${HOSTBACKUP_PLUGIN_FOLDER:-$PLUGIN_NAME}"
 fi
 LBHOMEDIR="${LBHOMEDIR:-$DETECTED_LBHOMEDIR}"
 LBP_BINDIR="${LBPBINDIR:-$SCRIPT_DIR}"
+if [[ "$SCRIPT_DIR" == /usr/libexec/loxberryhostbackup/releases/* ]]; then
+  LBP_BINDIR="$SCRIPT_DIR"
+fi
 LBP_CONFIGDIR="${LBPCONFIGDIR:-${LBPCONFIG:-$LBHOMEDIR/config/plugins}/$PLUGIN_FOLDER}"
 LBP_DATADIR="${LBPDATADIR:-${LBPDATA:-$LBHOMEDIR/data/plugins}/$PLUGIN_FOLDER}"
 LBP_LOGDIR="${LBPLOGDIR:-${LBPLOG:-$LBHOMEDIR/log/plugins}/$PLUGIN_FOLDER}"
@@ -25,6 +29,7 @@ fi
 LOCK_DIR="$ROOT_STATE_DIR/locks"
 TASK_DIR="$ROOT_STATE_DIR/tasks"
 TASK_LOG_DIR="$ROOT_STATE_DIR/logs"
+RESTART_JOURNAL_DIR="$ROOT_STATE_DIR/restart-journals"
 ROOT_IMPORT_DIR="$ROOT_STATE_DIR/imports"
 QUARANTINE_DIR="$ROOT_STATE_DIR/import-quarantine"
 TARGET_MARKER_NAME=".loxberry-hostbackup-target"
@@ -35,13 +40,13 @@ for runtime_dir in "$LBP_CONFIGDIR" "$LBP_DATADIR" "$LBP_LOGDIR"; do
   [ ! -L "$runtime_dir" ] || { echo "Unsafe symlink runtime directory: $runtime_dir" >&2; exit 13; }
   mkdir -p -- "$runtime_dir"
 done
-[ ! -L "$ROOT_STATE_DIR" ] && [ ! -L "$LOCK_DIR" ] && [ ! -L "$TASK_DIR" ] && [ ! -L "$TASK_LOG_DIR" ] && [ ! -L "$ROOT_IMPORT_DIR" ] && [ ! -L "$QUARANTINE_DIR" ] || { echo "Unsafe root state directory symlink." >&2; exit 13; }
-mkdir -p -- "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"
+[ ! -L "$ROOT_STATE_DIR" ] && [ ! -L "$LOCK_DIR" ] && [ ! -L "$TASK_DIR" ] && [ ! -L "$TASK_LOG_DIR" ] && [ ! -L "$ROOT_IMPORT_DIR" ] && [ ! -L "$QUARANTINE_DIR" ] && [ ! -L "$RESTART_JOURNAL_DIR" ] || { echo "Unsafe root state directory symlink." >&2; exit 13; }
+mkdir -p -- "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR" "$RESTART_JOURNAL_DIR"
 [ -d "$ROOT_STATE_DIR" ] && [ ! -L "$ROOT_STATE_DIR" ] || { echo "Root state directory is unsafe." >&2; exit 13; }
-chmod 700 "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR" 2>/dev/null || true
+chmod 700 "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR" "$RESTART_JOURNAL_DIR" 2>/dev/null || true
 
 if [ "$(id -u)" -eq 0 ]; then
-  for secure_dir in "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"; do
+  for secure_dir in "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR" "$RESTART_JOURNAL_DIR"; do
     secure_owner="$(stat -c '%u' "$secure_dir" 2>/dev/null || echo -1)"
     secure_mode="$(stat -c '%a' "$secure_dir" 2>/dev/null || echo '')"
     [ "$secure_owner" = "0" ] && [ -n "$secure_mode" ] && (( (8#$secure_mode & 022) == 0 )) || {
@@ -181,7 +186,7 @@ show_config() {
     $cfg->{mail_notify_restore} = exists $cfg->{mail_notify_restore} ? ($cfg->{mail_notify_restore} ? JSON::PP::true : JSON::PP::false) : JSON::PP::true;
     $cfg->{keep_backups} = ($cfg->{keep_backups} && $cfg->{keep_backups} =~ /^\d+$/) ? 0 + $cfg->{keep_backups} : 10;
     $cfg->{keep_backups} = 1 if $cfg->{keep_backups} < 1;
-    $cfg->{keep_backups} = 10 if $cfg->{keep_backups} > 10;
+    $cfg->{keep_backups} = 3650 if $cfg->{keep_backups} > 3650;
     $cfg->{schedule_enabled} = $cfg->{schedule_enabled} ? JSON::PP::true : JSON::PP::false;
     $cfg->{schedule_mode} = $cfg->{schedule_mode} || "daily";
     $cfg->{schedule_time} = $cfg->{schedule_time} || "02:00";
@@ -203,6 +208,10 @@ show_config() {
     $cfg->{target_fstype} //= "";
     $cfg->{target_majmin} //= "";
     $cfg->{import_max_size_mb} = ($cfg->{import_max_size_mb} && $cfg->{import_max_size_mb} =~ /^\d+$/) ? 0 + $cfg->{import_max_size_mb} : 65536;
+    $cfg->{retention_mode} = "count" unless ($cfg->{retention_mode} || "") =~ /^(count|gfs)$/;
+    my %maintenance_defaults = (keep_daily=>7, keep_weekly=>4, keep_monthly=>6, log_retention_days=>30, quarantine_retention_days=>7, integrity_interval_days=>7);
+    for my $key (keys %maintenance_defaults) { $cfg->{$key} = $maintenance_defaults{$key} unless defined $cfg->{$key}; }
+    $cfg->{integrity_enabled} = $cfg->{integrity_enabled} ? JSON::PP::true : JSON::PP::false;
     print JSON::PP->new->ascii->pretty->canonical->encode($cfg);
   ' "$CONFIG_FILE"
 }
@@ -314,9 +323,9 @@ save_config() {
   local schedule_time="$8"
   local schedule_weekday="$9"
   local schedule_monthday="${10}"
-  local schedule_months="${11:-*}"
-  local schedule_weekdays="${12:-$schedule_weekday}"
-  local schedule_monthdays="${13:-$schedule_monthday}"
+  local schedule_months="${11-*}"
+  local schedule_weekdays="${12-$schedule_weekday}"
+  local schedule_monthdays="${13-$schedule_monthday}"
   local pre_hook="${14}"
   local post_hook="${15}"
   local root_permission_ack="${16:-false}"
@@ -330,10 +339,8 @@ save_config() {
   local mail_notify_restore="${24:-true}"
   local metadata_mode="${25:-native-strict}"
 
-  case "$metadata_mode" in
-    native-strict|network-compatible|fake-super|portable-archive) ;;
-    *) metadata_mode="native-strict" ;;
-  esac
+  python3 "$LBP_BINDIR/hostbackup-overview.py" check-settings "$backup_mode" "$metadata_mode" "$schedule_enabled" \
+    "$schedule_mode" "$schedule_time" "$schedule_weekdays" "$schedule_monthdays" "$schedule_months"
   prepare_target_registration "$backup_root"
   [ -n "$backup_root" ] && backup_root="$REGISTERED_ROOT"
 
@@ -364,7 +371,7 @@ save_config() {
     }
     $keep_backups = ($keep_backups =~ /^\d+$/) ? 0 + $keep_backups : 10;
     $keep_backups = 1 if $keep_backups < 1;
-    $keep_backups = 10 if $keep_backups > 10;
+    $keep_backups = 3650 if $keep_backups > 3650;
     $backup_mode = "full" unless $backup_mode =~ /^(full|snapshot)$/;
     $schedule_mode = "daily" unless $schedule_mode =~ /^(daily|weekly|monthly)$/;
     $schedule_time = "02:00" unless $schedule_time =~ /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -451,6 +458,14 @@ save_config() {
     die "Refusing symlink config\n" if -l $file;
     sysopen(my $lock, "$file.lock", O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW, 0600) or die "Cannot lock config: $!";
     flock($lock, LOCK_EX) or die "Cannot lock config: $!";
+    # Saving the main form must not reset separately configured maintenance options.
+    sysopen(my $existing, $file, O_RDONLY | O_NOFOLLOW) or die "Cannot read existing config: $!";
+    local $/;
+    my $old = decode_json(<$existing>);
+    close $existing;
+    for my $key (qw(retention_mode keep_daily keep_weekly keep_monthly log_retention_days quarantine_retention_days integrity_enabled integrity_interval_days)) {
+      $cfg->{$key} = $old->{$key} if exists $old->{$key};
+    }
     my ($fh, $tmp) = tempfile(".config-XXXXXX", DIR => dirname($file), UNLINK => 0);
     chmod 0600, $tmp or die "Cannot chmod config temp: $!";
     print $fh JSON::PP->new->ascii->pretty->canonical->encode($cfg) or die "Cannot write config: $!";
@@ -781,7 +796,7 @@ install_schedule() {
   require_root_for_write
   local cron_file="/etc/cron.d/loxberryhostbackup"
   local enabled mode time_value weekday weekdays monthday monthdays months month_field hour minute dom dow command_line
-  local day fallback_start fallback_day normalized_monthdays
+  local day fallback_start fallback_day normalized_monthdays backend_command
   local -a days
   enabled="$(json_get_bool schedule_enabled)"
   if [ "$enabled" != "true" ]; then
@@ -850,12 +865,13 @@ install_schedule() {
     fi
     dom="$(printf '%s' "$normalized_monthdays" | sed 's/^,//; s/,$//')"
     [ -n "$dom" ] || dom="$monthday"
-    command_line="$LBP_BINDIR/hostbackup.sh schedule-run"
   else
     month_field="*"
   fi
 
-  command_line="${command_line:-$LBP_BINDIR/hostbackup.sh start}"
+  backend_command="$LBP_BINDIR/hostbackup.sh"
+  [ "$LBHOMEDIR" != "/opt/loxberry" ] || backend_command="/usr/local/sbin/loxberryhostbackup"
+  command_line="$backend_command schedule-run"
   cat > "$cron_file" <<EOF
 # Managed by LoxBerry Host Backup.
 SHELL=/bin/bash
@@ -873,7 +889,7 @@ schedule_run() {
 
   if [ "$mode" != "monthly" ]; then
     start_backup "" accept-warnings
-    return 0
+    return $?
   fi
 
   today="$(date '+%-d')"
@@ -934,7 +950,7 @@ prepare_log_file() {
 
 valid_task_name() {
   case "$1" in
-    backup-*.log|restore-*.log|export-*.log|import-*.log) ;;
+    backup-*.log|restore-*.log|export-*.log|import-*.log|verify-*.log) ;;
     *) return 1 ;;
   esac
   case "$1" in *[!A-Za-z0-9._-]*|.*|*..*|*/*) return 1 ;; esac
@@ -952,12 +968,19 @@ process_start_ticks() {
 }
 
 task_state_write() {
-  local task="$1" state="$2" phase="$3" log_file="$4" pid="${5:-$$}" exit_status="${6:-}"
+  local task="$1" state="$2" phase="$3" log_file="$4" pid="${5:-$$}" exit_status="${6:-}" expected_state="${7:-}"
   local path start_ticks
   path="$(task_state_path "$task")" || return 1
   start_ticks="$(process_start_ticks "$pid")"
-  perl -MJSON::PP -MFile::Basename=dirname -MFile::Temp=tempfile -MIO::Handle -e '
-    my ($file, $task, $state, $phase, $log, $pid, $ticks, $exit_status) = @ARGV;
+  perl -MJSON::PP -MFile::Basename=dirname -MFile::Temp=tempfile -MFcntl=:DEFAULT,:flock -MIO::Handle -e '
+    my ($file, $task, $state, $phase, $log, $pid, $ticks, $exit_status, $expected_state) = @ARGV;
+    sysopen(my $lock, "$file.lock", O_WRONLY | O_CREAT | O_NOFOLLOW, 0600) or die $!;
+    flock($lock, LOCK_EX) or die $!;
+    if (length($expected_state // "")) {
+      sysopen(my $current, $file, O_RDONLY | O_NOFOLLOW) or die $!;
+      local $/; my $previous = decode_json(<$current>); close $current or die $!;
+      exit 0 unless ($previous->{state} // "") eq $expected_state;
+    }
     my $data = {
       task => $task, state => $state, phase => $phase, log_file => $log,
       pid => 0 + ($pid || 0), process_start_ticks => $ticks || "",
@@ -970,7 +993,7 @@ task_state_write() {
     $fh->flush or die $!;
     close $fh or die $!;
     rename $tmp, $file or die $!;
-  ' "$path" "$task" "$state" "$phase" "$log_file" "$pid" "$start_ticks" "$exit_status"
+  ' "$path" "$task" "$state" "$phase" "$log_file" "$pid" "$start_ticks" "$exit_status" "$expected_state"
 }
 
 task_state_value() {
@@ -990,6 +1013,21 @@ task_process_is_current() {
   [ -n "$current" ] && [ "$current" = "$ticks" ]
 }
 
+task_failure_on_exit() {
+  local status="$1" task="$2" log_file="$3" phase="${4:-failed}"
+  if [ "$status" -ne 0 ]; then
+    task_state_write "$task" failed "$phase" "$log_file" "$$" "$status" || true
+  fi
+}
+
+install_task_failure_trap() {
+  local task="$1" log_file="$2" cleanup_trap
+  printf -v cleanup_trap 'HB_TASK_EXIT_STATUS=$?; trap - EXIT; task_failure_on_exit "$HB_TASK_EXIT_STATUS" %q %q; exit "$HB_TASK_EXIT_STATUS"' "$task" "$log_file"
+  # Freeze already-validated task/path arguments before the function unwinds.
+  # shellcheck disable=SC2064
+  trap "$cleanup_trap" EXIT
+}
+
 launch_background() {
   local task="$1" log_file="$2"
   shift 2
@@ -1002,7 +1040,9 @@ launch_background() {
     nohup "$@" >> "$log_file" 2>&1 &
   fi
   pid=$!
-  task_state_write "$task" running launched "$log_file" "$pid" ""
+  # A fast worker may already be running or finished. Register its PID only
+  # while the task is still queued, atomically with every worker state write.
+  task_state_write "$task" running launched "$log_file" "$pid" "" queued
   printf '%s\n' "$pid"
 }
 
@@ -1085,52 +1125,96 @@ tar_metadata_options() {
 
 METADATA_PROBE_MESSAGE=""
 metadata_capability_probe() {
-  local root="$1" mode="$2" source_dir target_dir archive status=0
-  local -a options=()
+  local root="$1" mode="$2" source_dir target_dir archive status=0 work_dir restored_dir opt
+  local acl_check=false xattr_check=false capability_check=false missing_checks="" expected actual
+  local -a options=() restore_options=()
   verify_backup_target "$root" true || return 1
-  source_dir="$(mktemp -d "$LBP_DATADIR/.metadata-source.XXXXXX")"
-  target_dir="$root/.metadata-probe.$$"
-  archive="$root/.metadata-probe.$$.tar"
-  trap 'rm -rf -- "$source_dir" "$target_dir"; rm -f -- "$archive"' RETURN
-  mkdir -p -- "$source_dir/sub"
+  work_dir="$(mktemp -d "$ROOT_STATE_DIR/.metadata-roundtrip.XXXXXX")" || return 1
+  source_dir="$work_dir/source"
+  restored_dir="$work_dir/restored"
+  target_dir="$(mktemp -d "$root/.metadata-probe.XXXXXX")" || { rmdir -- "$work_dir"; return 1; }
+  archive="$target_dir/rootfs.tar"
+  trap 'rm -rf -- "$work_dir" "$target_dir"' RETURN
+  mkdir -p -- "$source_dir/sub" "$restored_dir"
   printf 'metadata-probe\n' > "$source_dir/sub/file"
   ln "$source_dir/sub/file" "$source_dir/sub/hardlink"
   ln -s sub/file "$source_dir/symlink"
   dd if=/dev/zero of="$source_dir/sparse" bs=1 count=0 seek=1048576 2>/dev/null
-  chmod 6750 "$source_dir/sub/file"
-  if command -v setfattr >/dev/null 2>&1; then
-    setfattr -n user.loxberryhostbackup -v probe "$source_dir/sub/file" || status=1
+  if [ "$(id -u)" -eq 0 ]; then chown 1:1 "$source_dir/sub/file" || status=1; fi
+  chmod 6750 "$source_dir/sub/file" || status=1
+  if [ "$mode" != network-compatible ]; then
+    if command -v setfattr >/dev/null 2>&1 && command -v getfattr >/dev/null 2>&1; then
+      setfattr -n user.loxberryhostbackup -v probe "$source_dir/sub/file" || status=1
+      xattr_check=true
+    else
+      missing_checks="${missing_checks} xattrs"
+    fi
+    if [ "$(id -u)" -eq 0 ] && command -v setcap >/dev/null 2>&1 && command -v getcap >/dev/null 2>&1; then
+      printf 'capability-probe\n' > "$source_dir/capability"
+      setcap cap_net_bind_service=ep "$source_dir/capability" || status=1
+      capability_check=true
+    else
+      missing_checks="${missing_checks} File-Capabilities"
+    fi
   fi
-  if command -v setfacl >/dev/null 2>&1; then
-    setfacl -m u:daemon:r-- "$source_dir/sub/file" || status=1
+  if command -v setfacl >/dev/null 2>&1 && command -v getfacl >/dev/null 2>&1; then
+    setfacl -m u:65534:r-- "$source_dir/sub/file" || status=1
+    acl_check=true
+  else
+    missing_checks="${missing_checks} ACL-Werte"
   fi
 
   if [ "$mode" = "portable-archive" ]; then
     while IFS= read -r opt; do options+=("$opt"); done < <(tar_metadata_options)
     tar "${options[@]}" -C "$source_dir" -cpf "$archive" . || status=1
-    tar -tf "$archive" >/dev/null 2>&1 || status=1
+    tar "${options[@]}" -C "$restored_dir" -xpf "$archive" || status=1
   else
     while IFS= read -r opt; do options+=("$opt"); done < <(rsync_metadata_options "$mode" backup)
     rsync "${options[@]}" "$source_dir/" "$target_dir/" >/dev/null 2>&1 || status=1
-    [ -f "$target_dir/sub/file" ] && [ -L "$target_dir/symlink" ] || status=1
-    [ "$(stat -c '%i' "$target_dir/sub/file" 2>/dev/null)" = "$(stat -c '%i' "$target_dir/sub/hardlink" 2>/dev/null)" ] || status=1
-    if [ "$mode" = "native-strict" ] && command -v getfattr >/dev/null 2>&1 && command -v setfattr >/dev/null 2>&1; then
-      getfattr -n user.loxberryhostbackup "$target_dir/sub/file" >/dev/null 2>&1 || status=1
-    fi
+    while IFS= read -r opt; do restore_options+=("$opt"); done < <(rsync_metadata_options "$mode" restore)
+    rsync "${restore_options[@]}" "$target_dir/" "$restored_dir/" >/dev/null 2>&1 || status=1
     if [ "$mode" = "fake-super" ]; then
       command -v getfattr >/dev/null 2>&1 || status=1
       getfattr -d -m '^user\.rsync\.' "$target_dir/sub/file" 2>/dev/null | grep 'user.rsync.' >/dev/null || status=1
     fi
   fi
+  [ -f "$restored_dir/sub/file" ] && [ -L "$restored_dir/symlink" ] || status=1
+  cmp -s "$source_dir/sub/file" "$restored_dir/sub/file" || status=1
+  [ "$(readlink "$restored_dir/symlink" 2>/dev/null)" = sub/file ] || status=1
+  expected="$(stat -c '%u:%g:%a' "$source_dir/sub/file" 2>/dev/null)"
+  actual="$(stat -c '%u:%g:%a' "$restored_dir/sub/file" 2>/dev/null)" || status=1
+  [ -n "$actual" ] && [ "$expected" = "$actual" ] || status=1
+  expected="$(stat -c '%d:%i' "$restored_dir/sub/file" 2>/dev/null)" || status=1
+  actual="$(stat -c '%d:%i' "$restored_dir/sub/hardlink" 2>/dev/null)" || status=1
+  [ -n "$actual" ] && [ "$expected" = "$actual" ] || status=1
+  [ "$(stat -c '%s' "$restored_dir/sparse" 2>/dev/null)" = 1048576 ] || status=1
+  actual="$(stat -c '%b' "$restored_dir/sparse" 2>/dev/null)" || actual=999999
+  [ "$(( ${actual:-999999} * 512 ))" -lt 1048576 ] || status=1
+  if [ "$acl_check" = true ]; then
+    expected="$(getfacl -cpn "$source_dir/sub/file" 2>/dev/null)" || status=1
+    actual="$(getfacl -cpn "$restored_dir/sub/file" 2>/dev/null)" || status=1
+    [ "$expected" = "$actual" ] || status=1
+  fi
+  if [ "$xattr_check" = true ]; then
+    actual="$(getfattr --only-values -n user.loxberryhostbackup "$restored_dir/sub/file" 2>/dev/null)" || status=1
+    [ "$actual" = probe ] || status=1
+  fi
+  if [ "$capability_check" = true ]; then
+    actual="$(getcap "$restored_dir/capability" 2>/dev/null)" || status=1
+    [ "${actual#"$restored_dir/capability "}" = cap_net_bind_service=ep ] || status=1
+  fi
   verify_backup_target "$root" true || status=1
-  rm -rf -- "$source_dir" "$target_dir"
-  rm -f -- "$archive"
+  rm -rf -- "$work_dir" "$target_dir"
   trap - RETURN
   if [ "$status" -ne 0 ]; then
     METADATA_PROBE_MESSAGE="Metadaten-Roundtrip fuer Modus $mode ist fehlgeschlagen."
     return 1
   fi
-  METADATA_PROBE_MESSAGE="Metadaten-Roundtrip fuer Modus $mode erfolgreich."
+  METADATA_PROBE_MESSAGE="Metadaten-Roundtrip fuer Modus $mode erfolgreich: Dateninhalt, UID/GID, Rechte, Symlink, Hardlinks und Sparse-Datei zurueckgespielt und verglichen."
+  [ "$acl_check" != true ] || METADATA_PROBE_MESSAGE="$METADATA_PROBE_MESSAGE ACL-Werte bestaetigt."
+  [ "$xattr_check" != true ] || METADATA_PROBE_MESSAGE="$METADATA_PROBE_MESSAGE xattr-Werte bestaetigt."
+  [ "$capability_check" != true ] || METADATA_PROBE_MESSAGE="$METADATA_PROBE_MESSAGE File Capabilities bestaetigt."
+  [ -z "$missing_checks" ] || METADATA_PROBE_MESSAGE="$METADATA_PROBE_MESSAGE Mangels Testwerkzeugen nicht verifiziert:$missing_checks."
   return 0
 }
 
@@ -1502,6 +1586,136 @@ discover_stop_targets() {
   rm -f "$tmp"
 }
 
+restart_journal_path_is_safe() {
+  local state_dir="$1" task
+  case "$state_dir" in "$RESTART_JOURNAL_DIR"/*) ;; *) return 13 ;; esac
+  task="${state_dir#"$RESTART_JOURNAL_DIR/"}"
+  valid_task_name "$task" || return 13
+  [ -d "$state_dir" ] && [ ! -L "$state_dir" ] && [ ! -L "$state_dir/journal.json" ]
+}
+
+restart_journal_update() {
+  local state_dir="$1" action="$2" type="${3:-}" identity="${4:-}" label="${5:-}"
+  restart_journal_path_is_safe "$state_dir" || { echo "Unsafe restart journal." >&2; return 13; }
+  perl -MJSON::PP -MFile::Temp=tempfile -MFcntl=:DEFAULT -MIO::Handle -e '
+    my ($dir, $action, $type, $id, $label) = @ARGV;
+    my ($task) = $dir =~ m{([^/]+)$};
+    my $file = "$dir/journal.json";
+    my $data = {task => $task, entries => []};
+    if (-e $file) {
+      sysopen(my $in, $file, O_RDONLY | O_NOFOLLOW) or die "Cannot read restart journal: $!\n";
+      local $/; $data = decode_json(<$in>); close $in or die $!;
+      die "Invalid restart journal\n" unless ref($data) eq "HASH" && ($data->{task} // "") eq $task && ref($data->{entries}) eq "ARRAY";
+    } elsif ($action ne "init") { die "Restart journal missing\n"; }
+    for my $entry (@{$data->{entries}}) {
+      die "Invalid journal entry\n" unless ref($entry) eq "HASH" && ($entry->{type} // "") =~ /\A(?:docker|systemd)\z/ && ($entry->{id} // "") =~ /\A[A-Za-z0-9][A-Za-z0-9_.@:\\-]*\z/ && ($entry->{phase} // "") =~ /\A(?:intended|stopped|restarted)\z/;
+    }
+    if ($action eq "pending") {
+      for my $entry (reverse @{$data->{entries}}) {
+        next if $entry->{phase} eq "restarted";
+        print "$entry->{type}\t$entry->{id}\t$entry->{phase}\n";
+      }
+      exit 0;
+    }
+    if ($action ne "init") {
+      die "Invalid restart operation\n" unless $action =~ /\A(?:intended|stopped|restarted)\z/ && $type =~ /\A(?:docker|systemd)\z/ && $id =~ /\A[A-Za-z0-9][A-Za-z0-9_.@:\\-]*\z/;
+      my ($entry) = grep { $_->{type} eq $type && $_->{id} eq $id } @{$data->{entries}};
+      if (!$entry) {
+        die "Missing restart intent\n" unless $action eq "intended";
+        $entry = {type => $type, id => $id}; push @{$data->{entries}}, $entry;
+      }
+      $entry->{phase} = $action; $entry->{updated_at} = time();
+    }
+    my ($out, $tmp) = tempfile(".journal-XXXXXX", DIR => $dir, UNLINK => 0);
+    chmod 0600, $tmp or die $!;
+    print $out JSON::PP->new->ascii->canonical->encode($data) or die $!;
+    $out->flush or die $!; $out->sync or die "Cannot sync restart journal: $!\n";
+    close $out or die $!; rename $tmp, $file or die $!;
+    if ($^O eq "linux") {
+      sysopen(my $directory, $dir, O_RDONLY) or die $!;
+      $directory->sync or die "Cannot sync restart directory: $!\n";
+      close $directory or die $!;
+      if ($action eq "init") {
+        (my $parent = $dir) =~ s{/[^/]+$}{};
+        sysopen(my $parent_directory, $parent, O_RDONLY) or die $!;
+        $parent_directory->sync or die "Cannot sync restart journal parent: $!\n";
+        close $parent_directory or die $!;
+      }
+    }
+  ' "$state_dir" "$action" "$type" "$identity" "$label"
+}
+
+restart_journal_create() {
+  local task="$1" state_dir="$RESTART_JOURNAL_DIR/$1"
+  valid_task_name "$task" || return 13
+  [ ! -e "$state_dir" ] && [ ! -L "$state_dir" ] || { echo "A restart journal already exists for $task; recover it first." >&2; return 20; }
+  mkdir -m 700 -- "$state_dir" || return 20
+  restart_journal_update "$state_dir" init || return 20
+  printf '%s\n' "$state_dir"
+}
+
+restart_journal_finish() {
+  local state_dir="$1" pending
+  restart_journal_path_is_safe "$state_dir" || return 13
+  pending="$(restart_journal_update "$state_dir" pending)" || return 20
+  [ -z "$pending" ] || { log "ERROR: Service recovery is still pending in $state_dir"; return 20; }
+  # Remove only the known local control files; retain unexpected data for diagnosis.
+  rm -f -- "$state_dir/journal.json" "$state_dir/selected-stop-targets.tsv" "$state_dir/docker-to-stop.tsv" "$state_dir/post-hook.started" "$state_dir/post-hook.done" "$state_dir/restart.done" || return 20
+  rmdir -- "$state_dir" || return 20
+}
+
+restart_journal_retry_type() {
+  local state_dir="$1" requested_type="$2" pending type identity phase failed=0
+  pending="$(restart_journal_update "$state_dir" pending)" || return 20
+  while IFS=$'\t' read -r type identity phase; do
+    [ "$type" = "$requested_type" ] || continue
+    log "Recovering $type $identity (journal state: $phase)"
+    if [ "$type" = docker ]; then
+      if ! command -v docker >/dev/null 2>&1; then failed=1; continue; fi
+      if [ "$(docker inspect --format '{{.State.Running}}' "$identity" 2>/dev/null || true)" != true ]; then
+        if command -v timeout >/dev/null 2>&1; then timeout 45 docker start "$identity" || true;
+        else docker start "$identity" || true; fi
+      fi
+      if [ "$(docker inspect --format '{{.State.Running}}' "$identity" 2>/dev/null || true)" != true ]; then
+        log "ERROR: Docker container $identity did not restart; journal retained for retry"; failed=1; continue
+      fi
+    else
+      if ! command -v systemctl >/dev/null 2>&1; then failed=1; continue; fi
+      if ! systemctl is-active --quiet "$identity" 2>/dev/null; then
+        if command -v timeout >/dev/null 2>&1; then timeout 45 systemctl start "$identity" || true;
+        else systemctl start "$identity" || true; fi
+      fi
+      if ! systemctl is-active --quiet "$identity" 2>/dev/null; then
+        log "ERROR: Systemd service $identity did not restart; journal retained for retry"; failed=1; continue
+      fi
+    fi
+    restart_journal_update "$state_dir" restarted "$type" "$identity" || failed=1
+  done <<< "$pending"
+  return "$failed"
+}
+
+recover_restart_journals() {
+  require_root_for_write
+  acquire_operation_lock exclusive || return $?
+  local state_dir task log_file failed=0
+  for state_dir in "$RESTART_JOURNAL_DIR"/*; do
+    [ -d "$state_dir" ] && [ ! -L "$state_dir" ] || continue
+    task="$(basename -- "$state_dir")"
+    valid_task_name "$task" || { failed=1; continue; }
+    task_process_is_current "$task" && continue
+    log_file="$TASK_LOG_DIR/$task"
+    prepare_log_file "$log_file" append || { failed=1; continue; }
+    log "Recovering interrupted task $task from local restart journal" | tee -a "$log_file"
+    if start_backup_targets_if_needed "$state_dir" 2>&1 | tee -a "$log_file" && restart_journal_finish "$state_dir"; then
+      task_state_write "$task" failed recovered_after_interruption "$log_file" 0 20 || failed=1
+    else
+      task_state_write "$task" failed cleanup_failed "$log_file" 0 20 || true
+      failed=1
+    fi
+  done
+  return "$failed"
+}
+
 stop_docker_if_requested() {
   if [ "$(json_get_bool stop_docker_before_backup)" = "true" ] && command -v docker >/dev/null 2>&1; then
     local state_dir="$1" failed=0
@@ -1515,6 +1729,7 @@ stop_docker_if_requested() {
       done < "$state_dir/docker-to-stop.tsv"
       while IFS="$(printf '\t')" read -r id name; do
         [ -n "$id" ] || continue
+        restart_journal_update "$state_dir" intended docker "$id" "$name" || return 20
         log "Stopping Docker container $name ($id)"
         if command -v timeout >/dev/null 2>&1; then
           timeout 45 docker stop -t 30 "$id" || failed=1
@@ -1522,8 +1737,7 @@ stop_docker_if_requested() {
           docker stop -t 30 "$id" || failed=1
         fi
         if [ "$(docker inspect --format '{{.State.Running}}' "$id" 2>/dev/null || true)" = "false" ]; then
-          printf '%s\t%s\n' "$id" "$name" >> "$state_dir/docker-running-containers.tsv"
-          printf '%s\n' "$id" >> "$state_dir/docker-running-containers.txt"
+          restart_journal_update "$state_dir" stopped docker "$id" "$name" || return 20
         else
           log "ERROR: Docker container $name ($id) is still running"
           failed=1
@@ -1547,6 +1761,7 @@ stop_selected_systemd_targets() {
     [ -n "$unit" ] || continue
     protected_systemd_service "$unit" && { log "Skipping protected systemd service $unit"; continue; }
     if systemctl is-active --quiet "$unit" 2>/dev/null; then
+      restart_journal_update "$state_dir" intended systemd "$unit" || return 20
       log "Stopping systemd service $unit"
       if command -v timeout >/dev/null 2>&1; then
         timeout 45 systemctl stop "$unit" || failed=1
@@ -1554,7 +1769,7 @@ stop_selected_systemd_targets() {
         systemctl stop "$unit" || failed=1
       fi
       if ! systemctl is-active --quiet "$unit" 2>/dev/null; then
-        printf '%s\n' "$unit" >> "$state_dir/systemd-running-services.txt"
+        restart_journal_update "$state_dir" stopped systemd "$unit" || return 20
       else
         log "ERROR: systemd service $unit is still active"
         failed=1
@@ -1578,6 +1793,7 @@ stop_selected_docker_targets() {
     running="$(docker inspect --format '{{.State.Running}}' "$name" 2>/dev/null || true)"
     if [ "$running" = "true" ]; then
       id="$(docker inspect --format '{{.Id}}' "$name" 2>/dev/null | cut -c1-12)"
+      restart_journal_update "$state_dir" intended docker "${id:-$name}" "$name" || return 20
       log "Stopping Docker container $name (${id:-unknown})"
       if command -v timeout >/dev/null 2>&1; then
         timeout 45 docker stop -t 30 "$name" || failed=1
@@ -1585,8 +1801,7 @@ stop_selected_docker_targets() {
         docker stop -t 30 "$name" || failed=1
       fi
       if [ "$(docker inspect --format '{{.State.Running}}' "$name" 2>/dev/null || true)" = "false" ]; then
-        printf '%s\t%s\n' "${id:-$name}" "$name" >> "$state_dir/docker-running-containers.tsv"
-        printf '%s\n' "${id:-$name}" >> "$state_dir/docker-running-containers.txt"
+        restart_journal_update "$state_dir" stopped docker "${id:-$name}" "$name" || return 20
       else
         log "ERROR: Docker container $name is still running"
         failed=1
@@ -1601,11 +1816,12 @@ stop_selected_docker_targets() {
 stop_backup_targets() {
   local state_dir="$1"
   local targets_file="$state_dir/selected-stop-targets.tsv"
-  selected_stop_targets > "$targets_file" || true
+  restart_journal_path_is_safe "$state_dir" || return 13
+  selected_stop_targets > "$targets_file" || return 20
   if [ -s "$targets_file" ]; then
     log "Stopping selected native services and Docker containers if they are running"
-    stop_selected_systemd_targets "$state_dir" "$targets_file"
-    stop_selected_docker_targets "$state_dir" "$targets_file"
+    stop_selected_systemd_targets "$state_dir" "$targets_file" || return $?
+    stop_selected_docker_targets "$state_dir" "$targets_file" || return $?
   else
     log "No individual stop targets configured; checking legacy Docker option"
     stop_docker_if_requested "$state_dir"
@@ -1614,6 +1830,10 @@ stop_backup_targets() {
 
 start_docker_if_needed() {
   local state_dir="$1"
+  if [ -f "$state_dir/journal.json" ]; then
+    restart_journal_retry_type "$state_dir" docker
+    return $?
+  fi
   local state_tsv="$state_dir/docker-running-containers.tsv"
   local state_file="$state_dir/docker-running-containers.txt"
   local id name source_file failed=0
@@ -1651,6 +1871,10 @@ start_docker_if_needed() {
 
 start_systemd_if_needed() {
   local state_dir="$1"
+  if [ -f "$state_dir/journal.json" ]; then
+    restart_journal_retry_type "$state_dir" systemd
+    return $?
+  fi
   local state_file="$state_dir/systemd-running-services.txt"
   local unit failed=0
   if command -v systemctl >/dev/null 2>&1 && [ -s "$state_file" ]; then
@@ -1670,6 +1894,11 @@ start_systemd_if_needed() {
 
 log_restart_targets() {
   local state_dir="$1"
+  if [ -f "$state_dir/journal.json" ]; then
+    log "Pending service/container recovery from local journal:"
+    restart_journal_update "$state_dir" pending
+    return $?
+  fi
   local docker_file="$state_dir/docker-running-containers.tsv"
   local systemd_file="$state_dir/systemd-running-services.txt"
   local id name unit found=0
@@ -1698,6 +1927,7 @@ log_restart_targets() {
 start_backup_targets_if_needed() {
   local state_dir="$1"
   local failed=0
+  restart_journal_update "$state_dir" pending >/dev/null || return 20
   log_restart_targets "$state_dir"
   start_docker_if_needed "$state_dir" || failed=1
   start_systemd_if_needed "$state_dir" || failed=1
@@ -1706,16 +1936,18 @@ start_backup_targets_if_needed() {
 
 backup_cleanup_on_exit() {
   local status="$1"
-  local state_dir="$2"
+  local target="$2"
   local log_file="$3"
   local already_restarted="$4"
   local post_hook="${5:-}"
   local task="${6:-}"
-  local cleanup_failed=0
+  local state_dir="${7:-$RESTART_JOURNAL_DIR/$task}" cleanup_failed=0 manifest_status=""
 
-  [ -n "$state_dir" ] && [ -d "$state_dir" ] || return 0
-
-  if [ "$already_restarted" != "true" ] && [ ! -e "$state_dir/restart.done" ] && { [ -s "$state_dir/docker-running-containers.tsv" ] || [ -s "$state_dir/docker-running-containers.txt" ] || [ -s "$state_dir/systemd-running-services.txt" ]; }; then
+  if [ "$already_restarted" != "true" ] && [ ! -d "$state_dir" ]; then
+    cleanup_failed=1
+    log "ERROR: Local restart journal is missing; service recovery could not be verified" | tee -a "$log_file" || true
+  fi
+  if [ "$already_restarted" != "true" ] && [ -d "$state_dir" ]; then
     if [ -n "$log_file" ]; then
       log "Cleanup: restarting services and Docker containers after interrupted backup (exit status $status)" | tee -a "$log_file" || true
       start_backup_targets_if_needed "$state_dir" 2>&1 | tee -a "$log_file" || cleanup_failed=1
@@ -1723,26 +1955,37 @@ backup_cleanup_on_exit() {
       log "Cleanup: restarting services and Docker containers after interrupted backup (exit status $status)" || true
       start_backup_targets_if_needed "$state_dir" || cleanup_failed=1
     fi
-    [ "$cleanup_failed" -eq 0 ] && write_control_marker "$state_dir/restart.done"
+    if [ "$cleanup_failed" -eq 0 ]; then write_control_marker "$state_dir/restart.done" || cleanup_failed=1; fi
   fi
-  if [ ! -e "$state_dir/post-hook.started" ] && [ ! -e "$state_dir/post-hook.done" ]; then
-    write_control_marker "$state_dir/post-hook.started"
+  if [ -d "$state_dir" ] && [ ! -e "$state_dir/post-hook.started" ] && [ ! -e "$state_dir/post-hook.done" ]; then
+    write_control_marker "$state_dir/post-hook.started" || cleanup_failed=1
     if ! run_hook "$post_hook" 2>&1 | tee -a "$log_file"; then
       cleanup_failed=1
     fi
-    write_control_marker "$state_dir/post-hook.done"
+    write_control_marker "$state_dir/post-hook.done" || cleanup_failed=1
   fi
-  if [ -n "$task" ] && [ "$status" -ne 0 ]; then
+  if [ -d "$state_dir" ] && [ "$cleanup_failed" -eq 0 ]; then
+    restart_journal_finish "$state_dir" || cleanup_failed=1
+  fi
+  # A late stop after successful validation must not invalidate the data.
+  manifest_status="$(manifest_field "$target/manifest.json" status 2>/dev/null || true)"
+  if [ -n "$task" ] && [ "$cleanup_failed" -eq 0 ] && { [ "$manifest_status" = complete ] || [ "$manifest_status" = complete_with_warnings ]; } && { [ "$status" -eq 129 ] || [ "$status" -eq 130 ] || [ "$status" -eq 143 ]; }; then
+    task_state_write "$task" finished complete "$log_file" 0 0 || true
+    log "Backup already finalized before the stop signal; completed result preserved" | tee -a "$log_file" || true
+    return 0
+  fi
+  if [ -n "$task" ] && { [ "$status" -ne 0 ] || [ "$cleanup_failed" -ne 0 ]; }; then
     task_state_write "$task" failed "$([ "$cleanup_failed" -eq 0 ] && printf failed || printf cleanup_failed)" "$log_file" "$$" "$status" || true
   fi
-  if [ "$status" -ne 0 ] && [ -r "$state_dir/manifest.json" ]; then
+  if [ "$status" -ne 0 ] && [ -r "$target/manifest.json" ] && [ "$manifest_status" != complete ] && [ "$manifest_status" != complete_with_warnings ]; then
     local backup_id started size files
-    backup_id="$(basename -- "$state_dir")"
-    started="$(manifest_started_at "$state_dir")"
+    backup_id="$(basename -- "$target")"
+    started="$(manifest_started_at "$target")"
     [ -n "$started" ] || started="$(date -Iseconds)"
-    size="$(calculate_size "$state_dir")"
-    files="$(calculate_files "$state_dir")"
-    write_manifest "$state_dir" "$backup_id" "$([ "$cleanup_failed" -eq 0 ] && printf failed || printf cleanup_failed)" "$started" "$(date -Iseconds)" "$size" "$files" || true
+    # Interrupted/missing media must never delay host recovery for another size scan.
+    size="$(manifest_field "$target/manifest.json" size_bytes 2>/dev/null || printf 0)"
+    files="$(manifest_field "$target/manifest.json" files_count 2>/dev/null || printf 0)"
+    write_manifest "$target" "$backup_id" "$([ "$cleanup_failed" -eq 0 ] && printf failed || printf cleanup_failed)" "$started" "$(date -Iseconds)" "${size:-0}" "${files:-0}" || true
   fi
   return "$cleanup_failed"
 }
@@ -1808,7 +2051,7 @@ validate_completed_backup() {
   [ "${files_count:-0}" -ge "$min_files" ] && files_ok=true || files_ok=false
   metadata_mode_value="$(metadata_mode)"
   metadata_ok=true
-  metadata_value="full"
+  metadata_value="copy completed with configured metadata options; structural validation, not a complete restore test"
   if [ "$metadata_mode_value" = "network-compatible" ]; then
     metadata_value="xattrs and file capabilities intentionally omitted"
     metadata_informational=true
@@ -1821,11 +2064,9 @@ validate_completed_backup() {
 
   hardlink_ok=true
   if [ "$backup_mode" = "snapshot" ] && [ -n "$previous_backup" ] && [ -d "$previous_backup/rootfs" ]; then
-    hardlink_value="none_found"
-    if find "$target/rootfs" -xdev -type f -links +1 -print -quit 2>/dev/null | grep -q .; then
-      hardlink_value="found"
-    else
+    if ! hardlink_value="$(snapshot_reference_stats "$target/rootfs" "$previous_backup/rootfs")"; then
       hardlink_ok=false
+      hardlink_value="reference_comparison_failed"
     fi
   fi
 
@@ -1838,6 +2079,10 @@ validate_completed_backup() {
   perl -MJSON::PP -MFile::Basename=dirname -MFile::Temp=tempfile -MIO::Handle -e '
     my ($file, $status, $manifest_ok, $rootfs_ok, $etc_ok, $loxberry_ok, $varlib_ok, $mntdocker_ok, $hardlink_ok, $hardlink_value, $size_ok, $files_ok, $size_bytes, $files_count, $metadata_ok, $metadata_value, $metadata_mode, $metadata_informational) = @ARGV;
     my $bool = sub { $_[0] eq "true" ? JSON::PP::true : JSON::PP::false };
+    my $hardlink_details = eval { decode_json($hardlink_value) };
+    if (ref($hardlink_details) eq "HASH") {
+      $hardlink_value = "Referenz-Wiederverwendung: $hardlink_details->{reference_reused_files} Dateien; geprueft: $hardlink_details->{files_checked}; weitere Namen desselben Inodes im Snapshot: $hardlink_details->{intra_snapshot_aliases}.";
+    } else { $hardlink_details = {}; }
     my $data = {
       status => $status,
       checked_at => scalar localtime(),
@@ -1848,7 +2093,7 @@ validate_completed_backup() {
         { name => "/opt/loxberry vorhanden", ok => $bool->($loxberry_ok) },
         { name => "/var/lib vorhanden", ok => $bool->($varlib_ok) },
         { name => "/mnt/docker vorhanden", ok => $bool->($mntdocker_ok), optional => JSON::PP::true },
-        { name => "Snapshot-Hardlinks", ok => $bool->($hardlink_ok), value => $hardlink_value, optional => JSON::PP::true },
+        { name => "Snapshot-Hardlinks", ok => $bool->($hardlink_ok), value => $hardlink_value, statistics => $hardlink_details, optional => JSON::PP::true, informational => JSON::PP::true },
         { name => "Backup-Groesse plausibel", ok => $bool->($size_ok), value => $size_bytes },
         { name => "Dateianzahl plausibel", ok => $bool->($files_ok), value => $files_count },
         { name => "Metadaten-Fidelitaet", ok => $bool->($metadata_ok), value => $metadata_value, mode => $metadata_mode, informational => $bool->($metadata_informational) },
@@ -1868,6 +2113,27 @@ validate_completed_backup() {
     warning) return 1 ;;
     *) return 2 ;;
   esac
+}
+
+snapshot_reference_stats() {
+  local snapshot="$1" reference="$2"
+  [ -d "$snapshot" ] && [ ! -L "$snapshot" ] && [ -d "$reference" ] && [ ! -L "$reference" ] || return 1
+  perl -MFile::Find -MJSON::PP -e '
+    my ($snapshot, $reference) = @ARGV;
+    my ($checked, $reused, $linked, $aliases) = (0, 0, 0, 0);
+    my %inodes;
+    find({no_chdir => 1, wanted => sub {
+      my $path = $File::Find::name;
+      my @current = lstat($path); die "Cannot inspect snapshot path: $!\n" unless @current;
+      return unless -f _ && !-l _;
+      $checked++; $linked++ if $current[3] > 1;
+      $aliases++ if $inodes{"$current[0]:$current[1]"}++;
+      my $relative = substr($path, length($snapshot) + 1);
+      my @previous = lstat("$reference/$relative");
+      if (@previous && -f _ && !-l _ && $current[0] == $previous[0] && $current[1] == $previous[1]) { $reused++; }
+    }}, $snapshot);
+    print JSON::PP->new->canonical->encode({files_checked => $checked, reference_reused_files => $reused, files_with_multiple_links => $linked, intra_snapshot_aliases => $aliases});
+  ' "$snapshot" "$reference"
 }
 
 manifest_started_at() {
@@ -1943,13 +2209,13 @@ baseline_space_requirement_mb() {
     my $estimate = int(($bytes + $mib - 1) / $mib);
     my $reserve = int(($estimate + 4) / 5);
     $reserve = 1024 if $reserve < 1024;
-    print "$estimate ", $estimate + $reserve;
+    print "$estimate ", $estimate + $reserve, "\n";
   ' "$1"
 }
 
 preflight_backup() {
   local root available_mb docker_available docker_running excludes_count status warnings_json notices_json checks_json rsync_available target_writable backup_mode fs_type mode probe_ok target_ok target_message copy_tool_name
-  local full_baseline_required baseline_estimate_mb baseline_required_mb baseline_space_ok baseline_reference estimate_backup estimate_bytes baseline_check_value
+  local full_baseline_required baseline_estimate_mb baseline_required_mb baseline_space_ok baseline_reference estimate_backup estimate_bytes baseline_check_value available_inodes
   local -a notices=()
   require_root_permission_ack
   root="$(backup_root)"
@@ -1962,6 +2228,8 @@ preflight_backup() {
     target_ok=true
   fi
   available_mb="$(df -Pm "$root" 2>/dev/null | awk 'NR==2 {print $4}')"
+  available_inodes="$(df -Pi "$root" 2>/dev/null | awk 'NR==2 {print $4}')"
+  case "$available_inodes" in ''|*[!0-9]*) available_inodes=-1 ;; esac
   fs_type="$(current_mount_value "$root" FSTYPE)"
   case "$available_mb" in
     ''|*[!0-9]*) available_mb=0 ;;
@@ -1972,8 +2240,10 @@ preflight_backup() {
   baseline_space_ok=true
   baseline_reference=""
   baseline_check_value="nicht erforderlich"
-  if [ "$target_ok" = "true" ] && [ "$backup_mode" = "snapshot" ] && [ "$mode" != "portable-archive" ]; then
-    baseline_reference="$(latest_complete_backup "$root")"
+  if [ "$target_ok" = "true" ]; then
+    if [ "$backup_mode" = "snapshot" ] && [ "$mode" != "portable-archive" ]; then
+      baseline_reference="$(latest_complete_backup "$root")"
+    fi
     if [ -z "$baseline_reference" ]; then
       full_baseline_required=true
       baseline_check_value="vollstaendige Basiskopie; Groessenschaetzung nicht verfuegbar"
@@ -1987,11 +2257,17 @@ preflight_backup() {
           fi
         fi
       fi
-      notices+=("Hinweis: Keine kompatible Snapshot-Referenz vorhanden. Der naechste Lauf erstellt eine vollstaendige Basiskopie.")
+      if [ "$backup_mode" = snapshot ]; then
+        notices+=("Hinweis: Keine kompatible Snapshot-Referenz vorhanden. Der naechste Lauf erstellt eine vollstaendige Basiskopie.")
+      fi
+      if [ "$baseline_estimate_mb" -eq 0 ]; then
+        notices+=("Hinweis: Fuer diese vollstaendige Kopie ist noch keine verlaessliche Groessenschaetzung vorhanden. Bitte genuegend freien Platz fuer alle eingeschlossenen Daten vorsehen.")
+      fi
     else
       baseline_check_value="inkrementelle Referenz vorhanden: $(basename -- "$baseline_reference")"
     fi
   fi
+  notices+=("Hinweis: Die Speicherpruefung ist eine Schaetzung aus frueheren Sicherungen. Zusaetzliche Quelldaten, Inodes, Benutzer-/NAS-Quoten und Aenderungen waehrend des Backups koennen den tatsaechlich benoetigten Platz beeinflussen.")
   rsync_available=false
   copy_tool_name="rsync"
   if [ "$mode" = "portable-archive" ]; then
@@ -2021,6 +2297,9 @@ preflight_backup() {
   elif [ "$backup_mode" = "snapshot" ] && [ "$mode" = "portable-archive" ]; then
     status="error"
     warnings_json='["Portable Archive kann nicht mit inkrementellen Snapshots kombiniert werden."]'
+  elif [ "$available_inodes" -eq 0 ]; then
+    status="error"
+    warnings_json='["Auf dem Backup-Ziel sind keine freien Inodes mehr verfuegbar. Neue Dateien koennen nicht angelegt werden."]'
   elif [ "$baseline_space_ok" != "true" ]; then
     status="error"
     warnings_json="$(perl -MJSON::PP -e 'print encode_json([$ARGV[0]])' "Vollstaendige Basiskopie benoetigt voraussichtlich mindestens ${baseline_required_mb} MB, auf dem Backup-Ziel sind aber nur ${available_mb} MB frei. Bitte unvollstaendige oder nicht mehr benoetigte Backups loeschen beziehungsweise das Ziel vergroessern.")"
@@ -2040,10 +2319,11 @@ preflight_backup() {
   {"name":"Kopierwerkzeug ($copy_tool_name) verfuegbar","ok":$rsync_available},
   {"name":"Backup-Ziel beschreibbar","ok":$target_writable},
   {"name":"Backup-Modus","ok":true,"value":"$backup_mode"},
-  {"name":"Metadaten-Modus","ok":$probe_ok,"value":"$mode"},
+  {"name":"Metadaten-Modus","ok":$probe_ok,"value":"$mode","details":$(json_escape "${METADATA_PROBE_MESSAGE:-}")},
   {"name":"Dateisystem","ok":true,"value":"$fs_type"},
   {"name":"Freier Speicher MB","ok":$([ "$available_mb" -ge 1024 ] && echo true || echo false),"value":"$available_mb"},
   {"name":"Speicher fuer Snapshot-Basiskopie","ok":$baseline_space_ok,"value":$(json_escape "$baseline_check_value")},
+  {"name":"Freie Inodes","ok":$([ "$available_inodes" -ne 0 ] && echo true || echo false),"value":"$available_inodes (-1: unbekannt)"},
   {"name":"Docker verfuegbar","ok":$docker_available,"value":"running=$docker_running"},
   {"name":"Exclude-Regeln","ok":true,"value":"$excludes_count"}
 ]
@@ -2068,6 +2348,7 @@ EOF
 restore_eligibility() {
   local backup_id="$1" degraded_confirmation="${2:-false}"
   local root target manifest_status validation_status metadata_value storage_format
+  local inspection_json inspection_status inspection_mode
   root="$(backup_root)"
   verify_backup_target "$root" false
   target="$(safe_backup_target "$root" "$backup_id")"
@@ -2090,6 +2371,20 @@ restore_eligibility() {
     [ "${HOSTBACKUP_OFFLINE_RESTORE:-0}" = "1" ] || { echo "Portable Archive Restore ist nur mit HOSTBACKUP_OFFLINE_RESTORE=1 in einer Offline-/Rescue-Umgebung erlaubt." >&2; return 18; }
   else
     perl -e 'exit((-d $ARGV[0] && !-l $ARGV[0]) ? 0 : 1)' "$target/rootfs" || { echo "Backup rootfs is not a real directory." >&2; return 18; }
+  fi
+  inspection_json="$(inspect_backup_directory "$target")" || return 18
+  if ! read -r inspection_status inspection_mode < <(printf '%s' "$inspection_json" | perl -MJSON::PP -e 'local $/; my $d=decode_json(<STDIN>); print(($d->{status} // "error"), " ", ($d->{metadata_mode} // "legacy-unknown"), "\n");'); then
+    echo "Lokale Inhaltspruefung lieferte kein gueltiges Ergebnis." >&2; return 18
+  fi
+  case "$inspection_status" in
+    ok) ;;
+    warning)
+      [ "$degraded_confirmation" = confirm-degraded ] || { echo "Lokale Inhaltspruefung meldet Einschraenkungen. Restore erfordert confirm-degraded." >&2; return 18; }
+      ;;
+    *) echo "Lokale Inhaltspruefung hat den Restore nicht freigegeben." >&2; return 18 ;;
+  esac
+  if [ "$inspection_mode" = legacy-unknown ] && [ "$degraded_confirmation" != confirm-degraded ]; then
+    echo "Lokale Inhaltspruefung kann das alte Metadaten-Profil nicht bestaetigen." >&2; return 18
   fi
   printf '%s\n' "$target"
 }
@@ -2172,8 +2467,8 @@ create_backup() {
   require_root_for_write
   require_root_permission_ack
 
-  local root backup_id target rootfs log_file started finished size files exclude_file backup_mode previous_backup restart_done
-  local mode task validation_status final_status post_hook pre_hook rsync_status export_status portable_excludes
+  local root backup_id target rootfs log_file started finished size files exclude_file backup_mode previous_backup
+  local mode task validation_status final_status post_hook pre_hook rsync_status export_status portable_excludes state_dir preflight_json preflight_status cleanup_trap
   local -a rsync_opts=() metadata_opts=() tar_opts=()
   root="$(backup_root)"
   backup_mode="$(json_get_string backup_mode)"
@@ -2185,7 +2480,6 @@ create_backup() {
     command -v rsync >/dev/null 2>&1 || { echo "rsync is required." >&2; exit 3; }
   fi
   verify_backup_target "$root" true
-  metadata_capability_probe "$root" "$mode" || { echo "$METADATA_PROBE_MESSAGE" >&2; exit 17; }
   backup_id="${1:-$(date '+%Y%m%d-%H%M%S')}"
   backup_id="$(printf '%s' "$backup_id" | tr -cd 'A-Za-z0-9._-')"
   require_backup_id "$backup_id"
@@ -2202,7 +2496,18 @@ create_backup() {
     exit 4
   fi
 
-  prepare_log_file "$log_file" truncate
+  prepare_log_file "$log_file" append
+  if ! preflight_json="$(preflight_backup 2>&1)"; then
+    printf '%s\n' "$preflight_json" >> "$log_file"
+    task_state_write "$task" failed preflight_error "$log_file" 0 17
+    return 17
+  fi
+  preflight_status="$(printf '%s' "$preflight_json" | perl -MJSON::PP -e 'local $/; my $d=decode_json(<STDIN>); print $d->{status} // "error";')" || preflight_status=error
+  if [ "$preflight_status" = error ]; then
+    printf '%s\n' "$preflight_json" >> "$log_file"
+    task_state_write "$task" failed preflight_error "$log_file" 0 17
+    return 17
+  fi
   mkdir -p -- "$target"
   chmod 700 "$target" 2>/dev/null || true
   write_backup_marker "$target" "$backup_id"
@@ -2218,9 +2523,16 @@ create_backup() {
 
   pre_hook="$(json_get_string pre_backup_hook)"
   post_hook="$(json_get_string post_backup_hook)"
-  restart_done="false"
+  # Referenced from the frozen EXIT trap.
+  # shellcheck disable=SC2034
+  HB_BACKUP_RESTART_DONE=false
   task_state_write "$task" running initializing "$log_file" "$$" ""
-  trap 'backup_cleanup_on_exit "$?" "$target" "$log_file" "$restart_done" "$post_hook" "$task"' EXIT
+  state_dir="$(restart_journal_create "$task")"
+  # Errexit can unwind function locals before EXIT executes. Freeze paths now.
+  printf -v cleanup_trap 'HB_BACKUP_EXIT_STATUS=$?; trap - EXIT; backup_cleanup_on_exit "$HB_BACKUP_EXIT_STATUS" %q %q "${HB_BACKUP_RESTART_DONE:-false}" %q %q %q || { [ "$HB_BACKUP_EXIT_STATUS" -ne 0 ] || HB_BACKUP_EXIT_STATUS=20; }; exit "$HB_BACKUP_EXIT_STATUS"' "$target" "$log_file" "$post_hook" "$task" "$state_dir"
+  # Intentionally freeze shell-quoted cleanup arguments.
+  # shellcheck disable=SC2064
+  trap "$cleanup_trap" EXIT
   trap 'exit 129' HUP
   trap 'exit 130' INT
   trap 'exit 143' TERM
@@ -2236,7 +2548,7 @@ create_backup() {
   run_hook "$pre_hook" 2>&1 | tee -a "$log_file"
   log "Stopping selected services and Docker containers if configured" | tee -a "$log_file"
   task_state_write "$task" running stopping_services "$log_file" "$$" ""
-  stop_backup_targets "$target" 2>&1 | tee -a "$log_file"
+  stop_backup_targets "$state_dir" 2>&1 | tee -a "$log_file"
 
   while IFS= read -r opt; do
     rsync_opts+=("$opt")
@@ -2272,18 +2584,19 @@ create_backup() {
   fi
   set -e
   log "Backup copy finished with status $rsync_status" | tee -a "$log_file"
-  verify_backup_target "$root" true
-
   log "Starting services and Docker containers again if they were stopped" | tee -a "$log_file"
   task_state_write "$task" running restarting_services "$log_file" "$$" ""
-  start_backup_targets_if_needed "$target" 2>&1 | tee -a "$log_file"
-  restart_done="true"
-  write_control_marker "$target/restart.done"
+  start_backup_targets_if_needed "$state_dir" 2>&1 | tee -a "$log_file"
+  # Referenced from the frozen EXIT trap.
+  # shellcheck disable=SC2034
+  HB_BACKUP_RESTART_DONE=true
+  write_control_marker "$state_dir/restart.done"
   log "Running post-backup hook if configured" | tee -a "$log_file"
   task_state_write "$task" running post_hook "$log_file" "$$" ""
-  write_control_marker "$target/post-hook.started"
+  write_control_marker "$state_dir/post-hook.started"
   run_hook "$post_hook" 2>&1 | tee -a "$log_file"
-  write_control_marker "$target/post-hook.done"
+  write_control_marker "$state_dir/post-hook.done"
+  verify_backup_target "$root" true
 
   log "Calculating backup size and file count" | tee -a "$log_file"
   finished="$(date -Iseconds)"
@@ -2320,6 +2633,13 @@ create_backup() {
   esac
   write_manifest "$target" "$backup_id" "$final_status" "$started" "$finished" "$size" "$files"
 
+  if [ "$(json_get_bool integrity_enabled)" = true ]; then
+    task_state_write "$task" running recording_integrity "$log_file" "$$" ""
+    if ! maintenance_helper integrity "$root" "$backup_id" --record 2>&1 | tee -a "$log_file"; then
+      log "Inhaltspruef-Basis konnte nicht erstellt werden; Kopierergebnis bleibt erhalten. Pruefbericht kontrollieren." | tee -a "$log_file"
+    fi
+  fi
+
   if [ "$(json_get_bool create_export_after_backup)" = "true" ]; then
     log "Creating export archive for finalized backup $backup_id" | tee -a "$log_file"
     set +e
@@ -2329,6 +2649,7 @@ create_backup() {
     if [ "$export_status" -ne 0 ]; then
       log "Backup $backup_id failed while creating export archive" | tee -a "$log_file"
       task_state_write "$task" failed export_failed "$log_file" "$$" "$export_status"
+      restart_journal_finish "$state_dir"
       trap - EXIT HUP INT TERM
       notify_hostbackup "failure" 3 "LoxBerry Host Backup fehlgeschlagen" "Backup $backup_id ist beim Erstellen des Export-Archivs fehlgeschlagen." "$log_file"
       exit "$export_status"
@@ -2336,9 +2657,12 @@ create_backup() {
   fi
 
   log "Applying backup retention policy" | tee -a "$log_file"
-  prune_old_backups
+  if ! prune_old_backups 2>&1 | tee -a "$log_file"; then
+    log "Aufbewahrung konnte nicht vollstaendig angewendet werden. Backups und Bereinigungsvorschau pruefen." | tee -a "$log_file"
+  fi
 
   log "Backup $backup_id finished" | tee -a "$log_file"
+  restart_journal_finish "$state_dir"
   task_state_write "$task" finished complete "$log_file" "$$" 0
   trap - EXIT HUP INT TERM
   notify_hostbackup "success" 6 "LoxBerry Host Backup erfolgreich" "Backup $backup_id wurde erfolgreich abgeschlossen. Groesse: $size Bytes, Dateien: $files." "$log_file"
@@ -2347,27 +2671,51 @@ create_backup() {
 
 start_backup() {
   require_root_for_write
-  require_root_permission_ack
   local backup_id log_file task accept_warnings preflight_json preflight_status pid
-  backup_id="${1:-$(date '+%Y%m%d-%H%M%S')}"
+  backup_id="${1:-$(date '+%Y%m%d-%H%M%S')-$$}"
   accept_warnings="${2:-}"
   backup_id="$(printf '%s' "$backup_id" | tr -cd 'A-Za-z0-9._-')"
   require_backup_id "$backup_id"
-  acquire_operation_lock exclusive
-  acquire_backup_lock "$backup_id" exclusive
-  preflight_json="$(preflight_backup)"
-  preflight_status="$(printf '%s' "$preflight_json" | perl -MJSON::PP -e 'local $/; my $d=decode_json(<STDIN>); print $d->{status} // "error";')"
-  [ "$preflight_status" != "error" ] || { printf '%s\n' "$preflight_json" >&2; exit 17; }
+  log_file="$TASK_LOG_DIR/backup-$backup_id.log"
+  task="backup-$backup_id.log"
+  [ ! -e "$log_file" ] || { echo "Task already exists: $task" >&2; return 4; }
+  prepare_log_file "$log_file" truncate
+  task_state_write "$task" queued preflight "$log_file" "$$" ""
+  if ! acquire_operation_lock exclusive 2>> "$log_file" || ! acquire_backup_lock "$backup_id" exclusive 2>> "$log_file"; then
+    log "Backup start rejected: another HostBackup operation is active" >> "$log_file"
+    task_state_write "$task" failed busy "$log_file" 0 5
+    printf '%s\n' "Backup attempt $backup_id rejected: another operation is active." >&2
+    return 5
+  fi
+  if ! recover_restart_journals >> "$log_file" 2>&1; then
+    task_state_write "$task" failed cleanup_failed "$log_file" 0 20
+    echo "Pending services could not be restarted. See the retained recovery journal." >&2
+    return 20
+  fi
+  if ! preflight_json="$(preflight_backup 2>&1)"; then
+    printf '%s\n' "$preflight_json" >> "$log_file"
+    task_state_write "$task" failed preflight_error "$log_file" 0 17
+    printf '%s\n' "$preflight_json" >&2
+    return 17
+  fi
+  preflight_status="$(printf '%s' "$preflight_json" | perl -MJSON::PP -e 'local $/; my $d=decode_json(<STDIN>); print $d->{status} // "error";')" || preflight_status=error
+  printf '%s\n' "$preflight_json" >> "$log_file"
+  case "$preflight_status" in
+    ok|warning) ;;
+    *) task_state_write "$task" failed preflight_error "$log_file" 0 17; printf '%s\n' "$preflight_json" >&2; return 17 ;;
+  esac
   if [ "$preflight_status" = "warning" ] && [ "$accept_warnings" != "accept-warnings" ]; then
+    task_state_write "$task" failed preflight_warning "$log_file" 0 16
     printf '%s\n' "$preflight_json" >&2
     echo "Preflight-Warnungen muessen explizit bestaetigt werden." >&2
-    exit 16
+    return 16
   fi
-  log_file="$TASK_LOG_DIR/backup-$backup_id.launch.log"
-  task="backup-$backup_id.log"
-  prepare_log_file "$log_file" truncate
-  pid="$(launch_background "$task" "$log_file" "$0" backup "$backup_id")"
-  [ -n "$pid" ] || { echo "Backup process could not be launched." >&2; exit 14; }
+  if pid="$(launch_background "$task" "$TASK_LOG_DIR/backup-$backup_id.launch.log" "$0" backup "$backup_id")" && [ -n "$pid" ]; then
+    :
+  else
+    task_state_write "$task" failed launch_failed "$log_file" 0 14
+    echo "Backup process could not be launched." >&2; return 14
+  fi
   printf '%s\n' "$backup_id"
 }
 
@@ -2376,21 +2724,25 @@ stop_backup() {
   require_root_permission_ack
   local backup_id="$1"
   local root target log_file started finished size files task pid pgid ticks current_ticks waited=0
+  local state_dir state manifest_status signalled=false recovery_failed=0
   require_backup_id "$backup_id"
   root="$(backup_root)"
-  verify_backup_target "$root" false
   target="$(strict_child_path "$root" "$root/$backup_id")" || { echo "Unsafe backup path." >&2; exit 7; }
   log_file="$TASK_LOG_DIR/backup-$backup_id.log"
   task="backup-$backup_id.log"
-  [ -d "$target" ] || { echo "Backup not found: $backup_id" >&2; exit 6; }
+  state_dir="$RESTART_JOURNAL_DIR/$task"
+  [ -d "$target" ] || [ -f "$TASK_DIR/$task.json" ] || { echo "Backup task not found: $backup_id" >&2; exit 6; }
   prepare_log_file "$log_file" append
 
   log "Stop requested for backup $backup_id" | tee -a "$log_file"
 
   pid="$(task_state_value "$task" pid 2>/dev/null || true)"
+  state="$(task_state_value "$task" state 2>/dev/null || true)"
+  manifest_status="$(manifest_field "$target/manifest.json" status 2>/dev/null || true)"
   ticks="$(task_state_value "$task" process_start_ticks 2>/dev/null || true)"
   current_ticks="$(process_start_ticks "$pid")"
-  if [ -n "$pid" ] && [ -n "$ticks" ] && [ "$ticks" = "$current_ticks" ] && kill -0 "$pid" 2>/dev/null; then
+  if [ "$state" != finished ] && [ "$state" != stopped ] && [ "$manifest_status" != complete ] && [ "$manifest_status" != complete_with_warnings ] && [ -n "$pid" ] && [ "$pid" -gt 1 ] 2>/dev/null && [ -n "$ticks" ] && [ "$ticks" = "$current_ticks" ] && kill -0 "$pid" 2>/dev/null; then
+    signalled=true
     pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')"
     log "Stopping backup process group ${pgid:-$pid}" | tee -a "$log_file"
     if [ -n "$pgid" ] && [ "$pgid" -gt 1 ] 2>/dev/null; then
@@ -2409,19 +2761,40 @@ stop_backup() {
     log "No running backup process found for $backup_id" | tee -a "$log_file"
   fi
 
-  acquire_operation_lock exclusive
-  acquire_backup_lock "$backup_id" exclusive
-  if [ ! -e "$target/restart.done" ]; then
+  acquire_operation_lock exclusive || return $?
+  acquire_backup_lock "$backup_id" exclusive || return $?
+  state="$(task_state_value "$task" state 2>/dev/null || true)"
+  manifest_status="$(manifest_field "$target/manifest.json" status 2>/dev/null || true)"
+  if [ "$state" = finished ] || [ "$state" = stopped ] || [ "$manifest_status" = complete ] || [ "$manifest_status" = complete_with_warnings ]; then
+    log "Backup $backup_id already completed; stop request has no effect" | tee -a "$log_file"
+    return 0
+  fi
+  if [ -d "$state_dir" ]; then
     log "Restarting services and Docker containers stopped by this backup if needed" | tee -a "$log_file"
-    start_backup_targets_if_needed "$target" 2>&1 | tee -a "$log_file"
-    write_control_marker "$target/restart.done"
+    if start_backup_targets_if_needed "$state_dir" 2>&1 | tee -a "$log_file"; then
+      restart_journal_finish "$state_dir" || recovery_failed=1
+    else
+      recovery_failed=1
+    fi
+  fi
+  if [ "$recovery_failed" -ne 0 ]; then
+    task_state_write "$task" failed cleanup_failed "$log_file" 0 20
+    return 20
+  fi
+  if [ "$signalled" != true ]; then
+    log "No active process was stopped; preserving the existing task result" | tee -a "$log_file"
+    return 0
+  fi
+  if ! verify_backup_target "$root" false >> "$log_file" 2>&1 || [ ! -f "$target/manifest.json" ]; then
+    task_state_write "$task" stopped target_unavailable "$log_file" 0 0
+    return 0
   fi
   started="$(manifest_started_at "$target")"
   [ -n "$started" ] || started="$(date -Iseconds)"
   finished="$(date -Iseconds)"
-  size="$(calculate_size "$target")"
-  files="$(calculate_files "$target")"
-  write_manifest "$target" "$backup_id" "stopped" "$started" "$finished" "$size" "$files"
+  size="$(manifest_field "$target/manifest.json" size_bytes 2>/dev/null || printf 0)"
+  files="$(manifest_field "$target/manifest.json" files_count 2>/dev/null || printf 0)"
+  write_manifest "$target" "$backup_id" "stopped" "$started" "$finished" "${size:-0}" "${files:-0}"
   task_state_write "$task" stopped stopped "$log_file" "$$" 0
   log "Backup $backup_id stopped by user" | tee -a "$log_file"
   notify_hostbackup "stopped" 4 "LoxBerry Host Backup abgebrochen" "Backup $backup_id wurde durch den Benutzer abgebrochen. Bereits gestoppte Dienste und Container wurden wieder gestartet, soweit moeglich." "$log_file"
@@ -2436,7 +2809,7 @@ task_log_path() {
   local dir path
   case "$task" in
     *[!A-Za-z0-9._-]*|.*|*..*|*/*) echo "Unsafe task id." >&2; exit 11 ;;
-    backup-*.log|restore-*.log|export-*.log|import-*.log) ;;
+    backup-*.log|restore-*.log|export-*.log|import-*.log|verify-*.log) ;;
     *) echo "Unsafe task id." >&2; exit 11 ;;
   esac
   while IFS= read -r dir; do
@@ -2463,7 +2836,7 @@ list_tasks() {
     for my $dir (@dirs) {
       next if !$dir || $seen{"dir:$dir"}++;
       opendir(my $dh, $dir) or next;
-      for my $name (sort grep { /^(backup|restore|export|import)-.*\.log$/ || /\.(launch)\.log$/ } readdir($dh)) {
+      for my $name (sort grep { /^(backup|restore|export|import|verify)-.*\.log$/ || /\.(launch)\.log$/ } readdir($dh)) {
         my $path = "$dir/$name";
         my @st = lstat($path);
         next unless @st && -f _ && !-l _;
@@ -2590,7 +2963,7 @@ EOF
 EOF
 }
 
-list_backups() {
+list_backups_raw() {
   local root
   local dirs=()
   local dir
@@ -2682,11 +3055,13 @@ list_backups() {
         local $/;
         open my $fh, "<", $manifest;
         $data = eval { decode_json(<$fh>) } || {};
+        $data = {} unless ref($data) eq "HASH";
       }
       if (-f $validation && !-l $validation && -r $validation) {
         local $/;
         open my $vh, "<", $validation;
         $data->{validation} = eval { decode_json(<$vh>) } || {};
+        $data->{validation} = {} unless ref($data->{validation}) eq "HASH";
       }
       my $archive = "$root/$entry.tar.gz";
       my $lock = "$lock_root/export-$entry.lock";
@@ -2740,12 +3115,31 @@ list_backups() {
   ' "$root" "$LOCK_DIR" "${dirs[@]}"
 }
 
+list_backups() {
+  local root protected
+  root="$(backup_root)"
+  verify_backup_target "$root" false
+  protected="$(maintenance_helper pins "$root")"
+  list_backups_raw | python3 -c 'import json,sys; items=json.load(sys.stdin); pins=set(json.loads(sys.argv[1])["backup_ids"]); [item.update(pinned=item.get("backup_id") in pins) for item in items]; print(json.dumps(items))' "$protected"
+}
+
+export_cleanup_on_exit() {
+  local status="$1" task="$2" log_file="$3" temporary="$4" checksum_temporary="$5" descriptor_temporary="$6" failed=0
+  rm -f -- "$temporary" "$checksum_temporary" "$descriptor_temporary" || failed=1
+  task_failure_on_exit "$status" "$task" "$log_file" "$([ "$failed" -eq 0 ] && printf failed || printf cleanup_failed)"
+  return "$failed"
+}
+
 export_backup() {
   local backup_id="$1"
-  local root target archive tmp lock_file checksum descriptor manifest_hash task log_file status validation checksum_tmp descriptor_tmp
+  local root target archive tmp lock_file checksum descriptor manifest_hash task log_file status validation checksum_tmp descriptor_tmp cleanup_trap
   local -a tar_opts=()
   require_root_for_write
   require_backup_id "$backup_id"
+  task="export-$backup_id.log"
+  log_file="$TASK_LOG_DIR/$task"
+  prepare_log_file "$log_file" append
+  install_task_failure_trap "$task" "$log_file"
   root="$(backup_root)"
   verify_backup_target "$root" true
   acquire_operation_lock shared
@@ -2767,14 +3161,14 @@ export_backup() {
   flock -n 7 || { log "Export $backup_id failed: already running"; echo "Export already running: $backup_id" >&2; exit 5; }
   rm -f "$tmp"
   log "Starting export $backup_id"
-  task="export-$backup_id.log"
-  log_file="$TASK_LOG_DIR/$task"
-  prepare_log_file "$log_file" append
   task_state_write "$task" running archiving "$log_file" "$$" ""
   checksum_tmp="$archive.sha256.tmp.$$"
   descriptor="$archive.json"
   descriptor_tmp="$descriptor.tmp.$$"
-  trap 'status=$?; rm -f -- "$tmp" "$checksum_tmp" "$descriptor_tmp"; if [ "$status" -ne 0 ]; then task_state_write "$task" failed failed "$log_file" "$$" "$status" || true; fi' EXIT
+  printf -v cleanup_trap 'HB_EXPORT_EXIT_STATUS=$?; trap - EXIT; export_cleanup_on_exit "$HB_EXPORT_EXIT_STATUS" %q %q %q %q %q || { [ "$HB_EXPORT_EXIT_STATUS" -ne 0 ] || HB_EXPORT_EXIT_STATUS=20; }; exit "$HB_EXPORT_EXIT_STATUS"' "$task" "$log_file" "$tmp" "$checksum_tmp" "$descriptor_tmp"
+  # Intentionally freeze shell-quoted cleanup arguments.
+  # shellcheck disable=SC2064
+  trap "$cleanup_trap" EXIT
   while IFS= read -r opt; do tar_opts+=("$opt"); done < <(tar_metadata_options)
   if ! run_with_heartbeat "Export $backup_id" tar "${tar_opts[@]}" -C "$root" -czf "$tmp" -- "$backup_id"; then
     rm -f "$tmp"
@@ -2874,6 +3268,30 @@ export_info() {
 EOF
 }
 
+download_export() {
+  local backup_id="$1" root target archive lock_file
+  require_backup_id "$backup_id"
+  root="$(backup_root)"
+  verify_backup_target "$root" false
+  acquire_operation_lock shared
+  acquire_backup_lock "$backup_id" shared
+  target="$(safe_backup_target "$root" "$backup_id")"
+  archive="$root/$backup_id.tar.gz"
+  lock_file="$LOCK_DIR/export-$backup_id.lock"
+  [ ! -L "$lock_file" ] || return 13
+  exec 7>"$lock_file"
+  flock -sn 7 || { echo "Export wird noch erstellt. Bitte nach Abschluss erneut laden." >&2; return 5; }
+  python3 "$LBP_BINDIR/hostbackup-download.py" export "$archive" "$backup_id.tar.gz" \
+    --descriptor "$archive.json" --checksum "$archive.sha256" --manifest "$target/manifest.json"
+}
+
+download_log() {
+  local task="$1" path
+  valid_task_name "$task" || return 11
+  path="$(task_log_path "$task")"
+  python3 "$LBP_BINDIR/hostbackup-download.py" log "$path" "$task"
+}
+
 start_export() {
   require_root_for_write
   local backup_id="$1"
@@ -2918,6 +3336,37 @@ validate_import_archive() {
   python3 "$LBP_BINDIR/validate-import-archive.py" --json "$archive" "$max_bytes"
 }
 
+inspect_backup_directory() {
+  local target="$1" max_bytes="${2:-9223372036854775807}"
+  python3 "$LBP_BINDIR/validate-import-archive.py" --backup-dir --json "$target" "$max_bytes"
+}
+
+write_import_validation() {
+  local target="$1" archive="$2" archive_hash="$3" result
+  result="$(inspect_backup_directory "$target")" || return 18
+  printf '%s' "$result" | python3 -c '
+import json, os, pathlib, sys, tempfile
+directory, archive, digest = map(str, sys.argv[1:])
+result = json.load(sys.stdin)
+result["validation_source"] = "local-import-inspection"
+def replace(name, data):
+    fd, temporary = tempfile.mkstemp(prefix=".import-control-", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, str(pathlib.Path(directory) / name))
+    finally:
+        if os.path.exists(temporary): os.unlink(temporary)
+replace("backup-validation.json", json.dumps(result, indent=2, ensure_ascii=True) + "\n")
+replace("import-source.sha256", digest + "  " + pathlib.Path(archive).name + "\n")
+manifest = json.loads((pathlib.Path(directory) / "manifest.json").read_text(encoding="utf-8"))
+manifest["status"] = "complete_with_warnings" if result["status"] == "warning" else "complete"
+replace("manifest.json", json.dumps(manifest, indent=2, ensure_ascii=True) + "\n")
+' "$target" "$archive" "$archive_hash"
+}
+
 quarantine_import_archive() {
   local archive="$1" quarantine="$QUARANTINE_DIR" destination
   [ ! -L "$quarantine" ] || return 1
@@ -2931,11 +3380,42 @@ quarantine_import_archive() {
   mv -fT -- "$archive" "$destination"
 }
 
+import_cleanup_on_exit() {
+  local status="$1" task="$2" log_file="$3" staging="$4" archive="$5" cleanup_archive="$6" failed=0
+  if [ -n "$staging" ]; then
+    rm -rf --one-file-system -- "$staging" 2>/dev/null || failed=1
+  fi
+  if [ "$cleanup_archive" = 1 ] && { [ -e "$archive" ] || [ -L "$archive" ]; }; then
+    if [ "$status" -eq 0 ]; then
+      rm -f -- "$archive" || failed=1
+    elif ! quarantine_import_archive "$archive" 2>/dev/null; then
+      log "Import archive retained for diagnosis: $archive" >> "$log_file" || true
+      failed=1
+    fi
+  fi
+  task_failure_on_exit "$status" "$task" "$log_file" "$([ "$failed" -eq 0 ] && printf failed || printf cleanup_failed)"
+  return "$failed"
+}
+
+install_import_cleanup_trap() {
+  local task="$1" log_file="$2" staging="$3" archive="$4" cleanup_archive="$5" cleanup_trap
+  printf -v cleanup_trap 'HB_IMPORT_EXIT_STATUS=$?; trap - EXIT; import_cleanup_on_exit "$HB_IMPORT_EXIT_STATUS" %q %q %q %q %q || { [ "$HB_IMPORT_EXIT_STATUS" -ne 0 ] || HB_IMPORT_EXIT_STATUS=20; }; exit "$HB_IMPORT_EXIT_STATUS"' "$task" "$log_file" "$staging" "$archive" "$cleanup_archive"
+  # Intentionally freeze shell-quoted cleanup arguments.
+  # shellcheck disable=SC2064
+  trap "$cleanup_trap" EXIT
+}
+
 import_backup() {
   require_root_for_write
   local archive="$1"
   local root top staging extracted max_mb max_bytes archive_size task log_file archive_hash validation_json expanded_size free_bytes
   local -a tar_opts=()
+  task="${HOSTBACKUP_TASK_ID:-import-$(date '+%Y%m%d-%H%M%S')-$$.log}"
+  valid_task_name "$task" || return 11
+  log_file="$TASK_LOG_DIR/$task"
+  prepare_log_file "$log_file" append
+  task_state_write "$task" running inspecting "$log_file" "$$" ""
+  install_import_cleanup_trap "$task" "$log_file" '' "$archive" "${HOSTBACKUP_IMPORT_CLEANUP:-0}"
   root="$(backup_root)"
   verify_backup_target "$root" true
   acquire_operation_lock exclusive
@@ -2956,16 +3436,11 @@ import_backup() {
     echo "Backup already exists: $top" >&2
     exit 4
   fi
-  staging="$(strict_child_path "$root" "$root/.$top.import.$$" )" || { echo "Unsafe import staging path." >&2; exit 7; }
+  staging="$(mktemp -d "$root/.$top.import.XXXXXX")" || return 20
   extracted="$staging/$top"
-  rm -rf --one-file-system "$staging"
-  mkdir -m 0700 -- "$staging"
-  task="${HOSTBACKUP_TASK_ID:-import-$top.log}"
-  log_file="$TASK_LOG_DIR/$task"
-  prepare_log_file "$log_file" append
+  install_import_cleanup_trap "$task" "$log_file" "$staging" "$archive" "${HOSTBACKUP_IMPORT_CLEANUP:-0}"
   archive_hash="$(sha256sum "$archive" | awk '{print $1}')"
   task_state_write "$task" running extracting "$log_file" "$$" ""
-  trap 'status=$?; rm -rf --one-file-system "$staging" 2>/dev/null || true; if [ "${HOSTBACKUP_IMPORT_CLEANUP:-0}" = "1" ]; then if [ "$status" -eq 0 ]; then rm -f -- "$archive"; else quarantine_import_archive "$archive" 2>/dev/null || rm -f -- "$archive"; fi; fi; if [ "$status" -ne 0 ]; then task_state_write "$task" failed failed "$log_file" "$$" "$status" || true; fi' EXIT
   log "Starting import from $archive"
   while IFS= read -r opt; do tar_opts+=("$opt"); done < <(tar_metadata_options)
   if ! run_with_heartbeat "Import $top" tar "${tar_opts[@]}" --same-owner --same-permissions --delay-directory-restore --no-overwrite-dir -C "$staging" -xzf "$archive"; then
@@ -2989,8 +3464,8 @@ import_backup() {
     complete:ok|complete_with_warnings:warning) ;;
     *) echo "Imported backup is not complete and validated." >&2; exit 12 ;;
   esac
+  write_import_validation "$extracted" "$archive" "$archive_hash"
   write_backup_marker "$extracted" "$top"
-  printf '%s  %s\n' "$archive_hash" "$(basename "$archive")" > "$extracted/import-source.sha256"
   verify_backup_target "$root" true
   mv -- "$extracted" "$root/$top"
   rmdir "$staging"
@@ -3051,16 +3526,19 @@ start_import() {
   log_file="$TASK_LOG_DIR/$task_id"
   prepare_log_file "$log_file" truncate
   archive="$(claim_staged_import_archive "$archive")"
+  task_state_write "$task_id" queued preparing "$log_file" "$$" ""
+  install_import_cleanup_trap "$task_id" "$log_file" '' "$archive" 1
   log "Import queued from $archive" >> "$log_file"
   archive_size="$(stat -c '%s' "$archive" 2>/dev/null || echo 0)"
   free_bytes="$(df -PB1 "$root" 2>/dev/null | awk 'NR==2 {print $4}')"
-  [ "${free_bytes:-0}" -gt $((archive_size + 268435456)) ] || { rm -f "$archive"; echo "Not enough staging space for import." >&2; exit 20; }
+  [ "${free_bytes:-0}" -gt $((archive_size + 268435456)) ] || { echo "Not enough staging space for import." >&2; exit 20; }
   if ! pid="$(launch_background "$task_id" "$log_file" env HOSTBACKUP_IMPORT_CLEANUP=1 HOSTBACKUP_TASK_ID="$task_id" "$0" import "$archive")"; then
-    rm -f -- "$archive"
     echo "Import process could not be launched." >&2
     exit 14
   fi
-  [ -n "$pid" ] || { rm -f "$archive"; echo "Import process could not be launched." >&2; exit 14; }
+  [ -n "$pid" ] || { echo "Import process could not be launched." >&2; exit 14; }
+  # The worker now owns archive cleanup and the persistent task result.
+  trap - EXIT
   if [ ! -r "$log_file" ]; then
     echo "Import log is not readable: $log_file" >&2
     exit 14
@@ -3178,85 +3656,77 @@ delete_backup() {
   acquire_operation_lock exclusive
   acquire_backup_lock "$backup_id" exclusive
   target="$(safe_backup_target "$root" "$backup_id")"
+  maintenance_helper delete-check "$root" "$backup_id" >/dev/null
   archive="$root/$backup_id.tar.gz"
   trash="$(strict_child_path "$root" "$root/.trash-$backup_id-$(date +%s)-$$")" || { echo "Unsafe trash path." >&2; exit 7; }
   mv -- "$target" "$trash"
   rm -rf --one-file-system -- "$trash"
   rm -f -- "$archive" "$archive.sha256" "$archive.json"
+  if ! maintenance_helper forget-integrity "$root" "$backup_id" --marker "$backup_id"; then
+    log "Backup wurde geloescht; seine lokale Inhaltspruefbasis konnte nicht entfernt werden." >&2
+  fi
+}
+
+recovery_helper() {
+  local action="$1" root="$2" target="$3" destination="$4" mappings="$5"
+  shift 5
+  python3 "$LBP_BINDIR/hostbackup-recovery.py" "$action" --backup "$target" --backup-root "$root" \
+    --destination "$destination" --map-json "$mappings" \
+    --protect-host "$LBP_CONFIGDIR" --protect-host "$LBP_DATADIR" --protect-host "$LBP_LOGDIR" \
+    --protect-host "$ROOT_STATE_DIR" --protect-host /usr/libexec/loxberryhostbackup \
+    --protect-host /usr/local/sbin/loxberryhostbackup --protect-host /usr/local/sbin/loxberryhostbackup-sudo "$@"
 }
 
 restore_plan() {
-  local backup_id="$1"
-  local root target
+  local backup_id="$1" destination="${2:-/}" mappings="${3:-[]}"
+  local root target mode storage_format inspection
   require_backup_id "$backup_id"
   root="$(backup_root)"
   verify_backup_target "$root" false
+  acquire_operation_lock shared
+  acquire_backup_lock "$backup_id" shared
   target="$(safe_backup_target "$root" "$backup_id")"
-  cat <<EOF
-Restore-Plan fuer Backup $backup_id
-
-Quelle:
- $target/$( [ -f "$target/rootfs.tar" ] && printf rootfs.tar || printf rootfs/ )
-
-Ziel:
- /
-
-Dieses Restore schreibt das gesicherte Root-Dateisystem auf dieses System zurueck.
-
-Dabei werden unter anderem wiederhergestellt:
-- Systemdateien
-- LoxBerry-Konfigurationen
-- Docker-Daten
-- Dienste und Anwendungen
-- Benutzer-, Rechte- und Besitzinformationen
-- Hardlinks und symbolische Links
-
-Laufzeit-Verzeichnisse wie /proc, /sys, /dev und /run werden nicht ueberschrieben.
-
-Wichtige Hinweise:
-- Fuer die sicherste und vollstaendigste Wiederherstellung wird ein Restore aus einem Rescue-/Offline-System empfohlen.
-- Vor einem Online-Restore sollten Docker-Container und zusaetzliche Dienste beendet werden.
-- Pruefe vor dem Restore die Datei manifest.json des Backups.
-- Ein Restore kann bestehende Systemdaten ueberschreiben.
-- Waehrend des Restores sollte das System nicht ausgeschaltet werden.
-
-Restore-Befehl:
-ALLOW_RESTORE=1 $0 restore $backup_id
-EOF
+  inspection="$(inspect_backup_directory "$target")"
+  mode="$(manifest_field "$target/manifest.json" metadata.mode)"
+  storage_format="$(manifest_field "$target/manifest.json" backup.storage_format)"
+  [ -n "$mode" ] || mode=native-strict
+  [ -n "$storage_format" ] || storage_format=directory
+  printf 'Restore-Vorschau: %s\nBestehende Dateien im freigegebenen Zielbereich koennen ersetzt oder geloescht werden.\nBackup-Ausschluesse bleiben geschuetzt; separate Volumes erfordern eine ausdrueckliche Zuordnung.\n\n' "$backup_id"
+  printf 'Lokale Inhaltspruefung (warning erfordert confirm-degraded; eine Strukturpruefung ersetzt keinen vollstaendigen Restoretest):\n%s\n\n' "$inspection"
+  recovery_helper plan "$root" "$target" "$destination" "$mappings"
+  recovery_helper execute "$root" "$target" "$destination" "$mappings" --mode "$mode" --storage-format "$storage_format" --dry-run
 }
 
 restore_excludes() {
-  local root="$1" target="$2" output="$3" mountpoint
-  {
-    printf '%s\n' /proc /sys /dev /run /tmp /lost+found
-    printf '%s\n' "$root" "$target" "$LBP_CONFIGDIR" "$LBP_DATADIR" "$LBP_LOGDIR" "$ROOT_STATE_DIR"
-    while IFS= read -r mountpoint; do
-      [ -n "$mountpoint" ] && [ "$mountpoint" != "/" ] || continue
-      printf '%s\n' "$mountpoint"
-    done < <(findmnt -rn -o TARGET 2>/dev/null)
-  } | awk 'NF && !seen[$0]++' > "$output"
+  local root="$1" target="$2" output="$3"
+  recovery_helper excludes "$root" "$target" "${4:-/}" "${5:-[]}" --output "$output"
 }
 
 restore_cleanup_on_exit() {
   local status="$1" state_dir="$2" log_file="$3" task="$4" restarted="$5"
   local failed=0
+  if [ "$restarted" != "true" ] && [ ! -d "$state_dir" ]; then
+    log "ERROR: Local restore restart journal is missing; recovery could not be verified" | tee -a "$log_file" || true
+    failed=1
+  fi
   if [ "$restarted" != "true" ] && [ -d "$state_dir" ]; then
     start_backup_targets_if_needed "$state_dir" 2>&1 | tee -a "$log_file" || failed=1
   fi
-  if [ "$status" -ne 0 ]; then
+  if [ "$failed" -eq 0 ] && [ -d "$state_dir" ]; then
+    restart_journal_finish "$state_dir" || failed=1
+  fi
+  if [ "$status" -ne 0 ] || [ "$failed" -ne 0 ]; then
     task_state_write "$task" failed "$([ "$failed" -eq 0 ] && printf failed || printf cleanup_failed)" "$log_file" "$$" "$status" || true
   fi
-  rm -rf -- "$state_dir" 2>/dev/null || true
   return "$failed"
 }
 
 restore_backup() {
   require_root_for_write
   require_root_permission_ack
-  local backup_id="$1" degraded_confirmation="${2:-false}"
-  local root target exclude_file state_dir restore_dest mode storage_format task restarted=false
-  local log_file rsync_status dry_status
-  local -a rsync_opts=() metadata_opts=() tar_opts=()
+  local backup_id="$1" degraded_confirmation="${2:-false}" restore_dest="${3:-${HOSTBACKUP_RESTORE_DEST:-/}}" mappings="${4:-[]}"
+  local root target state_dir mode storage_format task
+  local log_file rsync_status cleanup_trap
   require_backup_id "$backup_id"
   [ "${ALLOW_RESTORE:-}" = "1" ] || { echo "Set ALLOW_RESTORE=1 to run restore." >&2; exit 8; }
   root="$(backup_root)"
@@ -3264,69 +3734,58 @@ restore_backup() {
   acquire_operation_lock exclusive
   acquire_backup_lock "$backup_id" shared
   target="$(restore_eligibility "$backup_id" "$degraded_confirmation")"
-  restore_dest="${HOSTBACKUP_RESTORE_DEST:-/}"
-  restore_dest="$(canonicalize_path "$restore_dest")" || { echo "Restore destination must be absolute." >&2; exit 7; }
-  [ -d "$restore_dest" ] && [ ! -L "$restore_dest" ] || { echo "Restore destination is unsafe." >&2; exit 7; }
   mode="$(manifest_field "$target/manifest.json" metadata.mode)"
   storage_format="$(manifest_field "$target/manifest.json" backup.storage_format)"
+  if [ -z "$mode" ] || [ "$mode" = "legacy-unknown" ]; then
+    [ "$degraded_confirmation" = confirm-degraded ] || { echo "Legacy-Metadaten benoetigen eine ausdrueckliche Bestaetigung." >&2; return 18; }
+    mode=native-strict
+  fi
+  [ -n "$storage_format" ] || storage_format=directory
   if [ "$storage_format" = "portable-tar" ]; then
     command -v tar >/dev/null 2>&1 || { echo "tar is required." >&2; exit 3; }
   else
     command -v rsync >/dev/null 2>&1 || { echo "rsync is required." >&2; exit 3; }
   fi
-  state_dir="$(mktemp -d "$LBP_DATADIR/restore-state-$backup_id.XXXXXX")"
-  exclude_file="$state_dir/restore-excludes.txt"
-  restore_excludes "$root" "$target" "$exclude_file"
   log_file="$TASK_LOG_DIR/restore-$backup_id.log"
   task="restore-$backup_id.log"
   prepare_log_file "$log_file" truncate
   task_state_write "$task" running preflight "$log_file" "$$" ""
-  trap 'restore_cleanup_on_exit "$?" "$state_dir" "$log_file" "$task" "$restarted"' EXIT
+  state_dir="$(restart_journal_create "$task")"
+  # Referenced from the frozen EXIT trap.
+  # shellcheck disable=SC2034
+  HB_RESTORE_RESTART_DONE=false
+  printf -v cleanup_trap 'HB_RESTORE_EXIT_STATUS=$?; trap - EXIT; restore_cleanup_on_exit "$HB_RESTORE_EXIT_STATUS" %q %q %q "${HB_RESTORE_RESTART_DONE:-false}" || { [ "$HB_RESTORE_EXIT_STATUS" -ne 0 ] || HB_RESTORE_EXIT_STATUS=20; }; exit "$HB_RESTORE_EXIT_STATUS"' "$state_dir" "$log_file" "$task"
+  # Intentionally freeze shell-quoted cleanup arguments.
+  # shellcheck disable=SC2064
+  trap "$cleanup_trap" EXIT
   trap 'exit 129' HUP
   trap 'exit 130' INT
   trap 'exit 143' TERM
   log "Starting restore $backup_id" | tee -a "$log_file"
   log "Restoring from $target to $restore_dest" | tee -a "$log_file"
-  log "Exclude rules: $exclude_file" | tee -a "$log_file"
-  task_state_write "$task" running stopping_services "$log_file" "$$" ""
-  stop_backup_targets "$state_dir" 2>&1 | tee -a "$log_file"
-  while IFS= read -r opt; do
-    rsync_opts+=("$opt")
-  done < <(rsync_live_options)
-  if [ "$storage_format" = "portable-tar" ]; then
-    while IFS= read -r opt; do tar_opts+=("$opt"); done < <(tar_metadata_options)
-    task_state_write "$task" running planning "$log_file" "$$" ""
-    tar -tf "$target/rootfs.tar" > "$state_dir/restore-plan.txt"
-    task_state_write "$task" running restoring "$log_file" "$$" ""
-    set +e
-    tar "${tar_opts[@]}" --same-owner --same-permissions --delay-directory-restore -C "$restore_dest" -xpf "$target/rootfs.tar" 2>&1 | tee -a "$log_file"
-    rsync_status=${PIPESTATUS[0]}
-    set -e
-  else
-    while IFS= read -r opt; do metadata_opts+=("$opt"); done < <(rsync_metadata_options "$mode" restore)
-    log "Creating rsync dry-run restore plan" | tee -a "$log_file"
-    task_state_write "$task" running planning "$log_file" "$$" ""
-    set +e
-    rsync "${metadata_opts[@]}" --one-file-system --delete --dry-run --itemize-changes --exclude-from="$exclude_file" "$target/rootfs/" "$restore_dest/" > "$state_dir/restore-plan.txt" 2>> "$log_file"
-    dry_status=$?
-    set -e
-    [ "$dry_status" -eq 0 ] || { log "Restore dry-run failed with status $dry_status" | tee -a "$log_file"; exit "$dry_status"; }
-    grep -F "$target" "$exclude_file" >/dev/null || { echo "Restore source is not protected by excludes." >&2; exit 18; }
-    log "rsync restore live output follows" | tee -a "$log_file"
-    task_state_write "$task" running restoring "$log_file" "$$" ""
-    set +e
-    rsync "${metadata_opts[@]}" --one-file-system --delete "${rsync_opts[@]}" --exclude-from="$exclude_file" "$target/rootfs/" "$restore_dest/" 2>&1 | tee -a "$log_file"
-    rsync_status=${PIPESTATUS[0]}
-    set -e
+  task_state_write "$task" running planning "$log_file" "$$" ""
+  recovery_helper plan "$root" "$target" "$restore_dest" "$mappings" 2>&1 | tee -a "$log_file"
+  recovery_helper execute "$root" "$target" "$restore_dest" "$mappings" --mode "$mode" --storage-format "$storage_format" --dry-run 2>&1 | tee -a "$log_file"
+  # No downtime before the complete, exclusion-aware plan succeeds.
+  if [ "$restore_dest" = / ]; then
+    task_state_write "$task" running stopping_services "$log_file" "$$" ""
+    stop_backup_targets "$state_dir" 2>&1 | tee -a "$log_file"
   fi
+  task_state_write "$task" running restoring "$log_file" "$$" ""
+  set +e
+  recovery_helper execute "$root" "$target" "$restore_dest" "$mappings" --mode "$mode" --storage-format "$storage_format" 2>&1 | tee -a "$log_file"
+  rsync_status=${PIPESTATUS[0]}
+  set -e
   log "restore copy finished with status $rsync_status" | tee -a "$log_file"
   if [ "$rsync_status" -eq 0 ]; then
     task_state_write "$task" running restarting_services "$log_file" "$$" ""
     start_backup_targets_if_needed "$state_dir" 2>&1 | tee -a "$log_file"
-    restarted=true
+    # Referenced from the frozen EXIT trap.
+    # shellcheck disable=SC2034
+    HB_RESTORE_RESTART_DONE=true
+    restart_journal_finish "$state_dir"
     log "Restore $backup_id finished" | tee -a "$log_file"
     task_state_write "$task" finished complete "$log_file" "$$" 0
-    rm -rf -- "$state_dir"
     trap - EXIT HUP INT TERM
     notify_hostbackup "restore" 5 "LoxBerry Host Backup Restore abgeschlossen" "Restore $backup_id wurde abgeschlossen. Bitte System, Dienste und Docker-Container pruefen." "$log_file"
   else
@@ -3339,77 +3798,287 @@ restore_backup() {
 start_restore() {
   require_root_for_write
   require_root_permission_ack
-  local backup_id="$1" degraded_confirmation="${2:-false}"
+  local backup_id="$1" degraded_confirmation="${2:-false}" destination="${3:-/}" mappings="${4:-[]}"
   local log_file task pid
   require_backup_id "$backup_id"
   acquire_operation_lock exclusive
   acquire_backup_lock "$backup_id" shared
   restore_eligibility "$backup_id" "$degraded_confirmation" >/dev/null
+  recovery_helper plan "$(backup_root)" "$(safe_backup_target "$(backup_root)" "$backup_id")" "$destination" "$mappings" >/dev/null
   log_file="$TASK_LOG_DIR/restore-$backup_id.launch.log"
   prepare_log_file "$log_file" truncate
   task="restore-$backup_id.log"
-  pid="$(launch_background "$task" "$log_file" env ALLOW_RESTORE=1 "$0" restore "$backup_id" "$degraded_confirmation")"
+  pid="$(launch_background "$task" "$log_file" env ALLOW_RESTORE=1 "$0" restore "$backup_id" "$degraded_confirmation" "$destination" "$mappings")"
   [ -n "$pid" ] || { echo "Restore process could not be launched." >&2; exit 14; }
   printf '%s\n' "$backup_id"
 }
 
+start_restore_files() {
+  require_root_for_write
+  require_root_permission_ack
+  local backup_id="$1" relative="$2" destination="$3" task log_file pid root target
+  require_backup_id "$backup_id"
+  root="$(backup_root)"
+  verify_backup_target "$root" false
+  acquire_operation_lock exclusive
+  acquire_backup_lock "$backup_id" shared
+  target="$(safe_backup_target "$root" "$backup_id")"
+  inspect_backup_directory "$target" >/dev/null
+  task="restore-partial-$backup_id-$(date +%s).log"
+  log_file="$TASK_LOG_DIR/$task"
+  prepare_log_file "$log_file" truncate
+  pid="$(launch_background "$task" "$log_file" "$0" restore-files-worker "$backup_id" "$relative" "$destination" "$task")"
+  [ -n "$pid" ] || return 14
+  printf '%s\n' "$task"
+}
+
+restore_files_worker() {
+  require_root_for_write
+  require_root_permission_ack
+  local backup_id="$1" relative="$2" destination="$3" task="$4" root target mode storage_format log_file
+  valid_task_name "$task" || return 11
+  require_backup_id "$backup_id"
+  root="$(backup_root)"
+  verify_backup_target "$root" false
+  acquire_operation_lock exclusive
+  acquire_backup_lock "$backup_id" shared
+  target="$(safe_backup_target "$root" "$backup_id")"
+  log_file="$TASK_LOG_DIR/$task"
+  task_state_write "$task" running inspecting "$log_file" "$$" ""
+  install_task_failure_trap "$task" "$log_file"
+  inspect_backup_directory "$target" >/dev/null
+  mode="$(manifest_field "$target/manifest.json" metadata.mode)"
+  storage_format="$(manifest_field "$target/manifest.json" backup.storage_format)"
+  [ -n "$mode" ] && [ "$mode" != legacy-unknown ] || mode=native-strict
+  [ -n "$storage_format" ] || storage_format=directory
+  task_state_write "$task" running restoring "$log_file" "$$" ""
+  recovery_helper files "$root" "$target" "$destination" '[]' --relative "$relative" --mode "$mode" --storage-format "$storage_format"
+  task_state_write "$task" finished complete "$log_file" "$$" 0
+  trap - EXIT
+}
+
+recovery_sheet() {
+  local backup_id="$1" root target
+  require_backup_id "$backup_id"
+  root="$(backup_root)"
+  verify_backup_target "$root" false
+  acquire_backup_lock "$backup_id" shared
+  target="$(safe_backup_target "$root" "$backup_id")"
+  python3 - "$target" "$backup_id" <<'PY'
+import json, pathlib, shlex, sys
+target, backup_id = pathlib.Path(sys.argv[1]), sys.argv[2]
+manifest_path = target / "manifest.json"
+if manifest_path.is_symlink(): raise SystemExit(18)
+manifest = json.loads(manifest_path.read_text())
+print('Content-Type: text/plain; charset=utf-8\r\nContent-Disposition: attachment; filename="recovery-' + backup_id + '.txt"\r\nCache-Control: no-store\r\n\r\n', end='')
+print('LoxBerry Host Backup - Recovery-Blatt\n')
+print('Backup:', backup_id, '\nQuelle:', target, '\nStatus:', manifest.get('status'))
+print('Metadaten:', manifest.get('metadata', {}).get('mode', 'legacy-unknown'))
+print('Format:', manifest.get('backup', {}).get('storage_format', 'directory'))
+print('Architektur:', manifest.get('host', {}).get('architecture', 'unbekannt'))
+print('''
+1. Backup-Datentraeger getrennt verwahren; dieses Blatt ist kein Nachweis eines Restoretests.
+2. Passendes Rescue-System starten. Backup-Medium lesbar und Zielsystem separat mounten.
+3. Vertrauenswuerdige HostBackup-Installation verwenden, Backup-Speicher registrieren und
+   vorab die lokale Import-/Strukturpruefung ausfuehren. Keine Hilfsskripte aus dem Backup als root ausfuehren.
+4. Offline-Ziel z.B. /mnt/recovery-root anlegen/mounten. Das muss der ZIEL-Datentraeger sein.
+5. Vorschau aufrufen und jede Auslassung/Loeschung kontrollieren:
+''')
+print('/usr/local/sbin/loxberryhostbackup restore-plan', shlex.quote(backup_id), '/mnt/recovery-root')
+print('''
+Separate Quell-Volumes werden NICHT automatisch restauriert. Die Volume-Zuordnung ist
+eine JSON-Liste: [{"source":"/media/data","destination":"/mnt/recovery-root/media/data"}].
+Die Quelldaten muessen im Backup enthalten und im Mount-Inventar aufgezeichnet sein.
+Die JSON-Liste als weiteren Parameter an restore-plan bzw. nach Zielpfad an restore uebergeben.
+
+6. Erst nach Kontrolle aus der Rescue-Konsole starten:
+''')
+print('ALLOW_RESTORE=1 HOSTBACKUP_OFFLINE_RESTORE=1 /usr/local/sbin/loxberryhostbackup restore', shlex.quote(backup_id), 'confirm-degraded /mnt/recovery-root')
+print('''
+confirm-degraded bestaetigt bewusst reduzierte oder unbekannte Metadaten; ein fehlerhaftes
+Backup wird dadurch nicht zugelassen. Native-Restore kann Dateien im freigegebenen Zielbereich
+loeschen. Gespeicherte Ausschluesse bleiben geschuetzt. Portable Archive loescht keine zusaetzlichen Dateien.
+7. Bootpartition/Bootloader, fstab, Volume-Zuordnungen, Netzwerk, Dienste und Anwendungen pruefen.
+   Das Plugin partitioniert keine Datentraeger und installiert keinen Bootloader automatisch.
+8. Erst nach erfolgreichem Teststart gilt der komplette Disaster-Recovery-Ablauf als getestet.
+''')
+PY
+}
+
 prune_old_backups() {
-  local keep root path backup_id safe trash
-  keep="$(json_get_number keep_backups)"
-  [ -n "$keep" ] || keep=0
-  [ "$keep" -gt 0 ] || return 0
+  local root preview digest
   root="$(backup_root)"
   verify_backup_target "$root" true
   acquire_operation_lock exclusive
-  perl -MJSON::PP -MTime::Piece -e '
-    my ($root, $keep, $now) = @ARGV;
-    opendir(my $dh, $root) or exit 0;
-    my (@complete, @expired);
-    while (defined(my $name = readdir($dh))) {
-      next if $name =~ /^\./;
-      next if $name !~ /^[A-Za-z0-9._-]+$/;
-      my $path = "$root/$name";
-      next if !-d $path;
-      my $manifest = "$path/manifest.json";
-      next if !-r $manifest;
-      open(my $fh, "<", $manifest) or next;
-      local $/;
-      my $data = eval { decode_json(<$fh>) } || {};
-      my $status = $data->{status} || "";
-      my $validation_status = "";
-      if (open(my $vh, "<", "$path/backup-validation.json")) {
-        local $/;
-        my $validation = eval { decode_json(<$vh>) } || {};
-        $validation_status = $validation->{status} || "";
-      }
-      my @st = stat($path);
-      next if !@st;
-      my $time = 0 + $st[9];
-      if (($data->{finished_at} || "") =~ /^\d{4}-\d{2}-\d{2}T/) {
-        my $parsed = eval { Time::Piece->strptime($data->{finished_at}, "%Y-%m-%dT%H:%M:%S%z")->epoch };
-        $time = $parsed if $parsed;
-      }
-      if (($status eq "complete" && $validation_status eq "ok") || ($status eq "complete_with_warnings" && $validation_status eq "warning")) {
-        push @complete, [$time, $path];
-      } elsif ($status =~ /^(failed|cleanup_failed|stopped)$/ && $time < $now - 7*86400) {
-        push @expired, $path;
-      } elsif ($status eq "running" && $time < $now - 2*86400) {
-        push @expired, $path;
-      }
-    }
-    @complete = sort { $b->[0] <=> $a->[0] } @complete;
-    for my $idx ($keep .. $#complete) {
-      push @expired, $complete[$idx]->[1];
-    }
-    print $_, "\0" for @expired;
-  ' "$root" "$keep" "$(date +%s)" | while IFS= read -r -d '' path; do
-    backup_id="$(basename -- "$path")"
-    safe="$(safe_backup_target "$root" "$backup_id")" || continue
-    trash="$(strict_child_path "$root" "$root/.trash-$backup_id-$(date +%s)-$$")" || continue
-    mv -- "$safe" "$trash"
-    rm -rf --one-file-system -- "$trash"
-    rm -f -- "$root/$backup_id.tar.gz" "$root/$backup_id.tar.gz.sha256" "$root/$backup_id.tar.gz.json"
-  done
+  preview="$(maintenance_helper retention "$root" --caller-pid "$$")" || return
+  digest="$(printf '%s' "$preview" | python3 -c 'import json,sys; print(json.load(sys.stdin)["preview_digest"])')" || return
+  maintenance_helper retention "$root" --apply "$digest" --caller-pid "$$"
+}
+
+maintenance_helper() {
+  python3 "$LBP_BINDIR/hostbackup-maintenance.py" "$@" --state "$ROOT_STATE_DIR" --config "$CONFIG_FILE"
+}
+
+plugin_version() {
+  if [ -f "$LBP_BINDIR/runtime-version" ] && [ ! -L "$LBP_BINDIR/runtime-version" ]; then
+    head -c 100 "$LBP_BINDIR/runtime-version" | tr -d '\r\n'
+  elif [ -f "$LBP_BINDIR/../plugin.cfg" ] && [ ! -L "$LBP_BINDIR/../plugin.cfg" ]; then
+    sed -n 's/^VERSION=//p' "$LBP_BINDIR/../plugin.cfg" | head -n 1 | tr -d '\r\n'
+  else
+    printf unknown
+  fi
+}
+
+maintenance_config() {
+  require_root_for_write
+  acquire_operation_lock exclusive
+  python3 - "$CONFIG_FILE" "${1:?Settings JSON required}" <<'PY'
+import fcntl, json, os, pathlib, sys, tempfile
+path = pathlib.Path(sys.argv[1])
+changes = json.loads(sys.argv[2])
+bounds = {'keep_backups': (1,3650), 'keep_daily': (0,3650), 'keep_weekly': (0,520), 'keep_monthly': (0,120),
+          'log_retention_days': (1,3650), 'quarantine_retention_days': (1,3650), 'integrity_interval_days': (1,365)}
+if not isinstance(changes, dict) or set(changes) - set(bounds) - {'retention_mode','integrity_enabled'}:
+    raise SystemExit('Ungueltige Wartungseinstellungen.')
+for key, value in changes.items():
+    if key in bounds and (type(value) is not int or not bounds[key][0] <= value <= bounds[key][1]):
+        raise SystemExit('Ungueltiger Zahlenwert: ' + key)
+if 'retention_mode' in changes and changes['retention_mode'] not in ('count','gfs'):
+    raise SystemExit('Aufbewahrungsmodus muss count oder gfs sein.')
+if 'integrity_enabled' in changes and type(changes['integrity_enabled']) is not bool:
+    raise SystemExit('Inhaltspruefung muss true oder false sein.')
+lock_fd = os.open(str(path) + '.lock', os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+with os.fdopen(lock_fd, 'w') as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd) as source: data = json.load(source)
+    data.update(changes)
+    if data.get('retention_mode') == 'gfs' and sum(data.get(k,v) for k,v in [('keep_daily',7),('keep_weekly',4),('keep_monthly',6)]) == 0:
+        raise SystemExit('Mindestens eine GFS-Aufbewahrung muss groesser als 0 sein.')
+    fd, tmp = tempfile.mkstemp(prefix='.config-', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'w') as out:
+            json.dump(data, out, indent=2); out.write('\n'); out.flush(); os.fsync(out.fileno())
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp): os.unlink(tmp)
+print(json.dumps({'status':'ok','settings':data}))
+PY
+}
+
+maintenance_action() {
+  local action="$1" root backup_id="${2:-}"
+  root="$(backup_root)"
+  case "$action" in
+    cleanup-runtime)
+      [ -z "${3:-}" ] || require_root_for_write
+      acquire_operation_lock exclusive
+      if [ -n "${3:-}" ]; then maintenance_helper cleanup-runtime --apply "$3"; else maintenance_helper cleanup-runtime; fi
+      return ;;
+    diagnostics)
+      local version
+      version="$(plugin_version)"
+      if [ -n "$backup_id" ]; then
+        valid_task_name "$backup_id" || return 11
+        maintenance_helper diagnostics --version "$version" --task "$backup_id"
+      else maintenance_helper diagnostics --version "$version"; fi
+      return ;;
+  esac
+  verify_backup_target "$root" false
+  case "$action" in
+    protect|retention|record-restore-test) require_root_for_write; acquire_operation_lock exclusive ;;
+    *) acquire_operation_lock shared ;;
+  esac
+  if [ -n "$backup_id" ] && [ "$action" != diagnostics ]; then
+    require_backup_id "$backup_id"
+    acquire_backup_lock "$backup_id" shared
+    safe_backup_target "$root" "$backup_id" >/dev/null
+  fi
+  case "$action" in
+    storage) maintenance_helper storage "$root" ;;
+    protect) maintenance_helper protect "$root" "$backup_id" "${3:?true or false required}" ;;
+    inspect) inspect_backup_directory "$(safe_backup_target "$root" "$backup_id")" ;;
+    report) maintenance_helper integrity "$root" "$backup_id" --report ;;
+    record-restore-test)
+      maintenance_helper record-restore-test "$root" "$backup_id" --result "${3:?RESULT required}" --tested-at "${4:?DATE required}" --note "${5:-}" ;;
+    retention)
+      if [ -n "${3:-}" ]; then maintenance_helper retention "$root" --apply "$3"; else maintenance_helper retention "$root"; fi ;;
+  esac
+}
+
+start_integrity_check() {
+  require_root_for_write
+  local backup_id="$1" root target task log_file pid
+  require_backup_id "$backup_id"
+  root="$(backup_root)"
+  verify_backup_target "$root" false
+  acquire_operation_lock shared
+  acquire_backup_lock "$backup_id" exclusive
+  target="$(safe_backup_target "$root" "$backup_id")"
+  task="verify-$backup_id-$(date +%s)-$$.log"
+  log_file="$TASK_LOG_DIR/$task"
+  prepare_log_file "$log_file" truncate
+  pid="$(launch_background "$task" "$log_file" "$0" verify-worker "$backup_id" "$task")"
+  [ -n "$pid" ] || return 14
+  printf '%s\n' "$task"
+}
+
+integrity_worker() {
+  local backup_id="$1" task="$2" root target log_file report status
+  require_root_for_write
+  require_backup_id "$backup_id"
+  valid_task_name "$task" || return 11
+  root="$(backup_root)"
+  verify_backup_target "$root" false
+  acquire_operation_lock shared
+  acquire_backup_lock "$backup_id" exclusive
+  target="$(safe_backup_target "$root" "$backup_id")"
+  log_file="$TASK_LOG_DIR/$task"
+  task_state_write "$task" running verifying "$log_file" "$$" ""
+  install_task_failure_trap "$task" "$log_file"
+  inspect_backup_directory "$target"
+  report="$(maintenance_helper integrity "$root" "$backup_id" --verify)"
+  printf '%s\n' "$report"
+  status="$(printf '%s' "$report" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')"
+  case "$status" in verified|ok|baseline_created) ;; *) return 19 ;; esac
+  task_state_write "$task" finished "$status" "$log_file" "$$" 0
+  trap - EXIT
+}
+
+integrity_schedule() {
+  [ "$(json_get_bool integrity_enabled)" = true ] || return 0
+  require_root_for_write
+  local root due backup_id
+  root="$(backup_root)"
+  verify_backup_target "$root" false
+  # A shared lock prevents a backup/restore/cleanup from changing the inventory.
+  acquire_operation_lock shared
+  due="$(maintenance_helper integrity-due "$root")"
+  backup_id="$(printf '%s' "$due" | python3 -c 'import json,sys; ids=json.load(sys.stdin)["backup_ids"]; print(ids[0] if ids else "")')"
+  [ -n "$backup_id" ] || return 0
+  start_integrity_check "$backup_id"
+}
+
+task_overview() {
+  local root=""
+  root="$(backup_root)"
+  verify_backup_target "$root" false >/dev/null 2>&1 || root=""
+  python3 "$LBP_BINDIR/hostbackup-overview.py" overview --config "$CONFIG_FILE" --root "$root" --state "$ROOT_STATE_DIR"
+}
+
+backup_preview() {
+  local root reference="" preflight excludes
+  root="$(backup_root)"
+  verify_backup_target "$root" false
+  preflight="$(preflight_backup)"
+  if [ "$(json_get_string backup_mode)" = snapshot ] && [ "$(metadata_mode)" != portable-archive ]; then
+    reference="$(latest_complete_backup "$root")"
+    [ -z "$reference" ] || reference="$(basename -- "$reference")"
+  fi
+  excludes="$(backup_excludes "$root")"
+  printf '%s' "$excludes" | python3 -c 'import json,sys; print(json.dumps({"excludes":sys.stdin.read().splitlines(),"preflight":json.loads(sys.argv[1])}))' "$preflight" \
+    | python3 "$LBP_BINDIR/hostbackup-overview.py" preview --config "$CONFIG_FILE" --root "$root" --reference "$reference"
 }
 
 usage() {
@@ -3427,6 +4096,10 @@ Actions:
   save-config ARGS       Save plugin config
   install-schedule       Install or remove the configured cron schedule
   schedule-run           Run configured schedule with monthly fallback logic
+  recover-services       Retry outstanding local service/container recovery journals
+  task-overview          Show current/history tasks, target and next scheduled start
+  backup-preview         Show saved sources, excludes and snapshot reference
+  storage-info           Measure logical/allocated/shared and local state storage
   tasks                  List task logs as JSON
   task-log TASK [LINES]  Print recent task log lines
   task-status TASK [N]   Print task status and recent log as JSON
@@ -3435,6 +4108,8 @@ Actions:
   export BACKUP_ID       Create/export BACKUP_ID.tar.gz
   start-export BACKUP_ID Create/export BACKUP_ID.tar.gz in the background
   export-info BACKUP_ID  Show export archive status as JSON
+  download-export ID     Stream checked archive including HTTP download headers
+  download-log TASK      Stream complete original log including HTTP headers
   delete-export BACKUP_ID Delete the export archive for BACKUP_ID
   import ARCHIVE.tar.gz   Import an exported backup archive
   start-import ARCHIVE.tar.gz Import an exported backup archive in the background
@@ -3442,9 +4117,23 @@ Actions:
   browse BACKUP_ID [PATH] List files inside a backup as JSON
   cat-file BACKUP_ID PATH Print one file from a backup
   delete BACKUP_ID       Delete a backup
-  restore-plan BACKUP_ID Show restore instructions
-  restore BACKUP_ID      Restore backup, requires ALLOW_RESTORE=1
-  start-restore BACKUP_ID [confirm-degraded] Restore backup in the background
+  restore-plan ID [DEST] [MAP_JSON] Preview actual file changes and omitted volumes
+  restore ID [confirm-degraded] [DEST] [MAP_JSON] Requires ALLOW_RESTORE=1
+  start-restore ID [confirm-degraded] [DEST] [MAP_JSON] Restore in background
+  restore-files ID PATH DEST Restore into a fresh recovered-* directory
+  recovery-sheet ID      Download backup-specific offline recovery instructions
+  inspect-backup ID      Locally inspect stored backup structure
+  verify-backup ID       Start comparison with local integrity baseline
+  verification-report ID Print last integrity report as JSON
+  record-restore-test ID RESULT DATE NOTE Document an external manual restore test
+  integrity-schedule    Check one due backup when optional integrity is enabled
+  protect-backup ID true|false  Protect a backup against cleanup/deletion
+  maintenance-config JSON Save validated retention/integrity settings
+  maintenance-preview  Show the current retention deletion plan and digest
+  maintenance-run DIGEST Apply the unchanged, previously inspected deletion plan
+  runtime-cleanup-preview Show old log/quarantine cleanup plan
+  runtime-cleanup-run DIGEST Apply the unchanged runtime cleanup plan
+  diagnostics [TASK]    Download redacted diagnostics and optional original log
 EOF
 }
 
@@ -3457,10 +4146,27 @@ case "$action" in
   config) show_config ;;
   target-info) backup_target_info ;;
   stop-targets) discover_stop_targets ;;
-  save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11:-*}" "${12:-0}" "${13:-1}" "${14:-}" "${15:-}" "${16:-false}" "${17:-full}" "${18:-}" "${19:-false}" "${20:-}" "${21:-true}" "${22:-true}" "${23:-true}" "${24:-true}" "${25:-native-strict}" ;;
+  save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11-*}" "${12-0}" "${13-1}" "${14:-}" "${15:-}" "${16:-false}" "${17:-full}" "${18:-}" "${19:-false}" "${20:-}" "${21:-true}" "${22:-true}" "${23:-true}" "${24:-true}" "${25:-native-strict}" ;;
   install-schedule) install_schedule ;;
   schedule-run) schedule_run ;;
+  recover-services) recover_restart_journals ;;
   tasks) list_tasks ;;
+  task-overview) task_overview ;;
+  backup-preview) backup_preview ;;
+  storage-info) maintenance_action storage ;;
+  inspect-backup) shift; maintenance_action inspect "${1:?BACKUP_ID required}" ;;
+  protect-backup) shift; maintenance_action protect "${1:?BACKUP_ID required}" "${2:?true or false required}" ;;
+  verify-backup) shift; start_integrity_check "${1:?BACKUP_ID required}" ;;
+  verify-worker) shift; integrity_worker "${1:?BACKUP_ID required}" "${2:?TASK required}" ;;
+  integrity-schedule) integrity_schedule ;;
+  verification-report) shift; maintenance_action report "${1:?BACKUP_ID required}" ;;
+  record-restore-test) shift; maintenance_action record-restore-test "${1:?BACKUP_ID required}" "${2:?RESULT required}" "${3:?DATE required}" "${4:-}" ;;
+  maintenance-config) shift; maintenance_config "${1:?JSON required}" ;;
+  maintenance-preview) maintenance_action retention ;;
+  maintenance-run) shift; maintenance_action retention "" "${1:?DIGEST required}" ;;
+  runtime-cleanup-preview) maintenance_action cleanup-runtime ;;
+  runtime-cleanup-run) shift; maintenance_action cleanup-runtime "" "${1:?DIGEST required}" ;;
+  diagnostics) shift; maintenance_action diagnostics "${1:-}" ;;
   task-log) shift; show_task_log "${1:?TASK required}" "${2:-300}" ;;
   task-status) shift; task_status "${1:?TASK required}" "${2:-400}" ;;
   stop) shift; stop_backup "${1:?BACKUP_ID required}" ;;
@@ -3468,6 +4174,8 @@ case "$action" in
   export) shift; export_backup "${1:?BACKUP_ID required}" ;;
   start-export) shift; start_export "${1:?BACKUP_ID required}" ;;
   export-info) shift; export_info "${1:?BACKUP_ID required}" ;;
+  download-export) shift; download_export "${1:?BACKUP_ID required}" ;;
+  download-log) shift; download_log "${1:?TASK required}" ;;
   delete-export) shift; delete_export "${1:?BACKUP_ID required}" ;;
   import) shift; import_backup "${1:?ARCHIVE required}" ;;
   start-import) shift; start_import "${1:?ARCHIVE required}" ;;
@@ -3475,8 +4183,11 @@ case "$action" in
   browse) shift; browse_backup "${1:?BACKUP_ID required}" "${2:-}" ;;
   cat-file) shift; cat_backup_file "${1:?BACKUP_ID required}" "${2:?PATH required}" ;;
   delete) shift; delete_backup "${1:?BACKUP_ID required}" ;;
-  restore-plan) shift; restore_plan "${1:?BACKUP_ID required}" ;;
-  restore) shift; restore_backup "${1:?BACKUP_ID required}" "${2:-false}" ;;
-  start-restore) shift; start_restore "${1:?BACKUP_ID required}" "${2:-false}" ;;
+  restore-plan) shift; restore_plan "${1:?BACKUP_ID required}" "${2:-/}" "${3:-[]}" ;;
+  restore) shift; restore_backup "${1:?BACKUP_ID required}" "${2:-false}" "${3:-${HOSTBACKUP_RESTORE_DEST:-/}}" "${4:-[]}" ;;
+  start-restore) shift; start_restore "${1:?BACKUP_ID required}" "${2:-false}" "${3:-/}" "${4:-[]}" ;;
+  restore-files) shift; start_restore_files "${1:?BACKUP_ID required}" "${2:?PATH required}" "${3:?DEST required}" ;;
+  restore-files-worker) shift; restore_files_worker "${1:?BACKUP_ID required}" "${2:?PATH required}" "${3:?DEST required}" "${4:?TASK required}" ;;
+  recovery-sheet) shift; recovery_sheet "${1:?BACKUP_ID required}" ;;
   *) usage; exit 1 ;;
 esac

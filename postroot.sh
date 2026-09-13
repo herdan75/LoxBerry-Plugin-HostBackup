@@ -18,10 +18,22 @@ case "$INSTALL_ID" in
     exit 1
     ;;
 esac
+case "$PLUGIN_FOLDER" in
+  ""|.|..|*[!A-Za-z0-9._-]*) echo "Unsafe plugin folder." >&2; exit 1 ;;
+esac
+case "$LBHOMEDIR" in
+  /*) ;;
+  *) echo "LoxBerry home must be an absolute path." >&2; exit 1 ;;
+esac
 
 BACKEND="$LBHOMEDIR/bin/plugins/$PLUGIN_FOLDER/hostbackup.sh"
+SOURCE_BIN="${BACKEND%/*}"
 DISPATCHER_SOURCE="$LBHOMEDIR/bin/plugins/$PLUGIN_FOLDER/hostbackup-sudo.sh"
 DISPATCHER_TARGET="/usr/local/sbin/loxberryhostbackup-sudo"
+LAUNCHER_SOURCE="$SOURCE_BIN/hostbackup-launcher.sh"
+LAUNCHER_TARGET="/usr/local/sbin/loxberryhostbackup"
+TRUST_ROOT="/usr/libexec/loxberryhostbackup"
+RECOVERY_CRON="/etc/cron.d/loxberryhostbackup-recovery"
 CGI="$LBHOMEDIR/webfrontend/htmlauth/plugins/$PLUGIN_FOLDER/index.cgi"
 RESTORE="$LBHOMEDIR/bin/plugins/$PLUGIN_FOLDER/restore-hostbackup.sh"
 NOTIFY="$LBHOMEDIR/bin/plugins/$PLUGIN_FOLDER/notify-hostbackup.php"
@@ -63,14 +75,14 @@ if [ -e "$UPGRADE_DIR" ]; then
   echo "Existing HostBackup configuration restored after upgrade."
 fi
 
-for required_file in "$BACKEND" "$DISPATCHER_SOURCE" "$CGI" "$RESTORE" "$NOTIFY" "$CONFIG"; do
+for required_file in "$BACKEND" "$DISPATCHER_SOURCE" "$LAUNCHER_SOURCE" "$SOURCE_BIN/validate-import-archive.py" "$CGI" "$RESTORE" "$NOTIFY" "$CONFIG"; do
   if [ ! -f "$required_file" ] || [ -L "$required_file" ]; then
     echo "Required installed file is missing or unsafe: $required_file" >&2
     exit 1
   fi
 done
 
-for secure_dir in "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR" "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"; do
+for secure_dir in "$SOURCE_BIN" "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR" "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"; do
   if [ -L "$secure_dir" ]; then
     echo "Refusing unsafe symlink directory: $secure_dir" >&2
     exit 1
@@ -87,8 +99,71 @@ chmod 755 "$CONFIG_DIR" "$LOG_DIR"
 chmod 600 "$CONFIG"
 chmod 700 "$ROOT_STATE_DIR" "$LOCK_DIR" "$TASK_DIR" "$TASK_LOG_DIR" "$ROOT_IMPORT_DIR" "$QUARANTINE_DIR"
 
-install -o root -g root -m 0755 "$DISPATCHER_SOURCE" "$DISPATCHER_TARGET"
+ensure_root_path() {
+  local path="$1" parent mode
+  parent="${path%/*}"
+  [ -n "$parent" ] || parent=/
+  if [ "$path" != / ]; then ensure_root_path "$parent"; fi
+  if [ ! -e "$path" ] && [ ! -L "$path" ]; then
+    install -d -o root -g root -m 0755 "$path"
+  fi
+  [ -d "$path" ] && [ ! -L "$path" ] || { echo "Unsafe trusted directory: $path" >&2; exit 1; }
+  mode="$(stat -c '%a' "$path")"
+  [ "$(stat -c '%u' "$path")" = 0 ] && (( (8#$mode & 022) == 0 )) || {
+    echo "Trusted directory must be root-owned and not writable by others: $path" >&2
+    exit 1
+  }
+}
 
-"$BACKEND" install-schedule
+ensure_root_path "$TRUST_ROOT/releases"
+ensure_root_path "${LAUNCHER_TARGET%/*}"
+ensure_root_path "${RECOVERY_CRON%/*}"
+[ ! -e "$TRUST_ROOT/current" ] || [ -L "$TRUST_ROOT/current" ] || {
+  echo "Refusing non-symlink current release pointer." >&2; exit 1;
+}
+# Close the package directory to replacement before copying the complete helper
+# set. The privileged runtime no longer depends on LoxBerry's mutable bin tree.
+chown root:root "$SOURCE_BIN"
+chmod 0755 "$SOURCE_BIN"
+release="$(mktemp -d "$TRUST_ROOT/releases/${INSTALL_ID}.XXXXXXXX")"
+pointer="$TRUST_ROOT/.current-${INSTALL_ID}-$$"
+launcher_tmp="${LAUNCHER_TARGET}.install-$$"
+dispatcher_tmp="${DISPATCHER_TARGET}.install-$$"
+recovery_tmp="${RECOVERY_CRON%/*}/.loxberryhostbackup-recovery-$$"
+trap 'rm -f -- "$pointer" "$launcher_tmp" "$dispatcher_tmp" "$recovery_tmp"' EXIT
+for helper in "$SOURCE_BIN"/*.sh "$SOURCE_BIN"/*.py "$SOURCE_BIN"/*.php; do
+  [ -e "$helper" ] || continue
+  [ -f "$helper" ] && [ ! -L "$helper" ] || { echo "Unsafe executable helper: $helper" >&2; exit 1; }
+  chown root:root "$helper"
+  chmod 0755 "$helper"
+  install -o root -g root -m 0755 "$helper" "$release/${helper##*/}"
+done
+if [ -e "$SOURCE_BIN/runtime-version" ] || [ -L "$SOURCE_BIN/runtime-version" ]; then
+  [ -f "$SOURCE_BIN/runtime-version" ] && [ ! -L "$SOURCE_BIN/runtime-version" ] || {
+    echo "Unsafe packaged runtime version." >&2; exit 1;
+  }
+  install -o root -g root -m 0644 "$SOURCE_BIN/runtime-version" "$release/runtime-version"
+else
+  printf 'unknown\n' > "$release/runtime-version"
+fi
+printf '%s\n' "$LBHOMEDIR" > "$release/runtime-home"
+printf '%s\n' "$PLUGIN_FOLDER" > "$release/runtime-plugin"
+chmod 0644 "$release/runtime-home" "$release/runtime-plugin"
+chmod 0755 "$release"
+install -o root -g root -m 0755 "$LAUNCHER_SOURCE" "$launcher_tmp"
+install -o root -g root -m 0755 "$DISPATCHER_SOURCE" "$dispatcher_tmp"
+ln -s -- "$release" "$pointer"
+mv -fT -- "$pointer" "$TRUST_ROOT/current"
+mv -fT -- "$launcher_tmp" "$LAUNCHER_TARGET"
+mv -fT -- "$dispatcher_tmp" "$DISPATCHER_TARGET"
+printf 'SHELL=/bin/bash\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n@reboot root %s recover-services\n*/5 * * * * root %s recover-services\n23 * * * * root %s integrity-schedule\n' "$LAUNCHER_TARGET" "$LAUNCHER_TARGET" "$LAUNCHER_TARGET" > "$recovery_tmp"
+chown root:root "$recovery_tmp"
+chmod 0644 "$recovery_tmp"
+mv -fT -- "$recovery_tmp" "$RECOVERY_CRON"
+# Existing documented plugin CLI paths remain callable, forwarding to the same
+# pinned trusted release as scheduled and web-triggered operations.
+install -o root -g root -m 0755 "$LAUNCHER_SOURCE" "$BACKEND"
+
+"$LAUNCHER_TARGET" install-schedule
 
 exit 0
