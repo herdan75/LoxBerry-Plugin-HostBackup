@@ -80,6 +80,28 @@ ein Paket veröffentlicht wird. Hardware-/NAS-Abnahme bleibt davon getrennt.
 
 ## Testgrenzen
 
+### Nachbesserung der Wiederinstallation: unprivilegierter Dateiaustausch
+
+Nach erfolgreicher Erstinstallation trat beim nächsten Update eine
+Startschleife auf. Der geschützte Plugin-Bin-Baum konnte durch den
+Plattformbenutzer nicht vollständig entfernt/ersetzt werden. POSTROOT übernahm
+anschliessend den alten Weiterleitungs-Launcher als eigentlichen Backend-Code.
+Der zuvor getestete Dateiaustausch als Root hatte diesen Fehler verdeckt.
+
+`test_real_unprivileged_platform_upgrade_and_stale_launcher` bildet die
+Lösch-/Kopierphase jetzt unter einem tatsächlichen unprivilegierten Linux-Konto
+nach. Er reproduziert den alten Berechtigungsfehler und prüft anschliessend
+Abweisung der alten Startdatei, Reparatur und Wiederholung derselben Version,
+Konfigurationserhalt sowie unveränderte geschützte Helferstände. Link-Ziele
+ausserhalb des Plugin-Bin-Baums bleiben geschützt. Der Test läuft nur unter
+Linux mit Root-Rechten und wird von der vorhandenen Linux-CI verpflichtend
+ausgeführt; ein Windows-Skip gilt nicht als bestandene Plattformprüfung.
+
+Die Änderungen bleiben zunächst auf `develop` und in einem separaten manuellen
+Testpaket. Version, Release-Tag und veröffentlichtes ZIP werden dafür nicht
+geändert. Eine erneute Prüfung über den echten LoxBerry-Pluginmanager bleibt
+zusätzlich notwendig.
+
 ### Nachbesserung der LoxBerry-Installation, weiterhin 0.7.0-beta
 
 Das anschliessende reale Installationsprotokoll meldete

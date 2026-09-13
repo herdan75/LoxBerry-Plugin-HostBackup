@@ -170,6 +170,14 @@ prepare_recovery_cron_directory
 # set. The privileged runtime no longer depends on LoxBerry's mutable bin tree.
 chown root:root "$SOURCE_BIN"
 chmod 0755 "$SOURCE_BIN"
+# A failed platform purge/copy can leave the forwarding shim at this path.
+# Never publish it as the backend: it would repeatedly exec itself through
+# current, blocking POSTROOT, cron and every web action. The marker also exists
+# in the real older backend, so retained releases remain usable for recovery.
+grep -Fxq 'PLUGIN_NAME="loxberryhostbackup"' "$BACKEND" || {
+  echo "Installed hostbackup.sh is not the backup backend (launcher or incomplete copy). Keeping the previous trusted release; reinstall the corrected package." >&2
+  exit 1
+}
 release="$(mktemp -d "$TRUST_ROOT/releases/${INSTALL_ID}.XXXXXXXX")"
 pointer="$TRUST_ROOT/.current-${INSTALL_ID}-$$"
 launcher_tmp="${LAUNCHER_TARGET}.install-$$"
@@ -210,6 +218,12 @@ mv -fT -- "$recovery_tmp" "$RECOVERY_CRON"
 # pinned trusted release as scheduled and web-triggered operations.
 install -o root -g root -m 0755 "$LAUNCHER_SOURCE" "$BACKEND"
 
-"$LAUNCHER_TARGET" install-schedule
+if timeout --kill-after=5 30 "$LAUNCHER_TARGET" install-schedule; then
+  echo "HostBackup schedule installation completed."
+else
+  status=$?
+  echo "HostBackup schedule installation failed or timed out (status $status); installation will not wait indefinitely." >&2
+  exit "$status"
+fi
 
 exit 0

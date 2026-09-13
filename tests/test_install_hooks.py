@@ -24,6 +24,7 @@ PACKAGE_PS1 = (ROOT / "package.ps1").read_text(encoding="utf-8")
 WORKFLOW = (ROOT / ".github" / "workflows" / "build-plugin.yml").read_text(
     encoding="utf-8"
 )
+LAUNCHER = (ROOT / "bin" / "hostbackup-launcher.sh").read_text(encoding="utf-8")
 
 
 class InstallHookTests(unittest.TestCase):
@@ -71,6 +72,20 @@ class InstallHookTests(unittest.TestCase):
             POSTROOT.index('for required_file in'),
         )
 
+    def test_update_releases_only_platform_bin_directories(self) -> None:
+        self.assertIn('find -P "$BIN_DIR" -type d -exec chown -h loxberry:loxberry -- {} +', PREROOT)
+        self.assertLess(PREROOT.index('cp --no-dereference'), PREROOT.index('find -P'))
+        self.assertIn('if [ -L "$BIN_DIR" ]', PREROOT)
+        self.assertNotIn('chown -R', PREROOT)
+
+    def test_backend_identity_checked_before_activation_and_execution(self) -> None:
+        marker = "grep -Fxq 'PLUGIN_NAME=\"loxberryhostbackup\"'"
+        self.assertIn(marker, POSTROOT)
+        self.assertLess(POSTROOT.index(marker), POSTROOT.index('mv -fT -- "$pointer"'))
+        self.assertIn(marker, LAUNCHER)
+        self.assertLess(LAUNCHER.index(marker), LAUNCHER.index('exec "$release/hostbackup.sh"'))
+        self.assertIn('timeout --kill-after=5 30 "$LAUNCHER_TARGET" install-schedule', POSTROOT)
+
     def test_reboot_safe_logs_use_persistent_root_state(self) -> None:
         self.assertIn('TASK_LOG_DIR="$ROOT_STATE_DIR/logs"', BACKEND)
         self.assertIn('TASK_LOG_DIR="$ROOT_STATE_DIR/logs"', POSTROOT)
@@ -105,6 +120,9 @@ class InstallHookTests(unittest.TestCase):
 
     def test_real_backend_install_with_loxberry_cron_symlink(self) -> None:
         self.run_linux_install_child("--cron-install-child")
+
+    def test_real_unprivileged_platform_upgrade_and_stale_launcher(self) -> None:
+        self.run_linux_install_child("--platform-upgrade-child")
 
     def run_linux_install_child(self, child_mode: str) -> None:
         required = os.environ.get("HOSTBACKUP_REQUIRE_LINUX_INTEGRATION") == "1"
@@ -170,7 +188,7 @@ def trusted_install_integration():
                     (bindir / source.name).chmod(0o755)
             # Calls run a harmless stub, never service control or a real backup.
             (bindir / "hostbackup.sh").write_text(
-                "#!/bin/bash\nset -eu\nprintf '%s\\n' '" + label + "' \"$@\"\n"
+                "#!/bin/bash\nset -eu\nPLUGIN_NAME=\"loxberryhostbackup\"\nprintf '%s\\n' '" + label + "' \"$@\"\n"
                 "if [ \"${1:-}\" = cache-test ]; then\n"
                 "python3 -c 'import importlib.util, os; spec=importlib.util.spec_from_file_location(\"validator\", os.environ[\"LBPBINDIR\"]+\"/validate-import-archive.py\"); spec.loader.exec_module(importlib.util.module_from_spec(spec))'\n"
                 "fi\n", encoding="utf-8"
@@ -248,6 +266,160 @@ for action in (lambda: p.write_text('injected'), lambda: p.unlink(),
         assert "second\nconfig\n" == run(dispatcher, "config").stdout
         assert run(dispatcher, "restore", "anything", success=False).returncode != 0
         assert run(dispatcher, "config", "extra", success=False).returncode != 0
+
+
+def platform_upgrade_integration():
+    """Reproduce LoxBerry's purge/copy as a real unprivileged user, not root.
+
+    Only a private /var/lib fixture is modified. Neither real platform files nor
+    user backups are involved; the real backend only reads config/installs a
+    redirected schedule. A legacy blocked copy must not activate a stale shim.
+    """
+    import pwd
+
+    assert os.geteuid() == 0
+    nobody = pwd.getpwnam("nobody")
+    with tempfile.TemporaryDirectory(prefix="hostbackup-platform-update-", dir="/var/lib") as temporary:
+        sandbox = pathlib.Path(temporary)
+        sandbox.chmod(0o755)
+        home = sandbox / "lbh"
+        trusted = sandbox / "libexec/loxberryhostbackup"
+        launcher = sandbox / "sbin/loxberryhostbackup"
+        cron = sandbox / "etc/cron.d"
+        cron.mkdir(parents=True)
+        incoming = sandbox / "package/bin"
+        incoming.mkdir(parents=True)
+        bindir = home / "bin/plugins/loxberryhostbackup"
+        config = home / "config/plugins/loxberryhostbackup/config.json"
+        cgi = home / "webfrontend/htmlauth/plugins/loxberryhostbackup/index.cgi"
+        for directory in (home / "bin/plugins", config.parent, cgi.parent):
+            directory.mkdir(parents=True, exist_ok=True)
+        # Platform-owned parents allow removal of the plugin directories, just
+        # like LoxBerry. The protected runtime lives outside this mutable tree.
+        for directory in (home, *home.rglob("*")):
+            if directory.is_dir():
+                os.chown(directory, nobody.pw_uid, nobody.pw_gid)
+                directory.chmod(0o755)
+        saved = {"backup_root": "/media/usb/PI_Backup/loxberry-hostbackup",
+                 "keep_backups": 3, "metadata_mode": "native-strict",
+                 "schedule_enabled": True, "schedule_mode": "daily", "schedule_time": "03:17",
+                 "rsync_extra_excludes": ["/media/usb/PI_Backup"],
+                 "stop_targets": ["systemd:mosquitto.service"], "backup_mode": "snapshot"}
+        saved_bytes = json.dumps(saved).encode()
+        config.write_bytes(saved_bytes)
+        cgi.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+
+        def rewrite(text):
+            return (text.replace("/usr/libexec/loxberryhostbackup", str(trusted))
+                    .replace("/usr/local/sbin/loxberryhostbackup", str(launcher))
+                    .replace("/etc/cron.d", str(cron))
+                    .replace("/tmp/${INSTALL_ID}_loxberryhostbackup_upgrade",
+                             str(sandbox / "upgrade/${INSTALL_ID}_loxberryhostbackup_upgrade"))
+                    .replace("loxberry:loxberry", "nobody:nogroup"))
+
+        for source in (ROOT / "bin").iterdir():
+            if source.suffix in (".sh", ".py", ".php"):
+                target = incoming / source.name
+                target.write_text(rewrite(source.read_text(encoding="utf-8")), encoding="utf-8")
+                target.chmod(0o755)
+        (incoming / "runtime-version").write_text("0.7.0\n", encoding="utf-8")
+        postroot, preroot = sandbox / "postroot.sh", sandbox / "preroot.sh"
+        postroot.write_text(rewrite(POSTROOT), encoding="utf-8")
+        preroot.write_text(rewrite(PREROOT), encoding="utf-8")
+        defaults = sandbox / "default-config.json"
+        defaults.write_text('{"keep_backups":10}', encoding="utf-8")
+
+        def run(*args, platform=False, success=True):
+            credentials = dict(user=nobody.pw_uid, group=nobody.pw_gid, extra_groups=[]) if platform else {}
+            result = subprocess.run([str(arg) for arg in args], text=True, capture_output=True,
+                                    check=False, timeout=15, cwd=sandbox, **credentials)
+            if success:
+                assert result.returncode == 0, result.stdout + result.stderr
+            return result
+
+        def hook(script, install_id, success=True):
+            return run("bash", script, install_id, "", "loxberryhostbackup", "", home, success=success)
+
+        def copy_as_platform(success=True):
+            result = run("cp", "-r", str(incoming) + "/.", bindir, platform=True, success=success)
+            # LoxBerry sets owner/mode AFTER copying; do not move this ahead of
+            # the copy and accidentally mask the very failure being tested.
+            run("chown", "-R", "nobody:nogroup", bindir)
+            run("chmod", "-R", "755", bindir)
+            return result
+
+        def assert_settings_and_backend():
+            assert config.read_bytes() == saved_bytes
+            assert config.stat().st_uid == 0 and config.stat().st_mode & 0o777 == 0o600
+            active = (trusted / "current").resolve()
+            assert (active / "hostbackup.sh").read_bytes() == (incoming / "hostbackup.sh").read_bytes()
+            assert (active / "runtime-version").read_text() == "0.7.0\n"
+            loaded = json.loads(run("bash", launcher, "config").stdout)
+            for key, value in saved.items():
+                assert loaded[key] == value, (key, loaded[key], value)
+            assert "17 3 * * * root " in (cron / "loxberryhostbackup").read_text()
+            assert bindir.stat().st_uid == 0
+            return active
+
+        copy_as_platform()
+        hook(postroot, "first")
+        first = assert_settings_and_backend()
+        first_contents = {p.name: p.read_bytes() for p in first.iterdir()}
+        # Explicitly reproduce the previously hidden Permission-denied copy.
+        purge = run("rm", "-rf", bindir, platform=True, success=False)
+        assert purge.returncode != 0 and "Permission denied" in purge.stderr
+        failed_copy = copy_as_platform(success=False)
+        assert failed_copy.returncode != 0 and "Permission denied" in failed_copy.stderr
+        assert (bindir / "hostbackup.sh").read_bytes() == (incoming / "hostbackup-launcher.sh").read_bytes()
+        rejected = hook(postroot, "stale-source", success=False)
+        assert rejected.returncode != 0 and "not the backup backend" in rejected.stderr
+        assert (trusted / "current").resolve() == first
+        assert config.read_bytes() == saved_bytes
+        # Even if a stale candidate were activated externally, the fixed root
+        # launcher must refuse immediately, without spawning an exec loop.
+        bad = trusted / "releases/bad-fixture"
+        shutil.copytree(first, bad)
+        shutil.copyfile(bad / "hostbackup-launcher.sh", bad / "hostbackup.sh")
+        (trusted / "current").unlink()
+        (trusted / "current").symlink_to(bad)
+        refused = run("bash", launcher, "config", success=False)
+        assert refused.returncode == 64 and "refusing a recursive start" in refused.stderr
+        (trusted / "current").unlink()
+        (trusted / "current").symlink_to(first)
+
+        # Recover the root-owned legacy staging directory and then repeat the
+        # exact same version again. All purges/copies happen as the web user.
+        for install_id in ("repair", "repeat"):
+            # Legacy root-owned cache directories and external links must not
+            # turn this migration into a recursive chown of the trusted store.
+            cache = bindir / "__pycache__"
+            cache.mkdir(mode=0o700)
+            (cache / "old.pyc").write_bytes(b"old")
+            (bindir / "external-link").symlink_to(first, target_is_directory=True)
+            hook(preroot, install_id)
+            assert bindir.stat().st_uid == nobody.pw_uid
+            assert cache.stat().st_uid == nobody.pw_uid
+            assert (first / "hostbackup.sh").stat().st_uid == 0
+            assert {p.name: p.read_bytes() for p in first.iterdir()} == first_contents
+            run("rm", "-rf", bindir, config.parent, platform=True)
+            run("mkdir", "-p", config.parent, platform=True)
+            run("cp", defaults, config, platform=True)
+            copy_as_platform()
+            previous = (trusted / "current").resolve()
+            hook(postroot, install_id)
+            active = assert_settings_and_backend()
+            assert active != previous
+            assert previous.is_dir() and first.is_dir()
+            assert {p.name: p.read_bytes() for p in first.iterdir()} == first_contents
+
+        # Refuse a substituted bin-directory link without touching its target.
+        original_bin = bindir.with_name("bin-saved")
+        bindir.rename(original_bin)
+        bindir.symlink_to(first, target_is_directory=True)
+        rejected = hook(preroot, "unsafe-link", success=False)
+        assert rejected.returncode != 0 and "unsafe plugin bin symlink" in rejected.stderr
+        assert (first / "hostbackup.sh").stat().st_uid == 0
+        assert {p.name: p.read_bytes() for p in first.iterdir()} == first_contents
 
 
 def cron_install_integration():
@@ -451,5 +623,7 @@ if __name__ == "__main__":
         trusted_install_integration()
     elif sys.argv[1:] == ["--cron-install-child"]:
         cron_install_integration()
+    elif sys.argv[1:] == ["--platform-upgrade-child"]:
+        platform_upgrade_integration()
     else:
         unittest.main()

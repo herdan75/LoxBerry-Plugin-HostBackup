@@ -12,10 +12,25 @@ unter demselben Downloadlink berücksichtigt nun LoxBerrys vorgesehenen
 `root:root 775`. Die erste Symlink-Korrektur hatte dieses Gruppenschreibrecht
 noch abgelehnt. Ausschliesslich die Gruppe `root` darf dieses vorgesehene
 Cron-Verzeichnis mitbeschreiben; Systemrechte werden nicht geändert.
-Bei einer fehlgeschlagenen
-Installation das ZIP frisch herunterladen und erneut über die Plugin-Verwaltung
-installieren, ohne vorher zu deinstallieren. Ist bereits `0.7.0` eingetragen,
-erscheint wegen der unveränderten Versionsnummer kein höheres Versionsupdate.
+Ist bereits `0.7.0` eingetragen, erscheint wegen der unveränderten Versionsnummer
+kein höheres Versionsupdate.
+
+> [!WARNING]
+> Bei der erneuten Installation wurde ein weiterer Fehler im Dateiaustausch
+> festgestellt: Ein altes Startskript konnte anstelle des Backup-Programms
+> übernommen werden und Installation, Webanfragen sowie Cron-Aufrufe blockieren.
+> Bei einer hängenden Installation keinen zweiten Versuch starten und nicht
+> deinstallieren. Die Korrektur auf `develop` wird **zunächst nur als separates
+> manuelles Test-ZIP ohne Versionsänderung** bereitgestellt. Der oben beschriebene
+> veröffentlichte Download wird erst nach ausdrücklicher Freigabe ersetzt.
+
+Der korrigierte Teststand bereitet das alte Plugin-Programmverzeichnis für
+LoxBerrys Dateiaustausch vor, sichert vorher die Konfiguration und prüft das
+eigentliche Backup-Programm vor seiner Aktivierung. Die geschützten
+Programmstände unter `/usr/libexec/loxberryhostbackup` bleiben erhalten.
+Zusätzlich wird die Zeitplan-Einrichtung zeitlich begrenzt. Die Tests bilden
+jetzt auch Löschen und Kopieren als unprivilegierter Plattformbenutzer nach;
+ein erfolgreiches Kopieren als Root allein reicht nicht als Update-Test.
 
 > [!IMPORTANT]
 > **Erst Einstellungen speichern, dann sichern.** Auch ausgewählte Optionen,

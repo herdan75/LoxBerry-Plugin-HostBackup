@@ -28,6 +28,20 @@ der gesamten Installation, Konfiguration oder Cron-Regeln. Diese Schutzprüfung
 gilt für die Plugin-Helfer; gemeinsam genutzte LoxBerry-/Systembibliotheken und
 deren Updates bleiben Verantwortung der Plattform.
 
+Vor einem Update sichert PREROOT zuerst die Konfiguration und übergibt dann
+nur die Verzeichnisse des alten Plugin-Bin-Baums an den Plattformbenutzer.
+LoxBerry löscht/kopiert dort als unprivilegierter Benutzer; Root-eigene
+Verzeichnisse würden den Austausch verhindern. Symlink-Verzeichnisse werden
+nicht verfolgt, Dateibesitzer und die geschützten Helferstände ausserhalb
+dieses Baums werden nicht geändert. POSTROOT schützt den neuen Bin-Baum wieder
+während der Übernahme. Eine Backend-Kennungsprüfung vor dem Umschalten von
+`current` verhindert, dass ein alter Weiterleitungs-Launcher als Backend
+veröffentlicht wird. Dieselbe Prüfung im Root-Einstieg verhindert rekursive
+Starts auch bei einem bereits falsch gesetzten Programmverweis. Sie ist eine
+Strukturprüfung, keine kryptografische Echtheitsprüfung des Installationspakets.
+Die abschliessende Zeitplan-Einrichtung ist auf 30 Sekunden plus höchstens
+5 Sekunden zum Beenden begrenzt.
+
 Die Cron-Integration berücksichtigt LoxBerrys systemseitige Verknüpfung
 `/etc/cron.d` nach `$LBHOMEDIR/system/cron/cron.d`. Nur dieser erwartete,
 existierende Zielpfad wird als Ausnahme zugelassen; der Symlink und das

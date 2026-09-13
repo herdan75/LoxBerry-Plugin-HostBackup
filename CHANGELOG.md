@@ -9,6 +9,23 @@ validiert werden.
 
 ## [Unreleased]
 
+- Update-/Wiederinstallationsfehler korrigiert: PREROOT gibt nach Sicherung der
+  Konfiguration ausschliesslich die alten Plugin-Bin-Verzeichnisse für
+  LoxBerrys unprivilegierten Dateiaustausch frei. Geschützte Helferstände,
+  Root-Status und Backups bleiben unberührt.
+- POSTROOT prüft vor Aktivierung, dass `hostbackup.sh` das eigentliche
+  Backup-Programm ist. Ein bei fehlgeschlagenem Dateiaustausch zurückgebliebenes
+  Startskript darf den bisherigen funktionierenden Programmstand nicht ersetzen.
+  Der Root-Einstieg weist solche falschen Programmstände ebenfalls sofort ab.
+- Die Zeitplan-Einrichtung wartet höchstens 30 Sekunden (plus maximal 5 Sekunden
+  zum Beenden), damit ein Fehler nicht unbegrenzt die Plugin-Installation sperrt.
+- Linux-Regression ergänzt: tatsächliches Löschen/Kopieren als unprivilegierter
+  Plattformbenutzer, Nachstellung des alten Kopierfehlers, Reparatur und erneute
+  Installation derselben Version, unveränderte Einstellungen und alte Helferstände,
+  Abweisung eines Startskripts als Backend und Schutz vor Symlink-Zielen.
+- Diese Nachbesserung wird zunächst nur als manuelles Testpaket mit interner
+  Version `0.7.0` bereitgestellt; das veröffentlichte Pre-Release bleibt bis zur
+  ausdrücklichen Freigabe unverändert.
 - Übersicht und Live-Status verwenden weisse Inhaltsflächen passend zu den
   Einstellungen. Beschriftungen und Werte in der Übersicht sind getrennt und
   bleiben auch ohne CSS durch Doppelpunkt und Leerzeichen lesbar.

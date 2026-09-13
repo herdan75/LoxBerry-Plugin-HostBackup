@@ -42,6 +42,8 @@ done
 for required in hostbackup.sh validate-import-archive.py runtime-home runtime-plugin; do
   [ -f "$release/$required" ] || fail "required trusted helper is missing: $required"
 done
+grep -Fxq 'PLUGIN_NAME="loxberryhostbackup"' "$release/hostbackup.sh" || \
+  fail "invalid backup backend (launcher or incomplete installation); refusing a recursive start"
 LBHOMEDIR="$(< "$release/runtime-home")"
 HOSTBACKUP_PLUGIN_FOLDER="$(< "$release/runtime-plugin")"
 LBPBINDIR="$release"
