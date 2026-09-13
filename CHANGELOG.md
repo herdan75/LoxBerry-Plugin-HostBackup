@@ -9,6 +9,13 @@ validiert werden.
 
 ## [Unreleased]
 
+- Übersicht kompakter gestaltet: vier wichtige Statuswerte bleiben sichtbar;
+  vollständige IDs, Zielpfad und Prüf-/Diagnoseaktionen liegen im standardmässig
+  geschlossenen Bereich „Details und Prüfaktionen“. Auf-/Zuklappen ist auch per
+  Tastatur möglich und bleibt bei automatischer Aktualisierung erhalten.
+  Fehlerhinweis, offene Dienst-Wiederanläufe und geladene Prüfergebnisse bleiben
+  ausserhalb des aufklappbaren Bereichs sichtbar. Responsive Browserprüfungen
+  decken vier/zwei/eine Spalte und lange Zielpfade ab.
 - Update-/Wiederinstallationsfehler korrigiert: PREROOT gibt nach Sicherung der
   Konfiguration ausschliesslich die alten Plugin-Bin-Verzeichnisse für
   LoxBerrys unprivilegierten Dateiaustausch frei. Geschützte Helferstände,

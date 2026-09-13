@@ -1692,14 +1692,14 @@ a.button-link:hover {
 }
 #hostbackup-app .overview-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
 }
 #hostbackup-app .overview-grid > .overview-item {
   display: block;
   min-width: 0;
-  padding: 14px 16px;
+  padding: 10px 12px;
   background: #ffffff;
   border: 1px solid #e1e7eb;
   border-radius: 6px;
@@ -1707,19 +1707,48 @@ a.button-link:hover {
 }
 #hostbackup-app .overview-label {
   display: block;
-  margin: 0 0 8px;
-  font-size: 13px;
+  margin: 0 0 5px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.4;
 }
 #hostbackup-app .overview-value {
   display: block;
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 400;
   line-height: 1.5;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+#hostbackup-app .overview-details {
+  margin: 0;
+  border-top: 1px solid #e1e7eb;
+}
+#hostbackup-app .overview-details > summary {
+  display: list-item;
+  padding: 10px 0;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+#hostbackup-app .overview-details > summary:focus-visible {
+  outline: 3px solid #14769a;
+  outline-offset: 3px;
+}
+#hostbackup-app .overview-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 12px 20px;
+  padding: 6px 0 12px;
+}
+#hostbackup-app .overview-detail-grid > .overview-item { min-width: 0; }
+#hostbackup-app .overview-details .config-actions { margin: 0; }
+#hostbackup-app .overview-details > .muted { margin: 8px 0 4px; font-size: 12px; }
+#hostbackup-app .overview-last-failure { margin: 8px 0; font-size: 13px; overflow-wrap: anywhere; }
+@media (max-width: 1100px) {
+  #hostbackup-app .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 #hostbackup-app .task-history-label {
   display: grid;
@@ -1751,12 +1780,15 @@ a.button-link:hover {
   #hostbackup-app fieldset { min-width: 0; max-width: 100%; }
   #hostbackup-app .settings-form, #hostbackup-app .nested-settings, #hostbackup-app .settings-load-guard { grid-template-columns: minmax(0, 1fr); min-width: 0; }
   #hostbackup-app .settings-form > *, #hostbackup-app .nested-settings > * { min-width: 0; }
-  #hostbackup-app .overview-grid { grid-template-columns: minmax(0, 1fr); }
+  #hostbackup-app .overview-detail-grid { grid-template-columns: minmax(0, 1fr); }
   #hostbackup-app td[data-label]::before { content: attr(data-label); display: block; font-weight: 600; color: #375368; margin-bottom: 4px; }
   #hostbackup-app td { overflow-wrap: anywhere; }
   #hostbackup-app .settings-change-popup { left: 12px; right: 12px; bottom: 12px; width: auto; max-width: none; }
   #hostbackup-app .settings-change-popup-header { flex-wrap: wrap; }
   #hostbackup-app .info-button { min-width: 28px; min-height: 28px; }
+}
+@media (max-width: 560px) {
+  #hostbackup-app .overview-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 .empty {

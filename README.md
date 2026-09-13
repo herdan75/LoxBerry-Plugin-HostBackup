@@ -658,9 +658,18 @@ nach dem Backup aufzuräumen.
 
 Übersicht und Live-Status haben wie die Einstellungen weisse Inhaltsflächen.
 In der Übersicht stehen Beschriftung und Wert mit Abstand untereinander;
-schmale Ansichten verwenden eine statt zwei Spalten. CSS und JavaScript werden
-über ihren Inhaltsstand geladen, sodass auch Korrekturen ohne Versionssprung
-nach erneutem Öffnen der Plugin-Seite sichtbar werden.
+direkt sichtbar bleiben letztes erfolgreiches Backup, nächster Termin, aktueller
+Vorgang und freier Zielspeicher. Je nach Fensterbreite stehen diese Angaben in
+vier, zwei oder einer Spalte. **Details und Prüfaktionen** klappt die vollständige
+Backup-ID, den Zielpfad, die Vorgangsdatei und die Prüf-/Diagnoseschaltflächen auf.
+Der Bereich ist anfangs geschlossen; automatische Aktualisierungen verändern
+seinen Zustand nicht. Das Aufklappen startet keine Prüfung. Der letzte
+protokollierte Fehler, offene Dienst-Wiederanläufe und bereits geladene
+Prüfergebnisse bleiben auch bei geschlossenem Detailbereich sichtbar.
+
+CSS und JavaScript werden über ihren Inhaltsstand geladen, sodass auch
+Korrekturen ohne Versionssprung nach erneutem Öffnen der Plugin-Seite sichtbar
+werden.
 
 Nach dem Start eines Backups erscheint ein Live-Status. Er zeigt fortlaufend,
 was das Backend gerade macht, z. B. Dienst-/Container-Stop, `rsync`-Fortschritt,

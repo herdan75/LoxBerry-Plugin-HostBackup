@@ -33,6 +33,7 @@ const overviewBackupId='20260901-020002', overviewFinishedAt='2026-09-01T02:07:2
 const overviewTarget='/media/usb/PI_Backup/loxberry-hostbackup/'+'backup-target-with-a-deliberately-long-name-'.repeat(3);
 const verificationReport={backup_id:'fixture-ok',status:'verified',checked_files:3,checked_at:'2026-09-13T12:00:00Z',changes:[],content_verified:true,restore_tested:false};
 let failSave=true, taskFinished=false, tokenNumber=0, postCount=0, htmlCount=0, statusCount=0, tokenDelay=0, saveDelay=0, lastSavedPath='';
+let overviewIssues=false, reportRequests=0;
 const longLog = () => Array.from({length:180+statusCount},(_,i)=>`${i}: 3.43G 96% 4.23MB/s ${'long-path/'.repeat(36)} file-${i}`).join('\r');
 function json(res,value,status=200){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));}
 const server=http.createServer(async(req,res)=>{
@@ -64,7 +65,8 @@ const server=http.createServer(async(req,res)=>{
       return json(res,{ok:true,redirect:'?active_task='+task});
     }
     if(action==='csrf-token'){await new Promise(resolve=>setTimeout(resolve,tokenDelay));return json(res,{csrf_token:'fresh-'+(++tokenNumber),expires_at:Date.now()/1000+3600});}
-    if(action==='task-overview')return json(res,{tasks:[{task,state:taskFinished?'finished':'running'}],active_task:taskFinished?null:task,last_success:{backup_id:overviewBackupId,finished_at:overviewFinishedAt},next_run:{local:'14.09.2026 02:00'},last_failure:null,pending_service_recovery:0,target:{configured:true,readable:true,path:overviewTarget,available_mb:20000}});
+    if(action==='task-overview')return json(res,{tasks:[{task,state:taskFinished?'finished':'running'}],active_task:taskFinished?null:task,last_success:{backup_id:overviewBackupId,finished_at:overviewFinishedAt},next_run:{local:'14.09.2026 02:00'},last_failure:overviewIssues?{task:'backup-old-failure.log',state:'failed'}:null,pending_service_recovery:overviewIssues?1:0,target:{configured:true,readable:true,path:overviewTarget,available_mb:20000}});
+    if(['backup-preview','storage-info','runtime-cleanup-preview','diagnostics'].includes(action))reportRequests++;
     if(action==='task-status'){statusCount++;return json(res,{state:taskFinished?'finished':'running',phase:'copying',now:100,mtime:99,content_b64:Buffer.from(longLog()).toString('base64')});}
     if(action==='target-notice'){res.end('<section class="inline-notice">Fixture-Ziel verfügbar</section>');return;}
     if(action==='backup-list'){res.end('<tr><td data-label="ID">fixture-ok</td><td data-label="Status">complete</td><td data-label="Host">fixture</td><td data-label="Grösse">3 GiB</td><td data-label="Dateien">100</td><td data-label="Fertiggestellt">heute</td><td data-label="Export">–</td><td data-label="Aktionen"><form method="get" class="operation-form"><input type="hidden" name="action" value="verification-report"><input type="hidden" name="backup_id" value="fixture-ok"><button type="submit">Prüfbericht anzeigen</button></form><details class="restore-test-record"><summary>Externen Restoretest dokumentieren</summary><form method="post" class="restore-test-form"><input type="hidden" name="action" value="record-restore-test"><input type="hidden" name="backup_id" value="fixture-ok"><label>Ergebnis<select name="result" required><option value="">Bitte wählen</option><option value="passed">Erfolgreich</option><option value="failed">Fehlgeschlagen</option></select></label><label>Datum und Uhrzeit<input name="tested_at" type="datetime-local" required></label><label>Notiz<textarea name="note" maxlength="2000"></textarea></label><button type="submit">Persönlichen Testeintrag speichern</button></form></details><span class="info-help"><button type="button" class="info-button" aria-label="Information">i</button><span class="info-bubble">Dynamisch geladene Information</span></span></td></tr>');return;}
@@ -97,19 +99,46 @@ async function visible(page,selector){await page.locator(selector).waitFor({stat
     assert.equal(assetRequests.filter(value=>value==='/assets/style.css').length,1,'Updated CGI must not request the obsolete URL');
     receipts.push('Real CGI head fingerprints CSS/JS by content and bypasses a primed old stylesheet cache');
     const overviewCards=page.locator('#overview-values .overview-item');
-    assert.equal(await overviewCards.count(),6);
+    assert.equal(await overviewCards.count(),4);
     const desktopLayout=await page.locator('#overview-values').evaluate(node=>({display:getComputedStyle(node).display,columns:getComputedStyle(node).gridTemplateColumns.split(' ').length,cards:Array.from(node.children).map(card=>{const label=card.querySelector('.overview-label'),value=card.querySelector('.overview-value');return {gap:value.getBoundingClientRect().top-label.getBoundingClientRect().bottom,text:card.textContent,background:getComputedStyle(card).backgroundColor};})}));
-    assert.equal(desktopLayout.display,'grid');assert.equal(desktopLayout.columns,2);
-    assert.ok(desktopLayout.cards.every(card=>card.gap>=7.5),JSON.stringify(desktopLayout));
+    assert.equal(desktopLayout.display,'grid');assert.equal(desktopLayout.columns,4);
+    assert.ok(desktopLayout.cards.every(card=>card.gap>=4.5),JSON.stringify(desktopLayout));
     assert.ok(desktopLayout.cards.every(card=>card.background==='rgb(255, 255, 255)'));
-    assert.equal(desktopLayout.cards[0].text,'Letztes erfolgreiches Backup: '+overviewBackupId+' · '+overviewFinishedAt);
-    assert.ok(desktopLayout.cards.some(card=>card.text==='Backup-Ziel: '+overviewTarget));
+    assert.equal(desktopLayout.cards[0].text,'Letztes erfolgreiches Backup: '+overviewFinishedAt);
+    assert.ok(desktopLayout.cards.some(card=>card.text==='Aktueller Vorgang: Backup'));
+    assert.ok(desktopLayout.cards.some(card=>card.text==='Freier Speicher am Ziel: 19.53 GiB'));
     for(const id of ['operational-overview','task-monitor'])assert.equal(await page.locator('#'+id+' > .panel-content').evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(255, 255, 255)');
-    await page.screenshot({path:path.join(temp,'overview-desktop.png'),fullPage:false});
+    const disclosure=page.locator('#overview-details'), summary=disclosure.locator('summary');
+    assert.equal(await disclosure.evaluate(node=>node.open),false);
+    assert.equal(await page.locator('[data-load-action="backup-preview"]').isVisible(),false);
+    assert.ok((await page.locator('#operational-overview').boundingBox()).height<250,'Closed desktop overview stays compact');
+    await page.locator('#operational-overview').screenshot({path:path.join(temp,'overview-desktop.png')});
+    await summary.focus();await page.keyboard.press('Enter');
+    await visible(page,'#overview-detail-values');
+    assert.match(await page.locator('#overview-detail-values').textContent(),new RegExp(overviewBackupId));
+    assert.ok((await page.locator('#overview-detail-values').textContent()).includes('Backup-Ziel: '+overviewTarget));
+    assert.ok((await page.locator('#overview-detail-values').textContent()).includes('Vorgangsdatei: '+task));
+    assert.equal(await page.locator('[data-load-action="backup-preview"]').isVisible(),true);
+    await page.locator('#operational-overview').screenshot({path:path.join(temp,'overview-expanded.png')});
+    overviewIssues=true;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+    await visible(page,'#overview-last-failure');await visible(page,'#recover-services-form');
+    assert.equal(await disclosure.evaluate(node=>node.open),true,'Polling preserves the open disclosure');
+    await summary.focus();await page.keyboard.press('Space');
+    assert.equal(await disclosure.evaluate(node=>node.open),false);
+    assert.match(await page.locator('#overview-last-failure').innerText(),/Letzter protokollierter Fehler: backup-old-failure.log/);
+    assert.equal(await page.locator('#recover-services-form').isVisible(),true,'Recovery action must not be hidden in details');
+    overviewIssues=false;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+    await page.locator('#overview-last-failure').waitFor({state:'hidden'});
+    assert.equal(await disclosure.evaluate(node=>node.open),false,'Polling preserves the closed disclosure');
+    assert.equal(reportRequests,0,'Opening details must not start expensive checks');
+    await page.setViewportSize({width:900,height:1100});
+    assert.equal(await page.locator('#overview-values').evaluate(node=>getComputedStyle(node).gridTemplateColumns.split(' ').length),2);
+    await page.setViewportSize({width:1440,height:1100});
     await page.evaluate(()=>{for(const sheet of document.styleSheets)sheet.disabled=true;});
-    assert.match(await overviewCards.first().innerText(),/Letztes erfolgreiches Backup: 20260901-020002/);
+    assert.match(await overviewCards.first().innerText(),/Letztes erfolgreiches Backup: 2026-09-01T02:07:27/);
     await page.evaluate(()=>{for(const sheet of document.styleSheets)sheet.disabled=false;});
-    receipts.push('Overview and live status use white content areas; six desktop cards keep title/value spacing even without CSS');
+    receipts.push('Compact overview has four primary values, keyboard-accessible details and complete IDs/paths; polling preserves disclosure state');
+    receipts.push('Last failure and pending service recovery remain visible with details closed; expanding never runs checks');
     assert.equal(await page.locator('#task-history').inputValue(),task);receipts.push('Running task discovered without URL');
     await page.locator('[name="metadata_mode"][value="network-compatible"]').check();await visible(page,'#settings-change-popup');
     const postBefore=postCount;await page.locator('.topbar-actions button[type="submit"]').click();assert.equal(postCount,postBefore);assert.match(await page.locator('#action-feedback').textContent(),/Zuerst Änderungen speichern/);receipts.push('Dirty profile blocks backup until explicitly saved');
@@ -148,14 +177,18 @@ async function visible(page,selector){await page.locator(selector).waitFor({stat
     await page.locator('.restore-test-form button').click();await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('Persönlich dokumentierter Restore-Test: Erfolgreich'));
     assert.match(await page.locator('#operation-result').textContent(),/Vom Plugin nicht überprüft/);assert.match(await page.locator('#operation-result').textContent(),/Rescue-Test in separater/);assert.match(await page.locator('#operation-result').textContent(),/keine Restore-Freigaben/);
     await page.locator('#backup-list-body .operation-form button').click();await visible(page,'#verification-download');assert.match(await page.locator('#operation-result').textContent(),/Persönlich dokumentierter Restore-Test: Erfolgreich/);receipts.push('External restore test recorded with UTC date and displayed only as manual evidence');
-    await page.locator('[data-load-action="backup-preview"]').click();await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('vollständige Basiskopie'));
+    await summary.click();await page.locator('[data-load-action="backup-preview"]').click();await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('vollständige Basiskopie'));
+    await summary.click();assert.equal(await page.locator('#operation-result').isVisible(),true,'Loaded results remain visible when details close');
     await page.screenshot({path:path.join(temp,'desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});
     await page.locator('#operational-overview').scrollIntoViewIfNeeded();
     const mobileOverview=await page.locator('#overview-values').evaluate(node=>({columns:getComputedStyle(node).gridTemplateColumns.split(' ').length,cards:Array.from(node.children).map(card=>{const title=card.querySelector('.overview-label').getBoundingClientRect(),value=card.querySelector('.overview-value').getBoundingClientRect();return {gap:value.top-title.bottom,right:card.getBoundingClientRect().right};})}));
-    assert.equal(mobileOverview.columns,1);assert.ok(mobileOverview.cards.every(card=>card.gap>=7.5&&card.right<=392),JSON.stringify(mobileOverview));
-    await page.screenshot({path:path.join(temp,'overview-mobile.png'),fullPage:false});
-    receipts.push('Mobile overview has one column with separated labels and long backup paths contained');
+    assert.equal(mobileOverview.columns,1);assert.ok(mobileOverview.cards.every(card=>card.gap>=4.5&&card.right<=392),JSON.stringify(mobileOverview));
+    await page.locator('#operational-overview').screenshot({path:path.join(temp,'overview-mobile.png')});
+    await summary.click();
+    assert.ok(await page.locator('#overview-detail-values').evaluate(node=>Array.from(node.children).every(child=>child.getBoundingClientRect().right<=392)));
+    await page.locator('#operational-overview').screenshot({path:path.join(temp,'overview-mobile-expanded.png')});
+    receipts.push('Responsive overview has four/two/one columns; expanded mobile details keep full long backup paths inside the viewport');
     await page.locator('#backup-list-body .info-button').click();
     const tip=await page.locator('#backup-list-body .info-bubble').boundingBox();assert.ok(tip.x>=0&&tip.x+tip.width<=392);
     assert.equal(await page.locator('#backup-list-body td').first().evaluate(node=>getComputedStyle(node,'::before').content),'"ID"');

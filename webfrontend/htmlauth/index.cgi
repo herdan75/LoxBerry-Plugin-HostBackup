@@ -1678,19 +1678,24 @@ print <<HTML;
 <h2>Übersicht</h2>
 <div class="panel-content">
 <div class="overview-grid" id="overview-values"><p>Letztes Backup und nächster Termin werden geladen...</p></div>
+<p class="overview-last-failure" id="overview-last-failure" hidden></p>
+<details class="overview-details" id="overview-details">
+<summary>Details und Prüfaktionen</summary>
+<div class="overview-detail-grid" id="overview-detail-values"></div>
 <div class="config-actions">
 <button data-role="none" type="button" data-load-action="backup-preview">Nächstes Backup prüfen</button>
 <button data-role="none" type="button" data-load-action="storage-info">Speicherbelegung berechnen</button>
 <button data-role="none" type="button" data-load-action="runtime-cleanup-preview">Laufzeitdateien prüfen</button>
 <a data-ajax="false" class="button-link" href="?action=diagnostics">Diagnosepaket herunterladen</a>
 </div>
+<p class="muted">Vorschau und Zeitplan verwenden die gespeicherten Einstellungen. Eine Speicherberechnung kann bei grossen Backups länger dauern.</p>
+</details>
 <form data-ajax="false" method="post" id="recover-services-form" hidden>
 $csrf_html
 <input data-role="none" type="hidden" name="action" value="recover-services">
 <p>Ein Dienst-Wiederanlauf ist noch offen. Bitte zuerst die Journal-/Loghinweise prüfen.</p>
 <button data-role="none" type="submit">Offene Dienste wieder starten</button>
 </form>
-<p class="muted">Vorschau und Zeitplan verwenden die gespeicherten Einstellungen. Eine Speicherberechnung kann bei grossen Backups länger dauern.</p>
 <div id="operation-result" hidden></div>
 </div>
 </section>
