@@ -116,7 +116,7 @@ ensure_root_path() {
 }
 
 prepare_recovery_cron_directory() {
-  local cron_dir="${RECOVERY_CRON%/*}" expected_dir resolved_dir mode
+  local cron_dir="${RECOVERY_CRON%/*}" expected_dir resolved_dir mode owner group forbidden_write_bits
   if [ -L "$cron_dir" ]; then
     # LoxBerry deliberately redirects /etc/cron.d into its system tree. That
     # platform-managed cron directory is not an executable helper directory:
@@ -139,10 +139,18 @@ prepare_recovery_cron_directory() {
       echo "Unsafe LoxBerry system cron directory: $resolved_dir" >&2; exit 1;
     }
     mode="$(stat -c '%a' "$resolved_dir")"
-    [ "$(stat -c '%u' "$resolved_dir")" = 0 ] && (( (8#$mode & 022) == 0 )) || {
-      echo "LoxBerry system cron directory must be root-owned and not writable by others: $resolved_dir" >&2
+    owner="$(stat -c '%u' "$resolved_dir")"
+    group="$(stat -c '%g' "$resolved_dir")"
+    # LoxBerry installations can retain root:root 0775/02775 on this shared
+    # system configuration directory. Trust its root group here only; the
+    # stricter checks for executable helpers and their ancestors stay intact.
+    forbidden_write_bits=022
+    [ "$group" != 0 ] || forbidden_write_bits=002
+    [ "$owner" = 0 ] && (( (8#$mode & forbidden_write_bits) == 0 )) || {
+      echo "Unsafe LoxBerry system cron directory (uid=$owner gid=$group mode=$mode): $resolved_dir; root ownership required, group write allowed only for group root, no world write." >&2
       exit 1
     }
+    echo "LoxBerry cron directory accepted (uid=$owner gid=$group mode=$mode): $resolved_dir"
     cron_dir="$resolved_dir"
   else
     ensure_root_path "$cron_dir"

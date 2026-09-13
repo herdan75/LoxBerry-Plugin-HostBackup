@@ -31,8 +31,13 @@ deren Updates bleiben Verantwortung der Plattform.
 Die Cron-Integration berücksichtigt LoxBerrys systemseitige Verknüpfung
 `/etc/cron.d` nach `$LBHOMEDIR/system/cron/cron.d`. Nur dieser erwartete,
 existierende Zielpfad wird als Ausnahme zugelassen; der Symlink und das
-Cron-Zielverzeichnis müssen Root gehören, das Ziel darf nicht durch Gruppe
-oder andere Benutzer beschreibbar sein. Seine von LoxBerry verwalteten
+Cron-Zielverzeichnis müssen Root gehören. Am Ziel ist Gruppenschreibrecht
+ausschliesslich für die Gruppe `root` (GID 0) zulässig, wie beim tatsächlich
+gemeldeten Zustand `root:root 775`. Weltschreibrecht und Schreibrecht für andere
+Gruppen werden abgelehnt. Diese Ausnahme behandelt die Gruppe `root` als Teil
+der administrativen Plattformgrenze, nicht als unprivilegierten Webbenutzer.
+Die erzeugten Cron-Dateien bleiben Root-eigen und haben Modus `644`.
+Die von LoxBerry verwalteten
 Elternverzeichnisse werden nicht umgewidmet. Diese Plattformgrenze gilt nur für
 Cron-Konfigurationen, nicht für ausführbare Root-Helfer oder deren Elternpfade.
 

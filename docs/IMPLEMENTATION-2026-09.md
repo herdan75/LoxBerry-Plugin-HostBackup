@@ -103,6 +103,25 @@ ShellCheck, Rechteprüfungen und ZIP-Build. Der abschliessende Tag-Lauf und die 
 ZIP-Prüfsumme werden beim bestehenden Pre-Release dokumentiert; Version und
 Download-URL bleiben unverändert.
 
+### Zweite Nachbesserung anhand der gemessenen Verzeichnisrechte
+
+Die erste Cron-Korrektur war noch unvollständig: Das zweite reale Protokoll
+meldete die Ablehnung des Zielverzeichnisses. Die nachgereichte `stat`-Ausgabe
+belegte `/etc/cron.d` als Root-eigenen Symlink (Modus `777`, unter Linux normal)
+und sein Ziel `/opt/loxberry/system/cron/cron.d` mit `root:root 775`.
+Die vorherige Fixture hatte nur ein Ziel mit Modus `755` abgebildet.
+
+Der ergänzte Fix lässt deshalb ausschliesslich am erwarteten Plattform-Cronziel
+Gruppenschreibrecht für GID 0 zu. Die neue Installationsmatrix umfasst
+`755`, `775`, `2755` und `2775`, reproduziert beide bisherigen Ablehnungen
+und prüft den vollständigen anschliessenden Ablauf mit echtem Backend,
+Zeitplan, gespeicherten Einstellungen und Neuinstallation derselben Version.
+Negative Tests prüfen weiterhin falsche Ziele/Eigentümer/Gruppen,
+Weltschreibrecht sowie unverändert verbotene gruppenschreibbare Root-Helfer.
+Es werden keine gemeinsamen Verzeichnisrechte korrigiert oder umgewidmet.
+Der abschliessende CI-Lauf und die neue ZIP-Prüfsumme stehen beim bestehenden
+Pre-Release; sie sind von den oben dokumentierten älteren Läufen zu unterscheiden.
+
 ### Verbleibende Praxisabnahme
 
 Keine produktiven Backups, Restores oder Serviceaktionen. Linux-Integrationstests

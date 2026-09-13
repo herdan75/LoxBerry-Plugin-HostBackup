@@ -8,8 +8,11 @@ Tests vorgesehen. Änderungen, Updatehinweise und Prüfgrenzen stehen in den
 
 **Installationskorrektur vom 13.09.2026, weiterhin 0.7.0-beta:** Das Paket
 unter demselben Downloadlink berücksichtigt nun LoxBerrys vorgesehenen
-`/etc/cron.d`-Symlink. Damit wird der POSTROOT-Abbruch
-`Unsafe trusted directory: /etc/cron.d` behoben. Bei einer fehlgeschlagenen
+`/etc/cron.d`-Symlink einschliesslich des gemeldeten Zielverzeichnisses mit
+`root:root 775`. Die erste Symlink-Korrektur hatte dieses Gruppenschreibrecht
+noch abgelehnt. Ausschliesslich die Gruppe `root` darf dieses vorgesehene
+Cron-Verzeichnis mitbeschreiben; Systemrechte werden nicht geändert.
+Bei einer fehlgeschlagenen
 Installation das ZIP frisch herunterladen und erneut über die Plugin-Verwaltung
 installieren, ohne vorher zu deinstallieren. Ist bereits `0.7.0` eingetragen,
 erscheint wegen der unveränderten Versionsnummer kein höheres Versionsupdate.

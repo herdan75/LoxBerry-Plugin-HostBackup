@@ -222,9 +222,13 @@ for action in (lambda: p.write_text('injected'), lambda: p.unlink(),
                                 user=nobody.pw_uid, group=nobody.pw_gid, extra_groups=[],
                                 capture_output=True, text=True, check=False)
         assert attack.returncode == 0, attack.stdout + attack.stderr
-        helper.chmod(0o777)
-        assert run(dispatcher, "config", success=False).returncode != 0
+        for unsafe_mode in (0o775, 0o2775, 0o777):
+            helper.chmod(unsafe_mode)
+            assert run(dispatcher, "config", success=False).returncode != 0
         helper.chmod(0o755)
+        first_release.chmod(0o775)
+        assert run(dispatcher, "config", success=False).returncode != 0
+        first_release.chmod(0o755)
         helper.rename(first_release / "validator.saved")
         helper.symlink_to(first_release / "validator.saved")
         assert run(dispatcher, "config", success=False).returncode != 0
@@ -256,7 +260,13 @@ def cron_install_integration():
 
     assert os.geteuid() == 0
     nobody = pwd.getpwnam("nobody")
-    for layout in ("regular", "loxberry-link"):
+    for layout, cron_mode in (
+        ("regular", 0o755),
+        ("loxberry-link", 0o755),
+        ("loxberry-link", 0o775),
+        ("loxberry-link", 0o2755),
+        ("loxberry-link", 0o2775),
+    ):
         with tempfile.TemporaryDirectory(prefix="hostbackup-cron-test-", dir="/var/lib") as temporary:
             sandbox = pathlib.Path(temporary)
             sandbox.chmod(0o755)
@@ -268,12 +278,13 @@ def cron_install_integration():
             cron.parent.chmod(0o755)
             managed = home / "system/cron/cron.d"
             managed.mkdir(parents=True)
-            # LoxBerry resetpermissions.sh owns cron.d as root, but its parent
-            # directories belong to loxberry; do not silently change those.
+            # LoxBerry resetpermissions.sh owns cron.d as root, but only chmods
+            # its files, not the directory. The reported LoxBerry 4 installation
+            # has root:root 0775 here; its parents still belong to loxberry.
             for parent in (home, home / "system", managed.parent):
                 parent.chmod(0o755)
                 os.chown(parent, nobody.pw_uid, nobody.pw_gid)
-            managed.chmod(0o755)
+            managed.chmod(cron_mode)
             if layout == "loxberry-link":
                 cron.symlink_to(managed, target_is_directory=True)
             else:
@@ -324,9 +335,9 @@ def cron_install_integration():
                     assert result.returncode != 0, "Unsafe cron layout was accepted"
                 return result
 
-            if layout == "loxberry-link":
-                # Reproduce the reported POSTROOT failure with the previous
-                # strict cron-directory policy, before exercising the fix.
+            if layout == "loxberry-link" and cron_mode == 0o755:
+                # Reproduce the first POSTROOT failure: even a safe platform
+                # symlink was rejected by the original executable-path policy.
                 legacy_text = rewrite(POSTROOT).replace(
                     "\nprepare_recovery_cron_directory\n",
                     '\nensure_root_path "${RECOVERY_CRON%/*}"\n',
@@ -341,6 +352,28 @@ def cron_install_integration():
                 assert result.returncode != 0
                 assert "Unsafe trusted directory: " + str(cron) in result.stderr
                 assert json.loads(config.read_text()) == saved
+            if layout == "loxberry-link" and cron_mode == 0o775:
+                # Reproduce the SECOND real installation failure independently:
+                # accepting the symlink still rejected root:root mode 0775.
+                old_guard = '''    [ "$(stat -c '%u' "$resolved_dir")" = 0 ] && (( (8#$mode & 022) == 0 )) || {
+      echo "LoxBerry system cron directory must be root-owned and not writable by others: $resolved_dir" >&2
+      exit 1
+    }
+'''
+                previous_text = rewrite(POSTROOT)
+                start_marker = '    mode="$(stat -c \'%a\' "$resolved_dir")"\n'
+                start = previous_text.index(start_marker) + len(start_marker)
+                end = previous_text.index('    cron_dir="$resolved_dir"', start)
+                previous_text = previous_text[:start] + old_guard + previous_text[end:]
+                previous = sandbox / "postroot-previous-cron-mode-policy.sh"
+                previous.write_text(previous_text, encoding="utf-8")
+                result = subprocess.run(
+                    ["bash", str(previous), "fixture-cron", "", "loxberryhostbackup", "", str(home)],
+                    text=True, capture_output=True, check=False, timeout=15,
+                )
+                assert result.returncode != 0
+                assert "LoxBerry system cron directory must be root-owned and not writable by others: " + str(managed) in result.stderr
+                assert json.loads(config.read_text()) == saved
             run_install()
             assert json.loads(config.read_text()) == saved
             assert "17 3 * * * root " in (cron / "loxberryhostbackup").read_text()
@@ -348,8 +381,20 @@ def cron_install_integration():
             assert "@reboot root " + str(launcher) + " recover-services\n" in recovery.read_text()
             assert "*/5 * * * * root " + str(launcher) + " recover-services\n" in recovery.read_text()
             assert "23 * * * * root " + str(launcher) + " integrity-schedule\n" in recovery.read_text()
-            assert recovery.stat().st_uid == 0
-            assert recovery.stat().st_mode & 0o777 == 0o644
+            def assert_cron_permissions():
+                for entry in (cron / "loxberryhostbackup", recovery):
+                    assert not entry.is_symlink()
+                    assert entry.stat().st_uid == 0
+                    assert entry.stat().st_gid == 0
+                    assert entry.stat().st_mode & 0o7777 == 0o644
+                assert cron.stat().st_uid == 0
+                assert cron.stat().st_gid == 0
+                assert cron.stat().st_mode & 0o7777 == cron_mode
+                if layout == "loxberry-link":
+                    assert cron.is_symlink() and cron.resolve() == managed
+                    assert cron.lstat().st_uid == 0
+                    assert cron.lstat().st_gid == 0
+            assert_cron_permissions()
             result = subprocess.run(["bash", str(launcher), "config"], text=True,
                                     capture_output=True, check=False, timeout=15)
             assert result.returncode == 0, result.stdout + result.stderr
@@ -366,8 +411,14 @@ def cron_install_integration():
                 install_sources()
                 run_install()
                 assert json.loads(config.read_text()) == saved
+                assert_cron_permissions()
+                assert "17 3 * * * root " in (cron / "loxberryhostbackup").read_text()
+            if layout == "loxberry-link" and cron_mode == 0o2775:
                 good_pointer = (trusted / "current").resolve()
-                for unsafe in ("wrong-target", "dangling", "link-owner", "target-owner", "target-mode"):
+                for unsafe in (
+                    "wrong-target", "dangling", "link-owner", "target-owner",
+                    "target-group", "target-mode",
+                ):
                     cron.unlink()
                     target = managed
                     if unsafe == "wrong-target":
@@ -380,6 +431,9 @@ def cron_install_integration():
                         os.lchown(cron, nobody.pw_uid, nobody.pw_gid)
                     elif unsafe == "target-owner":
                         os.chown(managed, nobody.pw_uid, nobody.pw_gid)
+                    elif unsafe == "target-group":
+                        os.chown(managed, 0, nobody.pw_gid)
+                        managed.chmod(0o775)
                     elif unsafe == "target-mode":
                         managed.chmod(0o777)
                     install_sources()
@@ -389,7 +443,7 @@ def cron_install_integration():
                     if target != managed and target.exists():
                         assert not list(target.iterdir())
                     os.chown(managed, 0, 0)
-                    managed.chmod(0o755)
+                    managed.chmod(cron_mode)
 
 
 if __name__ == "__main__":

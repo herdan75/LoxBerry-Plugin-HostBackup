@@ -35,6 +35,16 @@ Noch keine Änderungen nach 0.7.0-beta.
   Der vorgesehene Root-eigene Symlink auf `system/cron/cron.d` wird akzeptiert;
   Ziel, Eigentümer und Schreibrechte bleiben geprüft. Unbekannte, defekte oder
   ungeschützte Verknüpfungen werden weiterhin abgelehnt.
+- Nach dem zweiten Installationsprotokoll und der tatsächlichen Rechteausgabe
+  ergänzt: Das vorgesehene Cron-Ziel mit `root:root 775` beziehungsweise `2775`
+  wird unterstützt. Gruppenschreibrecht ist nur für GID 0 zulässig; fremde
+  Eigentümer, andere schreibberechtigte Gruppen und Weltschreibrecht bleiben
+  verboten. Die erste Symlink-Korrektur allein hatte diesen Fall nicht abgedeckt.
+- Die Linux-Installationsmatrix bildet nun die Rechte `755`, `775`, `2755` und
+  `2775` ab, reproduziert beide bisherigen Ablehnungen und prüft danach die
+  vollständige Installation mit echtem Backend sowie die Neuinstallation
+  derselben Version. Ausführbare Helfer bleiben auch bei Gruppenschreibrecht
+  für `root` gesperrt; Cron-Dateien bleiben Root-eigen und `644`.
 - Keine Änderung gemeinsamer LoxBerry-/Systemverzeichnisrechte und keine
   Lockerung des Schutzes ausführbarer Root-Helfer. Der Recovery-Cron-Eintrag
   wird über eine zufällige temporäre Datei atomar installiert.

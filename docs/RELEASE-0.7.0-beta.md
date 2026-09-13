@@ -12,8 +12,12 @@ Nachweis eines bootfähigen vollständigen Restores.
 
 **Korrigiertes Paket vom 13.09.2026, ohne Versionswechsel:** Der gemeldete
 POSTROOT-Fehler `Unsafe trusted directory: /etc/cron.d` ist behoben. LoxBerrys
-vorgesehene Cron-Verknüpfung wird gezielt unterstützt, bei weiterhin geprüften
-Root-Rechten. Versionsnummer und Downloadlink bleiben unverändert.
+vorgesehene Cron-Verknüpfung wird gezielt unterstützt, nun auch mit den tatsächlich
+gemeldeten Rechten `root:root 775` am Zielverzeichnis. Die erste Korrektur hatte
+dieses Gruppenschreibrecht noch abgelehnt. Nur die Gruppe `root` wird hier als
+schreibberechtigt akzeptiert, kein fremder Eigentümer und kein Weltschreibrecht.
+Root-Helfer bleiben unverändert streng geschützt; es werden keine gemeinsamen
+Systemrechte geändert. Versionsnummer und Downloadlink bleiben unverändert.
 
 [LoxBerryHostBackup_0.7.0.zip herunterladen](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.7.0-beta/LoxBerryHostBackup_0.7.0.zip)
 
@@ -102,10 +106,13 @@ dieses Updates**.
 
 ## Prüfung und bekannte Grenzen
 
-- [Linux-Abnahme der Installationskorrektur](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34753883131):
+- [Linux-Abnahme der ersten Installationskorrektur](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34753883131):
   188 Tests ohne Skips, zehn Browser-Prüfblöcke sowie Rechteprüfung und ZIP-Build
   erfolgreich. Der neue Test reproduziert die frühere Cron-Ablehnung und prüft
   anschliessend Installation und erneute Installation mit dem echten Backend.
+  Dieser ältere Lauf enthielt noch nicht die nachträglich gemeldeten Rechte
+  `root:root 775`. Die aktuelle Matrix prüft zusätzlich `775`, `2755` und `2775`;
+  der Nachweis des tatsächlich veröffentlichten Standes folgt auf der Release-Seite.
 - [Linux-Abnahme](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34753075077):
   187 Tests ohne Skips, alle zehn Browser-Prüfblöcke sowie Rechte-/Metadatenprüfung
   und ZIP-Build erfolgreich. Der Release-Tag wird vor Veröffentlichung erneut geprüft.
