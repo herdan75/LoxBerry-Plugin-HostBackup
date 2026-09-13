@@ -581,6 +581,9 @@ getcap "$DESTINATION/payload"
             for directory in ("media", volume):
                 member = fixture_member(directory)
                 member.type = tarfile.DIRTYPE
+                # TarInfo defaults to 0644 even for directories. Give the
+                # synthetic directory searchable permissions like a real source.
+                member.mode = 0o750
                 archive.addfile(member)
             for name, content in (("./" + volume + "/a.txt", b"alpha"), (volume + "/b.txt", b"beta")):
                 member = fixture_member(name)
@@ -604,6 +607,7 @@ getcap "$DESTINATION/payload"
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual((mapped / "a.txt").read_bytes(), b"alpha")
         self.assertEqual((mapped / "b.txt").read_bytes(), b"beta")
+        self.assertEqual(stat.S_IMODE(mapped.stat().st_mode), 0o750)
         self.assertEqual((mapped / "a.txt").stat().st_ino, (mapped / "hardlink").stat().st_ino)
         restored = (mapped / "a.txt").stat()
         self.assertEqual((restored.st_uid, restored.st_gid), (owner.st_uid, owner.st_gid))
