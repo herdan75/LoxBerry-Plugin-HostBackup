@@ -80,6 +80,26 @@ ein Paket veröffentlicht wird. Hardware-/NAS-Abnahme bleibt davon getrennt.
 
 ## Testgrenzen
 
+### Nachbesserung der LoxBerry-Installation, weiterhin 0.7.0-beta
+
+Das anschliessende reale Installationsprotokoll meldete
+`Unsafe trusted directory: /etc/cron.d`. LoxBerry verknüpft dieses Verzeichnis
+absichtlich mit seinem Root-eigenen `system/cron/cron.d`; dessen Eltern gehören
+LoxBerry. Der bisherige Installer testete dagegen nur ein gewöhnliches
+Root-eigenes Verzeichnis und ersetzte das Backend im Installationstest durch
+einen Stub. Diese Abdeckung hat den Plattformfehler nicht erkannt.
+
+Die Korrektur akzeptiert gezielt die vorgesehene Cron-Verknüpfung, ohne
+Systemrechte zu verändern oder den Schutz ausführbarer Helfer zu lockern.
+Ein zusätzlicher verpflichtender Linux-Test installiert das echte Backend mit
+beiden Verzeichnisvarianten, prüft den gespeicherten Zeitplan, das Laden der
+Konfiguration und die erneute Installation derselben Version. Unbekannte,
+defekte und ungeschützte Symlink-/Zielvarianten müssen weiterhin scheitern.
+Der abschliessende CI-Nachweis und die neue ZIP-Prüfsumme werden beim bestehenden
+Pre-Release dokumentiert; Version und Download-URL bleiben unverändert.
+
+### Verbleibende Praxisabnahme
+
 Keine produktiven Backups, Restores oder Serviceaktionen. Linux-Integrationstests
 verwenden ausschliesslich isolierte temporäre Verzeichnisse. Echte Offline-
 Wiederherstellung auf LoxBerry und NAS-Matrix bleiben gesonderte Praxistests.

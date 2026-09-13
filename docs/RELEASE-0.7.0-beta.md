@@ -10,7 +10,17 @@ Nachweis eines bootfähigen vollständigen Restores.
 
 ## Installation und Update
 
+**Korrigiertes Paket vom 13.09.2026, ohne Versionswechsel:** Der gemeldete
+POSTROOT-Fehler `Unsafe trusted directory: /etc/cron.d` ist behoben. LoxBerrys
+vorgesehene Cron-Verknüpfung wird gezielt unterstützt, bei weiterhin geprüften
+Root-Rechten. Versionsnummer und Downloadlink bleiben unverändert.
+
 [LoxBerryHostBackup_0.7.0.zip herunterladen](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.7.0-beta/LoxBerryHostBackup_0.7.0.zip)
+
+Nach einem fehlgeschlagenen Installationsversuch dieses ZIP **frisch herunterladen
+und erneut über die Plugin-Verwaltung installieren**, ohne vorherige Deinstallation.
+Eine bereits eingetragene Version 0.7.0 erhält wegen der identischen Versionsnummer
+keine neue Update-Meldung. Vorhandene Einstellungen anschliessend kontrollieren.
 
 Den Pre-Release-Kanal in der LoxBerry-Plugin-Verwaltung aktivieren und nach
 Updates suchen. Alternativ das ZIP über die Plugin-Verwaltung installieren.

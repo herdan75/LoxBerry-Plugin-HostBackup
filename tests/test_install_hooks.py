@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import pathlib
 import configparser
+import json
 import os
 import shutil
 import subprocess
@@ -100,6 +101,12 @@ class InstallHookTests(unittest.TestCase):
         self.assertIn("prerelease: ${{ contains(github.ref_name, '-') }}", WORKFLOW)
 
     def test_trusted_install_and_webuser_permissions(self) -> None:
+        self.run_linux_install_child("--trusted-install-child")
+
+    def test_real_backend_install_with_loxberry_cron_symlink(self) -> None:
+        self.run_linux_install_child("--cron-install-child")
+
+    def run_linux_install_child(self, child_mode: str) -> None:
         required = os.environ.get("HOSTBACKUP_REQUIRE_LINUX_INTEGRATION") == "1"
         if sys.platform != "linux":
             if required:
@@ -115,7 +122,7 @@ class InstallHookTests(unittest.TestCase):
                 self.skipTest("Linux root/web-user integration requires passwordless sudo")
             prefix = ["sudo", "-n"]
         result = subprocess.run(
-            [*prefix, sys.executable, str(pathlib.Path(__file__).resolve()), "--trusted-install-child"],
+            [*prefix, sys.executable, str(pathlib.Path(__file__).resolve()), child_mode],
             text=True, capture_output=True, check=False, timeout=60,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -239,8 +246,156 @@ for action in (lambda: p.write_text('injected'), lambda: p.unlink(),
         assert run(dispatcher, "config", "extra", success=False).returncode != 0
 
 
+def cron_install_integration():
+    """Install the real backend with native and LoxBerry-managed cron layouts.
+
+    All system paths are redirected below a private /var/lib test directory.
+    No service, real cron configuration, backup or host settings are changed.
+    """
+    import pwd
+
+    assert os.geteuid() == 0
+    nobody = pwd.getpwnam("nobody")
+    for layout in ("regular", "loxberry-link"):
+        with tempfile.TemporaryDirectory(prefix="hostbackup-cron-test-", dir="/var/lib") as temporary:
+            sandbox = pathlib.Path(temporary)
+            sandbox.chmod(0o755)
+            home = sandbox / "lbh"
+            trusted = sandbox / "libexec/loxberryhostbackup"
+            launcher = sandbox / "sbin/loxberryhostbackup"
+            cron = sandbox / "etc/cron.d"
+            cron.parent.mkdir()
+            cron.parent.chmod(0o755)
+            managed = home / "system/cron/cron.d"
+            managed.mkdir(parents=True)
+            # LoxBerry resetpermissions.sh owns cron.d as root, but its parent
+            # directories belong to loxberry; do not silently change those.
+            for parent in (home, home / "system", managed.parent):
+                parent.chmod(0o755)
+                os.chown(parent, nobody.pw_uid, nobody.pw_gid)
+            managed.chmod(0o755)
+            if layout == "loxberry-link":
+                cron.symlink_to(managed, target_is_directory=True)
+            else:
+                cron.mkdir(mode=0o755)
+            bindir = home / "bin/plugins/loxberryhostbackup"
+            bindir.mkdir(parents=True)
+            config = home / "config/plugins/loxberryhostbackup/config.json"
+            config.parent.mkdir(parents=True)
+            saved = {
+                "backup_root": "/media/usb/PI_Backup/loxberry-hostbackup",
+                "metadata_mode": "network-compatible", "keep_backups": 3,
+                "schedule_enabled": True, "schedule_mode": "daily",
+                "schedule_time": "03:17", "rsync_extra_excludes": ["/media/usb/PI_Backup"],
+            }
+            config.write_text(json.dumps(saved), encoding="utf-8")
+            cgi = home / "webfrontend/htmlauth/plugins/loxberryhostbackup/index.cgi"
+            cgi.parent.mkdir(parents=True)
+            cgi.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+
+            def rewrite(text):
+                return (text.replace("/usr/libexec/loxberryhostbackup", str(trusted))
+                        .replace("/usr/local/sbin/loxberryhostbackup", str(launcher))
+                        .replace("/etc/cron.d", str(cron))
+                        .replace("/tmp/${INSTALL_ID}_loxberryhostbackup_upgrade",
+                                 str(sandbox / "upgrade/${INSTALL_ID}_loxberryhostbackup_upgrade"))
+                        .replace("loxberry:loxberry", "nobody:nogroup"))
+
+            def install_sources():
+                for source in (ROOT / "bin").iterdir():
+                    if source.suffix in (".sh", ".py", ".php"):
+                        target = bindir / source.name
+                        target.write_text(rewrite(source.read_text(encoding="utf-8")), encoding="utf-8")
+                        target.chmod(0o755)
+                (bindir / "runtime-version").write_text("0.7.0\n", encoding="utf-8")
+
+            postroot = sandbox / "postroot.sh"
+            postroot.write_text(rewrite(POSTROOT), encoding="utf-8")
+            install_sources()
+
+            def run_install(expected_success=True):
+                result = subprocess.run(
+                    ["bash", str(postroot), "fixture-cron", "", "loxberryhostbackup", "", str(home)],
+                    text=True, capture_output=True, check=False, timeout=15,
+                )
+                if expected_success:
+                    assert result.returncode == 0, result.stdout + result.stderr
+                else:
+                    assert result.returncode != 0, "Unsafe cron layout was accepted"
+                return result
+
+            if layout == "loxberry-link":
+                # Reproduce the reported POSTROOT failure with the previous
+                # strict cron-directory policy, before exercising the fix.
+                legacy_text = rewrite(POSTROOT).replace(
+                    "\nprepare_recovery_cron_directory\n",
+                    '\nensure_root_path "${RECOVERY_CRON%/*}"\n',
+                )
+                assert legacy_text != rewrite(POSTROOT)
+                legacy = sandbox / "postroot-previous-cron-policy.sh"
+                legacy.write_text(legacy_text, encoding="utf-8")
+                result = subprocess.run(
+                    ["bash", str(legacy), "fixture-cron", "", "loxberryhostbackup", "", str(home)],
+                    text=True, capture_output=True, check=False, timeout=15,
+                )
+                assert result.returncode != 0
+                assert "Unsafe trusted directory: " + str(cron) in result.stderr
+                assert json.loads(config.read_text()) == saved
+            run_install()
+            assert json.loads(config.read_text()) == saved
+            assert "17 3 * * * root " in (cron / "loxberryhostbackup").read_text()
+            recovery = cron / "loxberryhostbackup-recovery"
+            assert "@reboot root " + str(launcher) + " recover-services\n" in recovery.read_text()
+            assert "*/5 * * * * root " + str(launcher) + " recover-services\n" in recovery.read_text()
+            assert "23 * * * * root " + str(launcher) + " integrity-schedule\n" in recovery.read_text()
+            assert recovery.stat().st_uid == 0
+            assert recovery.stat().st_mode & 0o777 == 0o644
+            result = subprocess.run(["bash", str(launcher), "config"], text=True,
+                                    capture_output=True, check=False, timeout=15)
+            assert result.returncode == 0, result.stdout + result.stderr
+            loaded = json.loads(result.stdout)
+            for key, value in saved.items():
+                assert loaded[key] == value, (key, loaded[key], value)
+            for parent in (home, home / "system", managed.parent):
+                assert parent.stat().st_uid == nobody.pw_uid
+                assert parent.stat().st_mode & 0o777 == 0o755
+            if layout == "loxberry-link":
+                assert cron.is_symlink() and cron.resolve() == managed
+                # Reinstall the same package version after an interrupted update.
+                # A fresh source backend must replace the installed forwarding shim.
+                install_sources()
+                run_install()
+                assert json.loads(config.read_text()) == saved
+                good_pointer = (trusted / "current").resolve()
+                for unsafe in ("wrong-target", "dangling", "link-owner", "target-owner", "target-mode"):
+                    cron.unlink()
+                    target = managed
+                    if unsafe == "wrong-target":
+                        target = sandbox / "other-cron"
+                        target.mkdir()
+                    elif unsafe == "dangling":
+                        target = sandbox / "missing-cron"
+                    cron.symlink_to(target, target_is_directory=True)
+                    if unsafe == "link-owner":
+                        os.lchown(cron, nobody.pw_uid, nobody.pw_gid)
+                    elif unsafe == "target-owner":
+                        os.chown(managed, nobody.pw_uid, nobody.pw_gid)
+                    elif unsafe == "target-mode":
+                        managed.chmod(0o777)
+                    install_sources()
+                    run_install(expected_success=False)
+                    assert (trusted / "current").resolve() == good_pointer
+                    assert json.loads(config.read_text()) == saved
+                    if target != managed and target.exists():
+                        assert not list(target.iterdir())
+                    os.chown(managed, 0, 0)
+                    managed.chmod(0o755)
+
+
 if __name__ == "__main__":
     if sys.argv[1:] == ["--trusted-install-child"]:
         trusted_install_integration()
+    elif sys.argv[1:] == ["--cron-install-child"]:
+        cron_install_integration()
     else:
         unittest.main()

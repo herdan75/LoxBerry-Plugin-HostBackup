@@ -28,6 +28,14 @@ der gesamten Installation, Konfiguration oder Cron-Regeln. Diese Schutzprüfung
 gilt für die Plugin-Helfer; gemeinsam genutzte LoxBerry-/Systembibliotheken und
 deren Updates bleiben Verantwortung der Plattform.
 
+Die Cron-Integration berücksichtigt LoxBerrys systemseitige Verknüpfung
+`/etc/cron.d` nach `$LBHOMEDIR/system/cron/cron.d`. Nur dieser erwartete,
+existierende Zielpfad wird als Ausnahme zugelassen; der Symlink und das
+Cron-Zielverzeichnis müssen Root gehören, das Ziel darf nicht durch Gruppe
+oder andere Benutzer beschreibbar sein. Seine von LoxBerry verwalteten
+Elternverzeichnisse werden nicht umgewidmet. Diese Plattformgrenze gilt nur für
+Cron-Konfigurationen, nicht für ausführbare Root-Helfer oder deren Elternpfade.
+
 Fake Super verwendet für die getrennte Behandlung von Sender und Empfänger
 einen festen lokalen rsync-Transport. Der Shellcode ist konstant, führt kein
 `eval` aus und stellt keine SSH-/Netzwerkverbindung her; Zielpfade werden nicht

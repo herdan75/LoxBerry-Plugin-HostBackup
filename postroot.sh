@@ -115,9 +115,46 @@ ensure_root_path() {
   }
 }
 
+prepare_recovery_cron_directory() {
+  local cron_dir="${RECOVERY_CRON%/*}" expected_dir resolved_dir mode
+  if [ -L "$cron_dir" ]; then
+    # LoxBerry deliberately redirects /etc/cron.d into its system tree. That
+    # platform-managed cron directory is not an executable helper directory:
+    # its ancestors belong to LoxBerry, while cron.d itself belongs to root.
+    ensure_root_path "${cron_dir%/*}"
+    [ "$(stat -c '%u' "$cron_dir")" = 0 ] || {
+      echo "Cron directory symlink must be root-owned: $cron_dir" >&2; exit 1;
+    }
+    expected_dir="$(readlink -e -- "$LBHOMEDIR")" || {
+      echo "Cannot resolve LoxBerry home for the system cron directory." >&2; exit 1;
+    }
+    expected_dir="$expected_dir/system/cron/cron.d"
+    resolved_dir="$(readlink -e -- "$cron_dir")" || {
+      echo "Cron directory symlink has no existing target: $cron_dir" >&2; exit 1;
+    }
+    [ "$resolved_dir" = "$expected_dir" ] || {
+      echo "Cron directory symlink must point to the LoxBerry system cron directory: $cron_dir" >&2; exit 1;
+    }
+    [ -d "$resolved_dir" ] && [ ! -L "$resolved_dir" ] || {
+      echo "Unsafe LoxBerry system cron directory: $resolved_dir" >&2; exit 1;
+    }
+    mode="$(stat -c '%a' "$resolved_dir")"
+    [ "$(stat -c '%u' "$resolved_dir")" = 0 ] && (( (8#$mode & 022) == 0 )) || {
+      echo "LoxBerry system cron directory must be root-owned and not writable by others: $resolved_dir" >&2
+      exit 1
+    }
+    cron_dir="$resolved_dir"
+  else
+    ensure_root_path "$cron_dir"
+  fi
+  # Use the resolved directory path for the atomic recovery-entry installation;
+  # its LoxBerry-managed ancestors remain part of the platform trust boundary.
+  RECOVERY_CRON="$cron_dir/${RECOVERY_CRON##*/}"
+}
+
 ensure_root_path "$TRUST_ROOT/releases"
 ensure_root_path "${LAUNCHER_TARGET%/*}"
-ensure_root_path "${RECOVERY_CRON%/*}"
+prepare_recovery_cron_directory
 [ ! -e "$TRUST_ROOT/current" ] || [ -L "$TRUST_ROOT/current" ] || {
   echo "Refusing non-symlink current release pointer." >&2; exit 1;
 }
@@ -129,8 +166,9 @@ release="$(mktemp -d "$TRUST_ROOT/releases/${INSTALL_ID}.XXXXXXXX")"
 pointer="$TRUST_ROOT/.current-${INSTALL_ID}-$$"
 launcher_tmp="${LAUNCHER_TARGET}.install-$$"
 dispatcher_tmp="${DISPATCHER_TARGET}.install-$$"
-recovery_tmp="${RECOVERY_CRON%/*}/.loxberryhostbackup-recovery-$$"
+recovery_tmp=""
 trap 'rm -f -- "$pointer" "$launcher_tmp" "$dispatcher_tmp" "$recovery_tmp"' EXIT
+recovery_tmp="$(mktemp "${RECOVERY_CRON%/*}/.loxberryhostbackup-recovery.XXXXXXXX")"
 for helper in "$SOURCE_BIN"/*.sh "$SOURCE_BIN"/*.py "$SOURCE_BIN"/*.php; do
   [ -e "$helper" ] || continue
   [ -f "$helper" ] && [ ! -L "$helper" ] || { echo "Unsafe executable helper: $helper" >&2; exit 1; }

@@ -18,14 +18,32 @@ Noch keine Änderungen nach 0.7.0-beta.
 - Neuer Pre-Release-Kanalstand mit interner Plugin-Version `0.7.0`, Tag
   `v0.7.0-beta` und Paket `LoxBerryHostBackup_0.7.0.zip`. LoxBerry kann ihn
   über `prerelease.cfg` als neues Update erkennen; Stable bleibt auf 0.5.8.
-- Paketveröffentlichung nach erfolgreicher Linux-CI; vorhandene Release-ZIPs
-  bleiben unverändert. Ausführliche Updatehinweise in `docs/RELEASE-0.7.0-beta.md`.
+- Paketveröffentlichung nach erfolgreicher Linux-CI. Das ZIP von 0.7.0-beta
+  wird für die unten dokumentierte Installationskorrektur unter demselben Namen
+  ersetzt; ältere Releases bleiben unverändert. Ausführliche Updatehinweise in
+  `docs/RELEASE-0.7.0-beta.md`.
 - Einstellungen vor dem Update exportieren und danach kontrollieren.
   Änderungen stets vor manuellen und automatischen Backups speichern.
 - Beim Umstieg von 0.5.8 und älter bleibt eine neue vollständige Basiskopie
   erforderlich; erst danach ist wieder inkrementelle Hardlink-Nutzung möglich.
   Eine vorhandene passende 0.6.x-Referenz wird nicht allein wegen der neuen
   Versionsnummer ausgeschlossen.
+
+### Installationskorrektur ohne Versionswechsel - 2026-09-13
+
+- POSTROOT-Abbruch `Unsafe trusted directory: /etc/cron.d` auf LoxBerry behoben.
+  Der vorgesehene Root-eigene Symlink auf `system/cron/cron.d` wird akzeptiert;
+  Ziel, Eigentümer und Schreibrechte bleiben geprüft. Unbekannte, defekte oder
+  ungeschützte Verknüpfungen werden weiterhin abgelehnt.
+- Keine Änderung gemeinsamer LoxBerry-/Systemverzeichnisrechte und keine
+  Lockerung des Schutzes ausführbarer Root-Helfer. Der Recovery-Cron-Eintrag
+  wird über eine zufällige temporäre Datei atomar installiert.
+- Linux-Installationstest mit echtem Backend ergänzt: normales Cron-Verzeichnis,
+  LoxBerry-Symlink mit LoxBerry-eigenen Elternverzeichnissen, Zeitplaninstallation,
+  erneute Installation derselben Version und Erhalt gespeicherter Einstellungen.
+- Plugin-Version `0.7.0`, Pre-Release `v0.7.0-beta` und ZIP-URL bleiben gleich.
+  Nach einem Fehlversuch das frisch heruntergeladene ZIP erneut installieren;
+  bei bereits eingetragener Version 0.7.0 gibt es keine höhere Updateversion.
 
 ### Daten- und Wiederherstellungssicherheit
 

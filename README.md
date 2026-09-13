@@ -6,6 +6,14 @@ Bedienungsverbesserungen aus der Analyse vom 13.09.2026 und ist für freiwillige
 Tests vorgesehen. Änderungen, Updatehinweise und Prüfgrenzen stehen in den
 [Release Notes](docs/RELEASE-0.7.0-beta.md); der stabile Kanal bleibt unverändert.
 
+**Installationskorrektur vom 13.09.2026, weiterhin 0.7.0-beta:** Das Paket
+unter demselben Downloadlink berücksichtigt nun LoxBerrys vorgesehenen
+`/etc/cron.d`-Symlink. Damit wird der POSTROOT-Abbruch
+`Unsafe trusted directory: /etc/cron.d` behoben. Bei einer fehlgeschlagenen
+Installation das ZIP frisch herunterladen und erneut über die Plugin-Verwaltung
+installieren, ohne vorher zu deinstallieren. Ist bereits `0.7.0` eingetragen,
+erscheint wegen der unveränderten Versionsnummer kein höheres Versionsupdate.
+
 > [!IMPORTANT]
 > **Erst Einstellungen speichern, dann sichern.** Auch ausgewählte Optionen,
 > Dienste, Container und Zeitpläne gelten erst nach **Änderungen speichern**.
