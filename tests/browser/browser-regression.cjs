@@ -13,6 +13,18 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'hostbackup-browser-'));
 const posix = value => value.replace(/\\/g, '/');
 const quote = value => "'" + value.replace(/'/g, "'\\''") + "'";
 const perlLib = ['tests/browser/perl','tests/perl-stub','tests/perl'].join(':');
+const cgiSource=fs.readFileSync(path.join(repo,'webfrontend/htmlauth/index.cgi'),'utf8');
+const sourceValidator=cgiSource.match(/^sub source_selection_json \{[\s\S]*?^\}/m)[0];
+const validatorProgram='use strict; use warnings; use JSON::PP;\n'+sourceValidator+'\n'+String.raw`
+my $valid = source_selection_json('{"policy":"local","overrides":{"/media/usb/data":true,"/media/smb/nas":false}}');
+my $decoded = decode_json($valid); die "source JSON values changed" unless $decoded->{overrides}{'/media/usb/data'} && !$decoded->{overrides}{'/media/smb/nas'};
+for my $bad ('{}', '{"policy":"all","overrides":{}}', '{"policy":"local","overrides":{"/mnt":1}}', '{"policy":"local","overrides":{"/":true}}', '{"policy":"local","overrides":{"/mnt/../secret":true}}', '{"policy":"local","overrides":{"/mnt//nas":true}}', '{"policy":"local","overrides":{"/mnt/nas/":true}}', '{"policy":"local","overrides":{},"extra":true}') {
+  eval { source_selection_json($bad) }; die "invalid source JSON accepted: $bad" unless $@;
+}
+print "CGI source selection validator passed\n";
+`;
+if(process.platform==='win32')execFileSync('C:/Program Files/Git/bin/bash.exe',['-s'],{cwd:repo,input:`perl -e ${quote(validatorProgram)}\n`,encoding:'utf8'});
+else execFileSync('perl',['-e',validatorProgram],{cwd:repo,encoding:'utf8'});
 let html;
 if (process.platform === 'win32') {
   html = execFileSync('C:/Program Files/Git/bin/bash.exe', ['-s'], {cwd:repo, input:`PERL5LIB=${quote(perlLib)} LBPDATADIR=${quote(posix(temp))} REQUEST_METHOD=GET REMOTE_USER=fixture HTTP_USER_AGENT=fixture perl -MHostBackupFixture webfrontend/htmlauth/index.cgi\n`, encoding:'utf8'});
@@ -21,6 +33,8 @@ assert.match(html,/value="\/fixture\/backup"/);
 assert.doesNotMatch(html,/Speichern und Backup-Start bleiben gesperrt/);
 assert.match(html, /<!doctype html><html><head>/);
 const assetUrls = {};
+const savedSources={overrides:{'/media/smb/disconnected':true},policy:'legacy'};
+html=html.replace(/(id="source-selection-json" name="source_selection_json" value=")[^"]*(")/,(_,before,after)=>before+JSON.stringify(savedSources).replace(/"/g,'&quot;')+after);
 for (const name of ['style.css', 'hostbackup.js']) {
   const digest = createHash('sha256').update(fs.readFileSync(path.join(repo, 'webfrontend/htmlauth/assets', name))).digest('hex').slice(0, 16);
   const assetUrl = 'assets/' + name + '?v=' + digest;
@@ -34,6 +48,9 @@ const overviewTarget='/media/usb/PI_Backup/loxberry-hostbackup/'+'backup-target-
 const verificationReport={backup_id:'fixture-ok',status:'verified',checked_files:3,checked_at:'2026-09-13T12:00:00Z',changes:[],content_verified:true,restore_tested:false};
 let failSave=true, taskFinished=false, tokenNumber=0, postCount=0, htmlCount=0, statusCount=0, tokenDelay=0, saveDelay=0, lastSavedPath='';
 let overviewIssues=false, reportRequests=0, taskPhase='copying';
+let lastSavedSources, failSources=false, failBackupMetadata=false;
+const probe={status:'error',mode:'network-compatible',message:'Der Test kann Eigentümer nicht erhalten.',checks:[{name:'Eigentümer und Rechte',status:'error',details:'CIFS erzwingt feste Rechte.',expected:'0:0 640',actual:'1000:1000 666',exit_code:23,stderr:'rsync: <img src=x onerror="window.unsafeProbe=true"> Operation not permitted'},{name:'xattrs',status:'skipped',details:'Bewusst ausgelassen.'}],advice:['Mount-Einstellungen prüfen oder Portable Archive mit Vollbackup und Offline-Restore verwenden.']};
+const sourceVolumes=[{path:'/',kind:'system',fstype:'ext4',included:true,selectable:false,reason:'Systemdaten'},{path:'/media/usb',kind:'automount',fstype:'autofs',included:true,selectable:false,reason:'Automount-Bereich; einzelne Laufwerke auswählen'},{path:'/media/usb/data',kind:'local',fstype:'ext4',included:true,selectable:true},{path:'/media/usb/network',kind:'network',fstype:'cifs',included:true,selectable:true},{path:'/media/smb/nas',kind:'network',fstype:'cifs',included:true,selectable:true},{path:'/fixture/backup',kind:'local',fstype:'ext4',included:false,selectable:false,forced_excluded:true,reason:'Backup-Ziel'}];
 const longLog = () => Array.from({length:180+statusCount},(_,i)=>`${i}: 3.43G 96% 4.23MB/s ${'long-path/'.repeat(36)} file-${i}`).join('\r');
 function json(res,value,status=200){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));}
 const server=http.createServer(async(req,res)=>{
@@ -55,7 +72,8 @@ const server=http.createServer(async(req,res)=>{
       let body='';for await(const chunk of req)body+=chunk;
       postCount++;assert.equal(req.headers['x-hostbackup-request'],'1');assert.equal(req.headers['x-csrf-token'],'fresh-'+tokenNumber);
       const params=new URLSearchParams(body);assert.equal(params.get('csrf_token'),'fresh-'+tokenNumber);
-      if(action==='save-config') { lastSavedPath=params.get('backup_root'); await new Promise(resolve=>setTimeout(resolve,saveDelay)); return json(res,failSave?{ok:false,error:'Simulierter Speicherfehler'}:{ok:true,message:'Gespeichert'},failSave?400:200); }
+      if(action==='save-config') { lastSavedPath=params.get('backup_root');lastSavedSources=JSON.parse(params.get('source_selection_json')); await new Promise(resolve=>setTimeout(resolve,saveDelay)); return json(res,failSave?{ok:false,error:'Simulierter Speicherfehler'}:{ok:true,message:'Gespeichert'},failSave?400:200); }
+      if(action==='backup'&&failBackupMetadata)return json(res,{ok:false,error:'Backup nicht gestartet: Metadatenprüfung fehlgeschlagen.',preflight:{status:'error',checks:[{name:'Metadaten-Modus',ok:false,value:'network-compatible'}],metadata_probe:probe},metadata_probe:probe},400);
       if(action==='record-restore-test') {
         assert.equal(params.get('backup_id'),'fixture-ok');assert.equal(params.get('result'),'passed');assert.match(params.get('tested_at'),/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
         const entry={result:params.get('result'),tested_at:params.get('tested_at'),note:params.get('note'),recorded_at:'2026-09-13T12:00:00Z',source:'manual-user-report',manifest_sha256:'fixture-hash',applies_to_current_manifest:true};
@@ -65,13 +83,14 @@ const server=http.createServer(async(req,res)=>{
       return json(res,{ok:true,redirect:'?active_task='+task});
     }
     if(action==='csrf-token'){await new Promise(resolve=>setTimeout(resolve,tokenDelay));return json(res,{csrf_token:'fresh-'+(++tokenNumber),expires_at:Date.now()/1000+3600});}
+    if(action==='source-info')return json(res,failSources?{ok:false,error:'Mountliste momentan nicht erreichbar'}:{selection:savedSources,volumes:sourceVolumes,notices:['Netzfreigaben bewusst auswählen.']},failSources?500:200);
     if(action==='task-overview')return json(res,{tasks:[{task,state:taskFinished?'finished':'running'}],active_task:taskFinished?null:task,last_success:{backup_id:overviewBackupId,finished_at:overviewFinishedAt},next_run:{local:'14.09.2026 02:00'},last_failure:overviewIssues?{task:'backup-old-failure.log',state:'failed'}:null,pending_service_recovery:overviewIssues?1:0,target:{configured:true,readable:true,path:overviewTarget,available_mb:20000}});
     if(['backup-preview','storage-info','runtime-cleanup-preview','diagnostics'].includes(action))reportRequests++;
     if(action==='task-status'){statusCount++;return json(res,{state:taskFinished?'finished':'running',phase:taskFinished?'complete':taskPhase,now:100,mtime:99,content_b64:Buffer.from(longLog()).toString('base64')});}
     if(action==='target-notice'){res.end('<section class="inline-notice">Fixture-Ziel verfügbar</section>');return;}
     if(action==='backup-list'){res.end('<tr><td data-label="ID">fixture-ok</td><td data-label="Status">complete</td><td data-label="Host">fixture</td><td data-label="Grösse">3 GiB</td><td data-label="Dateien">100</td><td data-label="Fertiggestellt">heute</td><td data-label="Export">–</td><td data-label="Aktionen"><form method="get" class="operation-form"><input type="hidden" name="action" value="verification-report"><input type="hidden" name="backup_id" value="fixture-ok"><button type="submit">Prüfbericht anzeigen</button></form><details class="restore-test-record"><summary>Externen Restoretest dokumentieren</summary><form method="post" class="restore-test-form"><input type="hidden" name="action" value="record-restore-test"><input type="hidden" name="backup_id" value="fixture-ok"><label>Ergebnis<select name="result" required><option value="">Bitte wählen</option><option value="passed">Erfolgreich</option><option value="failed">Fehlgeschlagen</option></select></label><label>Datum und Uhrzeit<input name="tested_at" type="datetime-local" required></label><label>Notiz<textarea name="note" maxlength="2000"></textarea></label><button type="submit">Persönlichen Testeintrag speichern</button></form></details><span class="info-help"><button type="button" class="info-button" aria-label="Information">i</button><span class="info-bubble">Dynamisch geladene Information</span></span></td></tr>');return;}
     if(action==='stop-targets'){await new Promise(resolve=>setTimeout(resolve,100));res.end('<input type="hidden" name="stop_targets_loaded" value="1"><label><input type="checkbox" name="stop_targets" value="systemd:test.service" checked>Testdienst</label><button type="button" data-stop-target-preset="none">Keine Dienste</button>');return;}
-    if(action==='backup-preview')return json(res,{saved_config:true,backup_mode:'snapshot',metadata_mode:'network-compatible',full_baseline_required:true,excludes:['/fixture/backup/***'],source_volumes:[{path:'/',included:true,reason:'System'}],available_mb:20000,baseline_estimate_mb:3000});
+    if(action==='backup-preview')return json(res,{saved_config:true,backup_mode:'snapshot',metadata_mode:'network-compatible',full_baseline_required:true,excludes:['/fixture/backup/***'],source_volumes:[{path:'/',included:true,reason:'System'}],available_mb:20000,baseline_estimate_mb:3000,metadata_probe:probe});
     if(action==='verification-report')return json(res,verificationReport);
     if(url.pathname==='/system/images/icons/loxberryhostbackup/icon_64.png'){res.writeHead(200,{'Content-Type':'image/png'});res.end(fs.readFileSync(path.join(repo,'icons/icon_64.png')));return;}
     if(url.pathname.startsWith('/system/')){res.writeHead(204);res.end();return;}
@@ -144,12 +163,34 @@ async function visible(page,selector){await page.locator(selector).waitFor({stat
     await page.waitForFunction(()=>document.querySelector('#task-heartbeat').textContent.includes('Aufbewahrung prüfen und alte Backups bereinigen'));
     assert.match(await page.locator('#task-state').textContent(),/läuft/);
     receipts.push('Retention displays its own readable phase and remains running until backend completion');
+    await page.locator('#source-selection-panel').evaluate(node=>node.open=true);
+    await page.waitForFunction(()=>!document.querySelector('#source-policy').disabled);
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true','Loading data sources must not mark saved settings dirty');
+    assert.equal(await page.locator('#source-policy').inputValue(),'legacy');
+    const nasSource=page.locator('[data-source-path="/media/smb/nas"]'),usbSource=page.locator('[data-source-path="/media/usb/data"]');
+    assert.equal(await nasSource.isChecked(),true);assert.equal(await usbSource.isChecked(),true);
+    assert.equal(await page.locator('[data-source-path="/media/smb/disconnected"]').isChecked(),true);
+    assert.equal(await page.locator('[data-source-path="/fixture/backup"]').isEnabled(),false);
+    await page.locator('#source-policy').selectOption('local');await visible(page,'#settings-change-popup');
+    assert.equal(await nasSource.isChecked(),false);assert.equal(await usbSource.isChecked(),true,'Recommended policy must preserve local USB data');
+    assert.equal(await page.locator('[data-source-path="/media/usb"]').isChecked(),false,'Autofs container remains excluded');assert.equal(await page.locator('[data-source-path="/media/usb/network"]').isChecked(),false,'Nested network sibling must not follow local USB');
+    await page.locator('#source-policy').selectOption('legacy');assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true','Reverting policy restores the exact clean baseline');
+    await nasSource.uncheck();await visible(page,'#settings-change-popup');
+    const sourceDraft=await page.locator('#source-selection-json').inputValue();
+    await page.locator('#source-selection-reload').click();await page.waitForFunction(()=>!document.querySelector('#source-selection-reload').disabled);
+    assert.equal(await page.locator('#source-selection-json').inputValue(),sourceDraft,'Reload must not replace draft with saved server selection');
+    failSources=true;await page.locator('#source-selection-reload').click();await page.waitForFunction(()=>document.querySelector('#source-selection-notices').textContent.includes('nicht geladen'));
+    assert.equal(await nasSource.isChecked(),false);assert.equal(await page.locator('#source-selection-json').inputValue(),sourceDraft);failSources=false;
+    receipts.push('Source selection preserves legacy behavior, excludes networks only after explicit policy change, retains USB and unmounted overrides, and survives refresh failures');
+    await page.locator('#source-selection-panel').screenshot({path:path.join(temp,'source-selection-desktop.png')});
+    assert.equal(await page.locator('.source-volume > label').first().evaluate(node=>getComputedStyle(node).flexDirection),'row');
     await page.locator('[name="metadata_mode"][value="network-compatible"]').check();await visible(page,'#settings-change-popup');
     const postBefore=postCount;await page.locator('.topbar-actions button[type="submit"]').click();assert.equal(postCount,postBefore);assert.match(await page.locator('#action-feedback').textContent(),/Zuerst Änderungen speichern/);receipts.push('Dirty profile blocks backup until explicitly saved');
     await page.locator('#backup-root-input').fill('/fixture/edited');
     await page.locator('.stop-target-panel').evaluate(node=>node.open=true);await page.locator('[name="stop_targets"]').uncheck();
     await page.locator('#settings-change-toggle').click();assert.match(await page.locator('#settings-change-list').textContent(),/Zu stoppende Dienste/);
     await page.locator('#settings-change-popup button[type="submit"]').click();await page.waitForFunction(()=>document.querySelector('#action-feedback').textContent.includes('Simulierter Speicherfehler'));
+    assert.equal(await nasSource.isChecked(),false);assert.equal(lastSavedSources.overrides['/media/smb/nas'],false);assert.equal(lastSavedSources.overrides['/media/smb/disconnected'],true);assert.equal(lastSavedSources.policy,'legacy');
     assert.equal(await page.locator('#backup-root-input').inputValue(),'/fixture/edited');assert.equal(await page.locator('[name="stop_targets"]').isChecked(),false);assert.equal(await page.locator('[name="metadata_mode"][value="network-compatible"]').isChecked(),true);receipts.push('Failed AJAX save preserves text/radio/asynchronously loaded checkbox edits');
     const htmlBefore=htmlCount;taskFinished=true;
     await page.locator('#task-log').evaluate(node=>{node.scrollTop=100;node.scrollLeft=120;node.dispatchEvent(new Event('scroll'));});
@@ -172,6 +213,18 @@ async function visible(page,selector){await page.locator(selector).waitFor({stat
     await page.locator('[name="metadata_mode"][value="network-compatible"]').check();
     await page.locator('[name="schedule_enabled"]').check();await page.locator('[name="schedule_mode"][value="weekly"]').check();await page.locator('[data-schedule-panel="weekly"]').evaluate(node=>node.open=true);await page.locator('[name="schedule_weekdays"][value="1"]').uncheck();await page.locator('#settings-change-popup button[type="submit"]').click();assert.equal(postCount,incompatiblePosts);assert.match(await page.locator('#action-feedback').textContent(),/Wochentag/);
     await page.locator('[name="schedule_enabled"]').uncheck();await page.locator('#settings-change-popup button[type="submit"]').click();await page.waitForFunction(()=>document.querySelector('#action-feedback').textContent.includes('Einstellungen gespeichert'));receipts.push('Incompatible portable snapshot and empty weekly schedule rejected before POST');
+    failBackupMetadata=true;await page.locator('.topbar-actions button[type="submit"]').click();await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('CIFS erzwingt feste Rechte'));
+    assert.match(await page.locator('#operation-result').textContent(),/0:0 640/);assert.match(await page.locator('#operation-result').textContent(),/1000:1000 666/);assert.match(await page.locator('#operation-result').textContent(),/Offline/);
+    assert.equal(await page.locator('#operation-result img').count(),0);assert.equal(await page.evaluate(()=>window.unsafeProbe),undefined);assert.equal(await page.locator('.preflight-confirm').count(),0);
+    assert.equal(await page.locator('#operation-result .metadata-probe-check').first().evaluate(node=>node.open),true);failBackupMetadata=false;
+    await page.locator('#operation-result').screenshot({path:path.join(temp,'metadata-diagnostics-desktop.png')});
+    const profilePosts=postCount;await page.locator('[data-archive-profile-draft]').click();await visible(page,'#settings-change-popup');
+    assert.equal(postCount,profilePosts,'Profile assistance must not save or start anything');
+    assert.equal(await page.locator('[name="metadata_mode"][value="portable-archive"]').isChecked(),true);assert.equal(await page.locator('[name="backup_mode"][value="full"]').isChecked(),true);
+    assert.match(await page.locator('#action-feedback').textContent(),/noch nicht gespeichert/);
+    await page.locator('[name="metadata_mode"][value="network-compatible"]').check();await page.locator('[name="backup_mode"][value="snapshot"]').check();
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true');
+    receipts.push('Blocked metadata preflight exposes exact failed check, expected/actual values, rsync error and profile advice safely without warning override');
     await page.locator('#backup-list-body .operation-form button').click();await visible(page,'#verification-download');assert.match(await page.locator('#operation-result').textContent(),/Dateien stimmen/);
     const downloadEvent=page.waitForEvent('download');await page.locator('#verification-download').click();const downloaded=await downloadEvent;
     assert.equal(downloaded.suggestedFilename(),'fixture-ok-verification.json');await downloaded.saveAs(path.join(temp,'verification-report.json'));
@@ -182,9 +235,12 @@ async function visible(page,selector){await page.locator(selector).waitFor({stat
     assert.match(await page.locator('#operation-result').textContent(),/Vom Plugin nicht überprüft/);assert.match(await page.locator('#operation-result').textContent(),/Rescue-Test in separater/);assert.match(await page.locator('#operation-result').textContent(),/keine Restore-Freigaben/);
     await page.locator('#backup-list-body .operation-form button').click();await visible(page,'#verification-download');assert.match(await page.locator('#operation-result').textContent(),/Persönlich dokumentierter Restore-Test: Erfolgreich/);receipts.push('External restore test recorded with UTC date and displayed only as manual evidence');
     await summary.click();await page.locator('[data-load-action="backup-preview"]').click();await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('vollständige Basiskopie'));
+    assert.match(await page.locator('#operation-result .metadata-probe').textContent(),/CIFS erzwingt feste Rechte/);
     await summary.click();assert.equal(await page.locator('#operation-result').isVisible(),true,'Loaded results remain visible when details close');
     await page.screenshot({path:path.join(temp,'desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});
+    await page.locator('#source-selection-panel').screenshot({path:path.join(temp,'source-selection-mobile.png')});
+    assert.ok(await page.locator('#source-selection-panel').evaluate(node=>{const right=node.getBoundingClientRect().right;return Array.from(node.querySelectorAll('select,label,strong,small')).every(item=>item.getBoundingClientRect().right<=right+1);}), 'Source controls and descriptions stay inside their mobile panel');
     await page.locator('#operational-overview').scrollIntoViewIfNeeded();
     const mobileOverview=await page.locator('#overview-values').evaluate(node=>({columns:getComputedStyle(node).gridTemplateColumns.split(' ').length,cards:Array.from(node.children).map(card=>{const title=card.querySelector('.overview-label').getBoundingClientRect(),value=card.querySelector('.overview-value').getBoundingClientRect();return {gap:value.top-title.bottom,right:card.getBoundingClientRect().right};})}));
     assert.equal(mobileOverview.columns,1);assert.ok(mobileOverview.cards.every(card=>card.gap>=4.5&&card.right<=392),JSON.stringify(mobileOverview));

@@ -128,10 +128,14 @@ def preview(config, root, excludes, reference, preflight):
         rule = next((r for r in excludes if recovery.glob_matches(target.lstrip("/"), r, True)), None)
         volumes.append({"path": target, "source": item.get("source"), "fstype": item.get("fstype"),
                         "included": rule is None, "reason": f"Ausschluss: {rule}" if rule else "Eingeschlossen; Unterverzeichnisse koennen eigene Ausschluesse haben."})
+    selection = preflight.get("source_selection", {})
+    if isinstance(selection, dict) and isinstance(selection.get("volumes"), list):
+        volumes = selection["volumes"]
     return {"saved_config": True, "backup_root": str(root), "backup_mode": config.get("backup_mode", "full"),
             "metadata_mode": config.get("metadata_mode", "native-strict"), "reference_id": reference or None,
             "full_baseline_required": config.get("backup_mode") != "snapshot" or not reference,
             "excludes": excludes, "source_volumes": volumes, "preflight": preflight,
+            "source_selection": selection,
             "available_mb": preflight.get("available_mb"), "baseline_estimate_mb": preflight.get("baseline_estimate_mb") or None,
             "note": "Vorschau der gespeicherten Einstellungen. Keine Dateien werden kopiert oder Dienste gestoppt."}
 

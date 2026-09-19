@@ -10,7 +10,24 @@ validiert werden.
 
 ## [Unreleased]
 
-Noch keine weiteren Änderungen.
+### Datenquellen und NAS-Diagnose (nur develop, noch nicht veröffentlicht)
+
+- Neue Konfigurationen sichern lokale Laufwerke und nur ausdrücklich gewählte
+  Netzfreigaben; autofs-Sammelbereiche werden nicht ungewollt rekursiv kopiert.
+  Bestehende Konfigurationen behalten ihren Umfang mit sichtbarem Umstellungshinweis.
+- Kompakte Laufwerksauswahl mit gespeicherten Ausnahmen, Vorschau und dem
+  bestehenden Speicherhinweis; lokale USB-Nutzdaten bleiben auswählbar.
+- Kein Backup-Start ohne gespeichertes Ziel, kein stilles Übergehen einer
+  ausgewählten, nicht eingebundenen Freigabe. Explizite Dateilisten und
+  Mount-Prüfung begrenzen Vollbackups, Snapshots und Portable Archives.
+- Metadatenprüfung protokolliert jeden Schritt, Soll-/Ist-Werte und begrenzte
+  Werkzeugfehler; letzter Bericht unter `/var/lib/loxberryhostbackup/metadata-probe.json`.
+  Konkrete Hinweise zu festen CIFS-Rechten und Portable Archive/Vollbackup.
+- Fehlende Unix-Metadaten werden weiterhin nicht als Erfolg behandelt;
+  Network Compatible überspringt ausschliesslich xattrs und File Capabilities.
+- Zusätzliche Regressionstests und isolierter echter Linux-Samba/CIFS-Test für
+  feste Eigentümer/Rechte, Archiv-Roundtrip und ausgewählte Datenquellen.
+- Versionsnummer, Release-Tags, Update-Kanäle und öffentliche ZIPs unverändert.
 
 ## [1.0.0] - 2026-09-19
 

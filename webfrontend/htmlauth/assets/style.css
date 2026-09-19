@@ -1775,6 +1775,21 @@ a.button-link:hover {
 #hostbackup-app .info-button:focus-visible, #hostbackup-app button:focus-visible, #hostbackup-app a:focus-visible { outline: 3px solid #14769a; outline-offset: 3px; }
 #hostbackup-app #operation-result { margin-top: 16px; overflow-wrap: anywhere; }
 #hostbackup-app .report-table { width: 100%; }
+#hostbackup-app .source-selection-panel { min-width: 0; overflow-wrap: anywhere; }
+#hostbackup-app .source-selection-panel > summary { cursor: pointer; font-weight: 600; }
+#hostbackup-app #source-selection-summary { color: #526a7f; font-size: 12px; font-weight: normal; }
+#hostbackup-app .source-policy-label { display: grid; gap: 6px; }
+#hostbackup-app .source-policy-label select { width: 100%; min-width: 0; }
+#hostbackup-app .source-volume { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 0; border-bottom: 1px solid #e2e7ef; }
+#hostbackup-app .source-volume > label { display: flex; flex-direction: row; flex: 1 1 240px; align-items: center; gap: 8px; min-width: 0; text-align: left; }
+#hostbackup-app .source-volume input { flex: 0 0 auto; width: 16px; height: 16px; min-height: 0; padding: 0; margin: 0; }
+#hostbackup-app .source-volume label span { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+#hostbackup-app .source-volume small { color: #526a7f; }
+#hostbackup-app .source-volume-note { width: 100%; }
+#hostbackup-app .metadata-probe-check { margin: 8px 0; border: 1px solid #dce5ec; border-radius: 5px; padding: 10px; }
+#hostbackup-app .metadata-probe-check summary { cursor: pointer; font-weight: 600; }
+#hostbackup-app .metadata-probe > small { display: block; margin-top: 6px; }
+#hostbackup-app .metadata-probe-check pre, #hostbackup-app #operation-result pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 350px; overflow: auto; }
 #hostbackup-app [aria-busy="true"] { outline: 1px dashed #7998aa; }
 @media (max-width: 780px) {
   #hostbackup-app fieldset { min-width: 0; max-width: 100%; }

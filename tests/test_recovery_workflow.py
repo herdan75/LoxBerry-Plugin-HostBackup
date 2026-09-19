@@ -41,6 +41,32 @@ class RecoveryWorkflowTests(unittest.TestCase):
     def plan(self, **kwargs):
         return recovery.build_plan(self.backup, self.backup_root, self.destination, kwargs.pop("mappings", []), kwargs.pop("protected", []), mounts=[], **kwargs)
 
+    def test_unselected_backup_volume_cannot_be_restored_as_volume(self):
+        (self.backup / "source-selection.json").write_text(json.dumps({"volumes": [
+            {"path": "/", "included": True}, {"path": "/media/smb/nas", "included": False}]}))
+        self.assertIn("/media/smb/nas", self.plan()["exclude_rules"])
+        mapped = self.destination / "nas"
+        mapped.mkdir()
+        with self.assertRaisesRegex(recovery.RecoveryError, "nicht zur Sicherung ausgewaehlt"):
+            self.plan(mappings=[{"source": "/media/smb/nas", "destination": str(mapped)}])
+
+    def test_selected_backup_volume_can_be_mapped_for_restore(self):
+        (self.backup / "source-selection.json").write_text(json.dumps({"volumes": [
+            {"path": "/", "included": True}, {"path": "/media/usb/data", "included": True}]}))
+        mapped = self.destination / "data"
+        mapped.mkdir()
+        plan = self.plan(mappings=[{"source": "/media/usb/data", "destination": str(mapped)}])
+        self.assertEqual(plan["volumes"][0]["source"], "/media/usb/data")
+
+    def test_malformed_source_selection_has_actionable_restore_error(self):
+        (self.backup / "source-selection.json").write_text('{"volumes":[null]}')
+        with self.assertRaisesRegex(recovery.RecoveryError, "Ungueltiger Eintrag"):
+            self.plan()
+        for path in ("/media/data\n/etc", "//media/data", "/media/../etc"):
+            (self.backup / "source-selection.json").write_text(json.dumps({"volumes": [{"path": path, "included": True}]}))
+            with self.assertRaisesRegex(recovery.RecoveryError, "Ungueltiger Eintrag"):
+                self.plan()
+
     def archive(self, files, hardlinks=()):
         # These non-privileged fixtures exercise selection and destination safety.
         # Give synthetic members the fixture owner's identity; TarInfo defaults

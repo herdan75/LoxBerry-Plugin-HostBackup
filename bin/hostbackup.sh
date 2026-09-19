@@ -64,6 +64,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
   "backup_mode": "full",
   "metadata_mode": "native-strict",
   "rsync_extra_excludes": [],
+  "source_selection": {"policy": "local", "overrides": {}},
   "stop_docker_before_backup": false,
   "stop_targets": [],
   "create_export_after_backup": false,
@@ -175,6 +176,8 @@ show_config() {
     $cfg->{backup_mode} = "full" unless ($cfg->{backup_mode} || "") =~ /^(full|snapshot)$/;
     $cfg->{metadata_mode} = "native-strict" unless ($cfg->{metadata_mode} || "") =~ /^(native-strict|network-compatible|fake-super|portable-archive)$/;
     $cfg->{rsync_extra_excludes} = [] unless ref($cfg->{rsync_extra_excludes}) eq "ARRAY";
+    # Existing installations keep their previous scope until explicitly changed.
+    $cfg->{source_selection} //= { policy => "legacy", overrides => {} };
     $cfg->{stop_docker_before_backup} = $cfg->{stop_docker_before_backup} ? JSON::PP::true : JSON::PP::false;
     $cfg->{stop_targets} = [] unless ref($cfg->{stop_targets}) eq "ARRAY";
     $cfg->{create_export_after_backup} = $cfg->{create_export_after_backup} ? JSON::PP::true : JSON::PP::false;
@@ -338,15 +341,19 @@ save_config() {
   local mail_notify_stopped="${23:-true}"
   local mail_notify_restore="${24:-true}"
   local metadata_mode="${25:-native-strict}"
+  local source_selection="${26:-}"
 
   python3 "$LBP_BINDIR/hostbackup-overview.py" check-settings "$backup_mode" "$metadata_mode" "$schedule_enabled" \
     "$schedule_mode" "$schedule_time" "$schedule_weekdays" "$schedule_monthdays" "$schedule_months"
+  if [ -n "$source_selection" ]; then
+    source_selection="$(python3 "$LBP_BINDIR/hostbackup-sources.py" validate --selection "$source_selection")" || return 18
+  fi
   prepare_target_registration "$backup_root"
   [ -n "$backup_root" ] && backup_root="$REGISTERED_ROOT"
 
   [ ! -L "$CONFIG_FILE.lock" ] || { echo "Unsafe configuration lock symlink." >&2; return 13; }
   perl -MJSON::PP -MFile::Basename=dirname -MFile::Temp=tempfile -MFcntl=:DEFAULT,:flock -MIO::Handle -e '
-    my ($file, $backup_root, $excludes_text, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $schedule_months, $schedule_weekdays, $schedule_monthdays, $pre_hook, $post_hook, $root_permission_ack, $backup_mode, $stop_targets_text, $mail_notify_enabled, $mail_notify_to, $mail_notify_success, $mail_notify_failure, $mail_notify_stopped, $mail_notify_restore, $metadata_mode, $target_marker, $target_mountpoint, $target_source, $target_fstype, $target_majmin) = @ARGV;
+    my ($file, $backup_root, $excludes_text, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $schedule_months, $schedule_weekdays, $schedule_monthdays, $pre_hook, $post_hook, $root_permission_ack, $backup_mode, $stop_targets_text, $mail_notify_enabled, $mail_notify_to, $mail_notify_success, $mail_notify_failure, $mail_notify_stopped, $mail_notify_restore, $metadata_mode, $target_marker, $target_mountpoint, $target_source, $target_fstype, $target_majmin, $source_selection) = @ARGV;
     my @excludes;
     for my $line (split /\r?\n/, $excludes_text) {
       $line =~ s/^\s+|\s+$//g;
@@ -463,6 +470,8 @@ save_config() {
     local $/;
     my $old = decode_json(<$existing>);
     close $existing;
+    $cfg->{source_selection} = length($source_selection) ? decode_json($source_selection)
+      : ($old->{source_selection} // { policy => "legacy", overrides => {} });
     for my $key (qw(retention_mode keep_daily keep_weekly keep_monthly log_retention_days quarantine_retention_days integrity_enabled integrity_interval_days)) {
       $cfg->{$key} = $old->{$key} if exists $old->{$key};
     }
@@ -473,7 +482,7 @@ save_config() {
     $fh->sync or die "Cannot sync config: $!";
     close $fh or die "Cannot close config: $!";
     rename $tmp, $file or die "Cannot replace config: $!";
-  ' "$CONFIG_FILE" "$backup_root" "$excludes_text" "$stop_docker" "$create_export" "$keep_backups" "$schedule_enabled" "$schedule_mode" "$schedule_time" "$schedule_weekday" "$schedule_monthday" "$schedule_months" "$schedule_weekdays" "$schedule_monthdays" "$pre_hook" "$post_hook" "$root_permission_ack" "$backup_mode" "$stop_targets" "$mail_notify_enabled" "$mail_notify_to" "$mail_notify_success" "$mail_notify_failure" "$mail_notify_stopped" "$mail_notify_restore" "$metadata_mode" "$REGISTERED_MARKER" "$REGISTERED_MOUNTPOINT" "$REGISTERED_SOURCE" "$REGISTERED_FSTYPE" "$REGISTERED_MAJMIN"
+  ' "$CONFIG_FILE" "$backup_root" "$excludes_text" "$stop_docker" "$create_export" "$keep_backups" "$schedule_enabled" "$schedule_mode" "$schedule_time" "$schedule_weekday" "$schedule_monthday" "$schedule_months" "$schedule_weekdays" "$schedule_monthdays" "$pre_hook" "$post_hook" "$root_permission_ack" "$backup_mode" "$stop_targets" "$mail_notify_enabled" "$mail_notify_to" "$mail_notify_success" "$mail_notify_failure" "$mail_notify_stopped" "$mail_notify_restore" "$metadata_mode" "$REGISTERED_MARKER" "$REGISTERED_MOUNTPOINT" "$REGISTERED_SOURCE" "$REGISTERED_FSTYPE" "$REGISTERED_MAJMIN" "$source_selection"
   install_schedule
 }
 
@@ -1144,98 +1153,32 @@ tar_metadata_options() {
 }
 
 METADATA_PROBE_MESSAGE=""
+METADATA_PROBE_JSON='{}'
 metadata_capability_probe() {
-  local root="$1" mode="$2" source_dir target_dir archive status=0 work_dir restored_dir opt
-  local acl_check=false xattr_check=false capability_check=false missing_checks="" expected actual
-  local -a options=() restore_options=()
+  local root="$1" mode="$2" status=0 output report_file
+  METADATA_PROBE_MESSAGE=""
+  METADATA_PROBE_JSON='{}'
   verify_backup_target "$root" true || return 1
-  work_dir="$(mktemp -d "$ROOT_STATE_DIR/.metadata-roundtrip.XXXXXX")" || return 1
-  source_dir="$work_dir/source"
-  restored_dir="$work_dir/restored"
-  target_dir="$(mktemp -d "$root/.metadata-probe.XXXXXX")" || { rmdir -- "$work_dir"; return 1; }
-  archive="$target_dir/rootfs.tar"
-  trap 'rm -rf -- "$work_dir" "$target_dir"' RETURN
-  mkdir -p -- "$source_dir/sub" "$restored_dir"
-  printf 'metadata-probe\n' > "$source_dir/sub/file"
-  ln "$source_dir/sub/file" "$source_dir/sub/hardlink"
-  ln -s sub/file "$source_dir/symlink"
-  dd if=/dev/zero of="$source_dir/sparse" bs=1 count=0 seek=1048576 2>/dev/null
-  if [ "$(id -u)" -eq 0 ]; then chown 1:1 "$source_dir/sub/file" || status=1; fi
-  chmod 6750 "$source_dir/sub/file" || status=1
-  if [ "$mode" != network-compatible ]; then
-    if command -v setfattr >/dev/null 2>&1 && command -v getfattr >/dev/null 2>&1; then
-      setfattr -n user.loxberryhostbackup -v probe "$source_dir/sub/file" || status=1
-      xattr_check=true
-    else
-      missing_checks="${missing_checks} xattrs"
-    fi
-    if [ "$(id -u)" -eq 0 ] && command -v setcap >/dev/null 2>&1 && command -v getcap >/dev/null 2>&1; then
-      printf 'capability-probe\n' > "$source_dir/capability"
-      setcap cap_net_bind_service=ep "$source_dir/capability" || status=1
-      capability_check=true
-    else
-      missing_checks="${missing_checks} File-Capabilities"
-    fi
+  output="$(python3 "$LBP_BINDIR/hostbackup-metadata.py" --root "$root" --mode "$mode" --state-dir "$ROOT_STATE_DIR" 2>&1)" || status=1
+  if ! METADATA_PROBE_JSON="$(printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert isinstance(d,dict) and d.get("status") in ("ok","error") and isinstance(d.get("message"),str); print(json.dumps(d,ensure_ascii=True))' 2>/dev/null)"; then
+    METADATA_PROBE_MESSAGE="Metadatenpruefung konnte nicht ausgefuehrt werden: ${output:0:2000}"
+    METADATA_PROBE_JSON="{\"status\":\"error\",\"message\":$(json_escape "$METADATA_PROBE_MESSAGE"),\"checks\":[],\"advice\":[]}"
+    status=1
   fi
-  if command -v setfacl >/dev/null 2>&1 && command -v getfacl >/dev/null 2>&1; then
-    setfacl -m u:65534:r-- "$source_dir/sub/file" || status=1
-    acl_check=true
-  else
-    missing_checks="${missing_checks} ACL-Werte"
+  METADATA_PROBE_MESSAGE="$(printf '%s' "$METADATA_PROBE_JSON" | perl -MJSON::PP -e 'local $/; print decode_json(<STDIN>)->{message};')"
+  if ! printf '%s' "$METADATA_PROBE_JSON" | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin)["status"]=="ok" else 1)'; then status=1; fi
+  if ! verify_backup_target "$root" true; then
+    METADATA_PROBE_MESSAGE="Backup-Ziel hat sich waehrend der Metadatenpruefung geaendert."
+    METADATA_PROBE_JSON="{\"status\":\"error\",\"message\":$(json_escape "$METADATA_PROBE_MESSAGE"),\"checks\":[],\"advice\":[]}"
+    status=1
   fi
-
-  if [ "$mode" = "portable-archive" ]; then
-    while IFS= read -r opt; do options+=("$opt"); done < <(tar_metadata_options)
-    tar "${options[@]}" -C "$source_dir" -cpf "$archive" . || status=1
-    tar "${options[@]}" -C "$restored_dir" -xpf "$archive" || status=1
-  else
-    while IFS= read -r opt; do options+=("$opt"); done < <(rsync_metadata_options "$mode" backup)
-    rsync "${options[@]}" "$source_dir/" "$(rsync_destination "$mode" "$target_dir/")" >/dev/null 2>&1 || status=1
-    while IFS= read -r opt; do restore_options+=("$opt"); done < <(rsync_metadata_options "$mode" restore)
-    rsync "${restore_options[@]}" "$target_dir/" "$(rsync_destination "$mode" "$restored_dir/")" >/dev/null 2>&1 || status=1
-    if [ "$mode" = "fake-super" ]; then
-      command -v getfattr >/dev/null 2>&1 || status=1
-      getfattr -d -m '^user\.rsync\.' "$target_dir/sub/file" 2>/dev/null | grep 'user.rsync.' >/dev/null || status=1
-    fi
-  fi
-  [ -f "$restored_dir/sub/file" ] && [ -L "$restored_dir/symlink" ] || status=1
-  cmp -s "$source_dir/sub/file" "$restored_dir/sub/file" || status=1
-  [ "$(readlink "$restored_dir/symlink" 2>/dev/null)" = sub/file ] || status=1
-  expected="$(stat -c '%u:%g:%a' "$source_dir/sub/file" 2>/dev/null)"
-  actual="$(stat -c '%u:%g:%a' "$restored_dir/sub/file" 2>/dev/null)" || status=1
-  [ -n "$actual" ] && [ "$expected" = "$actual" ] || status=1
-  expected="$(stat -c '%d:%i' "$restored_dir/sub/file" 2>/dev/null)" || status=1
-  actual="$(stat -c '%d:%i' "$restored_dir/sub/hardlink" 2>/dev/null)" || status=1
-  [ -n "$actual" ] && [ "$expected" = "$actual" ] || status=1
-  [ "$(stat -c '%s' "$restored_dir/sparse" 2>/dev/null)" = 1048576 ] || status=1
-  actual="$(stat -c '%b' "$restored_dir/sparse" 2>/dev/null)" || actual=999999
-  [ "$(( ${actual:-999999} * 512 ))" -lt 1048576 ] || status=1
-  if [ "$acl_check" = true ]; then
-    expected="$(getfacl -cpn "$source_dir/sub/file" 2>/dev/null)" || status=1
-    actual="$(getfacl -cpn "$restored_dir/sub/file" 2>/dev/null)" || status=1
-    [ "$expected" = "$actual" ] || status=1
-  fi
-  if [ "$xattr_check" = true ]; then
-    actual="$(getfattr --only-values -n user.loxberryhostbackup "$restored_dir/sub/file" 2>/dev/null)" || status=1
-    [ "$actual" = probe ] || status=1
-  fi
-  if [ "$capability_check" = true ]; then
-    actual="$(getcap "$restored_dir/capability" 2>/dev/null)" || status=1
-    [ "${actual#"$restored_dir/capability "}" = cap_net_bind_service=ep ] || status=1
-  fi
-  verify_backup_target "$root" true || status=1
-  rm -rf -- "$work_dir" "$target_dir"
-  trap - RETURN
-  if [ "$status" -ne 0 ]; then
-    METADATA_PROBE_MESSAGE="Metadaten-Roundtrip fuer Modus $mode ist fehlgeschlagen."
+  # Private, atomic report; never write through an existing report symlink.
+  report_file="$(mktemp "$ROOT_STATE_DIR/.metadata-report.XXXXXX")" || return 1
+  if ! { printf '%s\n' "$METADATA_PROBE_JSON" > "$report_file" && chmod 600 "$report_file" && mv -fT -- "$report_file" "$ROOT_STATE_DIR/metadata-probe.json"; }; then
+    rm -f -- "$report_file"
     return 1
   fi
-  METADATA_PROBE_MESSAGE="Metadaten-Roundtrip fuer Modus $mode erfolgreich: Dateninhalt, UID/GID, Rechte, Symlink, Hardlinks und Sparse-Datei zurueckgespielt und verglichen."
-  [ "$acl_check" != true ] || METADATA_PROBE_MESSAGE="$METADATA_PROBE_MESSAGE ACL-Werte bestaetigt."
-  [ "$xattr_check" != true ] || METADATA_PROBE_MESSAGE="$METADATA_PROBE_MESSAGE xattr-Werte bestaetigt."
-  [ "$capability_check" != true ] || METADATA_PROBE_MESSAGE="$METADATA_PROBE_MESSAGE File Capabilities bestaetigt."
-  [ -z "$missing_checks" ] || METADATA_PROBE_MESSAGE="$METADATA_PROBE_MESSAGE Mangels Testwerkzeugen nicht verifiziert:$missing_checks."
-  return 0
+  return "$status"
 }
 
 require_root_for_write() {
@@ -1450,6 +1393,15 @@ $ROOT_STATE_DIR
 $root
 EOF
   json_get_array_lines rsync_extra_excludes
+}
+
+source_info() {
+  local rules status=0
+  rules="$(mktemp "$ROOT_STATE_DIR/.source-rules.XXXXXX")" || return 18
+  if ! backup_excludes "$(backup_root)" > "$rules"; then rm -f -- "$rules"; return 18; fi
+  python3 "$LBP_BINDIR/hostbackup-sources.py" source-info --config "$CONFIG_FILE" --excludes "$rules" || status=$?
+  rm -f -- "$rules"
+  return "$status"
 }
 
 run_hook() {
@@ -1680,7 +1632,7 @@ restart_journal_finish() {
   pending="$(restart_journal_update "$state_dir" pending)" || return 20
   [ -z "$pending" ] || { log "ERROR: Service recovery is still pending in $state_dir"; return 20; }
   # Remove only the known local control files; retain unexpected data for diagnosis.
-  rm -f -- "$state_dir/journal.json" "$state_dir/selected-stop-targets.tsv" "$state_dir/docker-to-stop.tsv" "$state_dir/post-hook.started" "$state_dir/post-hook.done" "$state_dir/restart.done" || return 20
+  rm -f -- "$state_dir/journal.json" "$state_dir/selected-stop-targets.tsv" "$state_dir/docker-to-stop.tsv" "$state_dir/post-hook.started" "$state_dir/post-hook.done" "$state_dir/restart.done" "$state_dir/source-files.nul" || return 20
   rmdir -- "$state_dir" || return 20
 }
 
@@ -2064,10 +2016,10 @@ validate_completed_backup() {
     list_file="$(mktemp)"
     if tar -tf "$target/rootfs.tar" > "$list_file" 2>/dev/null; then
       rootfs_ok=true
-      grep -Eq '^\./?etc(/|$)' "$list_file" && etc_ok=true || etc_ok=false
-      grep -Eq '^\./?opt/loxberry(/|$)' "$list_file" && loxberry_ok=true || loxberry_ok=false
-      grep -Eq '^\./?var/lib(/|$)' "$list_file" && varlib_ok=true || varlib_ok=false
-      grep -Eq '^\./?mnt/docker(/|$)' "$list_file" && mntdocker_ok=true || mntdocker_ok=false
+      grep -Eq '^(\./)?etc(/|$)' "$list_file" && etc_ok=true || etc_ok=false
+      grep -Eq '^(\./)?opt/loxberry(/|$)' "$list_file" && loxberry_ok=true || loxberry_ok=false
+      grep -Eq '^(\./)?var/lib(/|$)' "$list_file" && varlib_ok=true || varlib_ok=false
+      grep -Eq '^(\./)?mnt/docker(/|$)' "$list_file" && mntdocker_ok=true || mntdocker_ok=false
     else
       rootfs_ok=false; etc_ok=false; loxberry_ok=false; varlib_ok=false; mntdocker_ok=false
     fi
@@ -2247,6 +2199,9 @@ preflight_backup() {
   local root available_mb docker_available docker_running excludes_count status warnings_json notices_json checks_json rsync_available target_writable backup_mode fs_type mode probe_ok target_ok target_message copy_tool_name
   local full_baseline_required baseline_estimate_mb baseline_required_mb baseline_space_ok baseline_reference estimate_backup estimate_bytes baseline_check_value available_inodes
   local -a notices=()
+  local source_json source_ok=true source_message=""
+  METADATA_PROBE_JSON='{}'
+  METADATA_PROBE_MESSAGE=""
   require_root_permission_ack
   root="$(backup_root)"
   backup_mode="$(json_get_string backup_mode)"
@@ -2254,8 +2209,19 @@ preflight_backup() {
   mode="$(metadata_mode)"
   target_ok=false
   target_message=""
-  if target_message="$(verify_backup_target "$root" true 2>&1)"; then
+  if [ -z "$(json_get_string backup_root)" ]; then
+    target_message="Kein Backup-Ziel gespeichert. Bitte ein separates Backup-Ziel festlegen und Einstellungen speichern."
+  elif target_message="$(verify_backup_target "$root" true 2>&1)"; then
     target_ok=true
+  fi
+  if ! source_json="$(source_info)"; then source_ok=false; fi
+  if ! source_message="$(printf '%s' "$source_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("; ".join(d.get("errors",[]))); sys.exit(0 if d.get("status")=="ok" else 1)')"; then
+    source_ok=false
+    [ -n "$source_message" ] || source_message="Datenquellen konnten nicht sicher ermittelt werden."
+    source_json="{\"status\":\"error\",\"errors\":[$(json_escape "$source_message")]}"
+  fi
+  if [ "$source_ok" = true ]; then
+    while IFS= read -r notice; do notices+=("$notice"); done < <(printf '%s' "$source_json" | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin).get("notices",[])))')
   fi
   available_mb="$(df -Pm "$root" 2>/dev/null | awk 'NR==2 {print $4}')"
   available_inodes="$(df -Pi "$root" 2>/dev/null | awk 'NR==2 {print $4}')"
@@ -2321,7 +2287,10 @@ preflight_backup() {
   if [ "$target_ok" = "true" ] && metadata_capability_probe "$root" "$mode"; then
     probe_ok=true
   fi
-  if [ "$rsync_available" != "true" ] || [ "$target_writable" != "true" ] || [ "$probe_ok" != "true" ]; then
+  if [ "$source_ok" != true ]; then
+    status="error"
+    warnings_json="[$(json_escape "$source_message")]"
+  elif [ "$rsync_available" != "true" ] || [ "$target_writable" != "true" ] || [ "$probe_ok" != "true" ]; then
     status="error"
     warnings_json="$(perl -MJSON::PP -e 'print encode_json([$ARGV[0]])' "${target_message:-${METADATA_PROBE_MESSAGE:-Pflichtcheck fehlgeschlagen: rsync, Zielidentitaet, Schreibzugriff oder Metadatenprobe.}}")"
   elif [ "$backup_mode" = "snapshot" ] && [ "$mode" = "portable-archive" ]; then
@@ -2350,6 +2319,7 @@ preflight_backup() {
   {"name":"Backup-Ziel beschreibbar","ok":$target_writable},
   {"name":"Backup-Modus","ok":true,"value":"$backup_mode"},
   {"name":"Metadaten-Modus","ok":$probe_ok,"value":"$mode","details":$(json_escape "${METADATA_PROBE_MESSAGE:-}")},
+  {"name":"Datenquellen-Auswahl","ok":$source_ok,"details":$(json_escape "$source_message")},
   {"name":"Dateisystem","ok":true,"value":"$fs_type"},
   {"name":"Freier Speicher MB","ok":$([ "$available_mb" -ge 1024 ] && echo true || echo false),"value":"$available_mb"},
   {"name":"Speicher fuer Snapshot-Basiskopie","ok":$baseline_space_ok,"value":$(json_escape "$baseline_check_value")},
@@ -2370,7 +2340,9 @@ EOF
   "baseline_required_mb": $baseline_required_mb,
   "warnings": $warnings_json,
   "notices": $notices_json,
-  "checks": $checks_json
+  "checks": $checks_json,
+  "metadata_probe": $METADATA_PROBE_JSON,
+  "source_selection": $source_json
 }
 EOF
 }
@@ -2499,6 +2471,7 @@ create_backup() {
 
   local root backup_id target rootfs log_file started finished size files exclude_file backup_mode previous_backup
   local mode task validation_status final_status post_hook pre_hook rsync_status export_status portable_excludes state_dir preflight_json preflight_status cleanup_trap
+  local source_list="" selection_active=false source_plan_json
   local -a rsync_opts=() metadata_opts=() tar_opts=()
   root="$(backup_root)"
   backup_mode="$(json_get_string backup_mode)"
@@ -2580,6 +2553,18 @@ create_backup() {
   task_state_write "$task" running stopping_services "$log_file" "$$" ""
   stop_backup_targets "$state_dir" 2>&1 | tee -a "$log_file"
 
+  # Enumerate only after services are quiesced, so newly created database files
+  # are not missed. Any enumeration failure uses the normal restart EXIT trap.
+  source_plan_json="$(source_info)" || return 18
+  selection_active="$(printf '%s' "$source_plan_json" | python3 -c 'import json,sys; s=json.load(sys.stdin)["selection"]; print("true" if s["policy"] != "legacy" or s["overrides"] else "false")')"
+  if [ "$selection_active" = true ]; then
+    task_state_write "$task" running selecting_sources "$log_file" "$$" ""
+    log "Preparing explicit file list for selected local volumes and network shares" | tee -a "$log_file"
+    source_list="$state_dir/source-files.nul"
+    (umask 077; set -o noclobber; python3 "$LBP_BINDIR/hostbackup-sources.py" files --config "$CONFIG_FILE" --excludes "$exclude_file" --report "$target/source-selection.json" > "$source_list") 2>> "$log_file" || return 18
+    [ -s "$source_list" ] || { log "ERROR: Source file list is empty" | tee -a "$log_file"; return 18; }
+  fi
+
   while IFS= read -r opt; do
     rsync_opts+=("$opt")
   done < <(rsync_live_options)
@@ -2604,15 +2589,29 @@ create_backup() {
     sed 's#^/##; /^$/d' "$exclude_file" > "$portable_excludes"
     while IFS= read -r opt; do tar_opts+=("$opt"); done < <(tar_metadata_options)
     log "Creating portable root filesystem archive" | tee -a "$log_file"
-    tar "${tar_opts[@]}" --exclude-from="$portable_excludes" -C / -cpf "$target/rootfs.tar" . 2>&1 | tee -a "$log_file"
-    rsync_status=${PIPESTATUS[0]}
+    if [ "$selection_active" = true ]; then
+      tar "${tar_opts[@]}" -C / -cpf "$target/rootfs.tar" --no-recursion --null --verbatim-files-from --files-from="$source_list" 2>&1 | tee -a "$log_file"
+      rsync_status=${PIPESTATUS[0]}
+    else
+      tar "${tar_opts[@]}" --exclude-from="$portable_excludes" -C / -cpf "$target/rootfs.tar" . 2>&1 | tee -a "$log_file"
+      rsync_status=${PIPESTATUS[0]}
+    fi
   else
     log "Starting rsync copy from / to $rootfs" | tee -a "$log_file"
     log "rsync live output follows. Large files or slow storage can keep one line active for a while." | tee -a "$log_file"
+    if [ "$selection_active" = true ]; then
+      rsync_opts+=(--from0 --files-from="$source_list" --no-recursive --dirs)
+    fi
     rsync "${metadata_opts[@]}" --delete "${rsync_opts[@]}" --exclude-from="$exclude_file" / "$(rsync_destination "$mode" "$rootfs/")" 2>&1 | tee -a "$log_file"
     rsync_status=${PIPESTATUS[0]}
   fi
   set -e
+  # Docker/service restart can legitimately change mounts, so verify the source
+  # snapshot now, while the quiesced source state is still expected to match.
+  if [ "$selection_active" = true ] && ! python3 "$LBP_BINDIR/hostbackup-sources.py" verify --report "$target/source-selection.json" >> "$log_file" 2>&1; then
+    log "ERROR: Source mounts changed during the copy; backup cannot be accepted" | tee -a "$log_file"
+    rsync_status=18
+  fi
   log "Backup copy finished with status $rsync_status" | tee -a "$log_file"
   log "Starting services and Docker containers again if they were stopped" | tee -a "$log_file"
   task_state_write "$task" running restarting_services "$log_file" "$$" ""
@@ -4176,8 +4175,9 @@ case "$action" in
   preflight-restore) shift; preflight_restore "${1:?BACKUP_ID required}" ;;
   config) show_config ;;
   target-info) backup_target_info ;;
+  source-info) source_info ;;
   stop-targets) discover_stop_targets ;;
-  save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11-*}" "${12-0}" "${13-1}" "${14:-}" "${15:-}" "${16:-false}" "${17:-full}" "${18:-}" "${19:-false}" "${20:-}" "${21:-true}" "${22:-true}" "${23:-true}" "${24:-true}" "${25:-native-strict}" ;;
+  save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11-*}" "${12-0}" "${13-1}" "${14:-}" "${15:-}" "${16:-false}" "${17:-full}" "${18:-}" "${19:-false}" "${20:-}" "${21:-true}" "${22:-true}" "${23:-true}" "${24:-true}" "${25:-native-strict}" "${26:-}" ;;
   install-schedule) install_schedule ;;
   schedule-run) schedule_run ;;
   recover-services) shift; recover_restart_journals "$@" ;;

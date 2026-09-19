@@ -1,0 +1,62 @@
+# NAS- und Datenquellen-Teststand auf develop
+
+Unveröffentlichte Änderungen auf Basis von 1.0.0. Kein neues Release und keine
+Änderung an den öffentlichen Download- oder Update-Kanälen.
+
+## Die beiden Forum-Befunde
+
+1. Netzfreigaben unter `/media/smb/...` konnten zusammen mit `/` ungewollt
+   rekursiv kopiert werden. Neue Konfigurationen verwenden eine lokale Grundregel
+   mit ausdrücklich gewählten Netzfreigaben. Bestehende Einstellungen bleiben
+   unverändert; diese Nutzer müssen die neue Grundregel bewusst speichern.
+   Ohne gespeichertes Ziel wird nicht mehr auf den lokalen Standardpfad ausgewichen.
+2. Network Compatible benötigt weiterhin echte Eigentümer, Rechte, ACLs und
+   Links. Ein CIFS-Mount mit festen Werten kann das nicht erfüllen. Jeder
+   Prüfschritt wird nun sichtbar; ein unpassendes Profil bleibt blockiert.
+   Portable Archive mit Vollbackup ist der vorgesehene Weg für ein solches Ziel,
+   sofern dessen eigener Roundtrip gelingt. Kein stiller Profilwechsel.
+
+## Sichere Anwendung des Testpakets
+
+Einstellungen exportieren und laufende Aufgaben beenden lassen. Testpaket
+manuell über die Plugin-Verwaltung installieren, nicht vorher deinstallieren.
+Unter Laufwerke und Netzfreigaben lokale Grundregel auswählen, gewünschte
+eingebundene Freigaben aktivieren und speichern. Vorherige Ausschlüsse behalten
+ihre Wirkung. Der Sicherungsdatenträger darf nicht als Quelldaten mitgesichert
+werden; das Backup-Ziel selbst bleibt automatisch ausgeschlossen.
+
+Bei einem Metadatenfehler die einzelnen Prüfschritte lesen. Falls das NAS feste
+Eigentümer/Rechte erzwingt, Portable Archive **und** Vollbackup auswählen und
+speichern; erneut prüfen. Archive sind nicht inkrementell und erfordern für
+den System-Restore eine Offline-/Rescue-Umgebung.
+
+## Technische Schutzmassnahmen
+
+- Auswahl anhand der Kernel-Mount-Tabelle ohne Auslesen von Zugangsdaten.
+- Kein Betreten ausgeschlossener autofs-/Netzwerkbäume zur Dateierfassung.
+- Dateiliste nach dem Dienst-Stopp; rsync und tar verarbeiten sie ohne Rekursion.
+- Bei einem Erfassungsfehler greift derselbe Dienst-Wiederanlauf wie bei anderen
+  Backupfehlern. Eine Teilliste wird nicht kopiert.
+- Mount-Identität vor/nach Erfassung und nach der Kopie prüfen; erst danach
+  Dienste/Container wieder starten, da deren Mount-Änderungen erwartet werden.
+- `source-selection.json` hält die tatsächliche Auswahl fest und schützt beim
+  Volume-Restore vor der Auswahl nicht gesicherter Quellen.
+- Metadaten-Diagnose ist begrenzt, enthält keine Mount-Zugangsdaten und liegt
+  atomar ersetzt mit Modus 0600 in den geschützten Laufzeitdaten.
+
+## Prüfumfang und Grenzen
+
+Automatische Tests prüfen die Auswahl von zehn NAS-Freigaben, erhaltene
+USB-/Boot-Daten, Ausschlüsse, fehlende Quellen, unveränderte Alt-Konfigurationen,
+Dateilistentransport, Restore-Schutz und sichere Anzeige/Übernahme im Browser.
+
+`tests/run-cifs.sh` erzeugt nur auf einem ausdrücklich freigegebenen, isolierten
+Linux-Testsystem einen temporären lokalen Samba-Server mit echtem CIFS-Mount.
+Mit `forceuid`, `forcegid`, festen Dateirechten und `nounix` muss Network
+Compatible einen detaillierten Fehler liefern. Portable Archive muss dort
+Metadaten erfolgreich sichern und lokal wiederherstellen. Die CIFS-Quelle darf
+nur nach ausdrücklicher Auswahl durch rsync/tar kopiert werden.
+
+Windows-Tests ersetzen diese Linux-Prüfung nicht. Ein grüner CIFS-Test ersetzt
+seinerseits keinen Gegencheck auf der konkreten Synology mit deren Mount-Optionen,
+keinen vollständigen System-/Boot-Restore und keinen echten LoxBerry-Neustarttest.

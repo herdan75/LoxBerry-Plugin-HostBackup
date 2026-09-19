@@ -30,8 +30,29 @@
     return changed;
   }
   function logViewport(scrollTop, clientHeight, scrollHeight) { return scrollHeight - scrollTop - clientHeight < 40; }
-  function phaseLabel(phase) { return phase === 'retention' ? 'Aufbewahrung prüfen und alte Backups bereinigen' : phase; }
-  var core = { normalizeLogForDisplay: normalizeLogForDisplay, controlState: controlState, validateSettings: validateSettings, updateDirty: updateDirty, logViewport: logViewport, phaseLabel: phaseLabel };
+  function phaseLabel(phase) { return ({ retention: 'Aufbewahrung prüfen und alte Backups bereinigen', selecting_sources: 'Ausgewählte Datenquellen erfassen' })[phase] || phase; }
+  function sourceSelection(value) {
+    var selection = typeof value === 'string' ? JSON.parse(value) : value;
+    if (!selection || !/^(local|legacy)$/.test(selection.policy) || !selection.overrides || Array.isArray(selection.overrides) || typeof selection.overrides !== 'object') throw new Error('Die gespeicherte Datenquellenauswahl ist ungültig. Bitte nicht überschreiben.');
+    var overrides = Object.create(null);
+    Object.keys(selection.overrides).sort().forEach(function (path) { if (typeof selection.overrides[path] !== 'boolean') throw new Error('Ungültige Datenquellen-Ausnahme.'); overrides[path] = selection.overrides[path]; });
+    return { overrides: overrides, policy: selection.policy };
+  }
+  function sourceIncluded(selection, volume, volumes) {
+    if (volume.path === '/') return true;
+    if (volume.forced_excluded || !volume.selectable && volume.kind !== 'system' && volume.kind !== 'automount') return false;
+    if (Object.prototype.hasOwnProperty.call(selection.overrides, volume.path)) return selection.overrides[volume.path] && volume.kind !== 'automount' && volume.kind !== 'system';
+    var parents = (volumes || []).filter(function (item) { return item.path !== '/' && item.path !== volume.path && volume.path.indexOf(item.path + '/') === 0; }).sort(function (a, b) { return b.path.length - a.path.length; });
+    var blocked = []; parents.some(function (parent) { if (sourceIncluded(selection, parent, volumes)) return true; blocked.push(parent); return false; });
+    var ancestor = Object.keys(selection.overrides).filter(function (path) { return volume.path.indexOf(path + '/') === 0; }).sort(function (a, b) { return b.length - a.length; })[0];
+    // A known local USB mount may sit below an autofs container. Include that
+    // mount, not the container or its network siblings, unless explicitly denied.
+    var localAutomountChild = selection.policy === 'local' && volume.kind === 'local' && blocked.every(function (parent) { return parent.kind === 'automount'; }) && (!ancestor || selection.overrides[ancestor] !== false);
+    if (parents.length && !sourceIncluded(selection, parents[0], volumes) && !localAutomountChild) return false;
+    if (ancestor && selection.overrides[ancestor] === false) return false;
+    return selection.policy === 'legacy' || volume.kind === 'local';
+  }
+  var core = { normalizeLogForDisplay: normalizeLogForDisplay, controlState: controlState, validateSettings: validateSettings, updateDirty: updateDirty, logViewport: logViewport, phaseLabel: phaseLabel, sourceSelection: sourceSelection, sourceIncluded: sourceIncluded };
   if (typeof module !== 'undefined' && module.exports) module.exports = core;
   if (!root.document) return;
   var document = root.document;
@@ -42,6 +63,7 @@
   var userSelectedTask = false, taskInFlight = false, overviewInFlight = false, followLog = true, finalTask = '';
   var csrfRefresh = null, busyForms = new WeakSet(), busyCount = 0, pendingImport = false, intentionalNavigation = false;
   var reportDownloadUrl = null;
+  var sourceVolumes = [], sourceLoading = false;
   var labels = {
     backup_root: 'Backup-Verzeichnis', keep_backups: 'Anzahl Backups behalten', metadata_mode: 'Metadaten-Profil', backup_mode: 'Backup-Modus',
     schedule_enabled: 'Automatische Backups', schedule_mode: 'Zeitplan', schedule_time: 'Startzeit', schedule_weekdays: 'Wochentage',
@@ -50,6 +72,7 @@
     mail_notify_to: 'Mailadresse', mail_notify_success: 'Mail bei Erfolg', mail_notify_failure: 'Mail bei Fehler', mail_notify_stopped: 'Mail bei Abbruch',
     mail_notify_restore: 'Mail bei Restore', stop_targets: 'Zu stoppende Dienste/Container', create_export_after_backup: 'Export nach dem Backup',
     retention_mode: 'Aufbewahrungsart', keep_daily: 'Tagesstände', keep_weekly: 'Wochenstände', keep_monthly: 'Monatsstände',
+    source_selection_json: 'Laufwerke und Netzfreigaben',
     log_retention_days: 'Log-Aufbewahrung', quarantine_retention_days: 'Quarantäne-Aufbewahrung', integrity_enabled: 'Regelmässige Integritätsprüfung', integrity_interval_days: 'Prüfintervall'
   };
   function byId(id) { return document.getElementById(id); }
@@ -57,12 +80,14 @@
   function el(tag, text, className) { var node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; }
   function actionOf(form) { return (form.querySelector('[name="action"]') || {}).value || ''; }
   function settingsForm(form) { return form && (form.id === 'settings-save-form' || form.id === 'maintenance-settings-form'); }
-  function controls(name) { return all('#settings-save-form [name], #maintenance-settings-form [name]').filter(function (item) { return item.name === name && !/^(hidden|submit|button|file)$/.test(item.type); }); }
-  function names() { return Array.from(new Set(all('#settings-save-form [name], #maintenance-settings-form [name]').filter(function (item) { return !/^(hidden|submit|button|file)$/.test(item.type); }).map(function (item) { return item.name; }))); }
+  function tracked(item) { return item.name === 'source_selection_json' || !/^(hidden|submit|button|file)$/.test(item.type); }
+  function controls(name) { return all('#settings-save-form [name], #maintenance-settings-form [name]').filter(function (item) { return item.name === name && tracked(item); }); }
+  function names() { return Array.from(new Set(all('#settings-save-form [name], #maintenance-settings-form [name]').filter(tracked).map(function (item) { return item.name; }))); }
   function states() { var result = {}; names().forEach(function (name) { result[name] = controlState(controls(name)); }); return result; }
   function capture(form) { names().forEach(function (name) { if (!form || controls(name).some(function (item) { return item.form === form; })) { initial[name] = controlState(controls(name)); delete changed[name]; } }); }
   function dirty() { return pendingDraft || Object.keys(changed).length > 0; }
   function readable(name, value) {
+    if (name === 'source_selection_json') { try { var selection = sourceSelection(value); return (selection.policy === 'legacy' ? 'Bisherige Grundregel' : 'Lokale Laufwerke; Netzfreigaben ausdrücklich') + ' · ' + Object.keys(selection.overrides).length + ' gespeicherte Ausnahmen'; } catch (ignore) { return 'Ungültige Auswahl – bitte prüfen'; } }
     if (/hook$/.test(name)) return value ? 'Eingetragen' : 'Leer';
     if (name === 'rsync_extra_excludes') return value.split(/\r?\n/).filter(function (line) { return line.trim(); }).length + ' Einträge';
     if (name === 'stop_targets') return (value ? value.split('\u001f').length : 0) + ' Ziele ausgewählt';
@@ -82,6 +107,17 @@
     byId('settings-change-title').textContent = 'Ungespeicherte Änderungen' + (Object.keys(changed).length ? ' (' + Object.keys(changed).length + ')' : '');
   }
   function onSettingChange(event) {
+    if (event.target.hasAttribute('data-source-policy') || event.target.hasAttribute('data-source-path')) {
+      var input = byId('source-selection-json');
+      try {
+        var selection = sourceSelection(input.value);
+        if (event.target.hasAttribute('data-source-policy')) selection.policy = event.target.value;
+        else selection.overrides[event.target.dataset.sourcePath] = event.target.checked;
+        input.value = JSON.stringify(sourceSelection(selection));
+        updateDirty(initial, changed, input.name, input.value, new Date()); renderSources(); renderDirty(); clearPreflight();
+      } catch (error) { feedback(error.message, 'error'); }
+      return;
+    }
     if (!settingsForm(event.target.form) || !event.target.name || event.target.type === 'hidden') return;
     updateDirty(initial, changed, event.target.name, controlState(controls(event.target.name)), new Date());
     updateSchedule(); renderDirty(); clearPreflight();
@@ -101,7 +137,7 @@
       var response = await root.fetch(url(action, params), options);
       var text = await response.text(), data;
       try { data = JSON.parse(text); } catch (ignore) { data = { ok: false, error: 'Unerwartete Serverantwort (HTTP ' + response.status + ').' }; }
-      if (!response.ok || data.ok === false && !data.requires_confirmation) throw new Error(data.error || 'HTTP ' + response.status);
+      if (!response.ok || data.ok === false && !data.requires_confirmation) { var failure = new Error(data.error || 'HTTP ' + response.status); failure.data = data; throw failure; }
       return data;
     } catch (error) { if (error.name === 'AbortError') throw new Error('Die Antwort dauert zu lange. Der Vorgang kann im Hintergrund weiterlaufen. Bitte Status prüfen, bevor du ihn erneut startest.'); throw error; }
     finally { root.clearTimeout(timeout); }
@@ -121,6 +157,70 @@
     checkbox.type = 'checkbox'; checkbox.name = 'accept_preflight_warnings'; checkbox.value = '1'; checkbox.required = true; checkbox.dataset.role = 'none';
     label.append(checkbox, el('span', 'Backup trotz dieser Warnhinweise starten')); form.prepend(label);
     feedback('Backup noch nicht gestartet: ' + data.warning + ' Prüfe die Warnung und bestätige sie nur, wenn du fortfahren möchtest.', 'warning');
+  }
+  function renderSources() {
+    var input = byId('source-selection-json'); if (!input) return;
+    var selection = sourceSelection(input.value), target = byId('source-volume-list'), policy = byId('source-policy');
+    policy.value = selection.policy;
+    byId('source-policy-note').textContent = selection.policy === 'legacy' ? 'Bestehende Konfiguration: Alle bisher einbezogenen Laufwerke bleiben berücksichtigt, auch Netzfreigaben. Es erfolgt keine automatische Umstellung. Prüfe die Auswahl bewusst.' : 'Lokale Laufwerke bleiben enthalten; einzelne eingebundene Netzfreigaben müssen ausdrücklich ausgewählt werden. Automount-Bereiche werden nicht pauschal aktiviert. Gespeicherte Ausnahmen gelten auch nach einem späteren Wechsel der Grundregel.';
+    byId('source-selection-summary').textContent = selection.policy === 'legacy' ? '· bisherige Grundregel' : '· lokale Laufwerke';
+    target.replaceChildren();
+    var volumes = sourceVolumes.slice();
+    Object.keys(selection.overrides).forEach(function (path) { if (!volumes.some(function (volume) { return volume.path === path; })) volumes.push({ path: path, kind: 'unmounted', selectable: true, reason: 'Gespeicherte Ausnahme; momentan nicht eingebunden. Eine aktiv ausgewählte Quelle muss vor dem Backup eingebunden werden, sonst wird der Start blockiert.' }); });
+    volumes.forEach(function (volume) {
+      var row = el('div', undefined, 'source-volume'), label = el('label'), box = el('input'), text = el('span'), title = el('strong', volume.path);
+      box.type = 'checkbox'; box.dataset.role = 'none'; box.dataset.sourcePath = volume.path; box.checked = sourceIncluded(selection, volume, volumes); box.disabled = !volume.selectable;
+      var kind = ({ local: 'Lokales Laufwerk', network: 'Netzfreigabe', automount: 'Automount-Bereich', system: 'System', unmounted: 'Nicht eingebunden' })[volume.kind] || volume.kind || '';
+      text.append(title, el('small', kind + (volume.fstype ? ' · ' + volume.fstype : '') + (volume.selectable ? '' : ' · ' + (volume.reason || 'Fest vorgegeben'))));
+      label.append(box, text); row.append(label);
+      if (volume.selectable || Object.prototype.hasOwnProperty.call(selection.overrides, volume.path)) {
+        var overridden = Object.prototype.hasOwnProperty.call(selection.overrides, volume.path), reset = el('button', 'Grundregel verwenden'); reset.type = 'button'; reset.dataset.sourceReset = volume.path; reset.dataset.role = 'none'; reset.disabled = !overridden;
+        row.append(reset);
+        if (volume.kind === 'unmounted') row.append(el('small', volume.reason, 'source-volume-note'));
+      }
+      target.append(row);
+    });
+    if (!volumes.length) target.append(el('p', 'Keine zusätzlichen eingebundenen Datenquellen erkannt.'));
+  }
+  async function loadSources() {
+    if (!byId('source-selection-json') || sourceLoading) return;
+    sourceLoading = true; byId('source-selection-reload').disabled = true;
+    try {
+      var data = await request('source-info'); sourceVolumes = data.volumes || [];
+      renderSources(); byId('source-policy').disabled = false;
+      byId('source-selection-notices').textContent = (data.notices || []).concat(data.errors || []).join(' ');
+    } catch (error) { byId('source-selection-notices').textContent = 'Datenquellen konnten nicht geladen werden: ' + error.message + ' Die gespeicherte Auswahl und deine Eingaben bleiben erhalten.'; }
+    finally { sourceLoading = false; byId('source-selection-reload').disabled = false; }
+  }
+  function renderMetadataProbe(target, probe) {
+    if (!probe || !Array.isArray(probe.checks)) return;
+    var panel = el('section', undefined, 'metadata-probe'); panel.append(el('h3', 'Metadatenprüfung: ' + (probe.mode || '')));
+    if (probe.message) panel.append(el('p', probe.message));
+    probe.checks.forEach(function (check) {
+      var details = el('details', undefined, 'metadata-probe-check'), status = ({ ok: 'OK', error: 'Fehler', skipped: 'Nicht geprüft' })[check.status] || check.status || 'Unbekannt';
+      details.open = check.status === 'error'; details.append(el('summary', status + ' · ' + check.name));
+      if (check.details) details.append(el('p', typeof check.details === 'string' ? check.details : JSON.stringify(check.details)));
+      [['Erwartet', check.expected], ['Ermittelt', check.actual], ['Exit-Code', check.exit_code], ['Fehlerausgabe', check.stderr]].forEach(function (item) { if (item[1] !== undefined && item[1] !== null && item[1] !== '') { details.append(el('strong', item[0] + ':'), el('pre', typeof item[1] === 'string' ? item[1] : JSON.stringify(item[1], null, 2))); } });
+      panel.append(details);
+    });
+    (probe.advice || []).forEach(function (advice) { panel.append(el('p', advice)); });
+    if (probe.mode === 'network-compatible' && probe.status === 'error') {
+      panel.append(el('p', 'Network Compatible lässt nur xattrs und File Capabilities weg. Echte Fehler bei Eigentümern, Rechten, Links oder ACLs bleiben blockierend. Portable Archive kann Metadaten im Archiv bewahren, erfordert aber ausdrücklich ein Vollbackup und einen Offline-/Rescue-Restore.'));
+      panel.append(el('p', 'Für dieses Verfahren: Metadaten-Profil „Portable Archive“ und Backup-Modus „Volles Backup“ auswählen, Änderungen speichern und danach das Backup erneut starten. Es gibt dabei keine inkrementellen Snapshots.'));
+      var apply = el('button', 'Portable Archive und Vollbackup auswählen'); apply.type = 'button'; apply.dataset.archiveProfileDraft = '1'; apply.dataset.role = 'none'; panel.append(apply);
+      panel.append(el('small', 'Ändert nur die Auswahl in den Einstellungen. Speichern und Backup-Start erfolgen ausdrücklich durch dich.'));
+    }
+    target.append(panel);
+  }
+  function renderRequestError(error) {
+    if (!error.data || (!error.data.metadata_probe && !error.data.preflight)) return;
+    var target = byId('operation-result'); target.replaceChildren(); target.hidden = false;
+    target.append(el('h3', 'Backup nicht gestartet'));
+    var preflight = error.data.preflight || {};
+    (preflight.checks || []).filter(function (check) { return check.ok === false; }).forEach(function (check) { target.append(el('p', check.name + ': ' + (check.value || 'Prüfung fehlgeschlagen'))); });
+    renderMetadataProbe(target, error.data.metadata_probe || preflight.metadata_probe);
+    var details = el('details'); details.append(el('summary', 'Vollständige Vorprüfung'), el('pre', JSON.stringify(preflight, null, 2))); target.append(details);
+    target.scrollIntoView({ block: 'nearest' });
   }
   async function fragment(action, target) {
     if (!target) return;
@@ -180,6 +280,7 @@
       target.append(el('p', 'Verfügbar: ' + byteLabel(data.available_mb == null ? null : data.available_mb * 1048576) + ' · geschätzte Basiskopie: ' + byteLabel(data.baseline_estimate_mb == null ? null : data.baseline_estimate_mb * 1048576)));
       reportRows(target, ['Datenquelle', 'Im Backup', 'Grund'], (data.source_volumes || []).map(function (volume) { return [volume.path, volume.included ? 'Ja' : 'Nein', volume.reason]; }));
       var exclusions = el('details'), list = el('ul'); exclusions.append(el('summary', 'Wirksame Ausschlüsse')); (data.excludes || []).forEach(function (rule) { list.append(el('li', rule)); }); exclusions.append(list); target.append(exclusions);
+      renderMetadataProbe(target, data.metadata_probe || (data.preflight || {}).metadata_probe);
     } else if (action === 'storage-info') {
       target.append(el('h3', 'Speicherbelegung'), el('p', 'Backups ohne doppelt gezählte Hardlinks: ' + byteLabel(data.backups_unique_allocated_bytes) + ' · Exporte: ' + byteLabel(data.exports_bytes) + ' · fehlgeschlagene Backups: ' + byteLabel(data.failed_bytes)));
       target.append(el('p', 'Logische Dateigrösse und belegter Speicher unterscheiden sich. Gemeinsam genutzte Dateien dürfen nicht pro Snapshot aufsummiert werden.'));
@@ -331,7 +432,7 @@
         fragment('backup-list', byId('backup-list-body')); overview(); pollTask();
       }
       return true;
-    } catch (error) { feedback(error.message + ' Deine Eingaben wurden nicht verworfen.', 'error'); return false; }
+    } catch (error) { feedback(error.message + ' Deine Eingaben wurden nicht verworfen.', 'error'); renderRequestError(error); return false; }
     finally { setBusy(form, false); }
   }
   document.addEventListener('submit', async function (event) {
@@ -349,6 +450,14 @@
   document.addEventListener('input', onSettingChange);
   document.addEventListener('change', onSettingChange);
   document.addEventListener('click', async function (event) {
+    if (event.target.closest('[data-archive-profile-draft]')) {
+      event.preventDefault();
+      [['metadata_mode', 'portable-archive'], ['backup_mode', 'full']].forEach(function (choice) { var control = controls(choice[0]).find(function (item) { return item.value === choice[1]; }); if (control) { control.checked = true; control.dispatchEvent(new Event('change', { bubbles: true })); } });
+      feedback('Portable Archive und Volles Backup sind ausgewählt, aber noch nicht gespeichert. Bitte Änderungen speichern und danach das Backup erneut starten. Der Restore ist nur offline möglich.'); return;
+    }
+    var resetSource = event.target.closest('[data-source-reset]');
+    if (resetSource) { event.preventDefault(); var sourceInput = byId('source-selection-json'), selectedSources = sourceSelection(sourceInput.value); delete selectedSources.overrides[resetSource.dataset.sourceReset]; sourceInput.value = JSON.stringify(sourceSelection(selectedSources)); updateDirty(initial, changed, sourceInput.name, sourceInput.value, new Date()); renderSources(); renderDirty(); clearPreflight(); return; }
+    if (event.target.closest('#source-selection-reload')) { event.preventDefault(); loadSources(); return; }
     var info = event.target.closest('.info-button');
     if (info) { event.preventDefault(); var help = info.closest('.info-help'); help.classList.toggle('is-open'); info.setAttribute('aria-expanded', help.classList.contains('is-open') ? 'true' : 'false'); positionInfoBubble(help); return; }
     var picker = event.target.closest('[data-backup-root]');
@@ -356,7 +465,7 @@
     var preset = event.target.closest('[data-stop-target-preset]');
     if (preset) { event.preventDefault(); all('[name="stop_targets"]').forEach(function (box) { box.checked = preset.dataset.stopTargetPreset === 'recommended' && box.dataset.recommended === '1'; }); updateDirty(initial, changed, 'stop_targets', controlState(controls('stop_targets')), new Date()); renderDirty(); return; }
     var load = event.target.closest('[data-load-action]');
-    if (load) { event.preventDefault(); if (load.dataset.loadAction === 'backup-preview' && !requireSaved()) return; load.disabled = true; feedback('Ergebnis wird berechnet...'); try { renderReport(load.dataset.loadAction, await request(load.dataset.loadAction, {}, { timeout: 3600000 })); byId('action-feedback').hidden = true; } catch (error) { feedback(error.message, 'error'); } finally { load.disabled = false; } return; }
+    if (load) { event.preventDefault(); if (load.dataset.loadAction === 'backup-preview' && !requireSaved()) return; load.disabled = true; feedback('Ergebnis wird berechnet...'); try { renderReport(load.dataset.loadAction, await request(load.dataset.loadAction, {}, { timeout: 3600000 })); byId('action-feedback').hidden = true; } catch (error) { feedback(error.message, 'error'); renderRequestError(error); } finally { load.disabled = false; } return; }
     var preview = event.target.closest('[data-restore-preview]');
     if (preview) { var form = preview.closest('form'); preview.disabled = true; try { var data = new FormData(form), result = await request('restore-plan', { backup_id: data.get('backup_id'), destination: data.get('restore_destination'), volume_map: data.get('restore_volume_map') }, { timeout: 3600000 }); byId('restore-plan-output').textContent = result.text; byId('restore-plan-output').hidden = false; } catch (error) { feedback(error.message, 'error'); } finally { preview.disabled = false; } }
   });
@@ -373,6 +482,7 @@
   root.addEventListener('focus', function () { refreshCSRF().catch(function () {}); overview(); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { refreshCSRF().catch(function () {}); overview(); pollTask(); } });
   capture(); renderDirty(); updateSchedule(); enhanceTables(app); byId('stop-task-form').hidden = true;
+  try { renderSources(); } catch (error) { feedback(error.message, 'error'); } loadSources();
   fragment('target-notice', byId('target-notice')); fragment('backup-list', byId('backup-list-body')); fragment('stop-targets', byId('stop-targets-list'));
   overview(); pollTask(); root.setInterval(function () { if (!document.hidden) { overview(); pollTask(); } }, 5000);
   root.setInterval(function () { if (!document.hidden) refreshCSRF().catch(function () {}); }, 1800000);

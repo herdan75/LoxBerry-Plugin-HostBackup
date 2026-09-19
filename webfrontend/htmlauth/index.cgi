@@ -64,6 +64,7 @@ my $browse_id = $q->param('browse_id') || '';
 my $message = '';
 my $error = '';
 my $preflight_warning = '';
+my $preflight_result;
 my $active_task = '';
 
 sub asset_url {
@@ -98,6 +99,22 @@ sub json_response {
   print header(-type => 'application/json', -charset => 'utf-8', -status => ($status || '200 OK'), -Cache_Control => 'no-store');
   print encode_json($value);
   exit;
+}
+
+sub source_selection_json {
+  my ($value) = @_;
+  die "Die Datenquellenauswahl ist zu gross.\n" if length($value || '') > 65536;
+  my $selection = eval { decode_json($value || '') };
+  die "Ungueltige Datenquellenauswahl.\n" unless ref($selection) eq 'HASH'
+    && scalar(keys %$selection) == 2 && ($selection->{policy} || '') =~ /^(?:local|legacy)$/
+    && ref($selection->{overrides}) eq 'HASH' && scalar(keys %{$selection->{overrides}}) <= 256;
+  for my $path (keys %{$selection->{overrides}}) {
+    die "Ungueltiger Datenquellenpfad.\n" unless $path =~ m{^/[^/]}
+      && $path !~ m{[\x00-\x1f\x7f]|//|/$|(?:^|/)\.\.?(?:/|$)};
+    die "Datenquellen muessen ausdruecklich ein- oder ausgeschlossen sein.\n"
+      unless JSON::PP::is_bool($selection->{overrides}{$path});
+  }
+  return JSON::PP->new->canonical->encode($selection);
 }
 
 sub secure_random_hex {
@@ -437,7 +454,7 @@ if ($action eq 'restore-plan') {
   json_response({ ok => JSON::PP::true, text => $out });
 }
 
-if ($action =~ /^(?:task-overview|backup-preview|storage-info|verification-report|inspect-backup|runtime-cleanup-preview)$/) {
+if ($action =~ /^(?:task-overview|source-info|backup-preview|storage-info|verification-report|inspect-backup|runtime-cleanup-preview)$/) {
   my @args = ($action);
   if ($action eq 'verification-report' || $action eq 'inspect-backup') {
     reject_request('400 Bad Request', 'Ungueltige Backup-ID.') unless $backup_id =~ /^[A-Za-z0-9._-]+$/;
@@ -445,6 +462,9 @@ if ($action =~ /^(?:task-overview|backup-preview|storage-info|verification-repor
   }
   my ($status, $out) = run_shell(backend_cmd(@args));
   my $data = eval { decode_json($out) };
+  # Missing selected mounts are an actionable report, not a broken endpoint.
+  # Preserve the inventory so the user can correct an old selection safely.
+  json_response($data) if $action eq 'source-info' && ref($data) eq 'HASH' && ref($data->{volumes}) eq 'ARRAY';
   reject_request('500 Internal Server Error', $out || 'Die Daten konnten nicht geladen werden.') if $status != 0 || !$data;
   json_response($data);
 }
@@ -570,8 +590,10 @@ if ($q->request_method eq 'POST') {
         my $mail_notify_failure = exists $imported->{mail_notify_failure} ? bool_arg($imported->{mail_notify_failure}) : 'true';
         my $mail_notify_stopped = exists $imported->{mail_notify_stopped} ? bool_arg($imported->{mail_notify_stopped}) : 'true';
         my $mail_notify_restore = exists $imported->{mail_notify_restore} ? bool_arg($imported->{mail_notify_restore}) : 'true';
+        my $sources = eval { source_selection_json(encode_json(exists $imported->{source_selection} ? $imported->{source_selection} : { policy => 'legacy', overrides => {} })) };
+        $error = escapeHTML($@) if $@;
 
-        my ($status, $out) = run_shell(
+        my ($status, $out) = $error ? (1, $error) : run_shell(
           backend_cmd(
             'save-config',
             $backup_root,
@@ -598,7 +620,8 @@ if ($q->request_method eq 'POST') {
             $mail_notify_failure,
             $mail_notify_stopped,
             $mail_notify_restore,
-            $metadata_mode
+            $metadata_mode,
+            $sources
           )
         );
 
@@ -617,6 +640,11 @@ if ($q->request_method eq 'POST') {
     my $backup_mode = $q->param('backup_mode') || 'full';
     my $metadata_mode = $q->param('metadata_mode') || 'native-strict';
     my $keep_backups = $q->param('keep_backups') || '10';
+    my @source_args;
+    if (defined $q->param('source_selection_json')) {
+      my $sources = eval { source_selection_json(scalar $q->param('source_selection_json')) };
+      if ($@) { $error = $@; } else { @source_args = ($sources); }
+    }
 
     my $schedule_enabled = $q->param('schedule_enabled') ? 'true' : 'false';
     my $schedule_mode = $q->param('schedule_mode') || 'daily';
@@ -689,7 +717,8 @@ if ($q->request_method eq 'POST') {
         $mail_notify_failure,
         $mail_notify_stopped,
         $mail_notify_restore,
-        $metadata_mode
+        $metadata_mode,
+        @source_args
       )
     );
 
@@ -703,9 +732,11 @@ if ($q->request_method eq 'POST') {
   elsif ($action eq 'backup') {
     my $accept_warnings = $q->param('accept_preflight_warnings') ? 'accept-warnings' : '';
     my ($check_status, $check_out) = run_shell(backend_cmd('preflight-backup'));
-    my $check = $check_status == 0 ? eval { decode_json($check_out) } : undef;
+    my $check = eval { decode_json($check_out) };
+    $check = undef unless ref($check) eq 'HASH';
+    $preflight_result = $check;
     if ($check_status != 0 || !$check || (($check->{status} || '') eq 'error')) {
-      $error = escapeHTML($check_out || 'Backup-Preflight fehlgeschlagen.');
+      $error = $check ? 'Backup nicht gestartet: Die Vorpruefung ist fehlgeschlagen. Bitte die Pruefdetails beachten.' : escapeHTML($check_out || 'Backup-Preflight fehlgeschlagen.');
     } elsif (($check->{status} || '') eq 'warning' && $accept_warnings ne 'accept-warnings') {
       my $warnings = ref($check->{warnings}) eq 'ARRAY' ? join("\n", @{$check->{warnings}}) : 'Preflight meldet Warnungen.';
       $preflight_warning = escapeHTML($warnings);
@@ -912,7 +943,7 @@ if ($q->request_method eq 'POST') {
     }
   }
   if ($ajax_request) {
-    json_response({ ok => JSON::PP::false, error => $error }, '400 Bad Request') if $error;
+    json_response({ ok => JSON::PP::false, error => $error, ($preflight_result ? (preflight => $preflight_result, metadata_probe => $preflight_result->{metadata_probe}) : ()) }, '400 Bad Request') if $error;
     json_response({ ok => JSON::PP::false, warning => $preflight_warning, requires_confirmation => JSON::PP::true }) if $preflight_warning;
     json_response({ ok => JSON::PP::true, message => 'Aktion abgeschlossen.' });
   }
@@ -948,6 +979,10 @@ if ($action eq 'save-config' && $error && $config_loaded) {
     $config->{$name} = \@values;
   }
   $config->{rsync_extra_excludes} = [split /\r?\n/, ($q->param('rsync_extra_excludes') || '')];
+  if (defined $q->param('source_selection_json')) {
+    my $sources = eval { source_selection_json(scalar $q->param('source_selection_json')) };
+    $config->{source_selection} = decode_json($sources) if defined $sources && !$@;
+  }
   if ($q->param('stop_targets_loaded')) {
     my @targets = $q->param('stop_targets');
     $config->{stop_targets} = [map { my ($type, $name) = split /:/, $_, 2; { type => $type, name => $name } } @targets];
@@ -1001,6 +1036,7 @@ if ($browse_id) {
 }
 
 my $cfg_backup_root = escapeHTML($config->{backup_root} || '');
+my $cfg_source_selection = escapeHTML(JSON::PP->new->canonical->encode($config->{source_selection} || { policy => 'legacy', overrides => {} }));
 my $cfg_backup_mode = $config->{backup_mode} || 'full';
 my $cfg_metadata_mode = $config->{metadata_mode} || 'native-strict';
 $cfg_metadata_mode = 'native-strict' unless $cfg_metadata_mode =~ /^(?:native-strict|network-compatible|fake-super|portable-archive)$/;
@@ -1054,7 +1090,7 @@ my $info_backup_root = info_button('Hier legst du fest, wohin die Backups geschr
 my $info_backup_mode = info_button('Vollbackup kopiert jeden Stand vollständig. Inkrementeller Snapshot nutzt rsync mit Hardlinks auf das vorherige vollständige Backup: jedes Backup bleibt einzeln wiederherstellbar, unveränderte Dateien benötigen aber kaum zusätzlichen Speicher. Für zuverlässige Speicherersparnis wird ein Linux-Dateisystem wie ext4 empfohlen.');
 my $info_metadata_mode = info_button('Das Metadaten-Profil bestimmt, wie Linux-Dateirechte und Zusatzinformationen auf dem Backup-Ziel abgelegt werden. Standard ist Native Strict. Für CIFS/NFS und viele NAS-Systeme ist meistens Network Compatible passend. Die vier Info-Buttons erklären Umfang, Voraussetzungen und Restore-Einschränkungen jedes Profils.');
 my $info_metadata_native = info_button('Standardprofil bei einer Neuinstallation. Native Strict verwendet rsync mit -aHAX, numerischen Benutzer- und Gruppen-IDs sowie Sparse-Dateien. Gesichert werden Dateien, Verzeichnisse, symbolische Links, Besitzer, Gruppen, Rechte, Zeitstempel, ACLs, Hardlinks, xattrs und damit auch File Capabilities. Geeignet für lokale Linux-Dateisysteme wie ext4, xfs und btrfs. Unterstützt das Ziel eine erforderliche Metadatenfunktion nicht, wird das Backup als Fehler beendet.');
-my $info_metadata_network = info_button('Für CIFS/NFS und viele NAS-Systeme, die Linux-xattrs nicht vollständig unterstützen. Network Compatible verwendet rsync ohne das X-Flag. Dateien, Verzeichnisse, symbolische Links, Besitzer, Gruppen, Rechte, Zeitstempel, ACLs, Hardlinks und Sparse-Dateien werden weiterhin gesichert; xattrs und File Capabilities werden bewusst ausgelassen. Das erzeugt nur einen neutralen Hinweis und blockiert auch zeitgesteuerte Backups nicht. Vor einem Restore muss die reduzierte Metadatentreue bestätigt werden.');
+my $info_metadata_network = info_button('Für CIFS/NFS und NAS-Ziele, die nur Linux-xattrs nicht vollständig unterstützen. Network Compatible lässt xattrs und File Capabilities bewusst weg. Dieses Weglassen ist nur ein neutraler Hinweis und blockiert auch zeitgesteuerte Backups nicht. Besitzer, Gruppen, Rechte, Links, ACLs und Sparse-Dateien müssen dagegen weiterhin funktionieren; ein echter Fehler im Metadaten-Test blockiert den Start. CIFS mit fest vorgegebenen Eigentümern oder Rechten kann deshalb ungeeignet sein. Portable Archive bewahrt Metadaten innerhalb einer Archivdatei, benötigt aber ein Vollbackup und einen Offline-Restore. Vor einem Network-Compatible-Restore muss die reduzierte Metadatentreue bestätigt werden.');
 my $info_metadata_fake_super = info_button('Für Ziele, die user-xattrs zuverlässig unterstützen, aber native Unix-Besitzer oder privilegierte Metadaten nicht direkt speichern können. rsync --fake-super legt diese Angaben in Attributen unter user.rsync.* ab und liest sie beim Restore wieder aus. Das Profil hilft nicht, wenn das Ziel auch user-xattrs ablehnt. Deshalb nur verwenden, wenn die automatische Zielprüfung erfolgreich ist.');
 my $info_metadata_portable = info_button('Für Ziele ohne geeignete Linux-Metadatenfunktionen. Portable Archive schreibt statt eines normalen rsync-Dateibaums einen pax-kompatiblen rootfs.tar-Container mit numerischen Besitzern, ACLs, xattrs, SELinux-Informationen und Sparse-Dateien. Dadurch liegen die Metadaten innerhalb des Archivs. Inkrementelle Snapshots sind nicht möglich; die Wiederherstellung erfolgt ausschließlich mit dem Offline-Helper aus einer Rescue- oder Offline-Umgebung.');
 my $info_retention = info_button('Standard-Aufbewahrung: Anzahl fertiger Backups, erlaubt 1 bis 3650. Unter Erweiterte Aufbewahrung sind alternativ Tages-, Wochen- und Monatsstände möglich. Geschützte Backups und die letzte geeignete Sicherung bleiben erhalten; deshalb kann die tatsächliche Anzahl höher sein. Die Löschvorschau erklärt, was behalten oder entfernt würde. Nach einem erfolgreichen Backup wird die gespeicherte Aufbewahrungsregel angewendet. Hardlinks erhalten die Dateien verbleibender Snapshots; das Löschen einer Referenz löscht nicht deren weiterhin verwendete Daten.');
@@ -1655,6 +1691,9 @@ if (!$config_loaded) {
 if ($preflight_warning) {
   print qq{<section class="notice warning"><strong>Backup noch nicht gestartet:</strong><pre>$preflight_warning</pre><span>Prüfe den Hinweis. Wenn du trotzdem fortfahren möchtest, aktiviere oben die Bestätigung und starte das Backup erneut.</span></section>};
 }
+if ($preflight_result && $error) {
+  print '<section class="notice error"><details open><summary>Details der fehlgeschlagenen Backup-Vorprüfung</summary><pre>' . escapeHTML(JSON::PP->new->pretty->encode($preflight_result)) . '</pre></details></section>';
+}
 
 print <<HTML;
 
@@ -1663,7 +1702,8 @@ print <<HTML;
 <summary>Kurzanleitung</summary>
 <ol>
 <li><strong>Backup-Ziel wählen und speichern:</strong> Übernimm ein erkanntes Ziel oder trage das Backup-Verzeichnis ein. Bestätige die Root-Freigabe und speichere die Einstellungen; erst danach kann das Plugin Dateisystem, Mount und freien Speicher prüfen.</li>
-<li><strong>Metadaten-Profil passend zum Ziel wählen:</strong> Standard ist <em>Native Strict</em> für lokale Linux-Dateisysteme wie ext4, xfs oder btrfs. Für CIFS/NFS und viele NAS-Systeme ist <em>Network Compatible</em> vorgesehen; der dort angezeigte Hinweis blockiert weder manuelle noch zeitgesteuerte Backups.</li>
+<li><strong>Datenquellen bewusst auswählen:</strong> Öffne „Laufwerke und Netzfreigaben“. Neue Konfigurationen enthalten lokale Laufwerke, Netzfreigaben dagegen nur nach ausdrücklicher Auswahl. Bestehende Konfigurationen behalten ihren bisherigen Umfang, bis du die Grundregel bewusst änderst. Prüfe anschliessend die gespeicherte Auswahl mit „Nächstes Backup prüfen“.</li>
+<li><strong>Metadaten-Profil passend zum Ziel wählen:</strong> Standard ist <em>Native Strict</em> für lokale Linux-Dateisysteme wie ext4, xfs oder btrfs. <em>Network Compatible</em> lässt xattrs und File Capabilities ohne Warnbestätigung weg; Eigentümer, Rechte, ACLs und Links müssen trotzdem funktionieren. Bei einem Fehler zeigt die Vorprüfung einzelne Testschritte und Hinweise. <em>Portable Archive</em> benötigt ein Vollbackup und einen Offline-Restore.</li>
 <li><strong>Ausschlüsse prüfen:</strong> Schliesse das Backup-Ziel selbst, weitere Backup-Datenträger, alte Images und grosse Archivordner aus. So vermeidest du doppelte Sicherungen und unnötig grosse Backups.</li>
 <li><strong>Backup-Modus festlegen:</strong> Für regelmässige Sicherungen ist der inkrementelle Snapshot empfohlen. Unveränderte Dateien werden per Hardlink geteilt; deshalb belegen Folgebackups deutlich weniger zusätzlichen Speicher.</li>
 <li><strong>Dienste und Container auswählen:</strong> Stoppe gezielt Dienste und Container, die während des Backups viele Daten schreiben oder eigene Datenbanken verwenden. Das verbessert die Konsistenz der gesicherten Daten.</li>
@@ -1758,12 +1798,28 @@ $backup_target_picker
 </fieldset>
 
 <fieldset class="schedule-card wide">
+<legend>Datenquellen</legend>
+<details id="source-selection-panel" class="source-selection-panel">
+<summary>Laufwerke und Netzfreigaben auswählen <span id="source-selection-summary"></span></summary>
+<input data-role="none" type="hidden" id="source-selection-json" name="source_selection_json" value="$cfg_source_selection">
+<p>Das System wird gesichert. Hier legst du zusätzlich fest, welche eingebundenen Datenquellen dazugehören. Das Backup-Ziel, System-Sonderverzeichnisse und deine zusätzlichen Ausschlüsse bleiben ausgeschlossen.</p>
+<label class="source-policy-label"><span>Grundregel</span><select data-role="none" id="source-policy" data-source-policy disabled><option value="local">Empfohlen: lokale Laufwerke einschliessen, Netzfreigaben nur ausdrücklich</option><option value="legacy">Bisheriges Verhalten beibehalten: alle eingebundenen Datenquellen</option></select></label>
+<p class="muted" id="source-policy-note"></p>
+<div id="source-volume-list">Datenquellen werden geladen. Gespeicherte Ausnahmen bleiben erhalten.</div>
+<p id="source-selection-notices" class="muted"></p>
+<button data-role="none" type="button" id="source-selection-reload">Liste aktualisieren</button>
+<p class="muted">Das Root-Dateisystem sowie eingebundene lokale Boot- und USB-Datenträger bleiben bei der empfohlenen Grundregel enthalten, sofern sie nicht bewusst ausgeschlossen wurden. Auch bereits eingebundene lokale Laufwerke unter Automount-Bereichen bleiben berücksichtigt. Nicht pauschal /media ausschliessen. Automount-Bereiche werden nicht pauschal aktiviert; die gewünschte Netzfreigabe zuerst einbinden und danach einzeln auswählen. Eine ausdrücklich gewählte, später nicht eingebundene Quelle blockiert den Start, statt unbemerkt zu fehlen. Nach Änderungen zuerst speichern und anschliessend „Nächstes Backup prüfen“ öffnen.</p>
+<noscript>Die interaktive Laufwerksauswahl benötigt JavaScript. Die bisher gespeicherte Auswahl bleibt unverändert.</noscript>
+</details>
+</fieldset>
+
+<fieldset class="schedule-card wide">
 <legend>Metadaten-Profil $info_metadata_mode</legend>
 <div class="settings-subtitle">Passendes Sicherungsverfahren für das verwendete Backup-Ziel</div>
 <div class="metadata-default-note"><strong>Standardeinstellung:</strong> Native Strict. Für CIFS/NFS oder ein NAS bitte das zum Ziel passende Profil wählen.</div>
 <div class="schedule-modes metadata-modes">
 <label><input data-role="none" type="radio" name="metadata_mode" value="native-strict"$native_strict_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Native Strict</strong><span class="metadata-default-badge">Standard</span>$info_metadata_native</span><span class="metadata-profile-summary">Lokale Linux-Dateisysteme wie ext4, xfs und btrfs; vollständige Linux-Metadaten.</span></span></label>
-<label><input data-role="none" type="radio" name="metadata_mode" value="network-compatible"$network_compatible_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Network Compatible</strong>$info_metadata_network</span><span class="metadata-profile-summary">CIFS/NFS und viele NAS-Systeme; ohne xattrs und File Capabilities.</span></span></label>
+<label><input data-role="none" type="radio" name="metadata_mode" value="network-compatible"$network_compatible_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Network Compatible</strong>$info_metadata_network</span><span class="metadata-profile-summary">Ohne xattrs und File Capabilities; Unix-Rechte, Eigentümer, ACLs und Links müssen am NAS weiterhin funktionieren.</span></span></label>
 <label><input data-role="none" type="radio" name="metadata_mode" value="fake-super"$fake_super_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Fake Super</strong>$info_metadata_fake_super</span><span class="metadata-profile-summary">Ziele mit zuverlässigen user-xattrs, aber ohne native Unix-Metadaten.</span></span></label>
 <label><input data-role="none" type="radio" name="metadata_mode" value="portable-archive"$portable_archive_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Portable Archive</strong>$info_metadata_portable</span><span class="metadata-profile-summary">Metadatentreuer Archivcontainer; keine Snapshots und Restore nur offline.</span></span></label>
 </div>

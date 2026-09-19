@@ -3,6 +3,7 @@
   "backup_mode": "full",
   "metadata_mode": "native-strict",
   "rsync_extra_excludes": [],
+  "source_selection": {"policy": "local", "overrides": {}},
   "stop_docker_before_backup": false,
   "stop_targets": [],
   "create_export_after_backup": false,

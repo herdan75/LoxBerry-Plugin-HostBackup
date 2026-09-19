@@ -12,15 +12,19 @@ from test_runtime_safety import BASH, ROOT, function
 
 @unittest.skipUnless(BASH, "Bash is required")
 class SettingsWorkflowTests(unittest.TestCase):
-    def run_save(self, metadata="native-strict", mode="full", schedule="false", weekdays="0", monthdays="1", months="*"):
+    def run_save(self, metadata="native-strict", mode="full", schedule="false", weekdays="0", monthdays="1", months="*", selection=None, previous_selection=None):
         with tempfile.TemporaryDirectory(prefix="hostbackup-settings-") as tmp:
             base = Path(tmp)
             original = {"backup_root": "", "keep_backups": 3, "metadata_mode": "native-strict",
                         "retention_mode": "gfs", "keep_daily": 0, "keep_weekly": 8, "keep_monthly": 12,
                         "integrity_enabled": True, "integrity_interval_days": 14,
                         "log_retention_days": 60, "quarantine_retention_days": 21}
+            if previous_selection is not None:
+                original["source_selection"] = previous_selection
             (base / "config.json").write_text(json.dumps(original), encoding="utf-8")
             args = ["", "/media/usb/PI_Backup", "false", "false", "5", schedule, "weekly" if schedule == "true" else "daily", "02:00", "0", "1", months, weekdays, monthdays, "", "", "true", mode, "", "false", "", "true", "true", "true", "true", metadata]
+            if selection is not None:
+                args.append(json.dumps(selection))
             source = r'''
 set -euo pipefail
 cd "$SETTINGS_TEST_DIR"
@@ -61,6 +65,28 @@ install_schedule() { printf installed > schedule-called; }
 
     def test_empty_weekday_rejected_before_registration_or_write(self):
         result, saved, registered, scheduled, original = self.run_save(schedule="true", weekdays="")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(saved, original)
+        self.assertFalse(registered)
+        self.assertFalse(scheduled)
+
+    def test_old_save_preserves_source_scope(self):
+        result, saved, _, _, _ = self.run_save()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(saved["source_selection"], {"policy": "legacy", "overrides": {}})
+        selection = {"policy": "local", "overrides": {"/mnt/nas": True}}
+        result, saved, _, _, _ = self.run_save(previous_selection=selection)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(saved["source_selection"], selection)
+
+    def test_explicit_source_save_is_persisted(self):
+        selection = {"policy": "local", "overrides": {"/mnt/nas": True, "/media/usb/PI_Backup": False}}
+        result, saved, _, _, _ = self.run_save(selection=selection)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(saved["source_selection"], selection)
+
+    def test_invalid_source_selection_is_rejected_before_registration(self):
+        result, saved, registered, scheduled, original = self.run_save(selection={"policy": "local", "overrides": {"/mnt/nas": "true"}})
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(saved, original)
         self.assertFalse(registered)

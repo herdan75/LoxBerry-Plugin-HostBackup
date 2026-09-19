@@ -7,6 +7,11 @@ Programm- und Paketversion lauten `1.0.0`, ohne Beta-Zusatz. Gegenüber diesem
 develop-Stand werden keine Backup-/Restoreabläufe geändert.
 Details stehen in den [Release Notes für 1.0.0](docs/RELEASE-1.0.0.md).
 
+**Noch unveröffentlicht auf `develop`:** Eine explizite Auswahl von Laufwerken
+und Netzfreigaben sowie eine schrittweise Metadaten-Diagnose werden im
+[NAS-Teststand](docs/DEVELOP-NAS-SOURCES.md) beschrieben. Diese Änderungen sind
+nicht im bestehenden öffentlichen Download von 1.0.0 enthalten.
+
 > [!IMPORTANT]
 > **Update auf 1.0.0:** Das reguläre Release ist ohne Beta-Zusatz erhältlich.
 > Auch Nutzer des bisherigen Vorabkanals erhalten über dessen Kanaldatei dasselbe
@@ -122,7 +127,8 @@ Enthalten sind unter anderem:
 - `/opt`
 - `/home`
 - `/var/lib`
-- gemountete Datenpfade, sofern sie nicht ausgeschlossen werden
+- gemountete Datenpfade entsprechend der gespeicherten Datenquellenauswahl und
+  den zusätzlichen Ausschlüssen
 - Docker-Daten, sofern sie im gesicherten Dateisystem liegen
 - systemd-Units
 - Cronjobs
@@ -510,9 +516,58 @@ seinen gesicherten Metadaten, Voraussetzungen und Restore-Einschränkungen:
 
 Vor jedem Backup führt das Backend einen kleinen Metadaten-Roundtrip auf dem
 registrierten Ziel aus. Ein Profil wird nicht stillschweigend herabgestuft.
+Im unveröffentlichten develop-Teststand zeigt eine fehlgeschlagene Prüfung die
+betroffenen Schritte mit Soll-/Ist-Werten, Exit-Code und begrenzter
+Werkzeugausgabe. Die letzte Diagnose liegt zusätzlich root-geschützt unter
+`/var/lib/loxberryhostbackup/metadata-probe.json`; sie wird bei der nächsten
+Metadatenprüfung ersetzt. Bei zeitgesteuerten Startfehlern stehen die Details
+auch im Aufgabenlog.
+
+**Network Compatible ist kein allgemeiner Kompatibilitätsmodus für jede
+CIFS-Einbindung:** Besitzer, Gruppe, Rechte, ACLs und Links müssen weiterhin
+erhalten bleiben. Feste CIFS-Eigentümer oder Dateirechte können diese Prüfung
+zu Recht scheitern lassen. Falls das Ziel diese Eigenschaften nicht speichern
+kann: **Portable Archive und Vollbackup wählen, Einstellungen speichern und
+erneut prüfen.** Dieser Modus sichert die Metadaten innerhalb von `rootfs.tar`,
+unterstützt keine inkrementellen Snapshots und verlangt einen Offline-/Rescue-
+Restore. Die Zielprüfung muss auch für dieses Profil erfolgreich sein.
+
 File Capabilities können für einzelne Systemprogramme sicherheitsrelevant sein;
 deshalb ist das Weglassen von xattrs eine bewusste, sichtbare Entscheidung und
 keine pauschale Behandlung von rsync-Code 23 als Erfolg.
+
+### Laufwerke und Netzfreigaben auswählen (develop-Teststand)
+
+Unter **Laufwerke und Netzfreigaben** lassen sich die Grundregel und einzelne
+eingebundene Quellen auswählen. Änderungen wirken erst nach dem Speichern,
+auch bei zeitgesteuerten Backups.
+
+- **Neue Konfiguration:** Lokale Laufwerke bleiben enthalten, Netzfreigaben und
+  Automount-Bereiche dagegen nicht automatisch. Eine gewünschte Netzfreigabe
+  zuerst einbinden, aktualisieren und ausdrücklich auswählen.
+- **Bestehende Konfiguration ohne neue Auswahl:** Das bisherige Verhalten bleibt
+  erhalten, einschliesslich der bisher mitgesicherten Netzfreigaben. Zum Schutz
+  vor unbeabsichtigt grossen Backups die Grundregel bewusst auf lokale Laufwerke
+  ändern, gewünschte Freigaben auswählen und speichern. Das Update ändert den
+  Sicherungsumfang nicht stillschweigend.
+- Ein `autofs`-Sammelverzeichnis wird nicht pauschal freigegeben: einzelne
+  eingebundene Freigaben auswählen. Eine aktiv ausgewählte, aber nicht mehr
+  eingebundene Quelle verhindert den Start, statt unbemerkt im Backup zu fehlen.
+- Zusätzliche Ausschlüsse und der Ausschluss des Backup-Ziels haben Vorrang.
+  `/media/usb/PI_Backup` kann ausgeschlossen bleiben, während Nutzdaten auf
+  `/media/usb/USB_Loxberry` mitgesichert werden. `/media` nicht pauschal ausschliessen,
+  wenn dort gewünschte Nutzdaten liegen.
+- **Nächstes Backup prüfen** zeigt den gespeicherten Umfang. Beim Backup wird die
+  Dateiliste nach dem Dienst-Stopp erfasst und ohne rekursives Nachladen kopiert.
+  Dies verhindert, dass ausgeschlossene Netzfreigaben nachträglich betreten
+  werden. Änderungen der Mount-Tabelle führen vorsichtshalber zum Fehler.
+- Ohne gespeichertes Backup-Ziel startet kein Backup mehr in einem lokalen
+  Standardverzeichnis. Ein separates Ziel auswählen und zuerst speichern.
+
+Die Auswahl wird im Backup als `source-selection.json` dokumentiert. Ein darin
+nicht eingeschlossenes Volume kann nicht versehentlich für einen Volume-Restore
+freigegeben werden. Die Auswahl und Dateilisten-Prüfung ersetzen keinen echten
+Restore-Test; die Erfassung benötigt zusätzliche Zeit bei vielen Dateien.
 
 ### Automatische Backups
 

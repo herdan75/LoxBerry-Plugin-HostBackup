@@ -30,7 +30,7 @@ done
 
 action="${1:-}"
 case "$action" in
-  config|target-info|stop-targets|preflight-backup|tasks|list|recover-services|task-overview|backup-preview|storage-info|maintenance-preview|runtime-cleanup-preview)
+  config|target-info|source-info|stop-targets|preflight-backup|tasks|list|recover-services|task-overview|backup-preview|storage-info|maintenance-preview|runtime-cleanup-preview)
     [ "$#" -eq 1 ] || fail "unexpected arguments for $action"
     ;;
   start)
@@ -67,7 +67,7 @@ case "$action" in
     [ "$#" -eq 2 ] || fail "invalid import arguments"
     ;;
   save-config)
-    [ "$#" -eq 26 ] || fail "invalid configuration argument count"
+    { [ "$#" -eq 26 ] || [ "$#" -eq 27 ]; } || fail "invalid configuration argument count"
     ;;
   *)
     fail "action is not permitted"

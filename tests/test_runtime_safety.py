@@ -107,6 +107,7 @@ docker() {
 PREFLIGHT_MOCKS = r'''
 json_get_string() {
   case "$1" in
+    backup_root) echo "$TEST_ROOT/target" ;;
     backup_mode) echo "${TEST_BACKUP_MODE:-snapshot}" ;;
     schedule_mode) echo "${TEST_SCHEDULE_MODE:-daily}" ;;
     schedule_time) echo 02:00 ;;
@@ -132,6 +133,7 @@ df() {
 }
 metadata_mode() { echo native-strict; }
 metadata_capability_probe() { :; }
+source_info() { printf '%s\n' '{"status":"ok","selection":{"policy":"legacy","overrides":{}},"volumes":[],"notices":[],"errors":[]}'; }
 current_mount_value() { echo ext4; }
 latest_complete_backup() { echo "${REFERENCE:-}"; }
 latest_sized_complete_backup() { [ "${NO_ESTIMATE:-false}" = true ] || echo "$TEST_ROOT/historical"; }
@@ -196,6 +198,51 @@ class RuntimeSafetyTests(unittest.TestCase):
     def test_zero_inodes_is_a_real_error(self):
         result = self.run_shell(PREFLIGHT_MOCKS + '\npreflight_backup\n', ("baseline_space_requirement_mb", "preflight_backup"), {"FREE_MB": "20000", "FREE_INODES": "0"})
         self.assertEqual(json.loads(result.stdout)["status"], "error")
+
+    def test_missing_saved_target_never_uses_local_default(self):
+        result = self.run_shell(PREFLIGHT_MOCKS + r'''
+json_get_string() { [ "$1" != backup_mode ] || echo snapshot; }
+metadata_capability_probe() { echo forbidden > "$TEST_ROOT/probe-called"; }
+preflight_backup
+''', ("baseline_space_requirement_mb", "preflight_backup"))
+        data = json.loads(result.stdout)
+        self.assertEqual(data["status"], "error")
+        self.assertIn("Kein Backup-Ziel gespeichert", data["warnings"][0])
+        self.assertFalse((self.root / "probe-called").exists())
+
+    def test_unmounted_selected_source_blocks_start(self):
+        result = self.run_shell(PREFLIGHT_MOCKS + r'''
+source_info() { printf '%s\n' '{"status":"error","errors":["Ausgewaehlte Quelle ist nicht eingebunden: /mnt/nas"]}'; }
+preflight_backup
+''', ("baseline_space_requirement_mb", "preflight_backup"))
+        data = json.loads(result.stdout)
+        self.assertEqual(data["status"], "error")
+        self.assertIn("nicht eingebunden", data["warnings"][0])
+
+    def test_preflight_retains_detailed_metadata_failure(self):
+        result = self.run_shell(PREFLIGHT_MOCKS + r'''
+metadata_capability_probe() {
+  METADATA_PROBE_MESSAGE='Dateirechte stimmen nicht ueberein.'
+  METADATA_PROBE_JSON='{"status":"error","checks":[{"name":"Dateirechte","status":"error","expected":"6750","actual":"0666"}],"advice":["Portable Archive pruefen"]}'
+  return 1
+}
+preflight_backup
+''', ("baseline_space_requirement_mb", "preflight_backup"))
+        data = json.loads(result.stdout)
+        self.assertEqual(data["status"], "error")
+        self.assertEqual(data["metadata_probe"]["checks"][0]["actual"], "0666")
+
+    def test_portable_validation_accepts_plain_and_dot_prefixed_members(self):
+        for prefix in ("", "./"):
+            with self.subTest(prefix=prefix):
+                result = self.run_shell(r'''
+metadata_mode() { echo portable-archive; }
+mkdir -p "$TEST_ROOT/source/etc" "$TEST_ROOT/source/opt/loxberry" "$TEST_ROOT/source/var/lib" "$TEST_ROOT/source/mnt/docker"
+printf '{}' > "$TEST_ROOT/target/manifest.json"
+tar -C "$TEST_ROOT/source" -cf "$TEST_ROOT/target/rootfs.tar" "${MEMBER_PREFIX}etc" "${MEMBER_PREFIX}opt/loxberry" "${MEMBER_PREFIX}var/lib" "${MEMBER_PREFIX}mnt/docker"
+validate_completed_backup "$TEST_ROOT/target" full '' 200000000 200 0
+''', ("validate_completed_backup",), {"MEMBER_PREFIX": prefix})
+                self.assertIn("Backup validation status: ok", result.stdout)
 
     def test_full_preflight_stops_worker_before_target_and_services(self):
         result = self.run_shell(PREFLIGHT_MOCKS + r'''
@@ -599,9 +646,10 @@ snapshot_reference_stats "$TEST_ROOT/snapshot" "$TEST_ROOT/reference" > "$TEST_R
         for mode in ("native-strict", "network-compatible", "fake-super", "portable-archive"):
             with self.subTest(mode=mode):
                 result = self.run_shell(r'''
+LBP_BINDIR="$METADATA_HELPERS"
 metadata_capability_probe "$TEST_ROOT/target" "$TEST_METADATA_MODE"
 printf '%s\n' "$METADATA_PROBE_MESSAGE"
-''', ("rsync_metadata_options", "rsync_destination", "tar_metadata_options", "metadata_capability_probe"), {"TEST_METADATA_MODE": mode})
+''', ("rsync_metadata_options", "rsync_destination", "tar_metadata_options", "metadata_capability_probe"), {"TEST_METADATA_MODE": mode, "METADATA_HELPERS": (ROOT / "bin").as_posix()})
                 self.assertIn("UID/GID", result.stdout)
                 self.assertIn("ACL-Werte bestaetigt", result.stdout)
                 if mode != "network-compatible":

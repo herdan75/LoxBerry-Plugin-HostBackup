@@ -28,12 +28,15 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install validation tools
-        run: sudo apt-get update && sudo apt-get install -y zip libcgi-pm-perl php-cli python3 rsync acl attr libcap2-bin sudo shellcheck
+        run: sudo apt-get update && sudo apt-get install -y zip libcgi-pm-perl php-cli python3 rsync acl attr libcap2-bin sudo shellcheck samba cifs-utils
 
       - name: Run automated tests
         env:
           HOSTBACKUP_REQUIRE_LINUX_INTEGRATION: '1'
         run: bash tests/run.sh
+
+      - name: Test real CIFS metadata compatibility and portable archive
+        run: sudo env HOSTBACKUP_RUN_CIFS_INTEGRATION=1 bash tests/run-cifs.sh
 
       - name: Set up Node for mandatory browser regressions
         uses: actions/setup-node@v4
@@ -54,7 +57,7 @@ jobs:
 
       - name: Validate privileged entry points
         run: |
-          shellcheck --severity=warning bin/*.sh preroot.sh postinstall.sh postroot.sh uninstall/uninstall.sh package.sh tests/run.sh
+          shellcheck --severity=warning bin/*.sh preroot.sh postinstall.sh postroot.sh uninstall/uninstall.sh package.sh tests/run.sh tests/run-cifs.sh
           sudo visudo -cf sudoers/sudoers
           php -l bin/notify-hostbackup.php
 

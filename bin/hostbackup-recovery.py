@@ -87,6 +87,20 @@ def current_mounts():
 
 
 def captured_mounts(backup):
+    selection_path = backup / "source-selection.json"
+    if selection_path.exists() or selection_path.is_symlink():
+        selection = json.loads(read_control(selection_path))
+        if not isinstance(selection, dict) or not isinstance(selection.get("volumes"), list):
+            raise RecoveryError("Ungueltige gespeicherte Quellenauswahl.")
+        for row in selection["volumes"]:
+            if (not isinstance(row, dict) or not isinstance(row.get("path"), str)
+                    or not row["path"].startswith("/") or ".." in PurePosixPath(row["path"]).parts
+                    or row["path"].startswith("//") or len(row["path"]) > 4096
+                    or any(ord(char) < 32 or ord(char) == 127 for char in row["path"])
+                    or row["path"] != str(PurePosixPath(row["path"]))
+                    or not isinstance(row.get("included"), bool)):
+                raise RecoveryError("Ungueltiger Eintrag in der gespeicherten Quellenauswahl.")
+        return [row["path"] for row in selection["volumes"]]
     path = backup / "source-mounts.json"
     if path.exists() or path.is_symlink():
         data = json.loads(read_control(path))
@@ -265,6 +279,11 @@ def build_plan(backup, backup_root, destination, mappings, protected, mounts=Non
         source = source.rstrip("/")
         if source not in captured:
             raise RecoveryError(f"Kein aufgezeichnetes Quell-Volume: {source}")
+        selection_path = backup / "source-selection.json"
+        if selection_path.exists() or selection_path.is_symlink():
+            selection = json.loads(read_control(selection_path))
+            if not any(row.get("path") == source and row.get("included") is True for row in selection["volumes"]):
+                raise RecoveryError(f"Dieses Volume war nicht zur Sicherung ausgewaehlt: {source}")
         if excluded(source.lstrip("/"), base_rules, True):
             raise RecoveryError(f"Ausgeschlossenes oder geschuetztes Volume: {source}")
         mapped = checked_directory(str(item["destination"]))
