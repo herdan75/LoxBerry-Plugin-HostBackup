@@ -11,6 +11,10 @@ Details stehen in den [Release Notes für 1.0.0](docs/RELEASE-1.0.0.md).
 und Netzfreigaben sowie eine schrittweise Metadaten-Diagnose werden im
 [NAS-Teststand](docs/DEVELOP-NAS-SOURCES.md) beschrieben. Diese Änderungen sind
 nicht im bestehenden öffentlichen Download von 1.0.0 enthalten.
+Die Datenquellen-Ansicht trennt auswählbare Laufwerke von aufklappbaren technischen
+Einbindungen. Diese Gruppierung verändert keine Auswahl; gespeicherte Ausnahmen
+bleiben direkt sichtbar. Hinweistexte sind gegen globale LoxBerry-Schriftregeln
+abgegrenzt und ausführliche Erläuterungen lassen sich separat öffnen.
 
 > [!IMPORTANT]
 > **Update auf 1.0.0:** Das reguläre Release ist ohne Beta-Zusatz erhältlich.

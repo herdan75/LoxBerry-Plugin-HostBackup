@@ -17,6 +17,10 @@ validiert werden.
   Bestehende Konfigurationen behalten ihren Umfang mit sichtbarem Umstellungshinweis.
 - Kompakte Laufwerksauswahl mit gespeicherten Ausnahmen, Vorschau und dem
   bestehenden Speicherhinweis; lokale USB-Nutzdaten bleiben auswählbar.
+- Layoutkorrektur der Datenquellen: Texte und Aufklapptitel gegen globale
+  LoxBerry-Schriftregeln isoliert, Hinweise gekürzt und technische System-/Docker-
+  Einbindungen in aufklappbare Details gruppiert. Die Sicherungsauswahl bleibt
+  unverändert; bewusst gesetzte Ausnahmen bleiben in der Hauptliste sichtbar.
 - Kein Backup-Start ohne gespeichertes Ziel, kein stilles Übergehen einer
   ausgewählten, nicht eingebundenen Freigabe. Explizite Dateilisten und
   Mount-Prüfung begrenzen Vollbackups, Snapshots und Portable Archives.

@@ -1802,13 +1802,29 @@ $backup_target_picker
 <details id="source-selection-panel" class="source-selection-panel">
 <summary>Laufwerke und Netzfreigaben auswählen <span id="source-selection-summary"></span></summary>
 <input data-role="none" type="hidden" id="source-selection-json" name="source_selection_json" value="$cfg_source_selection">
-<p>Das System wird gesichert. Hier legst du zusätzlich fest, welche eingebundenen Datenquellen dazugehören. Das Backup-Ziel, System-Sonderverzeichnisse und deine zusätzlichen Ausschlüsse bleiben ausgeschlossen.</p>
+<p class="source-intro">Wähle die zusätzlichen Datenquellen für dein Systembackup. Das Backup-Ziel und deine Ausschlüsse bleiben geschützt.</p>
 <label class="source-policy-label"><span>Grundregel</span><select data-role="none" id="source-policy" data-source-policy disabled><option value="local">Empfohlen: lokale Laufwerke einschliessen, Netzfreigaben nur ausdrücklich</option><option value="legacy">Bisheriges Verhalten beibehalten: alle eingebundenen Datenquellen</option></select></label>
 <p class="muted" id="source-policy-note"></p>
 <div id="source-volume-list">Datenquellen werden geladen. Gespeicherte Ausnahmen bleiben erhalten.</div>
-<p id="source-selection-notices" class="muted"></p>
+<details id="source-technical-details" class="source-secondary-details" hidden>
+<summary id="source-technical-summary">System- und technische Einbindungen</summary>
+<p>Hier sind System-, Automount- und Container-Einbindungen zusammengefasst. Die Gruppierung ändert nicht, welche Daten gesichert werden.</p>
+<div id="source-technical-list"></div>
+</details>
+<p id="source-selection-notices" class="muted" role="status"></p>
+<div class="source-selection-actions">
 <button data-role="none" type="button" id="source-selection-reload">Liste aktualisieren</button>
-<p class="muted">Das Root-Dateisystem sowie eingebundene lokale Boot- und USB-Datenträger bleiben bei der empfohlenen Grundregel enthalten, sofern sie nicht bewusst ausgeschlossen wurden. Auch bereits eingebundene lokale Laufwerke unter Automount-Bereichen bleiben berücksichtigt. Nicht pauschal /media ausschliessen. Automount-Bereiche werden nicht pauschal aktiviert; die gewünschte Netzfreigabe zuerst einbinden und danach einzeln auswählen. Eine ausdrücklich gewählte, später nicht eingebundene Quelle blockiert den Start, statt unbemerkt zu fehlen. Nach Änderungen zuerst speichern und anschliessend „Nächstes Backup prüfen“ öffnen.</p>
+<p class="source-save-note">Nach Änderungen <strong>zuerst speichern</strong>, danach „Nächstes Backup prüfen“ öffnen.</p>
+</div>
+<details class="source-secondary-details source-selection-help">
+<summary>Hinweise zur Auswahl</summary>
+<ul>
+<li>Das System sowie lokale Boot- und USB-Datenträger bleiben bei der lokalen Grundregel enthalten, sofern sie nicht ausgeschlossen wurden. Das gilt auch für bereits eingebundene lokale Laufwerke unter Automount-Bereichen.</li>
+<li>Netzfreigaben zuerst einbinden und danach einzeln auswählen. Automount-Sammelbereiche werden nicht pauschal aktiviert.</li>
+<li>Fehlt eine ausdrücklich ausgewählte Quelle beim Backup-Start, wird der Start blockiert. Sie wird nicht unbemerkt ausgelassen.</li>
+<li>Nicht pauschal /media ausschliessen, wenn dort auch Nutzdaten liegen. Vorhandene Backup-Ausschlüsse haben weiterhin Vorrang.</li>
+</ul>
+</details>
 <noscript>Die interaktive Laufwerksauswahl benötigt JavaScript. Die bisher gespeicherte Auswahl bleibt unverändert.</noscript>
 </details>
 </fieldset>

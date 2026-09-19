@@ -1775,17 +1775,69 @@ a.button-link:hover {
 #hostbackup-app .info-button:focus-visible, #hostbackup-app button:focus-visible, #hostbackup-app a:focus-visible { outline: 3px solid #14769a; outline-offset: 3px; }
 #hostbackup-app #operation-result { margin-top: 16px; overflow-wrap: anywhere; }
 #hostbackup-app .report-table { width: 100%; }
-#hostbackup-app .source-selection-panel { min-width: 0; overflow-wrap: anywhere; }
-#hostbackup-app .source-selection-panel > summary { cursor: pointer; font-weight: 600; }
-#hostbackup-app #source-selection-summary { color: #526a7f; font-size: 12px; font-weight: normal; }
-#hostbackup-app .source-policy-label { display: grid; gap: 6px; }
-#hostbackup-app .source-policy-label select { width: 100%; min-width: 0; }
-#hostbackup-app .source-volume { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 0; border-bottom: 1px solid #e2e7ef; }
-#hostbackup-app .source-volume > label { display: flex; flex-direction: row; flex: 1 1 240px; align-items: center; gap: 8px; min-width: 0; text-align: left; }
+#hostbackup-app .source-selection-panel {
+  /* LoxBerry's global .wide means large/bold text; here it only means a full-width fieldset. */
+  font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#hostbackup-app .source-selection-panel p,
+#hostbackup-app .source-selection-panel li,
+#hostbackup-app .source-selection-panel summary {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-shadow: none;
+  text-transform: none;
+  word-spacing: normal;
+}
+#hostbackup-app .source-selection-panel p { margin: 8px 0 12px; }
+#hostbackup-app .source-selection-panel summary {
+  cursor: pointer;
+  display: list-item;
+  font-weight: 700;
+  margin: 0;
+  padding: 5px 0;
+}
+#hostbackup-app .source-selection-panel summary:focus-visible { outline: 3px solid #14769a; outline-offset: 3px; }
+#hostbackup-app .source-selection-panel > summary { color: #24445f; }
+#hostbackup-app #source-selection-summary { color: #526a7f; font-size: 12px; font-weight: 400; margin-left: 6px; }
+#hostbackup-app .source-policy-label { display: grid; gap: 6px; margin: 12px 0 8px; font-size: 13px; }
+#hostbackup-app .source-policy-label select { width: 100%; min-width: 0; font-size: 13px; font-weight: 400; }
+#hostbackup-app #source-policy-note {
+  background: #f3f6f8;
+  border-left: 3px solid #8ea4ba;
+  color: #435466;
+  font-size: 12px;
+  padding: 7px 9px;
+}
+#hostbackup-app #source-volume-list,
+#hostbackup-app #source-technical-list { max-height: 420px; overflow: auto; overscroll-behavior: contain; }
+#hostbackup-app #source-technical-list { max-height: 320px; }
+#hostbackup-app .source-volume { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 0; border-bottom: 1px solid #e2e7ef; }
+#hostbackup-app .source-volume > label { display: flex; flex-direction: row; flex: 1 1 240px; align-items: center; gap: 8px; min-width: 0; margin: 0; text-align: left; }
 #hostbackup-app .source-volume input { flex: 0 0 auto; width: 16px; height: 16px; min-height: 0; padding: 0; margin: 0; }
 #hostbackup-app .source-volume label span { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
-#hostbackup-app .source-volume small { color: #526a7f; }
+#hostbackup-app .source-volume strong { font-size: 13px; font-weight: 600; letter-spacing: normal; }
+#hostbackup-app .source-volume small { color: #526a7f; font-size: 11px; font-weight: 400; letter-spacing: normal; line-height: 1.4; }
+#hostbackup-app .source-volume button { flex: 0 0 auto; font-size: 12px; }
 #hostbackup-app .source-volume-note { width: 100%; }
+#hostbackup-app .source-selection-panel .source-secondary-details { border-top: 1px solid #ddd; margin-top: 12px; padding-top: 5px; }
+#hostbackup-app .source-selection-panel .source-secondary-details[hidden] { display: none; }
+#hostbackup-app .source-selection-panel .source-secondary-details > p { color: #526a7f; font-size: 12px; }
+#hostbackup-app .source-selection-panel ul { margin: 8px 0; padding-left: 20px; }
+#hostbackup-app .source-selection-panel li { font-size: 12px; margin: 5px 0; }
+#hostbackup-app #source-selection-notices:empty { display: none; }
+#hostbackup-app #source-selection-notices { color: #435466; font-size: 12px; }
+#hostbackup-app .source-selection-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-top: 12px; }
+#hostbackup-app .source-selection-panel .source-save-note { color: #435466; font-size: 12px; flex: 1 1 240px; margin: 0; }
+#hostbackup-app .source-save-note strong { font-weight: 700; letter-spacing: normal; }
 #hostbackup-app .metadata-probe-check { margin: 8px 0; border: 1px solid #dce5ec; border-radius: 5px; padding: 10px; }
 #hostbackup-app .metadata-probe-check summary { cursor: pointer; font-weight: 600; }
 #hostbackup-app .metadata-probe > small { display: block; margin-top: 6px; }

@@ -52,7 +52,20 @@
     if (ancestor && selection.overrides[ancestor] === false) return false;
     return selection.policy === 'legacy' || volume.kind === 'local';
   }
-  var core = { normalizeLogForDisplay: normalizeLogForDisplay, controlState: controlState, validateSettings: validateSettings, updateDirty: updateDirty, logViewport: logViewport, phaseLabel: phaseLabel, sourceSelection: sourceSelection, sourceIncluded: sourceIncluded };
+  function sourceDisplayGroup(selection, volume) {
+    // Group only the presentation; the selection calculation and controls are
+    // identical in both lists. Deliberate exceptions must remain prominent.
+    if (volume.path === '/' || volume.kind === 'unmounted' || Object.prototype.hasOwnProperty.call(selection.overrides, volume.path)) return 'primary';
+    var technicalLog = ['/opt/loxberry/log/plugins', '/opt/loxberry/log/ramlog', '/opt/loxberry/log/system_tmpfs'].indexOf(volume.path) !== -1;
+    return volume.kind === 'system' || volume.kind === 'automount' || volume.fstype === 'overlay' || technicalLog ? 'technical' : 'primary';
+  }
+  function sourceNotices(notices, errors) {
+    // This exact compatibility notice is already covered by the policy note.
+    // Never hide errors or other notices (especially missing selected mounts).
+    var legacyNotice = 'Bestehende Konfiguration: bisheriger Sicherungsumfang bleibt erhalten. Fuer einen begrenzten Umfang lokale Quellen waehlen und Netzfreigaben einzeln aktivieren.';
+    return (notices || []).filter(function (notice) { return notice !== legacyNotice; }).concat(errors || []);
+  }
+  var core = { normalizeLogForDisplay: normalizeLogForDisplay, controlState: controlState, validateSettings: validateSettings, updateDirty: updateDirty, logViewport: logViewport, phaseLabel: phaseLabel, sourceSelection: sourceSelection, sourceIncluded: sourceIncluded, sourceDisplayGroup: sourceDisplayGroup, sourceNotices: sourceNotices };
   if (typeof module !== 'undefined' && module.exports) module.exports = core;
   if (!root.document) return;
   var document = root.document;
@@ -161,10 +174,13 @@
   function renderSources() {
     var input = byId('source-selection-json'); if (!input) return;
     var selection = sourceSelection(input.value), target = byId('source-volume-list'), policy = byId('source-policy');
+    var technicalTarget = byId('source-technical-list'), technicalDetails = byId('source-technical-details'), technicalSummary = byId('source-technical-summary');
+    var grouped = technicalTarget && technicalDetails && technicalSummary, technicalCount = 0, technicalIncluded = 0;
     policy.value = selection.policy;
-    byId('source-policy-note').textContent = selection.policy === 'legacy' ? 'Bestehende Konfiguration: Alle bisher einbezogenen Laufwerke bleiben berücksichtigt, auch Netzfreigaben. Es erfolgt keine automatische Umstellung. Prüfe die Auswahl bewusst.' : 'Lokale Laufwerke bleiben enthalten; einzelne eingebundene Netzfreigaben müssen ausdrücklich ausgewählt werden. Automount-Bereiche werden nicht pauschal aktiviert. Gespeicherte Ausnahmen gelten auch nach einem späteren Wechsel der Grundregel.';
+    byId('source-policy-note').textContent = selection.policy === 'legacy' ? 'Bisheriger Umfang bleibt erhalten, auch Netzfreigaben. Empfehlung: lokale Laufwerke automatisch, Netzfreigaben einzeln auswählen. Gespeicherte Ausnahmen bleiben wirksam.' : 'Lokale Laufwerke sind enthalten; Netzfreigaben nur nach ausdrücklicher Auswahl. Automount-Bereiche werden nicht pauschal aktiviert. Gespeicherte Ausnahmen bleiben wirksam.';
     byId('source-selection-summary').textContent = selection.policy === 'legacy' ? '· bisherige Grundregel' : '· lokale Laufwerke';
     target.replaceChildren();
+    if (technicalTarget) technicalTarget.replaceChildren();
     var volumes = sourceVolumes.slice();
     Object.keys(selection.overrides).forEach(function (path) { if (!volumes.some(function (volume) { return volume.path === path; })) volumes.push({ path: path, kind: 'unmounted', selectable: true, reason: 'Gespeicherte Ausnahme; momentan nicht eingebunden. Eine aktiv ausgewählte Quelle muss vor dem Backup eingebunden werden, sonst wird der Start blockiert.' }); });
     volumes.forEach(function (volume) {
@@ -173,13 +189,20 @@
       var kind = ({ local: 'Lokales Laufwerk', network: 'Netzfreigabe', automount: 'Automount-Bereich', system: 'System', unmounted: 'Nicht eingebunden' })[volume.kind] || volume.kind || '';
       text.append(title, el('small', kind + (volume.fstype ? ' · ' + volume.fstype : '') + (volume.selectable ? '' : ' · ' + (volume.reason || 'Fest vorgegeben'))));
       label.append(box, text); row.append(label);
-      if (volume.selectable || Object.prototype.hasOwnProperty.call(selection.overrides, volume.path)) {
-        var overridden = Object.prototype.hasOwnProperty.call(selection.overrides, volume.path), reset = el('button', 'Grundregel verwenden'); reset.type = 'button'; reset.dataset.sourceReset = volume.path; reset.dataset.role = 'none'; reset.disabled = !overridden;
+      if (Object.prototype.hasOwnProperty.call(selection.overrides, volume.path)) {
+        var reset = el('button', 'Grundregel verwenden'); reset.type = 'button'; reset.dataset.sourceReset = volume.path; reset.dataset.role = 'none';
         row.append(reset);
-        if (volume.kind === 'unmounted') row.append(el('small', volume.reason, 'source-volume-note'));
       }
-      target.append(row);
+      if (volume.kind === 'unmounted') row.append(el('small', volume.reason, 'source-volume-note'));
+      if (grouped && sourceDisplayGroup(selection, volume) === 'technical') {
+        technicalTarget.append(row); technicalCount += 1; if (box.checked) technicalIncluded += 1;
+      } else target.append(row);
     });
+    if (grouped) {
+      technicalSummary.textContent = 'System- und technische Einbindungen (' + technicalCount + ' · ' + technicalIncluded + ' im Backup)';
+      // Keep the static <details> and its open state intact across refreshes.
+      technicalDetails.hidden = technicalCount === 0;
+    }
     if (!volumes.length) target.append(el('p', 'Keine zusätzlichen eingebundenen Datenquellen erkannt.'));
   }
   async function loadSources() {
@@ -188,7 +211,7 @@
     try {
       var data = await request('source-info'); sourceVolumes = data.volumes || [];
       renderSources(); byId('source-policy').disabled = false;
-      byId('source-selection-notices').textContent = (data.notices || []).concat(data.errors || []).join(' ');
+      byId('source-selection-notices').textContent = sourceNotices(data.notices, data.errors).join(' ');
     } catch (error) { byId('source-selection-notices').textContent = 'Datenquellen konnten nicht geladen werden: ' + error.message + ' Die gespeicherte Auswahl und deine Eingaben bleiben erhalten.'; }
     finally { sourceLoading = false; byId('source-selection-reload').disabled = false; }
   }

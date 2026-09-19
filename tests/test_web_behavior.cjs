@@ -52,4 +52,26 @@ const selectedAutoRows=[{path:'/outer',kind:'network',selectable:true},{path:'/o
 const selectedAuto=ui.sourceSelection({policy:'local',overrides:{'/outer':false,'/outer/chosen':true}});
 assert.equal(ui.sourceIncluded(selectedAuto,selectedAutoRows[3],selectedAutoRows),true,'Selected local child starts a new inclusion branch despite older parent exclusion');
 assert.equal(ui.sourceIncluded(selectedAuto,selectedAutoRows[4],selectedAutoRows),false,'Explicit local branch must not admit nested network mount');
+const defaultDisplay=ui.sourceSelection({policy:'local',overrides:{}});
+assert.equal(ui.sourceDisplayGroup(defaultDisplay,{path:'/',kind:'local',fstype:'overlay'}),'primary','Container root stays prominent even when it uses overlay');
+for(const volume of [{path:'/boot',kind:'local',fstype:'vfat'},{path:'/media/usb/data',kind:'local',fstype:'ext4'},{path:'/media/smb/nas',kind:'network',fstype:'cifs'},{path:'/media/smb/disconnected',kind:'unmounted'},{path:'/opt/loxberry/log/plugins-data',kind:'local'},{path:'/opt/loxberry/log/plugins/user-data',kind:'local'}]) {
+  assert.equal(ui.sourceDisplayGroup(defaultDisplay,volume),'primary','Real data sources and missing exceptions stay visible: '+volume.path);
+}
+for(const volume of [{path:'/proc',kind:'system',fstype:'proc'},{path:'/media/smb',kind:'automount',fstype:'autofs'},{path:'/var/lib/docker/overlay2/example/merged',kind:'local',fstype:'overlay'},{path:'/opt/loxberry/log/plugins',kind:'local'},{path:'/opt/loxberry/log/ramlog',kind:'local'},{path:'/opt/loxberry/log/system_tmpfs',kind:'local'}]) {
+  assert.equal(ui.sourceDisplayGroup(defaultDisplay,volume),'technical','Technical mount is visually grouped: '+volume.path);
+  for(const selected of [true,false]) assert.equal(ui.sourceDisplayGroup(ui.sourceSelection({policy:'local',overrides:{[volume.path]:selected}}),volume),'primary','Both selected and excluded explicit technical exceptions remain prominent');
+}
+const groupingRows=[{path:'/',kind:'local',fstype:'overlay',selectable:false},{path:'/proc',kind:'system',fstype:'proc',selectable:false},{path:'/media/smb',kind:'automount',fstype:'autofs',selectable:false},{path:'/media/smb/nas',kind:'network',fstype:'cifs',selectable:true},{path:'/media/usb/data',kind:'local',fstype:'ext4',selectable:true},{path:'/var/lib/docker/merged',kind:'local',fstype:'overlay',selectable:true}];
+for(const selection of [defaultDisplay,ui.sourceSelection({policy:'legacy',overrides:{}}),ui.sourceSelection({policy:'local',overrides:{'/var/lib/docker/merged':false}})]) {
+  const before=groupingRows.map(row=>ui.sourceIncluded(selection,row,groupingRows)), serialized=JSON.stringify(selection);
+  const primary=groupingRows.filter(row=>ui.sourceDisplayGroup(selection,row)==='primary'), technical=groupingRows.filter(row=>ui.sourceDisplayGroup(selection,row)==='technical');
+  assert.equal(primary.length+technical.length,groupingRows.length,'Grouping neither drops nor duplicates a mount');
+  assert.equal(new Set([...primary,...technical]).size,groupingRows.length,'Every mount belongs to exactly one display group');
+  assert.deepEqual(groupingRows.map(row=>ui.sourceIncluded(selection,row,groupingRows)),before,'Display grouping does not change any backup checkbox');
+  assert.equal(JSON.stringify(selection),serialized,'Display grouping never changes saved exceptions');
+}
+const legacyNotice='Bestehende Konfiguration: bisheriger Sicherungsumfang bleibt erhalten. Fuer einen begrenzten Umfang lokale Quellen waehlen und Netzfreigaben einzeln aktivieren.';
+assert.deepEqual(ui.sourceNotices([legacyNotice,'Gewählte Quelle ist nicht eingebunden.'],['Prüfung fehlgeschlagen.']),['Gewählte Quelle ist nicht eingebunden.','Prüfung fehlgeschlagen.'],'Remove only the duplicate policy explanation');
+assert.deepEqual(ui.sourceNotices([], [legacyNotice]),[legacyNotice],'Errors are never filtered, even when text matches a notice');
+assert.deepEqual(ui.sourceNotices(),[]);
 console.log('HostBackup web behavior tests passed.');

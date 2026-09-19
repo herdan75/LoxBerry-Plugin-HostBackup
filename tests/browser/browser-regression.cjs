@@ -51,6 +51,9 @@ let overviewIssues=false, reportRequests=0, taskPhase='copying';
 let lastSavedSources, failSources=false, failBackupMetadata=false;
 const probe={status:'error',mode:'network-compatible',message:'Der Test kann Eigentümer nicht erhalten.',checks:[{name:'Eigentümer und Rechte',status:'error',details:'CIFS erzwingt feste Rechte.',expected:'0:0 640',actual:'1000:1000 666',exit_code:23,stderr:'rsync: <img src=x onerror="window.unsafeProbe=true"> Operation not permitted'},{name:'xattrs',status:'skipped',details:'Bewusst ausgelassen.'}],advice:['Mount-Einstellungen prüfen oder Portable Archive mit Vollbackup und Offline-Restore verwenden.']};
 const sourceVolumes=[{path:'/',kind:'system',fstype:'ext4',included:true,selectable:false,reason:'Systemdaten'},{path:'/media/usb',kind:'automount',fstype:'autofs',included:true,selectable:false,reason:'Automount-Bereich; einzelne Laufwerke auswählen'},{path:'/media/usb/data',kind:'local',fstype:'ext4',included:true,selectable:true},{path:'/media/usb/network',kind:'network',fstype:'cifs',included:true,selectable:true},{path:'/media/smb/nas',kind:'network',fstype:'cifs',included:true,selectable:true},{path:'/fixture/backup',kind:'local',fstype:'ext4',included:false,selectable:false,forced_excluded:true,reason:'Backup-Ziel'}];
+sourceVolumes.push(...Array.from({length:72},(_,index)=>({path:'/var/lib/docker/overlay2/'+('mount-'+index+'-').repeat(3)+'/merged',kind:'local',fstype:'overlay',included:true,selectable:true})));
+sourceVolumes.push(...['/proc','/sys','/dev','/run'].map(mount=>({path:mount,kind:'system',fstype:'tmpfs',included:false,selectable:false,forced_excluded:true,reason:'System-Sonderverzeichnis'})));
+sourceVolumes.push(...['/opt/loxberry/log/plugins','/opt/loxberry/log/ramlog','/opt/loxberry/log/system_tmpfs'].map(mount=>({path:mount,kind:'local',fstype:'tmpfs',included:true,selectable:true})));
 const longLog = () => Array.from({length:180+statusCount},(_,i)=>`${i}: 3.43G 96% 4.23MB/s ${'long-path/'.repeat(36)} file-${i}`).join('\r');
 function json(res,value,status=200){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));}
 const server=http.createServer(async(req,res)=>{
@@ -98,6 +101,9 @@ const server=http.createServer(async(req,res)=>{
   }catch(error){errors.push(error.message);json(res,{error:error.message},500);}
 });
 async function visible(page,selector){await page.locator(selector).waitFor({state:'visible'});}
+async function sourceTypographyFailures(page){
+  return page.locator('#source-selection-panel').evaluate(node=>Array.from(node.querySelectorAll('p,summary')).map(item=>{const style=getComputedStyle(item);return {tag:item.tagName,text:item.textContent.slice(0,90),size:parseFloat(style.fontSize),weight:parseInt(style.fontWeight,10),spacing:style.letterSpacing};}).filter(item=>item.size>(item.tag==='SUMMARY'?15:14)||item.weight>(item.tag==='SUMMARY'?700:400)||!['normal','0px'].includes(item.spacing)));
+}
 (async()=>{
   let browser;
   try{
@@ -112,6 +118,48 @@ async function visible(page,selector){await page.locator(selector).waitFor({stat
     await page.goto(base+'legacy-ui');
     assert.equal(assetRequests.filter(value=>value==='/assets/style.css').length,1,'The obsolete unversioned stylesheet really is cached');
     await page.goto(base);await visible(page,'#download-task-log');
+    await page.locator('#source-selection-panel').evaluate(node=>node.open=true);
+    await page.waitForFunction(()=>!document.querySelector('#source-policy').disabled);
+    const typographyFailures=await sourceTypographyFailures(page);
+    if(typographyFailures.length) {
+      await page.locator('#source-selection-panel').screenshot({path:path.join(temp,'source-typography-regression.png')});
+      const reproduction={status:'failed',reason:'Source typography inherits global host theme',failures:typographyFailures,artifacts:temp};
+      fs.writeFileSync(path.join(temp,'source-typography-reproduction.json'),JSON.stringify(reproduction,null,2));console.log(JSON.stringify(reproduction,null,2));
+    }
+    assert.deepEqual(typographyFailures,[],'Source copy must remain <=14px/normal weight and summaries <=15px/700, with normal letter spacing despite global host-theme rules');
+    const paragraphStress=await page.addStyleTag({content:'p, summary {font-size:50px;font-weight:700;letter-spacing:4px;}'});
+    assert.deepEqual(await sourceTypographyFailures(page),[],'Source typography also resists a separate late-loaded global element-rule stress case');
+    await paragraphStress.evaluate(node=>node.remove());
+    receipts.push('Source typography overrides real LoxBerry 4.0.0.15 wide-class inheritance and a separate late-loaded paragraph/summary stress case');
+    const technicalDetails=page.locator('#source-technical-details'),technicalList=page.locator('#source-technical-list'),mainSources=page.locator('#source-volume-list');
+    assert.equal(await technicalDetails.evaluate(node=>node.open),false,'Technical sources are closed initially');
+    assert.ok(await technicalList.locator('.source-volume').count()>=80,'Fixture includes a realistic long system/Docker mount inventory');
+    for(const requiredPath of ['/','/media/usb/data','/media/smb/nas','/media/smb/disconnected'])assert.equal(await mainSources.locator('[data-source-path="'+requiredPath+'"]').count(),1,'Important source must remain outside technical disclosure: '+requiredPath);
+    assert.equal(await mainSources.locator('[data-source-path*="/overlay2/"]').count(),0,'Unmodified container mounts belong in the technical group');
+    const compactSourceDesktop=await page.locator('#source-selection-panel').evaluate(node=>({height:node.getBoundingClientRect().height,mainHeight:node.querySelector('#source-volume-list').getBoundingClientRect().height}));
+    assert.ok(compactSourceDesktop.height<900&&compactSourceDesktop.mainHeight<=422,JSON.stringify(compactSourceDesktop));
+    const cleanSourceState=await page.locator('#source-selection-json').inputValue();
+    await technicalDetails.locator('summary').focus();await page.keyboard.press('Enter');
+    assert.equal(await technicalDetails.evaluate(node=>node.open),true);
+    const technicalBounds=await technicalList.evaluate(node=>({height:node.getBoundingClientRect().height,scrollHeight:node.scrollHeight,overflow:getComputedStyle(node).overflowY}));
+    assert.ok(technicalBounds.height<=322&&technicalBounds.scrollHeight>technicalBounds.height&&['auto','scroll'].includes(technicalBounds.overflow),JSON.stringify(technicalBounds));
+    await page.locator('#source-selection-reload').click();await page.waitForFunction(()=>!document.querySelector('#source-selection-reload').disabled);
+    assert.equal(await technicalDetails.evaluate(node=>node.open),true,'Inventory refresh must preserve the open technical disclosure');
+    assert.equal(await page.locator('#source-selection-json').inputValue(),cleanSourceState,'Opening/refreshing technical rows must not edit configuration');
+    const technicalPath=sourceVolumes.find(item=>item.fstype==='overlay').path;
+    assert.equal(await technicalList.locator('[data-source-path="'+technicalPath+'"]').isChecked(),true);
+    // A real click intentionally moves this row out of the technical group;
+    // uncheck() would keep resolving the obsolete group-scoped locator.
+    await technicalList.locator('[data-source-path="'+technicalPath+'"]').click();
+    assert.equal(await mainSources.locator('[data-source-path="'+technicalPath+'"]').isChecked(),false,'A conscious technical override moves into the primary list');
+    assert.equal(await technicalDetails.evaluate(node=>node.open),true,'Editing a technical source must preserve disclosure state');
+    await mainSources.locator('[data-source-reset="'+technicalPath+'"]').click();
+    assert.equal(await technicalList.locator('[data-source-path="'+technicalPath+'"]').isChecked(),true,'Reset restores the inherited selection and technical grouping');
+    assert.equal(await page.locator('#source-selection-json').inputValue(),cleanSourceState);
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true');
+    await technicalDetails.locator('summary').focus();await page.keyboard.press('Space');
+    assert.equal(await technicalDetails.evaluate(node=>node.open),false);
+    receipts.push('Large mount inventories stay compact; technical disclosure is keyboard-operable, bounded and state-preserving, while important and deliberately overridden sources remain primary');
     await page.locator('.overview-item .overview-value').first().waitFor({state:'visible'});
     assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--hostbackup-legacy-css').trim()),'');
     for(const assetUrl of Object.values(assetUrls))assert.ok(assetRequests.includes(assetUrl),'Fresh fingerprinted asset must be loaded: '+assetUrl);
@@ -239,6 +287,9 @@ async function visible(page,selector){await page.locator(selector).waitFor({stat
     await summary.click();assert.equal(await page.locator('#operation-result').isVisible(),true,'Loaded results remain visible when details close');
     await page.screenshot({path:path.join(temp,'desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});
+    assert.deepEqual(await sourceTypographyFailures(page),[],'Real mobile wide-class rules must not resize or space source copy');
+    const compactSourceMobile=await page.locator('#source-selection-panel').evaluate(node=>({height:node.getBoundingClientRect().height,mainHeight:node.querySelector('#source-volume-list').getBoundingClientRect().height,technicalOpen:node.querySelector('#source-technical-details').open}));
+    assert.ok(compactSourceMobile.height<1450&&compactSourceMobile.mainHeight<=422&&!compactSourceMobile.technicalOpen,JSON.stringify(compactSourceMobile));
     await page.locator('#source-selection-panel').screenshot({path:path.join(temp,'source-selection-mobile.png')});
     assert.ok(await page.locator('#source-selection-panel').evaluate(node=>{const right=node.getBoundingClientRect().right;return Array.from(node.querySelectorAll('select,label,strong,small')).every(item=>item.getBoundingClientRect().right<=right+1);}), 'Source controls and descriptions stay inside their mobile panel');
     await page.locator('#operational-overview').scrollIntoViewIfNeeded();

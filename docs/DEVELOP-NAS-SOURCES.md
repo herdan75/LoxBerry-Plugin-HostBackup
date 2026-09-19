@@ -25,6 +25,14 @@ eingebundene Freigaben aktivieren und speichern. Vorherige Ausschlüsse behalten
 ihre Wirkung. Der Sicherungsdatenträger darf nicht als Quelldaten mitgesichert
 werden; das Backup-Ziel selbst bleibt automatisch ausgeschlossen.
 
+Die Hauptliste zeigt Datenträger, Netzfreigaben und gespeicherte Ausnahmen.
+System-, Automount- und Docker-Einbindungen stehen unter aufklappbaren technischen
+Details, einschliesslich der Anzahl der weiterhin berücksichtigten Einbindungen.
+Diese kompaktere Darstellung ändert weder Grundregel noch Sicherungsumfang.
+Längere Erläuterungen stehen unter „Hinweise zur Auswahl“; der Speicherhinweis
+bleibt direkt sichtbar. Die Typografie wird unabhängig von globalen LoxBerry-
+Schriftregeln gesetzt.
+
 Bei einem Metadatenfehler die einzelnen Prüfschritte lesen. Falls das NAS feste
 Eigentümer/Rechte erzwingt, Portable Archive **und** Vollbackup auswählen und
 speichern; erneut prüfen. Archive sind nicht inkrementell und erfordern für
