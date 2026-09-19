@@ -193,6 +193,25 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     await page.goto(base+'legacy-ui');
     assert.equal(assetRequests.filter(value=>value==='/assets/style.css').length,1,'The obsolete unversioned stylesheet really is cached');
     await page.goto(base);await visible(page,'#download-task-log');
+    const quickGuide=page.locator('.wizard-panel details'),guideSummary=quickGuide.locator('summary');
+    const guidePosts=postCount,guideSources=await page.locator('#source-selection-json').inputValue();
+    assert.equal(await quickGuide.evaluate(node=>node.open),false,'Quick guide remains collapsed initially');
+    await guideSummary.focus();await page.keyboard.press('Enter');
+    assert.equal(await quickGuide.evaluate(node=>node.open),true,'Quick guide opens by keyboard');
+    assert.ok(await quickGuide.locator('li').count()>=9,'Quick guide covers setup through recovery');
+    for(const [view,width,height] of [['desktop',1440,1100],['mobile',390,844]]){
+      await page.setViewportSize({width,height});
+      const guideLayout=await quickGuide.evaluate(node=>{const rect=node.getBoundingClientRect();return {right:rect.right,viewport:window.innerWidth,overflow:node.scrollWidth-node.clientWidth,items:Array.from(node.querySelectorAll('li')).map(item=>({size:parseFloat(getComputedStyle(item).fontSize),spacing:getComputedStyle(item).letterSpacing}))};});
+      assert.ok(guideLayout.right<=width+1&&guideLayout.overflow<=1,view+' quick guide stays inside its panel '+JSON.stringify(guideLayout));
+      assert.ok(guideLayout.items.every(item=>item.size<=16&&['normal','0px'].includes(item.spacing)),view+' quick guide retains normal typography');
+      await quickGuide.screenshot({path:path.join(temp,'quick-guide-'+view+'.png')});
+    }
+    await page.setViewportSize({width:1440,height:1100});await guideSummary.focus();await page.keyboard.press('Space');
+    assert.equal(await quickGuide.evaluate(node=>node.open),false,'Quick guide closes by keyboard');
+    assert.equal(postCount,guidePosts,'Reading the quick guide never starts or saves anything');
+    assert.equal(await page.locator('#source-selection-json').inputValue(),guideSources);
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true');
+    receipts.push('Actual CGI quick guide is readable on desktop/mobile, keyboard-operable and cannot change settings or start actions');
     await page.locator('#source-selection-panel').evaluate(node=>node.open=true);
     await page.waitForFunction(()=>!document.querySelector('#source-policy').disabled);
     assert.deepEqual(await page.locator('#source-policy option').evaluateAll(options=>options.map(node=>({value:node.value,label:node.textContent}))),[

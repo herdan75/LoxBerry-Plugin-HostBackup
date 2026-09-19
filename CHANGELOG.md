@@ -34,6 +34,13 @@ validiert werden.
   Löschvorschau sowie getrennten Restore, Restore-Ziel und Volume-Zuordnungen.
   Hilfen nennen Voraussetzungen, Dauer und Grenzen und lösen selbst keine
   Aktion aus. Keine Änderung an Sicherungsumfang oder Backend-Abläufen.
+- Kurzanleitung zu einer vollständigen Einrichtungs- und Prüfreihenfolge ergänzt:
+  Root-Unterordner und technische Einbindungen, Neuinstallations-/Updateverhalten,
+  automatischer Zielordner-Ausschluss gegenüber weiteren Backup-Datenträgern,
+  zunächst leere Stop-Dienstauswahl und konsistente Docker-/Datenbankdaten,
+  Speichern vor der Vorschau, Basiskopie/Speicherbedarf und manueller Test vor
+  dem Zeitplan. Restore-Grenzen, Volume-Zuordnung und separater Testdatenträger
+  ausdrücklich erklärt. Nur Anleitungstexte, keine neuen Standardwerte.
 - Kein Backup-Start ohne gespeichertes Ziel, kein stilles Übergehen einer
   ausgewählten, nicht eingebundenen Freigabe. Explizite Dateilisten und
   Mount-Prüfung begrenzen Vollbackups, Snapshots und Portable Archives.

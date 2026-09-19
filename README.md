@@ -22,6 +22,12 @@ und persönlich dokumentiertem Restore-Test. Das Öffnen einer Hilfe startet
 keine Aktion und verändert keine Einstellung; lange Hilfen sind auch mobil
 und per Tastatur scrollbar. Einfache Navigations- und Speicherbuttons bleiben
 ohne zusätzliche, wiederholende Erklärung.
+Die Kurzanleitung des develop-Teststands führt von Ziel und Quellenauswahl über
+bewusst gewählte Stop-Dienste, Speichern und Vorschau zum Testbackup und Restore-Test.
+Sie erklärt den Unterschied zwischen technischen Einbindungen und gesicherten
+Ordnern, Zielordner- und Datenträgerausschluss sowie die Grenzen des dateibasierten
+Backups: keine automatische Einrichtung von Partitionen oder Bootloader und
+ausdrückliche Zuordnung separater Boot-/Datenlaufwerke beim Restore.
 
 > [!IMPORTANT]
 > **Update auf 1.0.0:** Das reguläre Release ist ohne Beta-Zusatz erhältlich.

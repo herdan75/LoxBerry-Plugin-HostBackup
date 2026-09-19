@@ -34,11 +34,15 @@ The compact overview keeps four primary values visible and puts full IDs, target
 paths and report actions in a native disclosure. Tests exercise Enter/Space,
 initially closed state, preserved state during polling, no report request on
 expansion, and visible failure/recovery notices and loaded reports while closed.
-The suite currently emits 23 browser-check receipts, including the readable
+The suite currently emits 24 browser-check receipts, including the readable
 retention phase while the task is still running, source selection, and detailed
 metadata failures with explicit, unsaved-only profile assistance. Dedicated
 `overview-desktop.png`, `overview-expanded.png`, `overview-mobile.png` and
 `overview-mobile-expanded.png` screenshots supplement the full-page screenshots.
+The actual CGI quick guide is opened and closed by keyboard, checked for normal
+typography and no overflow at desktop/mobile widths, and captured in
+`quick-guide-desktop.png` and `quick-guide-mobile.png`. Reading it must not
+submit forms, change source selection or create unsaved settings.
 Storage calculation and runtime-check backend behavior are not validated by
 these UI fixtures; their known limitations are documented in the
 [1.0.0 release notes](../../docs/RELEASE-1.0.0.md). A successful main-branch build
