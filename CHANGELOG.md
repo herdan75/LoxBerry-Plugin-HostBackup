@@ -3,8 +3,8 @@
 Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
-Der Hauptstand auf `main` bereitet Version 1.0.0 vor; die öffentliche
-Veröffentlichung und die LoxBerry-Pluginseite sind noch nicht freigegeben.
+Version 1.0.0 ist als reguläres GitHub-Release und über die Update-Kanäle verfügbar.
+Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
@@ -12,7 +12,7 @@ validiert werden.
 
 Noch keine weiteren Änderungen.
 
-## [1.0.0] - vorbereitet am 2026-09-19, noch nicht veröffentlicht
+## [1.0.0] - 2026-09-19
 
 ### Übernahme auf main und erste Hauptversion
 
@@ -24,9 +24,16 @@ Noch keine weiteren Änderungen.
   README, aktuelle Release Notes, Sicherheitsmodell, Testplan, Umsetzungsbericht
   und Beschreibungsentwürfe auf den Hauptstand nachgeführt. Historische
   Versionsverläufe und Prüfnachweise behalten ihre damaligen Bezeichnungen.
-- Keine Veröffentlichung auf der LoxBerry-Pluginseite, kein neuer Release-Tag
-  und kein automatisches Stable-Update. `release.cfg` bleibt auf 0.5.8;
-  `prerelease.cfg` und der veröffentlichte Vorabkanal bleiben unverändert.
+- Reguläres GitHub-Release `v1.0.0` ohne Pre-Release-Kennzeichnung mit geprüftem ZIP.
+  `main/release.cfg` und `develop/prerelease.cfg` zeigen auf dasselbe Paket.
+  Die Kanaldateien werden erst nach erfolgreicher Prüfung des öffentlichen
+  Downloads aktiviert. Auch bisherige Vorabkanal-Nutzer können auf 1.0.0 wechseln.
+- `develop` auf die veröffentlichte Release-Basis nachgeführt. Bisherige
+  Release-Tags, Downloads und `pre-develop` bleiben unverändert.
+- Bei bereits installiertem 1.0.0-Testpaket kein höherer Versionshinweis:
+  für finale Kanalmetadaten und Dokumentation das Release-ZIP manuell installieren.
+- Wiki-/Pluginseiten- und Forumtexte bereitgestellt; externe Seiten werden
+  dadurch nicht automatisch bearbeitet.
 
 ### Enthalten gegenüber dem bisherigen main-Stand 0.5.8
 
@@ -49,8 +56,8 @@ Noch keine weiteren Änderungen.
   Profilinformationen eine neue vollständige Basiskopie. Genügend Platz und Zeit
   einplanen. Von 0.6.x/0.7.x erzwingt die Versionsänderung allein keine Basiskopie.
 - Geänderte Einstellungen vor Backup oder Vorschau ausdrücklich speichern.
-- Der übernommene Stand bestand 203 Linux-Tests ohne Skips und 15 Browserprüfungen;
-  der tatsächliche 1.0.0-main-Commit wird erneut unter Linux geprüft.
+- Der vorbereitete 1.0.0-Stand bestand 205 Linux-Tests ohne Skips und 15
+  Browser-Prüfblöcke; vor dem Upload wird auch der Release-Tag vollständig geprüft.
 - Vollständiger Offline-Restore mit Systemstart und NAS-/Hardwarematrix bleiben
   offen. Ebenso Speicherberechnung ohne Zwischenfortschritt und generische
   HTTP-500-Anzeige bei einer gesperrten Laufzeitprüfung. AP-14 bleibt ausgenommen.
@@ -768,8 +775,8 @@ nicht überarbeitet worden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.7.1-beta...main
-[1.0.0]: docs/RELEASE-1.0.0.md
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.0.0...main
+[1.0.0]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.0.0
 [0.7.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.1-beta
 [0.7.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.0-beta
 [0.6.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.6.1-beta

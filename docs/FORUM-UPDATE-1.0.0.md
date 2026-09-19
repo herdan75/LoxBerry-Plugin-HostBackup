@@ -1,14 +1,12 @@
-# Forum-Update zu LoxBerry Host Backup 1.0.0 – Entwurf
+# Forum-Update zu LoxBerry Host Backup 1.0.0
 
-**Noch nicht veröffentlichen.** Stand: 19.09.2026. Nach späterer Freigabe den
-tatsächlich geprüften Download und Veröffentlichungsstatus ergänzen.
+Textvorlage zur Veröffentlichung vom 19.09.2026. Der Beitrag wird nicht automatisch im Forum gepostet.
 
 Hallo zusammen
 
-ich bereite die erste Hauptversion **1.0.0** von LoxBerry Host Backup vor.
-Der vollständige aktuelle Entwicklungsstand ist dafür auf `main` übernommen.
-Die Version hat keinen Beta-Zusatz, ist aber noch nicht als neues Release
-oder über die LoxBerry-Pluginseite freigegeben.
+die erste Hauptversion **1.0.0** von LoxBerry Host Backup ist als reguläres
+GitHub-Release ohne Beta-Zusatz verfügbar. Der vollständige geprüfte Entwicklungsstand
+ist auf `main` übernommen. Beide Update-Kanäle bieten dasselbe stabile Paket an.
 
 Gegenüber dem bisherigen main-Stand 0.5.8 wurden besonders Datensicherheit,
 Wiederherstellung und Bedienung erweitert:
@@ -40,9 +38,14 @@ mit Systemstart und NAS-/Hardwaretests bleiben separat erforderlich. Die fehlend
 Fortschrittsanzeige der Speicherberechnung und eine generische HTTP-500-Meldung
 bei gesperrter Laufzeitprüfung sind weiterhin dokumentierte offene Punkte.
 
-Derzeit bleiben öffentliche Releases, Update-Kanäle und Pluginseite unverändert.
-Weitere Informationen zur Vorbereitung stehen in den
-[Release Notes](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/blob/main/docs/RELEASE-1.0.0.md).
+[**Version 1.0.0 herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip)
+
+Alternativ in der LoxBerry-Plugin-Verwaltung nach Updates suchen. Nicht vorher
+deinstallieren. Wer bereits das manuelle 1.0.0-Testpaket installiert hat, erhält
+keinen höheren Versionshinweis und kann das Release-ZIP erneut installieren.
+
+Details und Prüfnachweise stehen in den
+[Release Notes](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.0.0).
 
 Viele Grüsse
 Dani

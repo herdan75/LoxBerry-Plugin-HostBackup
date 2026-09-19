@@ -1,6 +1,6 @@
 # LoxBerry Host Backup 1.0.0
 
-Vorbereitet am 19.09.2026 auf `main`. **Noch nicht veröffentlicht.**
+Reguläres Release vom 19.09.2026 auf `main`, Tag **v1.0.0**.
 Plugin- und Paketversion: `1.0.0`, ohne Beta-Zusatz.
 
 ## Umfang und Herkunft
@@ -39,18 +39,24 @@ Hardware-Abnahme noch einen nachgewiesenen vollständigen Restore.
   sichtbarer Speicherhinweis bei Änderungen, geschützte Aufbewahrung,
   Inhaltsprüfungen, Diagnosepaket und dokumentierbare externe Restoretests.
 
-## Paket und Update vorbereiten
+## Download und Update
 
-Das CI-Testpaket beziehungsweise der lokale Build heisst
-`LoxBerryHostBackup_1.0.0.zip`. Ein Branch-Push erstellt nur ein Workflow-Artefakt.
-Es gibt noch keinen veröffentlichten Download unter einem `v1.0.0`-Tag.
+[**LoxBerryHostBackup_1.0.0.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip)
 
-- `release.cfg` bleibt auf dem öffentlichen Stable-Paket 0.5.8.
-- `prerelease.cfg` und der vorhandene Vorabkanal 0.7.1-beta bleiben unverändert.
-- Die LoxBerry-Pluginseite und öffentliche GitHub-Releases werden nicht geändert.
-- Ein 1.0.0-Testpaket nur bewusst manuell installieren; nicht vorher deinstallieren.
+- Reguläres GitHub-Release, **kein Pre-Release**.
+- `main/release.cfg` meldet Version 1.0.0. Auch `develop/prerelease.cfg` verweist
+  auf dasselbe stabile Paket, solange keine neuere Vorabversion existiert.
+- Die bestehenden Kanaladressen in `plugin.cfg` bleiben unverändert.
+- In LoxBerry nach Updates suchen oder das ZIP manuell installieren.
+  **Nicht vorher deinstallieren.** Automatische Installation hängt von der
+  persönlichen Einstellung in der Plugin-Verwaltung ab.
+- Bereits manuell installierte 1.0.0-Testpakete erhalten keinen höheren
+  Versionshinweis. Das Release-ZIP bei Bedarf erneut installieren, um auch
+  die finalen Kanalmetadaten und Dokumente zu übernehmen.
+- Ältere Releases und Downloads bleiben unverändert. Die Plugin-/Wiki-Seite
+  und Forumbeiträge werden separat gepflegt.
 
-Vor einer Testinstallation laufende Vorgänge beenden lassen und Einstellungen
+Vor einem Update laufende Vorgänge beenden lassen und Einstellungen
 exportieren. Nachher Ziel, Ausschlüsse, Profil, Dienste und Zeitplan kontrollieren.
 **Geänderte Einstellungen immer zuerst speichern.** Das gilt auch für
 Optionsfelder, Dienste und Container. Automatische Backups verwenden nur
@@ -84,27 +90,31 @@ demselben Profil. Alte Backups werden nicht pauschal vorab zur Platzbeschaffung 
 
 ## Prüfnachweise
 
-Der übernommene Programmstand bestand am 13.09.2026
-[203 Linux-Tests ohne Skips und 15 Browserprüfungen](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34764755275),
-einschliesslich echter Sperren, Metadaten-Roundtrips, Root-/Webbenutzerrechten,
-Installations-/Neustartschutz, Syntaxprüfungen und ZIP-Build.
+Der [vorbereitete 1.0.0-Stand c981111](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/35440782063)
+bestand 205 Linux-Tests ohne Skips, 15 Browser-Prüfblöcke, Syntax- und
+Rechteprüfungen sowie den ZIP-Bau. Darunter sind echte Dateisperren,
+Metadaten-Roundtrips und Installationen mit Root-/Webbenutzerrechten.
 
-Die [main-Prüfläufe](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/workflows/build-plugin.yml?query=branch%3Amain)
-prüfen den tatsächlichen 1.0.0-Commit erneut. Eine historische oder simulierte
-Prüfung wird nicht als Hardware-Abnahme für 1.0.0 ausgegeben.
+Der endgültige Release-Commit wird vor dem Tag und nochmals über den Tag unter
+Linux geprüft. Die [Release-Seite](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.0.0)
+nennt den dazugehörigen Lauf und die Prüfsumme des veröffentlichten Pakets.
 
-## Spätere Veröffentlichung – nur nach separater Freigabe
+Die Freigabe erfolgt mit den oben dokumentierten Grenzen. Ein vollständiger
+Offline-Restore mit Systemstart und die NAS-/Hardwarematrix sind weiterhin
+nicht nachgewiesen. Vor produktivem Disaster-Recovery-Einsatz den
+[DR-Testplan](DR-TESTPLAN.md) auf geeigneter eigener Testhardware abarbeiten.
 
-1. Offene Hardware-/Restoreabnahme nach [DR-TESTPLAN.md](DR-TESTPLAN.md) klären
-   und die tatsächlich bestandenen Prüfungen dokumentieren.
-2. Den vorgesehenen main-Commit vollständig unter Linux und im Browser prüfen.
-3. Erst dann `v1.0.0` ohne Beta-Zusatz taggen und ein reguläres GitHub-Release
-   mit dem geprüften `LoxBerryHostBackup_1.0.0.zip` bereitstellen.
-4. Öffentlichen Download, Paketinhalt, Version und SHA-256 prüfen.
-5. Erst danach `release.cfg` auf Version 1.0.0 und den vorhandenen Download
-   umstellen. Auch das Paket muss dann die freigegebenen Kanalmetadaten enthalten.
-6. Erst nach ausdrücklichem Auftrag die LoxBerry-Pluginseite und Forumtexte
-   veröffentlichen. Vorbereitete Texte: [Pluginseite](PLUGINSEITE-1.0.0.txt)
-   und [Forum-Update](FORUM-UPDATE-1.0.0.md).
+## Veröffentlichungsverfahren
 
-Bis dahin keine Tags, Releases, Download-Ersetzungen oder Kanalumschaltung auslösen.
+1. Release-Commit mit finalen Dokumenten und Kanalmetadaten unter Linux prüfen,
+   während die live abgefragten Branches noch den vorherigen Kanalstand liefern.
+2. Unveränderten geprüften Commit als `v1.0.0` taggen. Die Tag-Pipeline veröffentlicht
+   das ZIP erst nach erfolgreichen Linux-, Browser- und Paketprüfungen.
+3. Öffentlichen Download, ZIP-Inhalt, Laufzeitversion und SHA-256 kontrollieren.
+4. Erst danach `main` und `develop` auf den Release-Commit vorziehen, damit
+   beide Update-Kanäle auf das tatsächlich verfügbare Paket zeigen.
+5. Raw-Kanaladressen und Updatewerte nochmals von aussen prüfen. Die
+   LoxBerry-Pluginseite und Forumbeiträge separat pflegen.
+
+Vorbereitete Veröffentlichungstexte: [Pluginseite](PLUGINSEITE-1.0.0.txt)
+und [Forum-Update](FORUM-UPDATE-1.0.0.md).

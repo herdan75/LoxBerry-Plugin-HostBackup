@@ -110,21 +110,23 @@ class InstallHookTests(unittest.TestCase):
         version = plugin["PLUGIN"]["VERSION"]
         self.assertRegex(version, r"^\d+\.\d+\.\d+$")
         base = "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases"
-        # The prepared package may be newer than the channels already published.
-        # Never require an unreleased package to change the live update feed.
-        for source, suffix in ((RELEASE_CFG, ""), (PRERELEASE_CFG, "-beta")):
-            with self.subTest(channel=suffix or "stable"):
+        # The pre-release feed may deliberately point to the current stable ZIP.
+        # Check each feed against its advertised tag, not a forced beta suffix.
+        for name, source in (("stable", RELEASE_CFG), ("prerelease", PRERELEASE_CFG)):
+            with self.subTest(channel=name):
                 channel = configparser.ConfigParser()
                 channel.read_string(source)
                 published = channel["AUTOUPDATE"]["VERSION"]
                 self.assertRegex(published, r"^\d+\.\d+\.\d+$")
                 self.assertLessEqual(tuple(map(int, published.split("."))), tuple(map(int, version.split("."))))
-                tag = f"v{published}{suffix}"
+                tag = channel["AUTOUPDATE"]["INFOURL"].removeprefix(f"{base}/tag/")
+                allowed_tags = (f"v{published}", f"v{published}-beta") if name == "prerelease" else (f"v{published}",)
+                self.assertIn(tag, allowed_tags)
                 archive_url = f"{base}/download/{tag}/LoxBerryHostBackup_{published}.zip"
                 self.assertEqual(channel["AUTOUPDATE"]["ARCHIVEURL"], archive_url)
                 self.assertEqual(channel["AUTOUPDATE"]["INFOURL"], f"{base}/tag/{tag}")
                 self.assertIn(archive_url, README)
-                self.assertIn(f"## [{published}{suffix}]", CHANGELOG)
+                self.assertIn(f"## [{tag[1:]}]", CHANGELOG)
         self.assertIn("prerelease: ${{ contains(github.ref_name, '-') }}", WORKFLOW)
 
     def test_main_version_and_documentation_have_no_beta_suffix(self) -> None:
@@ -139,16 +141,22 @@ class InstallHookTests(unittest.TestCase):
         self.assertNotIn(f"{version}-beta", README + notes + PLUGIN_CFG)
         self.assertIn(f"LoxBerryHostBackup_{version}.zip", notes)
 
-    def test_1_0_0_preparation_keeps_publication_on_hold(self) -> None:
-        # Update this explicit publication guard only when release is authorized.
-        for source, expected in ((RELEASE_CFG, "0.5.8"), (PRERELEASE_CFG, "0.7.1")):
+    def test_1_0_0_release_channels_share_the_stable_package(self) -> None:
+        expected_archive = "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip"
+        for source in (RELEASE_CFG, PRERELEASE_CFG):
             channel = configparser.ConfigParser()
             channel.read_string(source)
-            self.assertEqual(channel["AUTOUPDATE"]["VERSION"], expected)
+            self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.0.0")
+            self.assertEqual(channel["AUTOUPDATE"]["ARCHIVEURL"], expected_archive)
+        plugin = configparser.ConfigParser()
+        plugin.read_string(PLUGIN_CFG)
+        self.assertEqual(plugin["AUTOUPDATE"]["RELEASECFG"], "https://raw.githubusercontent.com/herdan75/LoxBerry-Plugin-HostBackup/main/release.cfg")
+        self.assertEqual(plugin["AUTOUPDATE"]["PRERELEASECFG"], "https://raw.githubusercontent.com/herdan75/LoxBerry-Plugin-HostBackup/refs/heads/develop/prerelease.cfg")
         self.assertIn("if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')", WORKFLOW)
         notes = (ROOT / "docs" / "RELEASE-1.0.0.md").read_text(encoding="utf-8")
-        self.assertIn("**Noch nicht veröffentlicht.**", notes)
-        self.assertIn("Noch keinen `v1.0.0`-Tag", README)
+        self.assertIn("Reguläres Release", notes)
+        self.assertNotIn("Noch nicht veröffentlicht", notes)
+        self.assertIn("Auch Nutzer des bisherigen Vorabkanals", README)
 
     def test_trusted_install_and_webuser_permissions(self) -> None:
         self.run_linux_install_child("--trusted-install-child")

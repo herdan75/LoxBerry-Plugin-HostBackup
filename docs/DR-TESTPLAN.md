@@ -10,8 +10,8 @@ Testdienste ersetzt.
 Diese Szenarien sind ein Prüfplan, kein Nachweis bereits bestandener Hardwaretests:
 
 1. Auf einem isolierten LoxBerry Updates von 0.5.8, 0.6.x und 0.7.x
-   einschliesslich manueller Testpakete auf das CI-Testpaket 1.0.0 prüfen.
-   Keine öffentliche Freigabe daraus ableiten. Vorher Konfiguration exportieren und
+   einschliesslich manueller Testpakete auf das Release-Paket 1.0.0 prüfen.
+   Die Veröffentlichung ist kein Nachweis bestandener Hardwaretests. Vorher Konfiguration exportieren und
    alle aktiven Aufgaben beenden lassen; keinen zweiten Installer parallel starten.
 2. Ziel, Aufbewahrung, Profil, Ausschlüsse, ausgewählte Dienste und Zeitplan vor
    und nach dem Update vergleichen. Alte Backups und geschützte Helferstände
@@ -34,9 +34,10 @@ Diese Szenarien sind ein Prüfplan, kein Nachweis bereits bestandener Hardwarete
    0.6.x/0.7.x eine passende validierte Referenz und deren tatsächliche
    Hardlink-Wiederverwendung prüfen; die neue Versionsnummer allein darf diese
    Referenz nicht ausschliessen. Das letzte brauchbare Backup erhalten.
-8. Plugin- und Diagnoseversion müssen 1.0.0 ohne Beta-Zusatz anzeigen. Die
-   Update-Kanaldateien bleiben bis zur separaten Veröffentlichung auf ihren
-   bisherigen Versionen; weder Pluginseite noch öffentliche Releases ändern.
+8. Plugin- und Diagnoseversion müssen 1.0.0 ohne Beta-Zusatz anzeigen. Beide
+   Update-Kanaldateien müssen auf das geprüfte öffentliche 1.0.0-Release zeigen.
+   Updateerkennung auch aus dem bisherigen Vorabkanal prüfen. Bei bereits
+   installierter 1.0.0 darf kein höherer Versionshinweis erfunden werden.
 
 ## Ergänzende Cron-/Aufbewahrungsabnahme für 1.0.0
 

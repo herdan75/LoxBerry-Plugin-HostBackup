@@ -1,6 +1,6 @@
 # Sicherheitsmodell
 
-Stand: 1.0.0 auf `main`, Veröffentlichung noch nicht freigegeben. Enthalten ist die Absicherung des
+Stand: reguläres Release 1.0.0 auf `main`. Enthalten ist die Absicherung des
 unprivilegierten Update-Dateiaustauschs und die Launcher-/Backend-Trennung.
 Die kompakte Übersicht verändert keine Berechtigungen, Locks oder
 Bestätigungsanforderungen. Die noch offene HTTP-500-Darstellung bei gesperrter

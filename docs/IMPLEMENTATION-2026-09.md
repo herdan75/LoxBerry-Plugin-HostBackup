@@ -5,8 +5,9 @@ Erweiterungen. Aktueller Hauptstand: **1.0.0 auf main**, interne Plugin-Version 
 Die bisher zurückgestellte AP-14 zur Mail-/Benachrichtigungssemantik ist ausgenommen.
 Am 19.09.2026 wird der vollständige develop-Stand `4da7cf6` auf `main` übernommen.
 Nur Version, Tests der Versions-/Kanaltrennung und aktuelle Dokumentation ändern
-sich gegenüber diesem Programmstand. Die Veröffentlichung ist noch nicht freigegeben;
-der stabile Kanal bleibt auf 0.5.8, der Vorabkanal unverändert. Die
+sich gegenüber diesem Programmstand. Nach der gesonderten Freigabe wird 1.0.0
+als reguläres Release veröffentlicht; beide Update-Kanäle erhalten erst nach
+Prüfung des öffentlichen Downloads diesen Stand. Die
 [Release Notes](RELEASE-1.0.0.md) beschreiben Update, Freigabeschritte und Prüfgrenzen.
 Die ursprüngliche Analyse wurde mit 0.7.0-beta veröffentlicht; historische
 Prüfläufe darunter behalten ihre damaligen Versions- und Commitangaben.
@@ -198,7 +199,7 @@ Vor einer stabilen Freigabe sind zusätzlich
 die Szenarien in `DR-TESTPLAN.md` einschliesslich realem Neustart, Zielverlust,
 NAS-Profilen und vollständigem Offline-Systemstart abzuarbeiten.
 
-## Hauptstand 1.0.0 und zurückgestellte Veröffentlichung
+## Historie: Hauptstand 1.0.0 vor der Veröffentlichungsfreigabe
 
 - Plugin-Version `1.0.0`, Paket `LoxBerryHostBackup_1.0.0.zip`, kein Beta-Zusatz.
 - `main` übernimmt alle 23 bisherigen develop-Commits seit `47f75ef`; Ausgangsstand
@@ -213,3 +214,20 @@ NAS-Profilen und vollständigem Offline-Systemstart abzuarbeiten.
   Pluginseiten-/Forum-Entwürfe werden auf `main` committet und geprüft.
   Fremde unversionierte Arbeitsdateien sind kein Teil des Releases und werden
   weder übernommen noch bereinigt.
+
+## Veröffentlichung 1.0.0 am 19.09.2026
+
+- Gesonderter Auftrag zur Veröffentlichung als reguläres Release ohne Beta-Zusatz.
+- Finale Kanalmetadaten und Dokumentation werden zuerst auf einem Release-Zweig
+  geprüft. Live-Kanäle bleiben bis zur Prüfung des veröffentlichten Downloads unverändert.
+- `v1.0.0` bezeichnet den unveränderten, geprüften Release-Commit. Die Tag-Pipeline
+  prüft diesen erneut unter Linux und erzeugt das öffentliche ZIP.
+- Danach werden `main` und `develop` auf denselben Commit vorgezogen:
+  Stable- und Vorabkanal melden Version 1.0.0 mit identischer Downloadadresse.
+- Der vorbereitete Stand `c981111` bestand 205 Linux-Tests ohne Skips und 15
+  Browser-Prüfblöcke. Der endgültige Taglauf und die Paketprüfsumme werden auf
+  der [Release-Seite](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.0.0) dokumentiert.
+- Kein neuer Hardware-/NAS-/Offline-Restore-Nachweis durch die Veröffentlichung.
+  Bekannte Grenzen und AP-14 bleiben ausdrücklich offen.
+- Fremde unversionierte Dateien, frühere Releases und `pre-develop` bleiben unverändert.
+  Externe Plugin-/Wiki-Seiten werden nicht automatisch bearbeitet.

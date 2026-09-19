@@ -1,100 +1,814 @@
 ====== LoxBerry Host Backup ======
 
-**ENTWURF – noch nicht auf der LoxBerry-Pluginseite veröffentlichen.**
-Vorbereiteter Hauptstand: **Version 1.0.0**, ohne Beta-Zusatz. Stand: 19.09.2026.
-Ein reguläres Release, ein öffentlicher 1.0.0-Download und die Umstellung des Update-Kanals sind noch nicht freigegeben.
-
-===== Kurzbeschreibung =====
-
-Dateibasiertes Host-Backup und Restore für LoxBerry, Docker, DietPi und native Linux-Dienste. Das Plugin sichert System- und Anwendungsdateien als Vollbackup oder inkrementellen Snapshot und ergänzt Export/Import, Datei-Explorer, Wiederherstellungsvorschau, Aufbewahrung, Inhaltsprüfungen und Live-Protokolle.
-
-Es erstellt kein sektorweises Disk-Image. Ein vollständiger Offline-Restore mit anschliessendem Systemstart ist weiterhin separat auf der eigenen Hardware zu prüfen. Für kritische Systeme ein zweites unabhängiges Backup vorhalten.
-
 ++++ Version History... |
 
-Version 1.0.0 – auf main vorbereitet, noch nicht veröffentlicht:
+Die folgenden Einträge beschreiben den jeweiligen damaligen Versionsstand. Frühere Angaben zu Release- und Vorabkanälen sind historische Angaben.
 
-**Hauptversion und übernommener Stand**
+Version 1.0.0:
 
-  * Vollständigen develop-Stand einschliesslich der letzten Installations- und Laufzeitkorrekturen auf main übernommen
-  * Versionsnummer 1.0.0 ohne Beta-Zusatz; Paketname LoxBerryHostBackup_1.0.0.zip
-  * Gegenüber dem übernommenen Stand keine Änderung der Backup-/Restorelogik
-  * README, Changelog, Release Notes, Sicherheitsmodell und Testplan nachgeführt
+**Erste Hauptversion**
+
+  * Vollständigen Entwicklungsstand einschliesslich aller Korrekturen aus 0.7.1-beta auf ''main'' übernommen
+  * Plugin- und Paketversion ''1.0.0'' ohne Beta-Zusatz; Paketname ''LoxBerryHostBackup_1.0.0.zip''
+  * Gegenüber dem zuletzt geprüften 0.7.1-Entwicklungsstand keine Änderung der Backup-, Restore- oder Aufbewahrungslogik
+  * README, Changelog, Sicherheitsmodell, Testplan und Pluginbeschreibung aktualisiert
 
 **Daten- und Wiederherstellungssicherheit**
 
-  * Backup-Ziele anhand von Marker, Mountpoint, Quelle und Dateisystem prüfen
-  * Lokale Journale für den Wiederanlauf zuvor gestoppter Dienste und Container
-  * Root-geschützte Helfer, Konfiguration und Laufzeitdaten; Einstellungen bei Updates erhalten
-  * Importarchive auf unsichere Pfade, Links, Duplikate, Inhalt und Ressourcenbedarf prüfen
-  * Restore mit Vorschau, gespeicherten Ausschlüssen und ausdrücklicher Volume-Zuordnung
-  * Aufbewahrung mit Schutzmarkierungen, Schutz des letzten geeigneten Backups und bestätigter Löschvorschau
+  * Restore berücksichtigt die beim Backup gespeicherten Ausschlüsse und schützt ausgeschlossene Bereiche
+  * Restore mit tatsächlicher Datei-/Löschvorschau, ausdrücklich gewähltem Offline-Ziel und Volume-Zuordnungen
+  * Einzelne Dateien oder Ordner können in einen neuen Wiederherstellungsordner zurückgeholt werden, ohne dort vorhandene Dateien zu überschreiben
+  * Dauerhafte lokale Journale für den Wiederanlauf zuvor gestoppter Dienste und Container
+  * Root-geschützte, atomar aktivierte Helferstände; abgesicherte Imports sowie Export- und Logdownloads
+  * Inhaltsprüfungen mit lokaler Prüfbasis, herunterladbaren Prüfberichten und getrennt dokumentierbaren eigenen Restoretests
+  * Schutz einzelner Backups und Vorschau vor manueller Bereinigung
 
-**Metadaten, NAS und Zeitpläne**
+**Installation, Neustart und Automatik**
 
-  * Native Strict als Standard, ergänzt um Network Compatible, Fake Super und Portable Archive
-  * Network Compatible lässt xattrs und File Capabilities bewusst aus; der Hinweis blockiert keine manuellen oder geplanten Backups
-  * Echte Übertragungs- oder Metadatenfehler bleiben Fehler; NAS-Eignung muss geprüft werden
-  * Automatischer Dienst-Wiederanlauf setzt bei belegter Sperre still aus; keine Cron-Mail allein deshalb
-  * Echte Wiederanlauffehler und manuelle Sperrkonflikte bleiben sichtbar
+  * Vorhandene Einstellungen bleiben bei Updates erhalten; sicherheitskritische Laufzeitdaten werden dauerhaft und root-geschützt abgelegt
+  * Installation auf LoxBerry mit Cron-Symlink sowie erneute Installation derselben Version abgesichert
+  * Zurückgebliebene Launcher werden vor der Aktivierung als Backend abgewiesen; dadurch keine rekursive Startschleife
+  * Zeitplaneinrichtung mit begrenzter Laufzeit statt unbegrenzt blockierter Installation
+  * Automatischer Dienst-Wiederanlauf beim Boot und alle fünf Minuten setzt bei belegter Vorgangssperre still aus und versucht es später erneut
+  * Keine Cron-Mail allein wegen einer belegten Sperre; echte Fehler und manuelle Sperrkonflikte bleiben sichtbar
+  * Tägliche, wöchentliche und monatliche Backups verwenden denselben Vorprüfungsweg
 
-**Installation und Bedienung**
+**Bedienung und Aufbewahrung**
 
-  * Unprivilegierten Dateiaustausch bei Updates, Cron-Symlink-Unterstützung und Launcher-Prüfung korrigiert
-  * Zeitplaneinrichtung zeitlich begrenzt und Root-Laufzeitdaten neustartfest abgelegt
-  * Kompakte Übersicht mit aufklappbaren Details, Aufgabenhistorie und vollständigem Logdownload
-  * Speicherhinweis bei allen Einstellungsänderungen; Eingaben bleiben bei Fehlern erhalten
-  * Eigene Live-Phase für Aufbewahrung statt stehengebliebener Validierungsanzeige
-  * Optionale Inhaltsprüfungen, manuell dokumentierbare Restoretests und Diagnosepaket
+  * Kompakte Übersicht mit vier zentralen Statuswerten und aufklappbaren Details und Prüfaktionen
+  * Lesbare Beschriftungen, einheitliche Inhaltsflächen und aktualisierte CSS-/JavaScript-Adressen gegen veraltete Browser-Caches
+  * Speicherhinweis für alle Einstellungsänderungen; ungespeicherte Eingaben bleiben bei fehlgeschlagenem Speichern erhalten
+  * Lesbare Live-Logs ohne erzwungene Zeilenumbrüche, Aufgabenhistorie und vollständiger Logdownload
+  * Eigene Statusphase für die abschliessende Aufbewahrung statt stehengebliebener Validierungsanzeige
+  * Anzahlaufbewahrung von 1 bis 3650 Backups oder kombinierte tägliche, wöchentliche und monatliche Regeln
+  * Speicherübersicht, Bereinigung alter Laufzeitdaten mit Vorschau und Diagnosepaket
 
-Frühere Versionen und Einzeländerungen: [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup/blob/main/CHANGELOG.md|vollständiger Changelog]].
+**Wichtige Updatehinweise**
+
+  * Beim Umstieg von 0.5.8 oder älter benötigt der erste inkrementelle Lauf erneut eine vollständige Basiskopie
+  * Erst nach einer erfolgreichen neuen Basiskopie können folgende Läufe wieder inkrementell arbeiten; zusätzlichen Speicher und Laufzeit einplanen
+  * Beim Umstieg von 0.6.x/0.7.x erzwingt die neue Versionsnummer allein keine Basiskopie; Profil und Referenz müssen weiterhin passen
+  * Geänderte Einstellungen vor manuellen oder zeitgesteuerten Backups immer ausdrücklich speichern
+
+**Prüfstand und Grenzen**
+
+  * Der vorbereitete 1.0.0-Stand ''c981111'' bestand 205 Linux-Tests ohne übersprungene Tests sowie 15 Browser-Prüfblöcke und den ZIP-Bau
+  * Tests umfassen echte Root-/Webbenutzerrechte, konkurrierende Dateisperren, Installations- und Metadatenprüfungen
+  * Vollständiger Offline-Restore mit anschliessendem Systemstart und die NAS-/Hardwarematrix sind damit nicht nachgewiesen
+  * Speicherberechnung ohne Zwischenfortschritt und generische HTTP-500-Meldungen bei einer gesperrten Laufzeitprüfung bleiben bekannte Grenzen
+  * Die bisher zurückgestellte Überarbeitung der Mail-/Benachrichtigungssemantik ist nicht Bestandteil dieser Version
+
+Version 0.7.1-beta (Pre-Release):
+
+  * Installations- und Wiederinstallationskorrekturen unter einer neuen Vorabversion bereitgestellt
+  * Konfiguration vor dem unprivilegierten Austausch alter Plugin-Dateien gesichert; geschützte Helferstände bleiben erhalten
+  * Backend-Identität vor Aktivierung und Ausführung geprüft; hängen gebliebene Weiterleitungs-Startskripte werden abgewiesen
+  * Zeitplaneinrichtung zeitlich begrenzt
+  * Übersicht kompakter gestaltet; Details und Prüfaktionen aufklappbar
+  * Einheitliche weisse Inhaltsflächen, klare Trennung zwischen Beschriftungen und Werten sowie Cache-Schutz für CSS/JavaScript
+  * Im nachgebesserten Paket automatische Dienst-Wiederanläufe bei belegter Sperre ohne Cron-Mail zurückgestellt
+  * Eigene Live-Status-Phase ''retention'' für die abschliessende Aufbewahrungsprüfung ergänzt
+  * Nachgebesserten Stand mit 203 Linux-Tests ohne Skips und 15 Browser-Prüfblöcken geprüft
+  * Speicherberechnung ohne Zwischenfortschritt und generische HTTP-500-Anzeige bei gesperrter Laufzeitprüfung als offene Punkte dokumentiert
+
+Version 0.7.0-beta (Pre-Release):
+
+  * Daten- und Wiederherstellungssicherheit erweitert: gespeicherte Ausschlüsse, Restore-Vorschau, Offline-Ziel und Volume-Zuordnungen
+  * Dauerhafte lokale Wiederanlaufjournale für Dienste und Container sowie root-geschützte Helferstände eingeführt
+  * Import-, Export- und Downloadpfade weiter abgesichert; Metadaten mit Rückkopie geprüft
+  * Neue Snapshot-Basiskopie, Speicherplatz und freie Inodes in der Vorprüfung berücksichtigt
+  * Einheitlicher Startweg für tägliche, wöchentliche und monatliche Backups
+  * Übersicht, Aufgabenhistorie, Sicherungsvorschau, lesbare Logs und Schutz ungespeicherter Eingaben erweitert
+  * Einzeldatei-/Ordner-Restore, Recovery-Blatt, optionale Inhaltsprüfungen und dokumentierbare eigene Restoretests ergänzt
+  * Anzahlaufbewahrung bis 3650 sowie tägliche, wöchentliche und monatliche Aufbewahrung eingeführt
+  * Schutz einzelner Sicherungen, Bereinigungsvorschau, Wartung und Diagnosepaket ergänzt
+  * Nachgebesserte Installation akzeptiert den vorgesehenen LoxBerry-Cron-Symlink und die zulässigen Root-Gruppenrechte
+  * Die spätere Korrektur des unprivilegierten Dateiaustauschs und der Launcher-Prüfung wurde mit 0.7.1-beta bereitgestellt
+
+Version 0.6.1-beta (Pre-Release):
+
+**Neustart und Erhalt der Einstellungen**
+
+  * Fehler behoben, durch den die Plugin-Einstellungen nach einem LoxBerry-Neustart nicht mehr geladen wurden
+  * die vorhandene Konfiguration wurde dabei nicht gelöscht, sondern war wegen einer nicht passenden Rechteprüfung vorübergehend nicht erreichbar
+  * das von LoxBerry beim Neustart neu angelegte Plugin-Logverzeichnis darf nun plattformkonform dem Benutzer loxberry gehören
+  * sicherheitskritische Backup-, Restore-, Import- und Export-Logs liegen dauerhaft und root-geschützt unter /var/lib/loxberryhostbackup/logs
+  * gespeicherte Einstellungen werden nach einem Neustart wieder korrekt angezeigt und verwendet
+  * automatische und zeitgesteuerte Backups funktionieren nach einem Neustart wieder ohne manuellen Eingriff
+  * vorhandene Einstellungen bleiben auch bei der Aktualisierung von 0.6.0-beta auf 0.6.1-beta erhalten
+  * kann die Konfiguration aus einem anderen technischen Grund nicht geladen werden, werden Speichern und Backup-Start vorsorglich gesperrt
+  * sichtbare Ersatz- oder Standardwerte können dadurch keine vorhandene Konfiguration versehentlich überschreiben
+
+**Speicherprüfung bei inkrementellen Backups**
+
+  * die Backup-Vorprüfung erkennt jetzt, wenn keine kompatible Hardlink-Referenz vorhanden ist und deshalb eine vollständige Basiskopie erstellt werden muss
+  * der dafür benötigte freie Speicher wird vor dem eigentlichen Backup anhand des letzten vollständigen Backups mit zusätzlicher Reserve abgeschätzt
+  * bei eindeutig zu wenig freiem Speicher wird das Backup beendet, bevor Dienste oder Docker-Container gestoppt werden
+  * Fehler wie rsync code 11 beziehungsweise No space left on device werden dadurch nach Möglichkeit bereits vor dem Kopiervorgang verhindert
+
+**Live-Log und Darstellung**
+
+  * rsync-Fortschrittsmeldungen werden weiterhin vollständig im Live-Log angezeigt
+  * von rsync verwendete Wagenrückläufe werden als echte Zeilenenden dargestellt
+  * störende Terminal-Steuerzeichen werden aus der Webanzeige entfernt
+  * lange Logzeilen werden nicht mehr mitten im Text umgebrochen
+  * lange Einzelzeilen können horizontal gescrollt werden
+  * die gespeicherte Original-Logdatei bleibt unverändert
+
+**Versionierung und automatische Aktualisierung**
+
+  * Pre-Release-Version auf 0.6.1 angehoben, damit LoxBerry den korrigierten Stand als neues Update erkennt
+  * prerelease.cfg auf Version 0.6.1 und den Tag v0.6.1-beta aktualisiert
+  * neues Installationspaket LoxBerryHostBackup_0.6.1.zip veröffentlicht
+  * das GitHub-Release wird ausdrücklich als Pre-Release gekennzeichnet
+  * der stabile Release-Kanal bleibt unverändert auf Version 0.5.8
+  * README und Changelog auf Version 0.6.1-beta nachgeführt
+
+**Qualitätssicherung**
+
+  * ein Linux-Root-Test simuliert das von LoxBerry nach einem Neustart mit loxberry-Besitz angelegte Plugin-Logverzeichnis
+  * dabei wird geprüft, dass die gespeicherte Konfiguration und die Task-Abfragen weiterhin funktionieren
+  * Versionsnummer, Pre-Release-URL und Paketname werden automatisiert auf Übereinstimmung geprüft
+  * Windows- und Linux-Paketierung erfolgreich geprüft
+  * insgesamt 30 automatisierte Tests erfolgreich ausgeführt
+
+Version 0.6.0-beta (Pre-Release):
+
+**Metadaten und NAS-Kompatibilität**
+
+  * Metadaten-Profile Native Strict, Network Compatible, Fake Super und Portable Archive ergänzt
+  * Native Strict als Standardeinstellung gekennzeichnet
+  * eigene Info-Buttons mit Voraussetzungen und Einschränkungen für alle Metadaten-Profile ergänzt
+  * Network Compatible für CIFS-, NFS- und viele NAS-Ziele hinzugefügt
+  * Network Compatible sichert ACLs und Hardlinks, lässt xattrs und File Capabilities jedoch bewusst aus
+  * nicht unterstützte xattrs führen mit Network Compatible nicht mehr zu einem fehlgeschlagenen Backup
+  * der Hinweis von Network Compatible löst weder bei manuellen noch bei zeitgesteuerten Backups eine zusätzliche Bestätigung aus
+  * andere tatsächlich erkannte Preflight-Warnungen müssen bei einem manuellen Start weiterhin bestätigt werden
+
+**Inkrementelle Snapshots**
+
+  * als Hardlink-Referenz werden nur erfolgreich validierte Backups mit demselben Metadaten-Profil verwendet
+  * Backups aus Version 0.5.8 und älter enthalten noch keine Metadaten-Profilinformation
+  * diese älteren Backups werden deshalb nicht als Hardlink-Referenz verwendet
+  * der erste inkrementelle Lauf nach dem Update erstellt nochmals eine vollständige Basiskopie
+  * nachfolgende erfolgreiche Läufe mit demselben Metadaten-Profil arbeiten wieder inkrementell
+  * die verwendete Snapshot-Referenz wird im Live-Log ausdrücklich angezeigt
+
+**Installation und Updates**
+
+  * vorhandene Plugin-Einstellungen bleiben bei Updates erhalten
+  * Backup-Ziel, Aufbewahrung, Metadaten-Profil, Ausschlüsse, Zeitplan, Hooks sowie Dienst- und Container-Auswahl werden übernommen
+  * die gesicherte Konfiguration wird bereits zu Beginn der Installationsnacharbeiten wiederhergestellt
+  * privilegierte Installationsschritte wurden in den vorgesehenen LoxBerry-Root-Hook verschoben
+  * Installationspakete enthalten keine Python-Cachedateien mehr
+  * Windows- und Linux-Paketierung zusätzlich geprüft
+
+**Sicherheit und Zuverlässigkeit**
+
+  * privilegierte Webaktionen werden über einen kontrollierten, root-eigenen Dispatcher ausgeführt
+  * direkte privilegierte Ausführung des vollständigen Backends durch den Webbenutzer wurde entfernt
+  * Backup-Ziele werden über Marker, Mountpoint, Quelle und Dateisystem eindeutig registriert und geprüft
+  * ein nicht eingehängtes Netzlaufwerk kann dadurch nicht unbemerkt durch ein gleichnamiges lokales Verzeichnis ersetzt werden
+  * Backup-, Restore-, Import- und Exportabläufe zusätzlich abgesichert
+  * parallele oder widersprüchliche Aktionen werden über Sperren verhindert
+  * Importarchive werden vor der Übernahme auf unsichere Pfade, Links, Duplikate und übermässige Grösse geprüft
+  * Backups werden erst nach erfolgreicher Validierung als vollständig abgeschlossen markiert
+  * Restore ist nur mit vollständig validierten Backups möglich
+
+**Weboberfläche und Bedienung**
+
+  * Metadaten-Profile verständlicher und zielbezogen beschrieben
+  * Kurzanleitung um Backup-Ziel, Metadaten-Profil und automatische Zeitpläne erweitert
+  * Infofenster werden nicht mehr am rechten oder unteren Browserrand abgeschnitten
+  * bei ungespeicherten Änderungen erscheint ein Speicherhinweis mit geändertem Bereich, neuem Wert und Uhrzeit
+  * der Speicherhinweis gilt für alle Plugineinstellungen
+  * auch Optionsfelder sowie dynamisch geladene Dienste und Container werden als Änderung erkannt
+  * beim Zurückstellen auf den gespeicherten Wert verschwindet der Änderungshinweis wieder
+  * Änderungen können direkt über den eingeblendeten Speicherhinweis gespeichert werden
+  * Bestätigung für Preflight-Warnungen erscheint nur bei einer tatsächlich übergehbaren Warnung
+  * ein nicht konfiguriertes Backup-Verzeichnis wird als neutraler Hinweis und nicht als technischer Fehler angezeigt
+  * Ladeverhalten von Dateisystemprüfung, Backup-Liste sowie Dienst- und Container-Auswahl abgesichert
+
+**Dokumentation und Qualitätssicherung**
+
+  * README und Changelog auf den Entwicklungsstand 0.6.0 nachgeführt
+  * Verhalten älterer inkrementeller Backups dokumentiert
+  * automatisierte Sicherheits-, Installations-, Paketierungs- und Weboberflächentests erweitert
+  * das tatsächlich an den Browser ausgegebene JavaScript wird zusätzlich auf gültige Syntax geprüft
+  * insgesamt 25 automatisierte Tests erfolgreich ausgeführt
+
+Version 0.5.8:
+
+  * Version 0.5.8 als aktueller Release-Kanal bereitgestellt
+  * ''release.cfg'' auf das stabile Release-ZIP ''v0.5.8'' aktualisiert
+  * Korrekturen aus ''0.5.8-beta'' für den robusteren Export-Live-Status übernommen
+  * Export-Live-Status robuster gemacht
+  * Export-Logs werden vor dem Hintergrundjob sicher angelegt
+  * fehlende Export-Logs werden über ''export-info'' abgefangen
+  * wenn ein Exportarchiv vorhanden ist, wird der Exportstatus auch ohne vorhandenes Export-Log korrekt als abgeschlossen erkannt
+  * laufende Export-Neuerstellungen werden zuverlässig als ''running'' erkannt
+
+Version 0.5.8-beta:
+
+  * Export-Live-Status robuster gemacht
+  * Export-Logs werden vor dem Hintergrundjob sicher angelegt
+  * fehlende Export-Logs werden über ''export-info'' abgefangen
+  * laufende Export-Neuerstellungen werden zuverlässig als ''running'' erkannt
+
+Version 0.5.7:
+
+  * Version 0.5.7 als Release-Kanal bereitgestellt
+  * ''release.cfg'' auf das stabile Release-ZIP ''v0.5.7'' aktualisiert
+  * Korrekturen aus ''0.5.7-beta'' für Detailansichten, Export, Import und Konfigurationsimport übernommen
+
+Version 0.5.7-beta:
+
+  * Detailansichten für Datei-Explorer und Restore schliessen nun über eine robuste Basis-URL ohne alte Query-Parameter
+  * Export-Neuerstellungen werden in der Backup-Liste und in ''export-info'' korrekt als laufend angezeigt, auch wenn noch ein altes Export-Archiv vorhanden ist
+  * Export-Archiv-Löschung ist gegen gleichzeitig laufende Export-Jobs gesperrt
+  * lange Export- und Import-Jobs schreiben Heartbeat-Einträge ins Log, damit der Live-Status nicht fälschlich als veraltet erscheint
+  * Hintergrund-Importe akzeptieren nur noch zuvor im Plugin-Staging abgelegte ''.tar.gz''-Archive
+  * importierte Plugin-Einstellungen übernehmen die Root-Freigabe nicht mehr automatisch; sie muss nach dem Import erneut bestätigt werden
+
+Version 0.5.6-beta:
+
+  * Aktion ''Ansicht schliessen'' und ''Restore-Auswahl schliessen'' korrigiert
+  * Datei-Explorer und Restore-Auswahl verwenden eine saubere URL ohne ''browse_id'' oder ''restore_id''
+  * Detailansichten werden dadurch wirklich ausgeblendet
+
+Version 0.5.5-beta:
+
+  * Pre-Release-Paket neu erstellt
+  * ZIP-Einträge verwenden Unix-Pfade mit ''/''
+  * LoxBerry kann das Paket dadurch sauber entpacken
+  * Windows-Paketierungsskript korrigiert, damit künftige Builds keine Backslash-Pfade im ZIP erzeugen
+
+Version 0.5.4-beta:
+
+  * Aktion ''Ansicht schliessen'' und ''Restore-Auswahl schliessen'' korrigiert
+  * Datei-Explorer und Restore-Auswahl können wieder vollständig ausgeblendet werden
+  * Infotext für ''Export neu erstellen'' ergänzt
+  * klargestellt, dass nur das ''.tar.gz''-Exportarchiv neu erzeugt wird und der Backup-Snapshot unverändert bleibt
+
+Version 0.5.3-beta:
+
+  * Aktion ''Ansicht schliessen'' und ''Restore-Auswahl schliessen'' robuster gemacht
+  * Detailansichten werden wieder korrekt geschlossen
+  * Export-Aktionen eindeutiger beschriftet
+  * Download, Neuerstellung und Löschung des Export-Archivs sind klar getrennt
+  * separates Löschen eines vorhandenen ''.tar.gz''-Exportarchivs ergänzt, ohne den eigentlichen Backup-Snapshot zu entfernen
+  * Export-Status in der Backup-Liste lesbarer dargestellt
+
+Version 0.5.2:
+
+  * Version 0.5.2 als stabilen Release-Kanal bereitgestellt
+  * ''release.cfg'' auf das stabile Release-ZIP ''v0.5.2'' aktualisiert
+
+Version 0.5.2-beta:
+
+  * Pre-Release-CFG-URL im Plugin auf die präzisere ''refs/heads/develop''-Adresse umgestellt
+  * Pre-Release-Metadaten auf ein neues ZIP-Paket aktualisiert, damit LoxBerry die aktuelle Version eindeutig erkennt
+
+Version 0.5.1-beta:
+
+  * Einrichtungs-Wizard in Kurzanleitung umbenannt
+  * Kurzanleitung produktiver formuliert und um Restore-Konzept ergänzt
+  * sichtbare Texte im betroffenen UI-Bereich auf echte Umlaute vereinheitlicht
+
+Version 0.5.0-beta:
+
+  * Export vorhandener Backups läuft nun als Hintergrundjob mit Live-Status
+  * grosse ''.tar.gz''-Archive lösen dadurch keinen Browser- oder Webserver-Timeout mehr aus
+  * Export-Archive werden zuerst als temporäre Datei erstellt
+  * Export-Archive werden per ''tar -tzf'' geprüft
+  * Export-Archive werden danach atomar auf den finalen Archivnamen verschoben
+  * Backup-Liste zeigt Exportstatus, Archivgrösse und Archivpfad an
+  * Import externer Backup-Archive läuft nun ebenfalls als Hintergrundjob mit Live-Status
+  * hochgeladene Importdateien werden nach erfolgreichem Import oder bei Fehlern automatisch bereinigt
+  * Datei-Explorer und Restore-Auswahl können direkt wieder geschlossen werden
+  * kompakte Kurzanleitung erklärt die wichtigsten Schritte für Backup-Ziel, Ausschlüsse, Backup-Modus, Stop-Ziele, Erstkontrolle und Restore-Konzept
+
+Version 0.4.3:
+
+  * Mailbenachrichtigungen ergänzt
+  * optionale Empfängeradresse im Plugin
+  * wenn keine Empfängeradresse eingetragen ist, wird die LoxBerry-Standardadresse verwendet
+  * erfolgreiche Backups werden nur per Mail gemeldet
+  * Fehler, Abbruch und Restore bleiben als LoxBerry-Notifications sichtbar
+  * README, Changelog und Update-Dateien auf Version 0.4.3 nachgezogen
+
+Version 0.4.2:
+
+  * Backup-Zielauswahl überarbeitet
+  * erkannte Backup-Ziele gruppiert und einklappbar dargestellt
+  * UI weiter an LoxBerry-Optik angepasst
+  * Update-Dateien für stabilen Release-Kanal aktualisiert
+
+Version 0.4.1:
+
+  * Erweiterte Backup- und Restorefunktionen
+  * Docker- und Dienst-Auswahl verbessert
+  * Datei-Explorer erweitert
+  * Stabilitäts- und UI-Verbesserungen
+  * Verbesserte Backup-Informationen und Logs
+  * Weitere Vorbereitungen für produktive Tests
+
+Version 0.4.0:
+
+  * Docker-Container und systemd-Dienste integriert
+  * Erweiterte Inventarisierung
+  * Verbesserte Backup- und Restoreabläufe
+
+Version 0.3.0:
+
+  * Erste öffentliche Vorabversion
+  * Stable-/PreRelease-Kanäle vorbereitet
+  * Pluginstruktur überarbeitet
+
+Version 0.2.0-beta:
+
+  * Erste Beta-Version
+  * Grundlegende Backup- und Restorefunktionen
+
+GitHub Repository: [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup]]
+
+Releases: [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases]]
+
 ++++
 
-===== Voraussetzungen =====
+===== Funktion des Plugins =====
 
-  * Linux-basiertes LoxBerry, laut Plugin-Metadaten mindestens LoxBerry 2.0.0
-  * Bash, Perl mit JSON::PP und CGI, Python 3, rsync, tar, cron und sudo
-  * Ein geeignetes separates Backup-Ziel mit genügend freiem Speicher
-  * Root-Freigabe für die erforderlichen Systemaktionen
-  * Docker ist optional
+LoxBerry Host Backup ist ein hostnahes Backup- und Restore-Plugin für LoxBerry-Systeme.
 
-===== Einrichtung und Verwendung =====
+Das Plugin dient dazu, nicht nur LoxBerry selbst, sondern auch zusätzliche Programme, Dienste und Daten zu sichern, die parallel auf demselben System laufen. Dazu gehören zum Beispiel Docker-Container, Docker-Daten, systemd-Dienste, native Programme, Skripte, Benutzer- und Anwendungsdaten.
 
-  - Erst nach Freigabe das Release-ZIP verwenden; vorher nur bewusst ein geprüftes CI-Testpaket manuell installieren.
-  - Vor einem Update laufende Vorgänge beenden lassen und Einstellungen exportieren. Nicht vorher deinstallieren.
-  - Separates Backup-Ziel und passendes Metadaten-Profil wählen.
-  - Ausschlüsse prüfen: insbesondere weitere Backup-Ordner oder ganze Backup-Datenträger ausschliessen. Gemountete Anwendungsdaten können dagegen bewusst mitgesichert werden.
-  - Backup-Modus, Aufbewahrung sowie zu stoppende Dienste und Container festlegen.
-  - **Alle Änderungen ausdrücklich speichern – erst danach Backup oder Vorschau starten.** Das gilt auch für Optionsfelder, Dienste und Container. Der Zeitplan verwendet ausschliesslich gespeicherte Werte.
-  - Erstes Testbackup, Live-Log und Prüfergebnis kontrollieren. Einen Restore-Test in einer separaten Test-/Rescue-Umgebung vorsehen.
+Das Plugin erstellt ein dateibasiertes Host-Backup auf Basis von ''rsync''. Je nach Backup-Ziel kann zwischen vier Metadaten-Profilen gewählt werden. Für Ziele ohne geeignete Linux-Metadatenfunktionen steht zusätzlich ein portabler Archivmodus zur Verfügung. Das Plugin ist bewusst kein sektorbasiertes Komplettimage wie z. B. ''dd'', Clonezilla oder ein Raw-Disk-Image.
+
+Typische Sicherungsbereiche sind unter anderem:
+
+  * LoxBerry-Konfigurationen und Plugin-Daten
+  * Docker-Container, Docker-Volumes und Bind-Mounts
+  * systemd-Dienste
+  * Cronjobs
+  * Skripte und native Programme
+  * Benutzer- und Programmdaten
+  * Daten unter ''/etc'', ''/opt'', ''/home'' und ''/var/lib''
+  * Vollbackups
+  * inkrementelle Snapshot-Backups
+  * Restorefunktionen
+  * zeitgesteuerte Backups
+  * Backup-Explorer
+  * Import- und Exportfunktionen
+
+===== Version 1.0.0 und Prüfstand =====
+
+Diese Beschreibung bezieht sich auf **Version 1.0.0**, die erste Hauptversion ohne Beta-Zusatz. Sie übernimmt den vollständigen zuletzt geprüften Entwicklungsstand einschliesslich der Korrekturen aus 0.7.1-beta. Die Vergabe von 1.0.0 führt selbst zu keiner Änderung der Backup- oder Restorelogik.
+
+Enthalten sind vier Metadaten-Profile, abgesicherte Backup-/Restore-/Import-/Exportabläufe, eine neustartfeste Ablage der Laufzeitdaten, Installationskorrekturen, eine kompakte Übersicht und erweiterte Aufbewahrungs-, Prüf- und Diagnosefunktionen.
+
+Der vorbereitete 1.0.0-Stand ''c981111'' wurde unter Linux mit **205 Tests ohne übersprungene Tests**, **15 Browser-Prüfblöcken** sowie Syntax-, Rechte- und Paketprüfungen erfolgreich geprüft. Nachweis: [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/35440782063|Linux- und Browser-Prüfung des 1.0.0-Hauptstands]].
+
+**Ein vollständiger Ende-zu-Ende-Restore mit anschliessendem Systemstart und die breite NAS-/Hardwarematrix sind damit nicht nachgewiesen.** Backup- und insbesondere Restorevorgänge zuerst auf einem separaten Testsystem oder in einer Rescue-Umgebung prüfen. Die Versionsnummer ersetzt diesen Nachweis nicht.
+
+Für kritische Systeme weiterhin ein zweites unabhängiges Backup vorhalten. Die unter ''Bekannte Grenzen'' beschriebenen Einschränkungen gelten auch für Version 1.0.0.
+
+===== Plattform-Kompatibilität =====
+
+Ziel ist eine möglichst breite Nutzung auf Linux-basierten LoxBerry-/DietPi-/Debian-Systemen.
+
+Geeignete Plattformen können zum Beispiel sein:
+
+  * Raspberry Pi
+  * ODROID
+  * virtuelle Maschinen
+  * x86-/x64-Systeme
+  * andere Linux-/Debian-basierte Systeme
+
+Voraussetzungen:
+
+  * Linux mit Bash
+  * Perl mit ''JSON::PP''
+  * Perl-CGI-Unterstützung für die Weboberfläche
+  * ''rsync''
+  * Python 3 für die sichere Prüfung importierter Archive
+  * ''tar'', ''find'', ''awk'', ''sed'', ''tail'', ''base64'', ''stat''
+  * ''cron'' für automatische Backups
+  * ''sudo'' für privilegierte Aktionen aus der Weboberfläche
+
+Docker ist optional. Wenn Docker vorhanden ist, kann das Plugin Container erkennen, inventarisieren und optional vor dem Backup stoppen sowie danach wieder starten.
+
+Die Plugin-Metadaten nennen mindestens LoxBerry 2.0.0. Daraus ergibt sich keine nachgewiesene Kompatibilität mit allen älteren LoxBerry-, Debian- oder Python-Versionen. Die eigene Kombination aus LoxBerry-Version, Hardware und Backup-Ziel muss getestet werden; eine vollständige Plattformmatrix liegt noch nicht vor.
+
+===== Was wird gesichert? =====
+
+Standardquelle des Backups ist ''/''.
+
+Standardmässig ausgeschlossen werden typische virtuelle oder temporäre Systembereiche, zum Beispiel:
+
+  * ''/proc''
+  * ''/sys''
+  * ''/dev''
+  * ''/run''
+  * ''/tmp''
+  * ''/lost+found''
+  * ''/var/cache''
+  * das konfigurierte Backup-Ziel selbst
+
+Enthalten sind unter anderem:
+
+  * ''/etc''
+  * ''/opt''
+  * ''/home''
+  * ''/var/lib''
+  * LoxBerry-Konfigurationen
+  * Plugin-Daten
+  * systemd-Units
+  * Cronjobs
+  * Docker-Daten, sofern sie im gesicherten Dateisystem liegen
+  * weitere eingehängte Datenpfade, sofern sie nicht ausgeschlossen werden
+  * native Anwendungsdaten
+
+Das Backup-Ziel selbst wird automatisch ausgeschlossen, damit sich das Backup nicht selbst wieder mitsichert. Das bedeutet aber nicht, dass sämtliche anderen Backup-Ordner auf demselben Datenträger automatisch ausgeschlossen sind.
+
+**Weitere Backup-, Image- und Archivordner ausdrücklich ausschliessen.** Liegen zum Beispiel unter ''/media/usb/PI_Backup'' ausschliesslich Sicherungen, sollte der gesamte Pfad als zusätzlicher Ausschluss eingetragen werden. Ein separater Datenpfad wie ''/media/usb/USB_Loxberry'' bleibt dagegen eingeschlossen, wenn seine Anwendungsdaten mitgesichert werden sollen. Nicht pauschal alle USB- oder Netzwerk-Mounts ausschliessen.
+
+Die Vorschau ''Nächstes Backup prüfen'' zeigt die gespeicherten Regeln, erkannten Volumes und eine verwendbare Snapshot-Referenz.
+
+===== Backup-Ziel und Dateisystem =====
+
+Für produktive Sicherungen muss ein separates Backup-Ziel mit ausreichend freiem Speicher ausgewählt und gespeichert werden. Ohne gespeicherten Pfad zeigt die Oberfläche einen neutralen Einrichtungshinweis; eine Dateisystemprüfung ist dann noch nicht möglich.
+
+Beim Speichern wird das Ziel mit einer zufälligen Markerdatei sowie Mountpoint, Quelle, Dateisystem und Gerätekennung registriert. Vor Backup, Restore, Import, Export und Löschen werden diese Angaben erneut geprüft. Dadurch wird beispielsweise verhindert, dass ein nicht eingehängtes NAS unbemerkt durch ein gleichnamiges lokales Verzeichnis ersetzt wird.
+
+Für lokale Backups und inkrementelle Snapshots werden Linux-Dateisysteme wie ''ext4'', ''xfs'' oder ''btrfs'' empfohlen. Für CIFS-, NFS- und viele NAS-Ziele ist in der Regel das Metadaten-Profil ''Network Compatible'' vorgesehen.
+
+===== Backup-Modi =====
+
+Das Plugin unterstützt zwei Backup-Arten:
+
+  * Vollbackup
+  * inkrementeller Snapshot
+
+Beim Vollbackup enthält jeder Backup-Ordner eine vollständige Kopie der gesicherten Daten.
+
+Beim inkrementellen Snapshot verwendet das Plugin ''rsync --link-dest''. Unveränderte Dateien werden per Hardlink auf einen vorherigen, erfolgreich validierten Snapshot mit demselben Metadaten-Profil referenziert. Dadurch sieht jeder Snapshot weiterhin wie ein vollständiges Backup aus, benötigt aber deutlich weniger zusätzlichen Speicherplatz.
+
+Existiert noch keine passende Referenz, wird automatisch eine vollständige Basiskopie erstellt. Backups aus Version 0.5.8 und älter enthalten noch keine Metadaten-Profilinformation und werden deshalb nicht als ''--link-dest''-Referenz verwendet. Nach dem ersten erfolgreichen neuen Snapshot können nachfolgende Läufe wieder inkrementell arbeiten.
+
+Im Live-Log zeigt ''Snapshot reference: .../rootfs'' die verwendete Referenz. ''No complete previous backup found. Creating first snapshot as full copy.'' kennzeichnet eine neue vollständige Basiskopie.
+
+Für inkrementelle Snapshots wird ein Linux-Dateisystem wie ''ext4'', ''xfs'' oder ''btrfs'' empfohlen. Das Ziel muss Hardlinks zuverlässig unterstützen. Auf NTFS-/FUSE-Zielen können Hardlinks, Besitzer, Rechte oder Linux-Metadaten eingeschränkt sein.
+
+===== Wichtig beim Update und bei inkrementellen Backups =====
+
+**Update von Version 0.5.8 oder älter: Der erste inkrementelle Lauf erstellt erneut eine vollständige Basiskopie. Erst danach können weitere erfolgreiche Läufe mit passendem Profil wieder inkrementell arbeiten.**
+
+Den alten Backups fehlen Metadaten-Profilinformationen. Sie werden deshalb nicht als Hardlink-Referenz verwendet. Für die neue Basiskopie genügend zusätzlichen Speicherplatz und Laufzeit einplanen. Ein Wechsel des Metadaten-Profils oder eine fehlende beziehungsweise ungeeignete Referenz kann ebenfalls eine neue Basiskopie erforderlich machen.
+
+**Update von 0.6.x oder 0.7.x auf 1.0.0:** Die Versionsnummer allein erzwingt keine neue Basiskopie. Eine vorhandene, erfolgreich validierte Referenz mit demselben Profil kann weiterhin verwendet werden.
+
+Die Vorprüfung schätzt den Platzbedarf einer neuen Basiskopie anhand geeigneter vorhandener Backupdaten mit Reserve ab. Ein erkennbarer Platzmangel blockiert vor dem Stoppen ausgewählter Dienste. Diese Schätzung garantiert nicht, dass während des Kopierens kein Platzmangel entstehen kann. Freie Inodes und nachträgliche Datenänderungen spielen ebenfalls eine Rolle.
+
+Das letzte brauchbare Backup wird nicht vorab zur Platzbeschaffung gelöscht. Fehlgeschlagene oder unvollständige Sicherungen können weiterhin Platz belegen und müssen bewusst geprüft werden.
 
 ===== Metadaten-Profile =====
 
-  * **Native Strict – Standard:** Für geeignete lokale Linux-Dateisysteme wie ext4, xfs oder btrfs. Sichert Linux-Metadaten einschliesslich ACLs, xattrs, File Capabilities und Hardlinks; fehlende erforderliche Funktionen führen zum Fehler.
-  * **Network Compatible:** Für geeignete CIFS-/NFS-/NAS-Ziele. xattrs und File Capabilities werden bewusst ausgelassen; Besitzer, Rechte, ACLs und Hardlinks benötigen weiterhin passende Zielunterstützung. Ein erfolgreicher Lauf erhält den normalen Erfolgsstatus.
-  * **Fake Super:** Für Ziele mit zuverlässigen user-xattrs, aber ohne vollständige native Unix-Metadaten. Privilegierte Informationen werden von rsync in speziellen user.rsync-Attributen gespeichert. Nur nach erfolgreicher Zielprüfung verwenden.
-  * **Portable Archive:** Speichert Metadaten in einem Archivcontainer. Keine inkrementellen Snapshots; Restore nur in einer Offline-/Rescue-Umgebung.
+**Standardeinstellung: Native Strict.** Das Profil muss bewusst zum Backup-Ziel passen. Jedes Profil besitzt in der Weboberfläche einen eigenen Info-Button.
 
-===== Wichtig für inkrementelle Backups =====
+  * **Native Strict:** Für geeignete lokale Linux-Dateisysteme wie ''ext4'', ''xfs'' oder ''btrfs''. Sichert Dateien, Besitzer, Gruppen, Rechte, ACLs, xattrs, File Capabilities und Hardlinks. Fehlende erforderliche Metadatenfunktionen führen zum Fehler.
+  * **Network Compatible:** Für geeignete CIFS-/NFS-/NAS-Ziele, die bestimmte Linux-xattrs nicht vollständig unterstützen. Sichert Dateien, Besitzer, Rechte, ACLs und Hardlinks, lässt xattrs und File Capabilities bewusst aus. Auch diese verbleibenden Funktionen müssen vom Ziel unterstützt werden.
+  * **Fake Super:** Für Ziele mit zuverlässigen ''user.*''-xattrs, aber ohne vollständige native Unix-Metadaten. Privilegierte Angaben werden von rsync in ''user.rsync.*'' gespeichert. Nur nach erfolgreicher Zielprüfung verwenden.
+  * **Portable Archive:** Speichert die Metadaten in einem ''rootfs.tar''-Container. Keine inkrementellen Snapshots; Wiederherstellung nur mit dem Offline-Helper in einer Offline-/Rescue-Umgebung.
 
-**Beim Umstieg von Version 0.5.8 oder älter wird zuerst wieder eine vollständige Basiskopie erstellt.** Den alten Backups fehlen Metadaten-Profilinformationen, weshalb sie nicht als Hardlink-Referenz verwendet werden. Dafür genügend Platz und Zeit einplanen. Erst nach einer erfolgreichen neuen Basiskopie können Folgeläufe wieder inkrementell arbeiten.
+**Network Compatible erzeugt wegen des bewussten Verzichts auf xattrs nur einen neutralen Hinweis.** Ein ansonsten erfolgreicher Lauf erhält den normalen Erfolgsstatus. Weder manuelle noch zeitgesteuerte Backups verlangen allein deshalb eine zusätzliche Bestätigung.
 
-Beim Wechsel von 0.6.x oder 0.7.x auf 1.0.0 erzwingt die Versionsnummer allein keine neue Basiskopie. Entscheidend sind eine passende, validierte Referenz und dasselbe Profil. Ein Profilwechsel kann eine neue Basiskopie nötig machen.
+File Capabilities können für einzelne Programme wichtig sein und werden nicht pauschal als entbehrlich behandelt. Nach einem Restore sind benötigte Funktionen zu kontrollieren. Andere Übertragungsfehler bleiben Fehler; rsync-Code 23 wird nicht generell als Erfolg gewertet.
 
-===== Grenzen und offene Punkte =====
+Vor jedem Backup prüft das Plugin die benötigten Metadatenfunktionen einschliesslich Rückkopie auf dem registrierten Ziel. Das Profil wird nicht stillschweigend herabgestuft. Vor einem Restore eines ''Network Compatible''-Backups muss der reduzierte Metadatenumfang separat bestätigt werden.
 
-  * Vollständiger Offline-Restore mit Systemstart und die NAS-/Hardwarematrix sind noch separat nachzuweisen; kein garantiert bootfähiges Disk-Image.
-  * Datenbankkonsistenz hängt von Diensten, Stop-Auswahl und gegebenenfalls zusätzlichen anwendungseigenen Backups ab.
-  * Speicherberechnung liefert noch keinen Zwischenfortschritt. Ein Browserabbruch beendet den Backendlauf nicht zwingend.
-  * Laufzeitdateien-Prüfung kann bei belegter Sperre noch eine generische HTTP-500-Meldung zeigen. Prüfungen nacheinander ausführen.
-  * Die zurückgestellte Überarbeitung der Mail-/Benachrichtigungssemantik (AP-14) ist nicht enthalten.
+===== Preflight und automatische Backups =====
 
-===== Download und Freigabe =====
+Die Vorprüfung kontrolliert unter anderem Kopierwerkzeug, Zielidentität, Schreibbarkeit, Speicherplatz, freie Inodes, Metadatenfunktionen, Ausschlüsse sowie laufende Dienste und Container.
 
-Version 1.0.0 ist noch nicht öffentlich freigegeben. Der Stable-Kanal bleibt auf 0.5.8, der vorhandene Vorabkanal unverändert. Noch keinen 1.0.0-Downloadlink als verfügbar eintragen.
+  * Echte Fehler blockieren den Start und können nicht bestätigt und übergangen werden.
+  * Bei einem manuellen Start erscheint die Bestätigung nur, wenn tatsächlich eine übergehbare Warnung vorliegt.
+  * Der neutrale Hinweis von ''Network Compatible'' verlangt keine Bestätigung.
+  * Zeitgesteuerte Backups akzeptieren übergehbare Warnungen ohne interaktiven Dialog; echte Fehler blockieren auch hier und bleiben im Protokoll sichtbar.
 
-  * [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup|Repository]]
-  * [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup/blob/main/README.md|Anleitung]]
-  * [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup/blob/main/docs/RELEASE-1.0.0.md|Vorbereitung und Freigabeschritte für 1.0.0]]
+Automatische Backups können täglich, wöchentlich oder monatlich laufen. Alle Zeitplanarten verwenden denselben Vorprüfungsweg. Bei monatlichen Sicherungen am 29., 30. oder 31. berücksichtigt das Plugin kürzere Monate durch den Monatsende-Fallback.
 
-Nach separater Freigabe den geprüften Release-Link und den tatsächlichen Veröffentlichungsstatus ergänzen; diesen Entwurf nicht unverändert als bereits veröffentlichten Release-Eintrag einstellen.
+**Zeitgesteuerte Backups verwenden ausschliesslich gespeicherte Einstellungen.** Nach Änderungen an Uhrzeit, Wochentagen, Monaten, Ziel, Profil oder Diensten immer ''Änderungen speichern'' ausführen.
+
+Der automatische Wiederanlauf zuvor gestoppter Dienste ist ein eigener Vorgang: Er wird beim Boot und alle fünf Minuten versucht. Ist gerade eine Backup-/Restoreoperation aktiv und hält die globale Sperre, setzt nur dieser automatische Versuch ohne Ausgabe aus und versucht es später erneut. Dadurch entsteht keine Cron-Mail allein wegen der belegten Sperre. Echte Fehler und manuelle Sperrkonflikte werden weiterhin gemeldet.
+
+===== Import und Export =====
+
+Das Plugin kann vorhandene Backups als ''.tar.gz''-Archiv exportieren und externe ''.tar.gz''-Backup-Archive wieder importieren.
+
+Exportarchive werden im konfigurierten Backup-Verzeichnis abgelegt, typischerweise als:
+
+  * ''BACKUP-ID.tar.gz''
+
+Der Export grosser Backups kann je nach Datenträger, Dateisystem und Backup-Grösse längere Zeit dauern. Export- und Importvorgänge laufen als Hintergrundjobs mit Live-Status, damit der Browser während langer Archivoperationen nicht in einen Timeout läuft.
+
+Exportarchive werden zuerst als temporäre Datei erstellt, geprüft und danach atomar auf den finalen Archivnamen verschoben. Sie enthalten zusätzliche Metadaten, einen Descriptor und eine SHA-256-Prüfsumme mit Bezug zum finalen Backup-Manifest.
+
+Importarchive werden zunächst in einem geschützten Staging-Verzeichnis auf unsichere Pfade, symbolische und harte Links, Duplikate, widersprüchliche Kontrollinformationen und übermässige Grösse geprüft. Erst ein vollständig validierter Import wird in das Backup-Verzeichnis übernommen.
+
+Die Backup-Liste zeigt den Exportstatus an, zum Beispiel:
+
+  * noch kein Export vorhanden
+  * Export läuft
+  * Export vorhanden
+  * Export fehlgeschlagen
+
+Wenn ein Exportarchiv vorhanden ist, kann es über die Weboberfläche heruntergeladen werden. Zusätzlich wird der Exportstatus intern geprüft, damit die Oberfläche auch dann korrekt reagieren kann, wenn ein Exportarchiv vorhanden ist, aber ein zugehöriges Live-Log nicht mehr gefunden wird.
+
+Hinweis: Ein Exportarchiv eines inkrementellen Snapshots kann deutlich grösser sein als der tatsächlich zusätzlich belegte Speicherplatz des Snapshot-Ordners, weil das Archiv einen transportierbaren vollständigen Stand enthält.
+
+===== Funktionen =====
+
+Das Plugin bietet unter anderem folgende Funktionen:
+
+  * Mailbenachrichtigung für erfolgreiche Backups, Fehler, Abbruch und Restore
+  * vollständiges Host-Backup per ''rsync''
+  * inkrementelle Snapshot-Backups per ''rsync --link-dest''
+  * vier wählbare Metadaten-Profile für lokale Linux-, CIFS-/NFS-, NAS- und portable Ziele
+  * Metadaten-Funktionstest vor jedem Backup
+  * Restore eines ausgewählten Backups
+  * Restore-Check und Restore-Plan vor dem Start
+  * Live-Status für laufende Backup-, Restore-, Import- und Export-Jobs
+  * Stop-Button für laufende Backups
+  * Backup-Liste mit Status, Grösse, Dateianzahl, Abschlusszeit und Exportstatus
+  * Backup-Explorer in der Weboberfläche
+  * eindeutige Registrierung und Prüfung des Backup-Ziels
+  * Import externer ''.tar.gz''-Backup-Archive
+  * Export vorhandener Backups als ''.tar.gz''
+  * Download vorhandener Exportarchive
+  * Löschen vorhandener Backups
+  * Löschen einzelner Exportarchive ohne Löschen des Backups
+  * Export und Import der Plugin-Einstellungen als JSON-Datei
+  * Erhaltung vorhandener Einstellungen bei Plugin-Aktualisierungen
+  * Docker- und Dienst-Inventarisierung
+  * auswählbares Stoppen und Starten einzelner Docker-Container und systemd-Dienste
+  * zeitgesteuerte Backups per Cron
+  * tägliche, wöchentliche und monatliche Zeitpläne
+  * Monatsende-Fallback bei monatlichen Backups am 29., 30. oder 31.
+  * Anzahlaufbewahrung für 1 bis 3650 Backups oder kombinierte tägliche, wöchentliche und monatliche Aufbewahrung
+  * Schutz einzelner Sicherungen und bestätigte Bereinigung mit Vorschau
+  * kompakte Übersicht, Aufgabenhistorie und vollständiger Logdownload
+  * Einzeldatei-/Ordner-Restore und Recovery-Blatt je Backup
+  * optionale Inhaltsprüfungen mit Prüfbericht und dokumentierbare eigene Restoretests
+  * Wartungsfunktionen und Diagnosepaket
+  * Pre-/Post-Backup-Hooks
+  * Manifest pro Backup mit Host-, LoxBerry- und Inventardaten
+  * Validierung und Integritätsprüfung abgeschlossener Backups
+  * nicht blockierender Speicherhinweis für alle geänderten Plugineinstellungen
+  * robustere Behandlung langer Import- und Exportvorgänge
+  * robuste Rückmeldung des Exportstatus auch bei fehlendem Export-Log
+
+Laufende, fehlgeschlagene oder nicht validierte Backups können nicht geöffnet, exportiert oder für Restore ausgewählt werden. Diese Aktionen werden erst nach erfolgreicher Finalisierung und Validierung freigegeben.
+
+===== Mailbenachrichtigung =====
+
+LoxBerry Host Backup kann bei Backup-, Fehler-, Abbruch- und Restore-Ereignissen eine Mailbenachrichtigung senden.
+
+Die SMTP-Zugangsdaten werden nicht im Plugin gespeichert. Das Plugin verwendet die globale Mail- und Benachrichtigungskonfiguration von LoxBerry.
+
+Wenn im Plugin keine eigene Mailadresse eingetragen ist, verwendet LoxBerry Host Backup die in LoxBerry hinterlegte Standardadresse.
+
+Folgende Ereignisse können einzeln aktiviert oder deaktiviert werden:
+
+  * Backup erfolgreich
+  * Fehler
+  * Abbruch
+  * Restore
+
+Erfolgreiche Backups werden nur per Mail gemeldet und erzeugen keinen zusätzlichen Eintrag in der LoxBerry-Notification-Übersicht.
+
+Fehler, Abbruch und Restore-Ereignisse bleiben bewusst als LoxBerry-Notifications sichtbar, damit kritische Ereignisse auch im LoxBerry-System nachvollziehbar sind.
+
+Die bisher zurückgestellte grundsätzliche Überarbeitung der Mail-/Benachrichtigungssemantik ist nicht Bestandteil von 1.0.0. Der tatsächliche Versand hängt von der funktionierenden LoxBerry-Mailkonfiguration ab und sollte separat geprüft werden. Die Korrektur der Cron-Mails bei belegter Wiederanlaufsperre ändert diese Backup-Mailoptionen nicht.
+
+===== Docker und systemd-Dienste =====
+
+Das Plugin kann vorhandene Docker-Container und geeignete systemd-Dienste erkennen.
+
+In den Einstellungen kann ausgewählt werden, welche Container oder Dienste vor dem Backup gestoppt und danach wieder gestartet werden sollen.
+
+Das kann die Konsistenz von Container-, Datenbank- und Dienst-Daten verbessern, kann diese Dienste während des Backups aber vorübergehend unterbrechen.
+
+Das Plugin führt vor dem Stoppen lokale Wiederanlaufjournale. Damit kann es zuvor laufende, für diesen Backupvorgang gestoppte Dienste und Container wieder starten, auch wenn das Backup-Medium später nicht mehr erreichbar ist. Bereits vorher ausgeschaltete Dienste sollen ausgeschaltet bleiben.
+
+Die Journale liegen im root-geschützten lokalen Pluginstatus und überstehen einen Neustart. Offene Wiederanläufe bleiben in der Übersicht sichtbar. Sie werden weder durch eine belegte Vorgangssperre noch bei der allgemeinen Logbereinigung verworfen.
+
+Für Datenbanken oder Anwendungen mit eigenen Backup-Mechanismen können zusätzlich Pre-/Post-Backup-Hooks sinnvoll sein.
+
+Die Auswahl der zu stoppenden Dienste und Container ist gruppiert und einklappbar. Empfohlene Stop-Ziele können automatisch gesetzt werden.
+
+Kritische LoxBerry-, Web-, SSH-, Netzwerk-, Docker- und Backup-Dienste werden nicht als Stop-Ziel angeboten. LoxBerry-Plugins ohne eigenen Dienst werden nicht hart beendet; für solche Anwendungen sind Pre-/Post-Backup-Hooks vorgesehen.
+
+===== Restore und Migration =====
+
+**Ein vollständiger Restore kann vorhandene Dateien im freigegebenen Zielbereich überschreiben und beim rsync-Restore löschen.** Einen Online-Restore auf dem laufenden Produktivsystem vermeiden; zuerst ein separates Testsystem oder eine Offline-/Rescue-Umgebung verwenden.
+
+Nur finalisierte und erfolgreich validierte Backups sind restorefähig. Die zum Backup gespeicherten Ausschlüsse werden übernommen. Fehlende oder unsichere Ausschlussinformationen blockieren den Vorgang.
+
+Vorgehen:
+
+  - In der Backup-Liste beim gewünschten Backup ''Restore'' auswählen.
+  - Ziel und gegebenenfalls Volume-Zuordnungen ausdrücklich angeben.
+  - Restore-Check und tatsächliche Datei-/Löschvorschau vollständig prüfen.
+  - Die vollständige Backup-ID als Sicherheitsbestätigung eingeben.
+  - Restore per Checkbox bestätigen.
+  - Bei ''Network Compatible'' den reduzierten Metadatenumfang separat akzeptieren.
+  - Erst danach starten und Ergebnis sowie Protokoll kontrollieren.
+
+Separate Quell-Volumes werden nicht stillschweigend auf das Root-Dateisystem zurückkopiert. Sie benötigen eine ausdrückliche Zuordnung zu sicheren Zielverzeichnissen. Die Vorschau benennt ausgelassene Volumes.
+
+''Portable Archive'' ist in der Weboberfläche nicht als Online-Restore startbar. Dafür ist der Offline-Helper mit einem Ziel ungleich ''/'' vorgesehen. Er berücksichtigt die gespeicherten Ausschlüsse und löscht keine zusätzlich am Ziel vorhandenen Dateien.
+
+**Einzelne Dateien und Ordner** können alternativ in einen neu angelegten ''recovered-…''-Unterordner zurückgeholt werden. Vorhandene Dateien am gewählten Ablageort werden damit nicht überschrieben; Dienste werden für diesen Weg nicht gestoppt. Bei einem Fehler kann ein unvollständiger Wiederherstellungsordner zur Prüfung zurückbleiben.
+
+Das je Backup herunterladbare Recovery-Blatt beschreibt die passenden Offline-Schritte. Bootpartition, Bootloader, Partitionierung und der anschliessende Systemstart müssen getrennt vorbereitet und geprüft werden.
+
+Beste Voraussetzungen bestehen bei gleicher CPU-Architektur, vergleichbarer Hardware, ähnlicher Linux-Version und passender Docker-Umgebung. Ein Wechsel zwischen ARM und x86 oder zwischen deutlich unterschiedlichen Plattformen ist kein zugesicherter automatischer Migrationsweg. Kernelmodule, UUIDs, Mountpoints, Netzwerkinterfaces und Docker-Images können Nacharbeit erfordern.
+
+**Ein erfolgreich abgeschlossener Kopier- oder Validierungslauf ist kein Nachweis, dass das wiederhergestellte System startet.**
+
+===== Installation =====
+
+Release-Paket für Version 1.0.0:
+
+[[https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip|LoxBerryHostBackup_1.0.0.zip herunterladen]]
+
+Release Notes und Downloadstatus: [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.0.0|GitHub-Release v1.0.0]].
+
+  - Vor einem Update laufende Backup-, Restore-, Import- und Exportvorgänge beenden lassen.
+  - Die bisherigen Plugin-Einstellungen als JSON-Datei exportieren.
+  - Das geprüfte Release-ZIP in LoxBerry unter ''Plugins > Plugin installieren'' hochladen. Bei einem Update **nicht vorher deinstallieren**.
+  - Nach der Installation die Oberfläche öffnen und gespeicherte Einstellungen kontrollieren.
+  - Backup-Ziel, Metadaten-Profil, Ausschlüsse, Aufbewahrung, Dienste und Zeitplan prüfen.
+  - Root-Freigabe bewusst bestätigen, falls erforderlich.
+  - **Alle Änderungen speichern. Erst danach Backup oder Vorschau starten.**
+  - Zuerst ein manuelles Testbackup durchführen und das Ergebnis kontrollieren.
+
+Bereits hängende Altinstallationen zuerst klären. Keinen zweiten Installationsversuch parallel starten. Ein neues Paket beendet alte, fehlerhaft laufende Prozesse nicht automatisch.
+
+Vorhandene Einstellungen werden bei einem normalen Update erhalten. Kann die Konfiguration technisch nicht geladen werden, werden Speichern und Backup-Start gesperrt, damit angezeigte Ersatzwerte nicht versehentlich den gespeicherten Stand überschreiben.
+
+==== Automatische Plugin-Updates ====
+
+Die Updateerkennung wird über die in ''plugin.cfg'' hinterlegten ''release.cfg''- und ''prerelease.cfg''-Adressen gesteuert, nicht allein durch die Versionsangabe auf dieser Wiki-Seite. Eine neue Version wird erst angeboten, wenn die jeweilige Kanaldatei auf das vorhandene Release-ZIP verweist und die Versionsnummer höher als die installierte Version ist.
+
+Die interne Plugin-Version lautet ''1.0.0''. Die Einstellung für Vorabversionen ist für ein reguläres Release nicht erforderlich. Eine manuell bereits installierte 1.0.0 erhält allein durch die spätere Freigabe derselben Versionsnummer keine zusätzliche Update-Meldung.
+
+===== Empfohlene erste Tests =====
+
+Nach Installation oder Update:
+
+  - Gespeichertes Ziel, Ausschlüsse, Profil und Zeitplan kontrollieren.
+  - Weitere Backup- und Imageordner ausschliessen, gewünschte Anwendungsdaten aber eingeschlossen lassen.
+  - Root-Freigabe sowie ausgewählte Dienste und Container prüfen und **Einstellungen speichern**.
+  - Über ''Nächstes Backup prüfen'' die gespeicherte Sicherungsvorschau kontrollieren.
+  - Ein manuelles Backup durchführen, Live-Log und abschliessenden Status prüfen.
+  - Nach Abschluss kontrollieren, ob gestoppte Dienste und Container wieder laufen.
+  - Dateien über den Explorer prüfen und bei Bedarf ein Exportarchiv erstellen.
+  - Einen zweiten passenden Snapshot durchführen und im Log kontrollieren, ob eine Referenz genutzt wurde.
+  - In einer geeigneten Testphase einen LoxBerry-Neustart und einen geplanten Backup-Lauf prüfen.
+  - Einzeldatei-/Ordner-Restore und anschliessend einen vollständigen Restore auf einem separaten Testsystem prüfen.
+  - Erst einen tatsächlich durchgeführten Restoretest mit Datum und Ergebnis dokumentieren.
+
+Ein Exportarchiv kann zusätzlich mit ''tar -tzf /pfad/zum/backup/BACKUP-ID.tar.gz >/dev/null'' auf grundsätzliche Lesbarkeit geprüft werden. Das ist weder eine vollständige Inhaltsprüfung noch der Nachweis eines bootfähigen Restores.
+
+===== Konfigurationsoptionen =====
+
+**Wichtig: Jede Änderung ausdrücklich speichern.** Das gilt auch für Metadaten-Profil, Backup-Modus, Checkboxen, Dienste, Container, Ausschlüsse und Zeitplan. Manuelle Sicherungsvorschau und automatische Backups verwenden den gespeicherten Stand. Ein offenes Formular ist noch keine gespeicherte Konfiguration.
+
+Wichtige Standardeinstellungen bei einer Neuinstallation:
+
+  * Backup-Ziel: noch nicht eingerichtet
+  * Metadaten-Profil: ''Native Strict''
+  * Backup-Modus: ''Vollbackup''
+  * Anzahlaufbewahrung: 10 Backups
+  * Automatischer Backup-Zeitplan: ausgeschaltet; vorbelegte Uhrzeit ''02:00''
+  * Automatisches Stoppen ausgewählter Dienste/Container: ausgeschaltet
+  * Automatischer Export nach dem Backup: ausgeschaltet
+  * Mailbenachrichtigung: ausgeschaltet
+  * Optionale Inhaltsprüfung: ausgeschaltet
+  * Root-Freigabe: noch nicht bestätigt
+
+Vorhandene, gespeicherte Werte werden bei einem Update übernommen und nicht durch diese Neuinstallationswerte ersetzt.
+
+Weitere Optionen betreffen tägliche/wöchentliche/monatliche Zeitpläne, Aufbewahrungsregeln, Inhaltsprüfungen, Pre-/Post-Backup-Hooks, Mailereignisse, Import und Export der Einstellungen sowie auswählbare Backup-Ziele.
+
+Bei einer Änderung erscheint ein nicht blockierender Speicherhinweis mit geändertem Bereich, neuem Wert, Uhrzeit und der Aktion ''Änderungen speichern''. Das gilt für Texteingaben, Checkboxen, Optionsfelder und dynamisch geladene Dienste und Container. Beim Zurückstellen auf den gespeicherten Wert verschwindet der entsprechende Eintrag wieder.
+
+Ein Backup-Start mit ungespeicherten Änderungen wird abgefangen; erst speichern oder die Änderungen zurücknehmen. Schlägt das Speichern fehl, bleiben die Eingaben erhalten. Info-Buttons erklären die Optionen und werden innerhalb des sichtbaren Browserbereichs positioniert.
+
+Einstellungen lassen sich als JSON-Datei exportieren und importieren. Eine importierte Root-Freigabe wird aus Sicherheitsgründen nicht übernommen und muss danach erneut bewusst bestätigt werden.
+
+===== Übersicht und Live-Status =====
+
+Die kompakte Übersicht zeigt die wichtigsten Statuswerte. ''Details und Prüfaktionen'' lässt sich bei Bedarf aufklappen; vollständige IDs, Zielpfade und Prüfaktionen liegen dort. Das Auf-/Zuklappen bleibt bei automatischer Aktualisierung erhalten. Fehler und offene Dienst-Wiederanläufe bleiben sichtbar.
+
+  * ''Nächstes Backup prüfen'': Vorschau der gespeicherten Einstellungen, Volumes, Ausschlüsse und einer möglichen Snapshot-Referenz
+  * ''Speicherbelegung berechnen'': Messung von logischer Grösse, belegtem Speicher, gemeinsam genutzten Hardlinks, Exporten und lokalem Pluginstatus
+  * ''Laufzeitdateien prüfen'': Wartungs-/Prüfaktion für lokale Laufzeitdaten
+  * ''Diagnosepaket herunterladen'': Informationen für eine gezielte Fehlersuche
+
+Die Aufgabenhistorie bietet aktuelle und frühere Vorgänge. Der Live-Status zeigt die jeweilige Phase; zur abschliessenden Aufbewahrung gehört ausdrücklich ''Aufbewahrung prüfen und alte Backups bereinigen''. Das Backup ist erst nach Abschluss des gesamten Vorgangs fertig.
+
+**Die Live-Ansicht zeigt einen Log-Ausschnitt, nicht zwingend die ganze Datei.** Lange Einzelzeilen werden nicht künstlich umgebrochen und lassen sich horizontal scrollen. Leseposition und Scrollachsen bleiben bei Aktualisierungen erhalten. Über ''Vollständiges Log herunterladen'' steht das gesamte Originalprotokoll bereit.
+
+Die Speicherberechnung kann bei vielen Dateien oder langsamen NAS-Zielen dauern und liefert derzeit keinen Zwischenfortschritt. Ein Browserabbruch beendet den Backendvorgang nicht zwingend. Prüfungen nicht wiederholt parallel auslösen. Bei belegter Sperre kann die Laufzeitprüfung noch eine generische HTTP-500-Meldung zeigen.
+
+===== Aufbewahrung und Speicherplatz =====
+
+Standard ist die Anzahlaufbewahrung mit 10 Backups. Es können 1 bis 3650 eingestellt werden. Alternativ ist eine kombinierte tägliche, wöchentliche und monatliche Aufbewahrung möglich; die Standardbelegung dafür umfasst 7 tägliche, 4 wöchentliche und 6 monatliche Zeitgruppen.
+
+Pro Zeitgruppe bleibt die jüngste passende Sicherung erhalten. Nach einem erfolgreichen Backup wird die gespeicherte Regel angewendet. Einzelne Sicherungen können geschützt werden; die jüngste brauchbare Sicherung bleibt ebenfalls geschützt. Dadurch kann die tatsächliche Anzahl höher als der eingestellte Wert sein.
+
+Vor einer manuellen Bereinigung zeigt das Plugin die betroffenen Sicherungen und Gründe. Hat sich die Grundlage geändert, muss die Vorschau erneuert werden. **Bestätigtes Löschen ist endgültig.**
+
+Fehlgeschlagene, laufende und unvollständige Sicherungen werden nicht wie reguläre Backups gezählt. Fehlgeschlagene Stände bleiben zur bewussten Sichtung und Löschung erhalten und können weiterhin Speicher belegen.
+
+Bei inkrementellen Snapshots teilen sich unveränderte Dateien dieselben Datenblöcke über Hardlinks. Wird ein älterer Snapshot gelöscht, bleiben gemeinsam genutzte Inhalte erhalten, solange ein anderer Snapshot noch darauf verweist. Die logischen Grössen aller Snapshots dürfen deshalb nicht einfach als tatsächlicher Platzverbrauch addiert werden.
+
+Exportarchive benötigen zusätzlichen Platz. Die Speicherübersicht misst vorhandene Belegung; sie ist keine verlässliche Vorhersage für das nächste Backup. Das letzte gute Backup wird nicht vorab gelöscht, nur um Platz für eine neue Basiskopie zu schaffen.
+
+===== Inhaltsprüfung, Wartung und Diagnose =====
+
+Die optionale Inhaltsprüfung ist standardmässig ausgeschaltet. Bei Aktivierung wird nach einem erfolgreichen neuen Backup eine lokale Prüfbasis aufgezeichnet. Ein späterer Vergleich kann geänderte oder fehlende Dateien erkennen.
+
+Bei bereits vorhandenen Backups bedeutet die erste Erfassung lediglich ''Prüfbasis erstellt'', nicht nachträglich bewiesene Originaltreue. Die automatische Prüfung kontrolliert stündlich, ob nach dem gespeicherten Intervall eine Sicherung fällig ist; Standardintervall sind sieben Tage. Pro Aufruf wird höchstens eine fällige Sicherung geprüft.
+
+**Kopie abgeschlossen, Struktur geprüft, Inhalt mit Prüfbasis verglichen und vollständiger Restore getestet sind unterschiedliche Nachweise.** Ein Prüfbericht kann heruntergeladen werden. Eine Inhaltsprüfung ersetzt keinen tatsächlichen System-Restore.
+
+Über ''Externen Restoretest dokumentieren'' können eigene Tests mit Datum, Ergebnis und Notiz je Backup festgehalten werden. Diese Einträge sind persönliche Angaben, keine vom Plugin überprüfte Boot- oder Funktionsbestätigung. Sie ändern den Backupstatus und die Restore-Freigabe nicht.
+
+Prüfbasen und Schutzmarkierungen liegen im root-geschützten lokalen Pluginstatus. Ein fremder Import liefert keinen automatisch vertrauenswürdigen eigenen Testnachweis. Prüfindizes benötigen zusätzlichen lokalen Speicher, auch wenn das Backup auf einem NAS liegt; ein vollständiger Inhaltsvergleich liest die betreffenden Daten und kann lange dauern.
+
+Alte Logs und quarantänisierte Importe können separat mit Vorschau bereinigt werden. Offene Wiederanlaufjournale werden dabei nicht entfernt. Auch diese Bereinigung ist endgültig.
+
+Das Diagnosepaket enthält Version, ausgewählte Statusinformationen, anonymisierte Konfiguration und Mountinformationen. Ein optional enthaltenes Originalprotokoll kann private Pfade oder Adressen enthalten. **Diagnosepakete und Restoretest-Notizen vor öffentlicher Weitergabe prüfen.**
+
+===== Root-Freigabe =====
+
+Das Plugin benötigt kontrollierte Root-Rechte, weil ein vollständiges Host-Backup und ein Restore Systemdateien, Berechtigungen, Docker-Daten, Cronjobs und Dienste betreffen.
+
+In der Weboberfläche muss diese Freigabe bewusst bestätigt werden. Ohne diese Bestätigung starten Backup- und Restore-Aktionen nicht.
+
+Es werden keine Passwörter gespeichert. Die LoxBerry-sudoers-Regel erlaubt dem LoxBerry-Webbenutzer ausschliesslich den Aufruf eines root-eigenen Dispatchers. Dieser akzeptiert nur eine fest vorgegebene Liste benötigter Aktionen, startet einen geprüften, root-eigenen Helferstand unter ''/usr/libexec/loxberryhostbackup'' und verwirft die aufrufende Umgebung. Das vollständige Backend wird dem Webbenutzer nicht direkt freigegeben.
+
+===== Bekannte Grenzen =====
+
+* Vollständiger Offline-Restore mit anschliessendem Systemstart und eine breite NAS-/Hardwareabnahme sind nicht durch die automatisierten Tests ersetzt.
+  * Für kritische Systeme ein zweites unabhängiges Backup vorhalten.
+  * Kein sektorbasiertes Disk-Image und keine garantierte Übernahme von Partitionierung, Bootloader oder hardwareabhängigen Komponenten.
+  * Kein Ersatz für applikationsspezifische Datenbank-Backups; Konsistenz hängt von Stop-Auswahl, Diensten und Hooks ab.
+  * Plattform- und Architekturwechsel können erhebliche manuelle Nacharbeit erfordern.
+  * Metadaten, Hardlinks und Rechte müssen auf dem tatsächlichen Ziel unterstützt werden; die Bezeichnung NAS, CIFS oder NFS allein genügt nicht.
+  * ''Network Compatible'' enthält bewusst keine xattrs und File Capabilities.
+  * ''Portable Archive'' unterstützt keine inkrementellen Snapshots und erfordert einen Offline-/Rescue-Restore.
+  * Der erste inkrementelle Lauf beim Umstieg von 0.5.8 oder älter benötigt erneut eine vollständige Basiskopie.
+  * Speicherplatzschätzungen können Änderungen während des Backups nicht ausschliessen; auch freie Inodes beachten.
+  * Speicherberechnung liefert noch keinen Zwischenfortschritt; ein Browserabbruch beendet den Backendvorgang nicht zwingend.
+  * Die Laufzeitprüfung kann bei belegter Sperre noch eine generische HTTP-500-Meldung anzeigen.
+  * Exportarchive und lokale Inhaltsprüfbasen benötigen zusätzlichen Speicher.
+  * Die grundsätzliche Überarbeitung der Mail-/Benachrichtigungssemantik bleibt zurückgestellt.
+  * Erfolgreiche Validierung oder eine selbst erfasste Restoretest-Notiz sind keine Garantie eines bootfähigen, vollständig funktionsfähigen Systems.
+
+===== Einrichtung in der Loxone Config Software =====
+
+  * Für dieses Plugin ist keine Einrichtung in der Loxone Config Software erforderlich.
+
+===== Roadmap =====
+
+Weiter zu prüfen beziehungsweise zu verbessern:
+
+  * vollständige Ende-zu-Ende-Restoretests mit Systemstart auf separater Hardware
+  * nachvollziehbare Kompatibilitätsmatrix für LoxBerry-Versionen, NAS-Ziele und Metadaten-Profile
+  * weitere Neustart-, Stromausfall-, Zielverlust- und Wiederanlauftests
+  * Fortschrittsanzeige und Laufzeitverhalten der Speicherberechnung
+  * verständlichere Meldungen bei gesperrten Wartungs- und Prüfaktionen
+  * grosse Backups, Exporte, Importe und lokale Prüfindizes unter knappen Ressourcen
+  * produktive Langzeittests und Rückmeldungen zu Wiederherstellungen
+
+Die weitere Entwicklung und offene Befunde werden im Repository dokumentiert.
+
+===== Fragen stellen und Fehler melden =====
+
+Für Fehlermeldungen Plugin-Version, LoxBerry-Version, Backup-Ziel/Dateisystem, Metadaten-Profil und das relevante vollständige Protokoll angeben. Private Daten vor dem Teilen prüfen.
+
+GitHub Issues: [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup/issues]]
+
+Diskussion: [[https://www.loxforum.com/forum/projektforen/loxberry/plugins/485008-neues-loxberry-plugin-host-backup-f%C3%BCr-loxberry-docker-und-dietpi-systeme|Host Backup im LoxForum]]
+
+GitHub Repository: [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup]]
+
+Anleitung: [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup/blob/main/README.md|README]]
+
+Änderungsverlauf: [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup/blob/main/CHANGELOG.md|Changelog]]
+
+Alle Releases: [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases]]

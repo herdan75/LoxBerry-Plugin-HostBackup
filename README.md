@@ -1,6 +1,6 @@
 # LoxBerry Host Backup
 
-**Version 1.0.0 · Hauptstand auf `main` · Veröffentlichung noch nicht freigegeben.**
+**Version 1.0.0 · Reguläres Release · veröffentlicht am 19.09.2026.**
 Die erste Hauptversion übernimmt den vollständigen develop-Stand `4da7cf6`
 einschliesslich der Installations-, Sicherheits- und Bedienungskorrekturen.
 Programm- und Paketversion lauten `1.0.0`, ohne Beta-Zusatz. Gegenüber diesem
@@ -8,11 +8,11 @@ develop-Stand werden keine Backup-/Restoreabläufe geändert.
 Details stehen in den [Release Notes für 1.0.0](docs/RELEASE-1.0.0.md).
 
 > [!IMPORTANT]
-> **Noch keine Veröffentlichung auf der LoxBerry-Pluginseite und kein neues
-> automatisches Update.** `release.cfg` bleibt auf dem veröffentlichten Stable
-> 0.5.8; der bestehende Vorabkanal bleibt unverändert. Ein Push auf `main` baut
-> nur ein CI-Testpaket, kein GitHub-Release. Tag, Release-Download und Umstellung
-> des Update-Kanals für 1.0.0 erfolgen erst nach separater Freigabe.
+> **Update auf 1.0.0:** Das reguläre Release ist ohne Beta-Zusatz erhältlich.
+> Auch Nutzer des bisherigen Vorabkanals erhalten über dessen Kanaldatei dasselbe
+> stabile Paket, solange keine neuere Vorabversion angeboten wird.
+> Vor einem Update Einstellungen exportieren, aktive Vorgänge beenden lassen
+> und nicht vorher deinstallieren.
 
 **Enthaltene Korrekturen:** Der automatische Dienst-Wiederanlauf setzt
 bei einer belegten Vorgangssperre still aus, statt dadurch Cron-Mails auszulösen.
@@ -33,7 +33,7 @@ Systemrechte werden nicht geändert.
 > Installationsversuch parallel starten und nicht deinstallieren. Ein neues
 > ZIP beendet bereits laufende fehlerhafte Altprozesse nicht automatisch.
 > Erst nach Wiederherstellung einer bedienbaren Plugin-Verwaltung aktualisieren.
-> Bestehende veröffentlichte Downloads werden durch diese Vorbereitung nicht ersetzt.
+> Frühere Versionspakete bleiben unverändert; 1.0.0 besitzt einen eigenen Download.
 
 Die geschützten Programmstände unter `/usr/libexec/loxberryhostbackup` bleiben
 erhalten. Die Tests bilden Löschen und Kopieren als unprivilegierter
@@ -211,13 +211,18 @@ und den ZIP-Build. Der [nachgebesserte Stand 416e8ff](https://github.com/herdan7
 bestand 203 Linux-Tests ohne Skips sowie 15 Browser-Prüfblöcke, einschliesslich
 echter konkurrierender Dateisperren und Root-/Webbenutzerprüfungen. Auch der
 [übernommene Stand 4da7cf6](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/34764755275)
-bestand diese 203 Linux-Tests und 15 Browser-Prüfblöcke. Für 1.0.0 läuft die
-Linux-CI auf dem tatsächlichen `main`-Commit erneut. Der lokale
+bestand diese 203 Linux-Tests und 15 Browser-Prüfblöcke. Der
+[vorbereitete 1.0.0-Stand c981111](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/35440782063)
+bestand 205 Linux-Tests ohne Skips und 15 Browser-Prüfblöcke. Die Release-Pipeline
+prüft zusätzlich den tatsächlichen Tag vor dem Veröffentlichen des ZIPs; den
+zugehörigen Lauf nennt die [Release-Seite](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.0.0).
+Der lokale
 Umsetzungs- und Prüfstand wird in [IMPLEMENTATION-2026-09.md](docs/IMPLEMENTATION-2026-09.md)
 geführt. Die [GitHub-Prüfläufe](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/workflows/build-plugin.yml?query=branch%3Amain)
 zeigen den jeweiligen Commit, die Ergebnisse und das gebaute Testpaket.
 Eine echte LoxBerry-/NAS-/Offline-Hardwareabnahme ist damit nicht nachgewiesen
-und bleibt Voraussetzung für eine stabile Freigabe.
+und bleibt für den verlässlichen produktiven Disaster-Recovery-Einsatz separat erforderlich.
+Die Veröffentlichung bescheinigt keine bestandene Hardware-Abnahme.
 
 ### Bekannte offene Punkte in 1.0.0
 
@@ -237,8 +242,8 @@ und bleibt Voraussetzung für eine stabile Freigabe.
 
 ## Installation
 
-1. Für die noch nicht veröffentlichte Version 1.0.0 das geprüfte CI-Testpaket
-   verwenden oder lokal bauen; die unten verlinkten öffentlichen Pakete sind ältere Stände.
+1. Das Release-ZIP 1.0.0 über den Link unten herunterladen oder das angebotene
+   Update in der LoxBerry-Plugin-Verwaltung verwenden.
 2. In LoxBerry unter **Plugins > Plugin installieren** hochladen.
 3. Nach der Installation die Plugin-Oberfläche öffnen.
 4. Root-Freigabe in den Einstellungen bewusst bestätigen.
@@ -251,32 +256,27 @@ Die Weboberfläche ist in die normale LoxBerry-Oberfläche eingebettet. Die
 LoxBerry-Kopfzeile mit Haus-Symbol und Menü bleibt sichtbar, sodass jederzeit
 zur LoxBerry-Administration gewechselt werden kann.
 
-Weiterhin veröffentlichtes Stable-Paket 0.5.8 (nicht Version 1.0.0):
+Aktuelles reguläres Release-Paket:
 
-```text
-https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.5.8/LoxBerryHostBackup_0.5.8.zip
-```
+[**LoxBerryHostBackup_1.0.0.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip)
 
-Weiterhin veröffentlichtes Vorabpaket 0.7.1-beta (nicht Version 1.0.0):
+Der Vorabkanal verweist ebenfalls auf dieses reguläre Release, solange keine
+neuere Vorabversion existiert. Alte Downloads bleiben in der
+[Release-Historie](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases) erhalten.
 
-```text
-https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v0.7.1-beta/LoxBerryHostBackup_0.7.1.zip
-```
+### Update auf 1.0.0
 
-CI-Testpaket beziehungsweise lokales Paket dieses Hauptstands:
+In der LoxBerry-Plugin-Verwaltung nach Updates suchen oder das ZIP manuell
+installieren. Je nach persönlicher Update-Einstellung wird die neue Version
+angeboten oder automatisch installiert. Es ist nicht erforderlich, Vorabversionen
+zu aktivieren. Programmversion, Release-Tag und Paket lauten `1.0.0`,
+`v1.0.0` und `LoxBerryHostBackup_1.0.0.zip`, ohne Beta-Zusatz.
 
-```text
-LoxBerryHostBackup_1.0.0.zip
-```
-
-### Update auf 1.0.0 vorbereiten
-
-Die interne Plugin-Version und der Paketname verwenden `1.0.0` ohne Beta-Zusatz.
-Diese Version ist höher als 0.5.8, 0.6.x und 0.7.x, wird aber vorerst nicht über
-die Update-Suche angeboten: Die öffentlich abgefragten Kanaldateien bleiben auf
-ihren bisherigen Versionen. Es gibt noch keinen veröffentlichten `v1.0.0`-Tag
-oder Release-Download. Das CI-Testpaket kann für eine bewusste manuelle Prüfung
-hochgeladen werden. Nicht vorher deinstallieren.
+**Bereits das manuelle 1.0.0-Testpaket installiert?** Bei gleicher Versionsnummer
+erscheint kein höheres Update. Für exakt das veröffentlichte Paket das Release-ZIP
+erneut installieren, ohne vorher zu deinstallieren. Die Backup-/Restorelogik
+entspricht dem vorbereiteten 1.0.0-Stand; ergänzt sind finale Kanalmetadaten und
+Veröffentlichungsdokumentation.
 
 Vor dem Update laufende Backup-/Restoreaufgaben beenden lassen und die
 Plugin-Einstellungen exportieren. Vorhandene Einstellungen und Backupdaten
@@ -1005,22 +1005,24 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 
 Branches:
 
-- `main`: Hauptstand 1.0.0, noch nicht zur Veröffentlichung freigegeben
-- `develop`: bisheriger Entwicklungs-/Vorabstand; durch die Übernahme nicht verändert
+- `main`: veröffentlichter Hauptstand 1.0.0
+- `develop`: auf die Release-Basis nachgeführt; Ausgangspunkt weiterer Entwicklung
 - `pre-develop`: älterer Referenzstand; unverändert
 
 Update-Dateien:
 
-- `release.cfg`: weiterhin Stable 0.5.8, noch keine Umstellung auf 1.0.0
-- `prerelease.cfg`: unveränderter öffentlicher Vorabkanal 0.7.1-beta
+- `main/release.cfg`: Stable 1.0.0 mit dem geprüften Release-ZIP
+- `develop/prerelease.cfg`: vorerst dasselbe reguläre 1.0.0-Paket für Vorabkanal-Nutzer
 
-Ein Branch-Push auf `main` führt Linux-/Browserprüfungen aus und erzeugt ein
-Workflow-Artefakt, veröffentlicht aber kein Release und ändert keine Pluginseite.
-Erst ein Tag-/Release-Ereignis kann im vorhandenen Workflow ein Release-Asset
-veröffentlichen. **Noch keinen `v1.0.0`-Tag pushen und keinen Release anlegen.**
-Die spätere Freigabe ist in [RELEASE-1.0.0.md](docs/RELEASE-1.0.0.md) beschrieben.
-Der automatische Updateverweis darf erst nach dieser Freigabe auf ein verfügbares
-und geprüftes Paket umgestellt werden. AP-14 bleibt auch in 1.0.0 ausgenommen.
+Die in `plugin.cfg` hinterlegten Kanaladressen bleiben unverändert, damit
+bestehende Installationen die neuen Metadaten finden. Sobald eine neuere
+Vorabversion vorhanden ist, kann deren Kanal gezielt weitergeführt werden.
+
+Ein Branch-Push erzeugt nur ein geprüftes Workflow-Artefakt. Ein Tag-/Release-
+Ereignis veröffentlicht das ZIP erst nach Linux-/Browserprüfungen. Für die
+Freigabe werden die live abgefragten Branch-Kanaldateien erst nach erfolgreicher
+Prüfung des öffentlichen Downloads umgestellt. Die Wiki-/Pluginseite wird
+separat gepflegt; ein Git-Push bearbeitet sie nicht. AP-14 bleibt ausgenommen.
 
 Paket lokal bauen:
 
