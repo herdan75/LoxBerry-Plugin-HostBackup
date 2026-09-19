@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import pathlib
+import json
 import re
 import unittest
 
@@ -101,6 +102,49 @@ class WebSecurityTests(unittest.TestCase):
             "info-bubble-above",
         ):
             self.assertIn(marker.replace("window.innerWidth", "root.innerWidth"), JS)
+
+    def test_source_policy_labels_describe_scope_without_changing_stored_values(self) -> None:
+        self.assertIn('<option value="local">Lokale Laufwerke; Netzfreigaben einzeln (empfohlen)</option>', CGI)
+        self.assertIn('<option value="legacy">Alle eingebundenen Laufwerke und Netzfreigaben</option>', CGI)
+        self.assertNotIn('Bisheriges Verhalten beibehalten: alle eingebundenen Datenquellen', CGI)
+        self.assertNotIn("'Bisherige Grundregel'", JS)
+        self.assertNotIn("'· bisherige Grundregel'", JS)
+        config = json.loads((ROOT / "config" / "config.json").read_text(encoding="utf-8"))
+        self.assertEqual(config["source_selection"], {"policy": "local", "overrides": {}})
+
+    def test_source_help_uses_existing_tooltip_without_form_actions(self) -> None:
+        legend = re.search(r'<legend\b[^>]*id="source-selection-legend"[^>]*>(.*?)</legend>', CGI, re.DOTALL)
+        self.assertIsNotNone(legend)
+        self.assertIn("Datenquellen", legend.group(1))
+        self.assertRegex(legend.group(1), r"\$info_\w+")
+        self.assertIn('#hostbackup-app .info-bubble', STYLE)
+
+    def test_context_help_is_escaped_accessible_and_not_a_submit_control(self) -> None:
+        helper = re.search(r"sub info_button \{(?P<body>.*?)\n\}", CGI, re.DOTALL)
+        self.assertIsNotNone(helper)
+        body = helper.group("body")
+        for value in ("$text", "$tooltip_id", "$label"):
+            self.assertRegex(body, r"escapeHTML\(" + re.escape(value))
+        for attribute in ('type="button"', 'aria-label=', 'aria-describedby=', 'role="tooltip"', 'tabindex="0"'):
+            self.assertIn(attribute, body)
+        self.assertNotRegex(body, r"\bon(?:click|submit|change)\s*=")
+
+    def test_action_help_has_shared_catalog_for_checks_protection_and_restore(self) -> None:
+        helper = re.search(r"sub action_info \{(?P<body>.*?)\n\}", CGI, re.DOTALL)
+        self.assertIsNotNone(helper)
+        body = helper.group("body")
+        for action in (
+            "inspect-backup", "verify-backup", "verification-report", "recovery-sheet",
+            "protect-backup", "record-restore-test", "backup-preview", "storage-info",
+            "runtime-cleanup-preview", "diagnostics", "recover-services", "stop-backup",
+            "retention-mode", "integrity-enabled", "maintenance-preview", "restore-files",
+            "restore-destination", "restore-volumes", "restore-preview", "restore-start",
+        ):
+            self.assertRegex(body, r"['\"]" + re.escape(action) + r"['\"]\s*=>\s*\[")
+        self.assertIn("return info_button", body)
+        self.assertIn("$instance", body, "Backup-row tooltip IDs must be unique per backup")
+        self.assertIn("Vergleichsbasis", body)
+        self.assertIn("kein automatischer Nachweis", body)
 
     def test_preflight_confirmation_only_appears_after_a_warning(self) -> None:
         self.assertIn("my $preflight_warning = '';", CGI)

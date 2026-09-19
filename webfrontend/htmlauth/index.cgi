@@ -361,9 +361,47 @@ sub stop_targets_csv {
 }
 
 sub info_button {
-  my ($text) = @_;
+  my ($text, $tooltip_id, $label) = @_;
   my $safe = escapeHTML($text || '');
-  return qq{<span class="info-help"><button data-role="none" type="button" class="info-button" aria-label="Hinweis anzeigen">i</button><span class="info-bubble" role="tooltip">$safe</span></span>};
+  my $id = escapeHTML($tooltip_id || '');
+  my $safe_label = escapeHTML($label || 'Hinweis anzeigen');
+  my $button_attrs = length($id) ? qq{ aria-describedby="$id"} : '';
+  my $bubble_attrs = length($id) ? qq{ id="$id"} : '';
+  return qq{<span class="info-help"><button data-role="none" type="button" class="info-button" aria-label="$safe_label"$button_attrs>i</button><span class="info-bubble" role="tooltip" tabindex="0"$bubble_attrs>$safe</span></span>};
+}
+
+sub action_info {
+  my ($key, $instance) = @_;
+  my %help = (
+    'inspect-backup' => ['Backup-Struktur prüfen', 'Prüft den Aufbau des gespeicherten Backups, Manifest, Metadaten-Profil und Datenformat sowie die Plausibilität der enthaltenen Dateien. Auch diese Prüfung kann bei grossen Backups dauern. Sie verändert keine Backup-Dateien, vergleicht aber keine Prüfsummen aller Dateiinhalte und führt keinen Restore aus.'],
+    'verify-backup' => ['Dateiinhalte prüfen', 'Liest die gesicherten Dateien im Hintergrund und berechnet SHA-256-Prüfsummen. Ohne vorhandene Vergleichsbasis wird diese zuerst angelegt: Das ist noch kein Nachweis unveränderter Inhalte. Spätere Prüfungen vergleichen Inhalte und erfasste Metadaten mit dieser Basis. Bei Portable Archive wird der Archivcontainer geprüft. Das kann lange dauern; Status und Protokoll im Live-Status. Ein erfolgreicher Vergleich ersetzt keinen Restore-Test.'],
+    'verification-report' => ['Prüfbericht', 'Zeigt das zuletzt gespeicherte Ergebnis der Dateiinhaltsprüfung und vorhandene persönliche Restore-Testeinträge. Startet keine neue Prüfung. Achte auf Prüfdatum und Status: Eine erstmals erstellte Vergleichsbasis ist noch kein erfolgreicher Inhaltsvergleich; ein persönlich dokumentierter Restore-Test wurde nicht vom Plugin überprüft. Der Bericht kann als JSON heruntergeladen werden.'],
+    'recovery-sheet' => ['Wiederherstellungsblatt', 'Lädt ein Textblatt mit Angaben zu diesem Backup und Hinweisen für eine spätere Wiederherstellung herunter. Bewahre es getrennt vom LoxBerry zusammen mit dem Backup auf. Es enthält nicht die gesicherten Dateien, startet keinen Restore und richtet weder Partitionen noch Bootloader ein. Ein erfolgreicher Systemstart ist damit nicht bewiesen.'],
+    'protect-backup' => ['Löschschutz', 'Schützt dieses Backup vor der manuellen Backup-Löschung und der automatischen Aufbewahrungsbereinigung im Plugin. Schutz aufheben entfernt nur diese Markierung; es löscht das Backup nicht. Die jüngste brauchbare Sicherung bleibt zusätzlich geschützt. Der Schutz verhindert keine Änderungen oder Löschungen ausserhalb des Plugins und schützt nicht vor einem defekten Datenträger.'],
+    'record-restore-test' => ['Externen Restoretest dokumentieren', 'Trägt Ergebnis, Zeitpunkt und Notiz eines von dir bereits durchgeführten Restore-Tests ein, etwa auf einem Testdatenträger oder in einer Rescue-Umgebung. Hier wird kein Restore gestartet. Der Eintrag gehört zum aktuellen Manifest dieses Backups und ist nur deine persönliche Dokumentation, kein automatischer Nachweis. Er verändert weder Prüfergebnis noch Restore-Freigaben.'],
+    'backup-preview' => ['Nächstes Backup prüfen', 'Zeigt anhand der gespeicherten Einstellungen Datenquellen, Ausschlüsse, Metadaten-Profil und die mögliche Referenz für einen inkrementellen Snapshot. Führt auch die Ziel-Vorprüfung aus; dabei werden kurzzeitig Testdateien am Ziel angelegt und wieder entfernt. Es wird kein Backup kopiert und kein Dienst gestoppt. Änderungen zuerst speichern. Das Ergebnis ist eine Momentaufnahme, keine Garantie für den späteren Lauf.'],
+    'storage-info' => ['Speicherbelegung berechnen', 'Durchsucht erkannte Backups und Exportarchive und unterscheidet logische Dateigrösse von tatsächlich belegten Blöcken. Gemeinsam genutzte Hardlinks werden in der Gesamtsumme nur einmal gezählt. Zusätzlich wird der lokale Plugin-Laufzeitspeicher erfasst; andere Daten auf dem Backup-Datenträger gehören nicht zur Summe. Das kann bei vielen Dateien lange dauern. Es wird nichts gelöscht; Einzelgrössen sind nicht gleich dem beim Löschen frei werdenden Platz.'],
+    'runtime-cleanup-preview' => ['Laufzeitdateien prüfen', 'Zeigt alte lokale Task-Logs und Import-Quarantänedateien, die nach den gespeicherten Aufbewahrungsfristen entfernt werden könnten. Es wird noch nichts gelöscht. Erst die separate Bestätigung führt die unveränderte Vorschau aus. Offene Dienst-Wiederanlauf-Journale und aktive Task-Logs bleiben erhalten; Backups auf dem Ziel sind nicht Gegenstand dieser Bereinigung. Bei einem belegten Vorgang später erneut versuchen.'],
+    'diagnostics' => ['Diagnosepaket herunterladen', 'Lädt ein ZIP zur Fehlersuche mit Plugin-Version, gekürzten Einstellungen und Dateisysteminformationen herunter, nicht deine Backup-Dateien. Konfigurationspfade und Mountnamen werden ausgeblendet. Falls ein Original-Log beigefügt ist, kann es private Pfade, Rechnernamen oder Adressen enthalten. Den Inhalt vor dem Teilen im Forum prüfen. Der Download ändert keine Einstellungen.'],
+    'recover-services' => ['Offene Dienste wieder starten', 'Versucht die laut lokalem Wiederanlauf-Journal noch offenen Dienste und Docker-Container wieder zu starten, die das Plugin zuvor für einen Vorgang angehalten hat. Das ist weder ein Systemneustart noch ein Start aller Dienste. Bei Fehlern bleiben offene Einträge für einen erneuten Versuch erhalten. Vorher Journal und Log prüfen; ein anderer aktiver Vorgang kann den Versuch blockieren.'],
+    'stop-backup' => ['Backup stoppen', 'Fordert den Abbruch des ausgewählten laufenden Backups an. Bereits kopierte Daten können als unvollständiges Backup zurückbleiben; ältere Backups werden dadurch nicht gelöscht. Zuvor angehaltene Dienste und Container werden anhand des Wiederanlauf-Journals wieder gestartet, soweit möglich. Warte auf das Ergebnis und prüfe das Log; das Schliessen der Browserseite allein stoppt kein Backup.'],
+    'retention-mode' => ['Aufbewahrungsart', 'Standard ist Anzahl Backups: Es gilt der Wert Anzahl Backups behalten. Alternativ werden Tages-, Wochen- und Monatsstände kombiniert aufbewahrt. Diese Regel startet keine Backups; dafür ist der separate Zeitplan zuständig. Geschützte Backups und die jüngste brauchbare Sicherung bleiben zusätzlich erhalten. Unvollständige Backups müssen gesondert geprüft werden. Vor einer Bereinigung speichern und Löschvorschau ansehen.'],
+    'retention-buckets' => ['Tages-, Wochen- und Monatsstände', 'Nur bei dieser Aufbewahrungsart wirksam: Behalten wird jeweils die neueste brauchbare Sicherung pro belegtem Kalendertag, ISO-Kalenderwoche oder Monat, bis die eingestellte Anzahl erreicht ist. Standardwerte sind 7 Tages-, 4 Wochen- und 6 Monatsstände. 0 deaktiviert die jeweilige Gruppe; mindestens eine muss grösser als 0 sein. Ein Backup kann mehrere Gruppen erfüllen, deshalb werden die Zahlen nicht einfach addiert.'],
+    'log-retention' => ['Task-Logs aufbewahren', 'Standard: 30 Tage. Ältere lokale Vorgangsprotokolle können über Laufzeitdateien prüfen zur Löschung vorgeschlagen werden. Diese Frist löscht keine Backups und aktive Task-Logs bleiben erhalten. Erst speichern, Vorschau prüfen und die Bereinigung separat bestätigen; wichtige Logs vorher herunterladen.'],
+    'quarantine-retention' => ['Quarantäne aufbewahren', 'Standard: 7 Tage. Betrifft zurückgehaltene Dateien im lokalen Import-Quarantänebereich, nicht fertige Backups. Ältere Dateien können über Laufzeitdateien prüfen zur Bereinigung vorgeschlagen werden. Bei einem Importproblem zuerst zur Diagnose aufbewahren. Eine Änderung der Frist allein löscht nichts; die Bereinigung benötigt eine separate Bestätigung.'],
+    'integrity-enabled' => ['Regelmässige Prüfsummenprüfung', 'Standard: aus. Aktiviert regelmässige Hintergrundprüfungen fälliger, abgeschlossener Backups. Die Prüfung liest die Backup-Daten und benötigt Zeit, Laufzeitspeicher und Datenträgerzugriffe; bei aktiven Vorgängen kann sie später stattfinden. Fehlt eine Vergleichsbasis, wird sie zuerst angelegt; bei aktivierter Prüfung kann dies bereits beim Backup-Abschluss geschehen. Erst ein späterer Vergleich erkennt Änderungen, beweist aber keinen erfolgreichen Restore. Einstellung zuerst speichern.'],
+    'integrity-interval' => ['Prüfintervall', 'Standard: 7 Tage, erlaubt 1 bis 365. Nur wirksam, wenn regelmässige Prüfsummenprüfungen aktiviert sind. Beschreibt, wann ein Backup nach seiner letzten Prüfung wieder fällig wird, nicht eine garantierte Startzeit. Fällige Backups werden nacheinander geprüft; laufende Vorgänge und Systemstillstand können den Termin verschieben.'],
+    'maintenance-preview' => ['Löschvorschau', 'Berechnet anhand der gespeicherten Aufbewahrungsregel, welche Backups bleiben und welche samt zugehörigen Exportarchiven gelöscht würden. Diese Vorschau löscht nichts. Erst die separate Bestätigung führt genau diese Auswahl aus; hat sich der Bestand geändert, ist eine neue Vorschau nötig. Geschützte Backups und die jüngste brauchbare Sicherung bleiben erhalten.'],
+    'restore-files' => ['Datei oder Ordner getrennt wiederherstellen', 'Kopiert einen gewählten Pfad aus einem abgeschlossenen Verzeichnis-Backup in einen neuen, eindeutig benannten Unterordner des angegebenen bestehenden Zielverzeichnisses. Vorhandene Dateien werden nicht überschrieben. Das ist keine Systemwiederherstellung; prüfe die Dateien vor einer Übernahme. Diese Dateiansicht steht nicht für Portable Archive zur Verfügung. Bei grossen Ordnern kann das Kopieren dauern.'],
+    'restore-destination' => ['Restore-Ziel', 'Achtung: / bezeichnet das aktuell laufende System, nicht einen neuen Ordner. Ein Verzeichnis-Restore kann bestehende Dateien im freigegebenen Zielbereich überschreiben und löschen. Für einen Offline-Datenträger dessen bereits vorbereiteten Einhängepfad verwenden. Nur in einer Test- oder Rescue-Umgebung fortfahren; Daten sichern und zuerst die Restore-Vorschau samt ausgeschlossenen Pfaden und Volume-Zuordnungen prüfen.'],
+    'restore-volumes' => ['Volume-Zuordnung', 'Ordnet zusätzliche Datenträger aus dem Backup ausdrücklich einem Wiederherstellungsziel zu. source ist der damalige Einhängepfad, destination das vorbereitete Zielverzeichnis. Die JSON-Liste [] enthält keine Zuordnungen; separate Daten-Volumes werden dann nicht wiederhergestellt. Diese Eingabe formatiert, partitioniert oder mountet keine Datenträger. Alle Zuordnungen in der Restore-Vorschau kontrollieren.'],
+    'restore-preview' => ['Restore-Vorschau', 'Erstellt den Wiederherstellungsplan für dieses Backup, das eingegebene Ziel und die Volume-Zuordnungen. Zeigt Prüfungen, Einschränkungen und die vorgesehenen Kopieraktionen; bei einem Verzeichnis-Restore auch die vorgesehenen Löschungen im Ziel. Führt den Restore noch nicht aus. Nach jeder Änderung von Ziel oder Zuordnungen erneut erstellen. Ein fehlerfreier Plan ersetzt keinen Restore-Test und beweist keine Bootfähigkeit.'],
+    'restore-start' => ['Restore starten', 'Startet nach erfolgreicher Prüfung und den geforderten Bestätigungen die tatsächliche Wiederherstellung. Dateien am Restore-Ziel können überschrieben und bei einem Verzeichnis-Restore im freigegebenen Bereich gelöscht werden. Backup-ID, Ziel und Volume-Zuordnungen sorgfältig prüfen und nur in einer Test- oder Rescue-Umgebung starten. Bei Portable Archive ist stattdessen der Offline-Helper erforderlich. Dieser Infobutton allein startet keine Aktion.'],
+  );
+  die "Unbekannte Aktionshilfe: $key" unless exists $help{$key};
+  my ($title, $text) = @{$help{$key}};
+  my $id = 'help-' . $key . (defined $instance ? '-' . $instance : '');
+  return info_button($text, $id, "Hilfe: $title");
 }
 
 my $notice = $q->param('msg') || '';
@@ -1088,6 +1126,16 @@ my @month_checked = map { checked_attr($cfg_months{'*'} || $cfg_months{"$_"}) } 
 
 my $info_backup_root = info_button('Hier legst du fest, wohin die Backups geschrieben werden. Für ein echtes Host-Backup sollte das ein externer Datenträger, ein separates Mount oder ein grosser zweiter Datenspeicher sein. Erkannte Ziele können per Klick oder Drag und Drop übernommen werden. Wenn die Systemkarte selbst ausfällt, hilft ein Backup auf derselben Karte nicht.');
 my $info_backup_mode = info_button('Vollbackup kopiert jeden Stand vollständig. Inkrementeller Snapshot nutzt rsync mit Hardlinks auf das vorherige vollständige Backup: jedes Backup bleibt einzeln wiederherstellbar, unveränderte Dateien benötigen aber kaum zusätzlichen Speicher. Für zuverlässige Speicherersparnis wird ein Linux-Dateisystem wie ext4 empfohlen.');
+my $info_sources = info_button(join("\n\n",
+  'Datenquellen bestimmen, WAS gesichert wird. Das Backup-Ziel bestimmt, WOHIN geschrieben wird. Das Metadaten-Profil regelt die Speicherung von Dateirechten und Zusatzinformationen. Die Quellenauswahl ist unabhängig vom Gerätetyp, also auch für ODROID und Raspberry Pi gleich.',
+  'Lokale Laufwerke; Netzfreigaben einzeln (empfohlen): Standard bei einer Neuinstallation. Das System sowie lokale Boot- und USB-Datenträger werden berücksichtigt, sofern sie nicht ausgeschlossen wurden. Netzfreigaben werden nur nach ausdrücklicher Auswahl einbezogen.',
+  'Alle eingebundenen Laufwerke und Netzfreigaben: Bezieht auch Netzfreigaben automatisch ein. Das kann sehr grosse Backups verursachen; auch Automount-Freigaben können beim Sichern gelesen werden. Nur wählen, wenn dieser umfassende Sicherungsumfang gewünscht ist.',
+  'Bestehende Installationen ohne neue Quellenauswahl behalten beim Update den umfassenden Modus. Es gibt keine automatische Umstellung. Gespeicherte Ausnahmen bleiben bei einem Wechsel der Grundregel erhalten.',
+  'Ausschlüsse haben Vorrang: Das Backup-Ziel selbst wird nicht mitgesichert. Liegen auf seinem Datenträger weitere Backups, den ganzen entsprechenden Backup-Ordner oder Datenträger ausschliessen. Nicht pauschal /media ausschliessen, wenn dort auch USB-Nutzdaten liegen.',
+  'Bei der empfohlenen Grundregel: Gewünschte Netzfreigaben zuerst einbinden, Liste aktualisieren und einzeln auswählen. Automount-Sammelbereiche werden nicht pauschal aktiviert. Fehlt eine ausdrücklich ausgewählte Quelle später, wird der Backup-Start blockiert, statt sie unbemerkt auszulassen.',
+  'Die technischen Einbindungen sind nur zur Übersicht eingeklappt. Aufklappen verändert keine Auswahl. Mit Grundregel verwenden entfernst du eine einzeln gesetzte Ausnahme.',
+  'Nach Änderungen zuerst speichern und dann Nächstes Backup prüfen ausführen. Erst der gespeicherte Stand gilt für manuelle und zeitgesteuerte Backups. Backup-Ziel, Metadaten-Profil und Zeitplan werden durch den Wechsel der Grundregel nicht geändert.'
+), 'source-selection-help-text');
 my $info_metadata_mode = info_button('Das Metadaten-Profil bestimmt, wie Linux-Dateirechte und Zusatzinformationen auf dem Backup-Ziel abgelegt werden. Standard ist Native Strict. Für CIFS/NFS und viele NAS-Systeme ist meistens Network Compatible passend. Die vier Info-Buttons erklären Umfang, Voraussetzungen und Restore-Einschränkungen jedes Profils.');
 my $info_metadata_native = info_button('Standardprofil bei einer Neuinstallation. Native Strict verwendet rsync mit -aHAX, numerischen Benutzer- und Gruppen-IDs sowie Sparse-Dateien. Gesichert werden Dateien, Verzeichnisse, symbolische Links, Besitzer, Gruppen, Rechte, Zeitstempel, ACLs, Hardlinks, xattrs und damit auch File Capabilities. Geeignet für lokale Linux-Dateisysteme wie ext4, xfs und btrfs. Unterstützt das Ziel eine erforderliche Metadatenfunktion nicht, wird das Backup als Fehler beendet.');
 my $info_metadata_network = info_button('Für CIFS/NFS und NAS-Ziele, die nur Linux-xattrs nicht vollständig unterstützen. Network Compatible lässt xattrs und File Capabilities bewusst weg. Dieses Weglassen ist nur ein neutraler Hinweis und blockiert auch zeitgesteuerte Backups nicht. Besitzer, Gruppen, Rechte, Links, ACLs und Sparse-Dateien müssen dagegen weiterhin funktionieren; ein echter Fehler im Metadaten-Test blockiert den Start. CIFS mit fest vorgegebenen Eigentümern oder Rechten kann deshalb ungeeignet sein. Portable Archive bewahrt Metadaten innerhalb einer Archivdatei, benötigt aber ein Vollbackup und einen Offline-Restore. Vor einem Network-Compatible-Restore muss die reduzierte Metadatentreue bestätigt werden.');
@@ -1102,7 +1150,7 @@ my $info_months = info_button('Nur bei monatlichen Backups relevant. Mit Alle Mo
 my $info_pre_hook = info_button('Optionales Skript, das direkt vor dem Backup ausgeführt wird. Sinnvoll für Datenbank-Dumps oder das Vorbereiten von Diensten. Das Skript muss absolut angegeben werden und wird aus Sicherheitsgründen nur ausgeführt, wenn es Root gehört und nicht durch andere Benutzer beschreibbar ist.');
 my $info_post_hook = info_button('Optionales Skript, das nach dem Backup ausgeführt wird. Sinnvoll zum Aufräumen, Dienste wieder in einen gewünschten Zustand zu bringen oder Benachrichtigungen auszuführen. Es gelten dieselben Sicherheitsregeln wie beim Skript vor dem Backup.');
 my $info_excludes = info_button('Hier kannst du Pfade vom rsync-Backup ausschliessen, je ein Pfad pro Zeile. Das ist sinnvoll für grosse Medienarchive, Netzwerkshares oder Daten, die separat gesichert werden. Zu viele Ausschlüsse können aber die Wiederherstellung unvollständig machen.');
-my $info_stop_targets = info_button('Wähle gezielt Docker-Container oder sicher steuerbare Dienste aus, die vor dem Backup angehalten und danach wieder gestartet werden. Laufende Dienste werden erkannt; zusätzlich werden LoxBerry-/Plugin-nahe Dienste angezeigt, auch wenn sie gerade inaktiv sind. Kritische LoxBerry-, Web-, SSH- und Backup-Dienste werden nicht angeboten. LoxBerry-Plugins ohne eigenen Dienst werden nicht hart beendet; dafür sind Pre-/Post-Backup-Hooks der sichere Weg.');
+my $info_stop_targets = info_button('Wähle gezielt Docker-Container oder sicher steuerbare Dienste aus, die vor dem Backup angehalten und danach wieder gestartet werden. Laufende Dienste werden erkannt; zusätzlich werden LoxBerry-/Plugin-nahe Dienste angezeigt, auch wenn sie gerade inaktiv sind. Kritische LoxBerry-, Web-, SSH- und Backup-Dienste werden nicht angeboten. LoxBerry-Plugins ohne eigenen Dienst werden nicht hart beendet; dafür sind Pre-/Post-Backup-Hooks der sichere Weg. Empfohlene Auswahl setzen ersetzt die aktuelle Auswahl durch die erkannten Empfehlungen. Auswahl leeren entfernt alle Häkchen. Beides stoppt noch keinen Dienst: Auswahl kontrollieren und zuerst speichern; wirksam wird sie beim nächsten Backup.');
 my $info_export = info_button('Erstellt nach jedem Backup zusätzlich ein komprimiertes tar.gz-Archiv. Das ist praktisch zum Download, Kopieren oder Archivieren, benötigt aber zusätzlichen Speicherplatz und Zeit.');
 my $info_mail = info_button('Sendet Mailbenachrichtigungen über die zentrale LoxBerry-Benachrichtigung. SMTP-Zugangsdaten werden nicht im Plugin gespeichert.');
 my $info_mail_to = info_button('Optional. Wenn leer, verwendet LoxBerry Host Backup die in LoxBerry hinterlegte Standardadresse aus der Mail- und Benachrichtigungskonfiguration.');
@@ -1121,6 +1169,11 @@ my $info_download = info_button('Export erstellt ein tar.gz-Archiv im Backup-Ver
 my $info_download_ready = info_button('Lädt das bereits erstellte tar.gz-Exportarchiv dieses Backups auf deinen Computer herunter. Das ist nicht der Restore; für eine Wiederherstellung bitte den Restore-Button verwenden.');
 my $info_export_recreate = info_button('Erstellt das tar.gz-Exportarchiv für dieses Backup neu. Ein vorhandenes Export-Archiv wird ersetzt; der eigentliche Backup-Snapshot bleibt unverändert.');
 my $info_backup_start = info_button('Prüft zuerst wichtige Voraussetzungen wie rsync, Schreibzugriff, freien Speicher und laufende Docker-Container. Nur wenn eine übergehbare Warnung erkannt wird, erscheint anschließend eine Bestätigung für einen zweiten Startversuch. Echte Fehler können nicht übergangen werden.');
+my %action_help = map { $_ => action_info($_) } qw(
+  backup-preview storage-info runtime-cleanup-preview diagnostics recover-services stop-backup
+  retention-mode retention-buckets log-retention quarantine-retention integrity-enabled integrity-interval
+  maintenance-preview restore-files restore-destination restore-volumes restore-preview restore-start
+);
 
 sub render_target_notice {
   my ($target_info) = @_;
@@ -1406,6 +1459,9 @@ sub render_backup_rows {
     my $export_action = '';
 
     if ($is_complete) {
+      my %backup_help = map { $_ => action_info($_, $raw_id) } qw(
+        inspect-backup verify-backup verification-report recovery-sheet protect-backup record-restore-test
+      );
       if ($export_status eq 'available') {
         $export_action = qq{
 <form data-ajax="false" method="get" class="inline-form">
@@ -1461,12 +1517,12 @@ $active_task_hidden
 </form>
 $export_action
 <details class="backup-extra-actions"><summary>Prüfen und schützen</summary>
-<form data-ajax="false" method="get" class="inline-form operation-form"><input data-role="none" type="hidden" name="action" value="inspect-backup"><input data-role="none" type="hidden" name="backup_id" value="$id"><button data-role="none" type="submit">Backup-Struktur prüfen</button></form>
-<form data-ajax="false" method="post" class="inline-form">$csrf<input data-role="none" type="hidden" name="action" value="verify-backup"><input data-role="none" type="hidden" name="backup_id" value="$id"><button data-role="none" type="submit">Dateiinhalte prüfen</button></form>
-<form data-ajax="false" method="get" class="inline-form operation-form"><input data-role="none" type="hidden" name="action" value="verification-report"><input data-role="none" type="hidden" name="backup_id" value="$id"><button data-role="none" type="submit">Prüfbericht</button></form>
-<form data-ajax="false" method="get" class="inline-form"><input data-role="none" type="hidden" name="action" value="recovery-sheet"><input data-role="none" type="hidden" name="backup_id" value="$id"><button data-role="none" type="submit">Wiederherstellungsblatt</button></form>
-<form data-ajax="false" method="post" class="inline-form">$csrf<input data-role="none" type="hidden" name="action" value="protect-backup"><input data-role="none" type="hidden" name="backup_id" value="$id"><input data-role="none" type="hidden" name="protected" value="$pin_value"><button data-role="none" type="submit">$pin_label</button></form>
-<details class="restore-test-record"><summary>Externen Restoretest dokumentieren</summary>
+<form data-ajax="false" method="get" class="inline-form operation-form"><input data-role="none" type="hidden" name="action" value="inspect-backup"><input data-role="none" type="hidden" name="backup_id" value="$id"><button data-role="none" type="submit">Backup-Struktur prüfen</button>$backup_help{'inspect-backup'}</form>
+<form data-ajax="false" method="post" class="inline-form">$csrf<input data-role="none" type="hidden" name="action" value="verify-backup"><input data-role="none" type="hidden" name="backup_id" value="$id"><button data-role="none" type="submit">Dateiinhalte prüfen</button>$backup_help{'verify-backup'}</form>
+<form data-ajax="false" method="get" class="inline-form operation-form"><input data-role="none" type="hidden" name="action" value="verification-report"><input data-role="none" type="hidden" name="backup_id" value="$id"><button data-role="none" type="submit">Prüfbericht</button>$backup_help{'verification-report'}</form>
+<form data-ajax="false" method="get" class="inline-form"><input data-role="none" type="hidden" name="action" value="recovery-sheet"><input data-role="none" type="hidden" name="backup_id" value="$id"><button data-role="none" type="submit">Wiederherstellungsblatt</button>$backup_help{'recovery-sheet'}</form>
+<form data-ajax="false" method="post" class="inline-form">$csrf<input data-role="none" type="hidden" name="action" value="protect-backup"><input data-role="none" type="hidden" name="backup_id" value="$id"><input data-role="none" type="hidden" name="protected" value="$pin_value"><button data-role="none" type="submit">$pin_label</button>$backup_help{'protect-backup'}</form>
+<details class="restore-test-record"><summary>Externen Restoretest dokumentieren $backup_help{'record-restore-test'}</summary>
 <p>Dokumentiere nur einen von dir tatsächlich durchgeführten Test. Das ist deine persönliche Aufzeichnung; das Plugin bestätigt damit weder den Restore-Erfolg noch die Wiederherstellbarkeit und ändert keine Restore-Freigabe.</p>
 <form data-ajax="false" method="post" class="restore-test-form">$csrf
 <input data-role="none" type="hidden" name="action" value="record-restore-test"><input data-role="none" type="hidden" name="backup_id" value="$id">
@@ -1723,10 +1779,10 @@ print <<HTML;
 <summary>Details und Prüfaktionen</summary>
 <div class="overview-detail-grid" id="overview-detail-values"></div>
 <div class="config-actions">
-<button data-role="none" type="button" data-load-action="backup-preview">Nächstes Backup prüfen</button>
-<button data-role="none" type="button" data-load-action="storage-info">Speicherbelegung berechnen</button>
-<button data-role="none" type="button" data-load-action="runtime-cleanup-preview">Laufzeitdateien prüfen</button>
-<a data-ajax="false" class="button-link" href="?action=diagnostics">Diagnosepaket herunterladen</a>
+<span class="action-with-help"><button data-role="none" type="button" data-load-action="backup-preview">Nächstes Backup prüfen</button>$action_help{'backup-preview'}</span>
+<span class="action-with-help"><button data-role="none" type="button" data-load-action="storage-info">Speicherbelegung berechnen</button>$action_help{'storage-info'}</span>
+<span class="action-with-help"><button data-role="none" type="button" data-load-action="runtime-cleanup-preview">Laufzeitdateien prüfen</button>$action_help{'runtime-cleanup-preview'}</span>
+<span class="action-with-help"><a data-ajax="false" class="button-link" href="?action=diagnostics">Diagnosepaket herunterladen</a>$action_help{'diagnostics'}</span>
 </div>
 <p class="muted">Vorschau und Zeitplan verwenden die gespeicherten Einstellungen. Eine Speicherberechnung kann bei grossen Backups länger dauern.</p>
 </details>
@@ -1734,7 +1790,7 @@ print <<HTML;
 $csrf_html
 <input data-role="none" type="hidden" name="action" value="recover-services">
 <p>Ein Dienst-Wiederanlauf ist noch offen. Bitte zuerst die Journal-/Loghinweise prüfen.</p>
-<button data-role="none" type="submit">Offene Dienste wieder starten</button>
+<button data-role="none" type="submit">Offene Dienste wieder starten</button>$action_help{'recover-services'}
 </form>
 <div id="operation-result" hidden></div>
 </div>
@@ -1751,7 +1807,7 @@ $csrf_html
 $csrf_html
 <input data-role="none" type="hidden" name="action" value="stop-backup">
 <input data-role="none" type="hidden" name="task" value="$active_task_attr">
-<button data-role="none" class="danger" type="submit">Backup stoppen</button>
+<button data-role="none" class="danger" type="submit">Backup stoppen</button>$action_help{'stop-backup'}
 </form>
 </div>
 <pre class="terminal" id="task-log">Noch keine Live-Ausgabe vorhanden.</pre>
@@ -1798,12 +1854,12 @@ $backup_target_picker
 </fieldset>
 
 <fieldset class="schedule-card wide">
-<legend>Datenquellen</legend>
+<legend id="source-selection-legend">Datenquellen $info_sources</legend>
 <details id="source-selection-panel" class="source-selection-panel">
 <summary>Laufwerke und Netzfreigaben auswählen <span id="source-selection-summary"></span></summary>
 <input data-role="none" type="hidden" id="source-selection-json" name="source_selection_json" value="$cfg_source_selection">
 <p class="source-intro">Wähle die zusätzlichen Datenquellen für dein Systembackup. Das Backup-Ziel und deine Ausschlüsse bleiben geschützt.</p>
-<label class="source-policy-label"><span>Grundregel</span><select data-role="none" id="source-policy" data-source-policy disabled><option value="local">Empfohlen: lokale Laufwerke einschliessen, Netzfreigaben nur ausdrücklich</option><option value="legacy">Bisheriges Verhalten beibehalten: alle eingebundenen Datenquellen</option></select></label>
+<label class="source-policy-label"><span>Grundregel</span><select data-role="none" id="source-policy" data-source-policy disabled><option value="local">Lokale Laufwerke; Netzfreigaben einzeln (empfohlen)</option><option value="legacy">Alle eingebundenen Laufwerke und Netzfreigaben</option></select></label>
 <p class="muted" id="source-policy-note"></p>
 <div id="source-volume-list">Datenquellen werden geladen. Gespeicherte Ausnahmen bleiben erhalten.</div>
 <details id="source-technical-details" class="source-secondary-details" hidden>
@@ -2044,23 +2100,24 @@ $csrf_html
 <input data-role="none" type="hidden" name="action" value="maintenance-config">
 <fieldset class="settings-load-guard"$config_action_disabled>
 <div class="settings-form nested-settings">
-<label><span>Aufbewahrungsart</span><select data-role="none" name="retention_mode"><option value="count"$retention_count_selected>Anzahl Backups (Standard)</option><option value="gfs"$retention_gfs_selected>Tages-, Wochen- und Monatsstände</option></select></label>
+<label><span>Aufbewahrungsart $action_help{'retention-mode'}</span><select data-role="none" name="retention_mode"><option value="count"$retention_count_selected>Anzahl Backups (Standard)</option><option value="gfs"$retention_gfs_selected>Tages-, Wochen- und Monatsstände</option></select></label>
+<div class="retention-help-note">Tages-, Wochen- und Monatsstände: Bedeutung und Standardwerte $action_help{'retention-buckets'}</div>
 <label><span>Tagesstände behalten</span><input data-role="none" name="keep_daily" type="number" min="0" max="3650" required value="$maintenance_values{keep_daily}"></label>
 <label><span>Wochenstände behalten</span><input data-role="none" name="keep_weekly" type="number" min="0" max="520" required value="$maintenance_values{keep_weekly}"></label>
 <label><span>Monatsstände behalten</span><input data-role="none" name="keep_monthly" type="number" min="0" max="120" required value="$maintenance_values{keep_monthly}"></label>
-<label><span>Task-Logs aufbewahren (Tage)</span><input data-role="none" name="log_retention_days" type="number" min="1" max="3650" required value="$maintenance_values{log_retention_days}"></label>
-<label><span>Quarantäne aufbewahren (Tage)</span><input data-role="none" name="quarantine_retention_days" type="number" min="1" max="3650" required value="$maintenance_values{quarantine_retention_days}"></label>
-<label class="checkline"><input data-role="none" name="integrity_enabled" type="checkbox" value="1"$integrity_checked><span>Regelmässige Prüfsummenprüfung aktivieren (Standard: aus)</span></label>
-<label><span>Prüfintervall (Tage)</span><input data-role="none" name="integrity_interval_days" type="number" min="1" max="365" required value="$maintenance_values{integrity_interval_days}"></label>
+<label><span>Task-Logs aufbewahren (Tage) $action_help{'log-retention'}</span><input data-role="none" name="log_retention_days" type="number" min="1" max="3650" required value="$maintenance_values{log_retention_days}"></label>
+<label><span>Quarantäne aufbewahren (Tage) $action_help{'quarantine-retention'}</span><input data-role="none" name="quarantine_retention_days" type="number" min="1" max="3650" required value="$maintenance_values{quarantine_retention_days}"></label>
+<label class="checkline"><input data-role="none" name="integrity_enabled" type="checkbox" value="1"$integrity_checked><span>Regelmässige Prüfsummenprüfung aktivieren (Standard: aus) $action_help{'integrity-enabled'}</span></label>
+<label><span>Prüfintervall (Tage) $action_help{'integrity-interval'}</span><input data-role="none" name="integrity_interval_days" type="number" min="1" max="365" required value="$maintenance_values{integrity_interval_days}"></label>
 </div>
-<p class="muted">Prüfsummen erkennen Änderungen seit ihrer ersten Erfassung; sie beweisen keinen erfolgreichen Restore. Die erste Prüfung erstellt nur die Vergleichsbasis. Prüfungen verursachen zusätzliche Lesezugriffe.</p>
+<p class="muted">Prüfsummen erkennen Änderungen seit ihrer ersten Erfassung; sie beweisen keinen erfolgreichen Restore. Fehlt eine Vergleichsbasis, wird sie zuerst angelegt. Prüfungen verursachen zusätzliche Lesezugriffe.</p>
 <button data-role="none" type="submit">Wartungseinstellungen speichern</button>
 </fieldset>
 </form>
 <form data-ajax="false" method="post" class="maintenance-preview-form">
 $csrf_html
 <input data-role="none" type="hidden" name="action" value="maintenance-preview">
-<button data-role="none" type="submit"$config_action_disabled>Löschvorschau anzeigen</button>
+<button data-role="none" type="submit"$config_action_disabled>Löschvorschau anzeigen</button>$action_help{'maintenance-preview'}
 </form>
 <p class="muted">Die Vorschau löscht nichts. Erst die separate Bestätigung führt genau die geprüfte Auswahl aus; bei zwischenzeitlichen Änderungen muss neu geprüft werden.</p>
 </details>
@@ -2152,7 +2209,7 @@ if ($browse_id) {
 <a data-ajax="false" data-skip-scroll-save="1" class="button-link" href="$close_browse_url">Ansicht schliessen</a>
 </div>
 <p>Pfad: <code>$safe_browse_path</code></p>
-<details><summary>Datei oder Ordner getrennt wiederherstellen</summary>
+<details><summary>Datei oder Ordner getrennt wiederherstellen $action_help{'restore-files'}</summary>
 <form data-ajax="false" method="post" class="partial-restore-form">$csrf_html
 <input data-role="none" type="hidden" name="action" value="restore-files"><input data-role="none" type="hidden" name="backup_id" value="$safe_browse_id">
 <label><span>Pfad innerhalb des Backups, ohne führenden Schrägstrich</span><input data-role="none" type="text" name="path" required placeholder="etc/hostname"></label>
@@ -2299,10 +2356,10 @@ $csrf_html
 <input data-role="none" type="hidden" name="backup_id" value="$safe_restore_id">
 $offline_notice
 $degraded_confirmation
-<label><span>Restore-Ziel (bestehendes Verzeichnis)</span><input data-role="none" type="text" name="restore_destination" value="/" required></label>
+<label><span>Restore-Ziel (bestehendes Verzeichnis) $action_help{'restore-destination'}</span><input data-role="none" type="text" name="restore_destination" value="/" required></label>
 <p class="muted">Mit / wird das aktuelle System wiederhergestellt. Für einen vorbereiteten Offline-Datenträger dessen Einhängepfad eintragen. Separate Daten-Volumes werden nur mit ausdrücklicher Zuordnung wiederhergestellt.</p>
-<details><summary>Volume-Zuordnung für zusätzliche Datenträger</summary><label><span>Zuordnung als JSON-Liste; leer lassen mit []</span><textarea data-role="none" name="restore_volume_map" rows="3">[]</textarea></label><p class="muted">Beispiel: [&#123;&quot;source&quot;:&quot;/media/usb/Daten&quot;,&quot;destination&quot;:&quot;/mnt/recovery-root/media/usb/Daten&quot;&#125;]. Beide Ziele müssen bereits eingehängt beziehungsweise angelegt sein.</p></details>
-<button data-role="none" type="button" data-restore-preview>Restore-Vorschau erstellen</button>
+<details><summary>Volume-Zuordnung für zusätzliche Datenträger $action_help{'restore-volumes'}</summary><label><span>Zuordnung als JSON-Liste; leer lassen mit []</span><textarea data-role="none" name="restore_volume_map" rows="3">[]</textarea></label><p class="muted">Beispiel: [&#123;&quot;source&quot;:&quot;/media/usb/Daten&quot;,&quot;destination&quot;:&quot;/mnt/recovery-root/media/usb/Daten&quot;&#125;]. Beide Ziele müssen bereits eingehängt beziehungsweise angelegt sein.</p></details>
+<span class="action-with-help"><button data-role="none" type="button" data-restore-preview>Restore-Vorschau erstellen</button>$action_help{'restore-preview'}</span>
 <pre id="restore-plan-output" class="terminal" hidden></pre>
 <label>
 <span>Backup-ID zur Sicherheitsbestätigung eingeben</span>
@@ -2312,7 +2369,7 @@ $degraded_confirmation
 <input data-role="none" type="checkbox" name="confirm_restore" value="1" required>
 <span>Ich bestätige, dass dieses Backup auf das System zurückgeschrieben werden soll.</span>
 </label>
-<button data-role="none" class="danger" type="submit"$restore_submit_disabled>Restore starten</button>
+<span class="action-with-help"><button data-role="none" class="danger" type="submit"$restore_submit_disabled>Restore starten</button>$action_help{'restore-start'}</span>
 </form>
 </div>
 </fieldset>

@@ -63,7 +63,8 @@
     // This exact compatibility notice is already covered by the policy note.
     // Never hide errors or other notices (especially missing selected mounts).
     var legacyNotice = 'Bestehende Konfiguration: bisheriger Sicherungsumfang bleibt erhalten. Fuer einen begrenzten Umfang lokale Quellen waehlen und Netzfreigaben einzeln aktivieren.';
-    return (notices || []).filter(function (notice) { return notice !== legacyNotice; }).concat(errors || []);
+    var allSourcesNotice = 'Alle eingebundenen Quellen: Auch Netzfreigaben werden mitgesichert. Fuer einen begrenzten Umfang lokale Laufwerke waehlen und Netzfreigaben einzeln aktivieren.';
+    return (notices || []).filter(function (notice) { return notice !== legacyNotice && notice !== allSourcesNotice; }).concat(errors || []);
   }
   var core = { normalizeLogForDisplay: normalizeLogForDisplay, controlState: controlState, validateSettings: validateSettings, updateDirty: updateDirty, logViewport: logViewport, phaseLabel: phaseLabel, sourceSelection: sourceSelection, sourceIncluded: sourceIncluded, sourceDisplayGroup: sourceDisplayGroup, sourceNotices: sourceNotices };
   if (typeof module !== 'undefined' && module.exports) module.exports = core;
@@ -100,7 +101,7 @@
   function capture(form) { names().forEach(function (name) { if (!form || controls(name).some(function (item) { return item.form === form; })) { initial[name] = controlState(controls(name)); delete changed[name]; } }); }
   function dirty() { return pendingDraft || Object.keys(changed).length > 0; }
   function readable(name, value) {
-    if (name === 'source_selection_json') { try { var selection = sourceSelection(value); return (selection.policy === 'legacy' ? 'Bisherige Grundregel' : 'Lokale Laufwerke; Netzfreigaben ausdrücklich') + ' · ' + Object.keys(selection.overrides).length + ' gespeicherte Ausnahmen'; } catch (ignore) { return 'Ungültige Auswahl – bitte prüfen'; } }
+    if (name === 'source_selection_json') { try { var selection = sourceSelection(value); return (selection.policy === 'legacy' ? 'Alle eingebundenen Laufwerke und Netzfreigaben' : 'Lokale Laufwerke; Netzfreigaben einzeln (empfohlen)') + ' · ' + Object.keys(selection.overrides).length + ' gespeicherte Ausnahmen'; } catch (ignore) { return 'Ungültige Auswahl – bitte prüfen'; } }
     if (/hook$/.test(name)) return value ? 'Eingetragen' : 'Leer';
     if (name === 'rsync_extra_excludes') return value.split(/\r?\n/).filter(function (line) { return line.trim(); }).length + ' Einträge';
     if (name === 'stop_targets') return (value ? value.split('\u001f').length : 0) + ' Ziele ausgewählt';
@@ -177,8 +178,8 @@
     var technicalTarget = byId('source-technical-list'), technicalDetails = byId('source-technical-details'), technicalSummary = byId('source-technical-summary');
     var grouped = technicalTarget && technicalDetails && technicalSummary, technicalCount = 0, technicalIncluded = 0;
     policy.value = selection.policy;
-    byId('source-policy-note').textContent = selection.policy === 'legacy' ? 'Bisheriger Umfang bleibt erhalten, auch Netzfreigaben. Empfehlung: lokale Laufwerke automatisch, Netzfreigaben einzeln auswählen. Gespeicherte Ausnahmen bleiben wirksam.' : 'Lokale Laufwerke sind enthalten; Netzfreigaben nur nach ausdrücklicher Auswahl. Automount-Bereiche werden nicht pauschal aktiviert. Gespeicherte Ausnahmen bleiben wirksam.';
-    byId('source-selection-summary').textContent = selection.policy === 'legacy' ? '· bisherige Grundregel' : '· lokale Laufwerke';
+    byId('source-policy-note').textContent = selection.policy === 'legacy' ? 'Alle eingebundenen Laufwerke und Netzfreigaben werden grundsätzlich einbezogen. Das kann sehr grosse Backups verursachen. Ausschlüsse und gespeicherte Ausnahmen bleiben wirksam.' : 'Standard bei Neuinstallation: lokale Laufwerke einschliessen, Netzfreigaben einzeln auswählen. Ausschlüsse und gespeicherte Ausnahmen bleiben wirksam.';
+    byId('source-selection-summary').textContent = selection.policy === 'legacy' ? '· alle eingebundenen Quellen' : '· lokale Laufwerke (empfohlen)';
     target.replaceChildren();
     if (technicalTarget) technicalTarget.replaceChildren();
     var volumes = sourceVolumes.slice();
@@ -277,11 +278,16 @@
   }
   function positionInfoBubble(help) {
     var bubble = help.querySelector('.info-bubble'); if (!bubble) return;
-    bubble.style.marginLeft = '0px'; bubble.classList.remove('info-bubble-above');
-    var rect = bubble.getBoundingClientRect(), shift = Math.min(0, root.innerWidth - 12 - rect.right);
+    bubble.style.marginLeft = '0px'; bubble.style.maxHeight = ''; bubble.classList.remove('info-bubble-above');
+    var anchor = help.getBoundingClientRect(), rect = bubble.getBoundingClientRect();
+    var below = Math.max(0, root.innerHeight - anchor.bottom - 20), above = Math.max(0, anchor.top - 20);
+    var useAbove = rect.height > below && above > below;
+    if (useAbove) bubble.classList.add('info-bubble-above');
+    bubble.style.maxHeight = Math.floor(useAbove ? above : below) + 'px'; bubble.style.overflowY = 'auto';
+    rect = bubble.getBoundingClientRect();
+    var shift = Math.min(0, root.innerWidth - 12 - rect.right);
     if (rect.left + shift < 12) shift += 12 - rect.left - shift;
-    bubble.style.marginLeft = shift + 'px'; rect = bubble.getBoundingClientRect();
-    if (rect.bottom > root.innerHeight - 12 && help.getBoundingClientRect().top > rect.height + 12) bubble.classList.add('info-bubble-above');
+    bubble.style.marginLeft = shift + 'px';
   }
   function infoEvent(event) { var help = event.target.closest('.info-help'); if (help) positionInfoBubble(help); }
   document.addEventListener('pointerover', infoEvent);
@@ -473,6 +479,8 @@
   document.addEventListener('input', onSettingChange);
   document.addEventListener('change', onSettingChange);
   document.addEventListener('click', async function (event) {
+    var helpText = event.target.closest('.info-bubble');
+    if (helpText) { event.preventDefault(); helpText.focus({ preventScroll: true }); return; }
     if (event.target.closest('[data-archive-profile-draft]')) {
       event.preventDefault();
       [['metadata_mode', 'portable-archive'], ['backup_mode', 'full']].forEach(function (choice) { var control = controls(choice[0]).find(function (item) { return item.value === choice[1]; }); if (control) { control.checked = true; control.dispatchEvent(new Event('change', { bubbles: true })); } });

@@ -18,6 +18,26 @@ Unveröffentlichte Änderungen auf Basis von 1.0.0. Kein neues Release und keine
 
 ## Sichere Anwendung des Testpakets
 
+### Test-ZIP herunterladen
+
+1. Bei GitHub mit dem eigenen Konto anmelden und die
+   [Builds des develop-Teststands](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/workflows/build-plugin.yml?query=branch%3Adevelop)
+   öffnen. Den neuesten **erfolgreichen** Lauf für `develop` auswählen und dessen
+   Commit prüfen. Ein Link zu einem älteren einzelnen Lauf bleibt auf diesem
+   alten Stand; er wechselt nach einem Push nicht automatisch zum neuesten ZIP.
+2. Unten unter **Artifacts** auf **LoxBerryHostBackup** klicken.
+3. Das heruntergeladene Artefakt-ZIP **einmal entpacken**. Es enthält das eigentliche
+   Installationspaket **LoxBerryHostBackup_1.0.0.zip**. Dieses innere ZIP unverändert
+   in der LoxBerry-Plugin-Verwaltung hochladen, nicht das äussere Artefakt-ZIP.
+
+Das Testpaket behält die Version 1.0.0. Es ist kein neues öffentliches Release
+und wird nicht automatisch als Plugin-Update angeboten. Der öffentliche
+Release-Download und die Update-Kanäle bleiben unverändert. GitHub-Artefakte
+sind zeitlich befristet; bei einem abgelaufenen Download einen neueren
+erfolgreichen develop-Lauf verwenden.
+
+### Installation und erster Test
+
 Einstellungen exportieren und laufende Aufgaben beenden lassen. Testpaket
 manuell über die Plugin-Verwaltung installieren, nicht vorher deinstallieren.
 Unter Laufwerke und Netzfreigaben lokale Grundregel auswählen, gewünschte
@@ -32,6 +52,15 @@ Diese kompaktere Darstellung ändert weder Grundregel noch Sicherungsumfang.
 Längere Erläuterungen stehen unter „Hinweise zur Auswahl“; der Speicherhinweis
 bleibt direkt sichtbar. Die Typografie wird unabhängig von globalen LoxBerry-
 Schriftregeln gesetzt.
+
+Die Auswahl heisst jetzt funktionsbezogen „Lokale Laufwerke; Netzfreigaben
+einzeln (empfohlen)“ oder „Alle eingebundenen Laufwerke und Netzfreigaben“ statt
+„Bisheriges Verhalten“. Der Infobutton direkt neben Datenquellen erklärt beide
+Regeln und ihre Folgen. Die internen Werte local/legacy, der Standard für neue
+Konfigurationen und vorhandene Einstellungen werden dadurch nicht geändert.
+Auch bei einem ODROID N2+ mit USB-Nutzdaten ist die lokale Regel passend: den
+Nutzdatenträger eingeschlossen und den reinen Backup-Datenträger ausgeschlossen
+lassen. Ziel, Metadaten-Profil, Backup-Modus und Zeitplan bleiben bestehen.
 
 Bei einem Metadatenfehler die einzelnen Prüfschritte lesen. Falls das NAS feste
 Eigentümer/Rechte erzwingt, Portable Archive **und** Vollbackup auswählen und

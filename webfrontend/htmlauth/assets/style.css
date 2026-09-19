@@ -180,6 +180,9 @@ body.is-loading .loading-overlay {
   left: 50%;
   line-height: 1.35;
   max-width: min(340px, 80vw);
+  max-height: min(460px, calc(100vh - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 9px 10px;
   position: absolute;
   text-shadow: none;
@@ -187,7 +190,7 @@ body.is-loading .loading-overlay {
   top: calc(100% + 8px);
   transform: translateX(-50%);
   width: max-content;
-  white-space: normal;
+  white-space: pre-line;
   overflow-wrap: anywhere;
   word-spacing: normal;
   z-index: 20;
@@ -206,6 +209,24 @@ body.is-loading .loading-overlay {
   text-shadow: none;
   text-transform: none;
   word-spacing: normal;
+}
+
+#hostbackup-app .info-bubble:focus-visible {
+  outline: 3px solid #14769a;
+  outline-offset: 2px;
+}
+
+#hostbackup-app .action-with-help {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  vertical-align: middle;
+}
+#hostbackup-app .retention-help-note {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
 }
 
 #hostbackup-app .info-help:hover .info-bubble,

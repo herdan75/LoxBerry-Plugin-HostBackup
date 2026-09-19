@@ -73,5 +73,8 @@ for(const selection of [defaultDisplay,ui.sourceSelection({policy:'legacy',overr
 const legacyNotice='Bestehende Konfiguration: bisheriger Sicherungsumfang bleibt erhalten. Fuer einen begrenzten Umfang lokale Quellen waehlen und Netzfreigaben einzeln aktivieren.';
 assert.deepEqual(ui.sourceNotices([legacyNotice,'Gewählte Quelle ist nicht eingebunden.'],['Prüfung fehlgeschlagen.']),['Gewählte Quelle ist nicht eingebunden.','Prüfung fehlgeschlagen.'],'Remove only the duplicate policy explanation');
 assert.deepEqual(ui.sourceNotices([], [legacyNotice]),[legacyNotice],'Errors are never filtered, even when text matches a notice');
+const allSourcesNotice='Alle eingebundenen Quellen: Auch Netzfreigaben werden mitgesichert. Fuer einen begrenzten Umfang lokale Laufwerke waehlen und Netzfreigaben einzeln aktivieren.';
+assert.deepEqual(ui.sourceNotices([allSourcesNotice], ['Quelle fehlt.']),['Quelle fehlt.'],'Neutral policy notice is already explained next to the selector');
+assert.deepEqual(ui.sourceNotices([], [allSourcesNotice]),[allSourcesNotice],'Neutral policy errors must also remain visible');
 assert.deepEqual(ui.sourceNotices(),[]);
 console.log('HostBackup web behavior tests passed.');

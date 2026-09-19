@@ -15,6 +15,13 @@ Die Datenquellen-Ansicht trennt auswählbare Laufwerke von aufklappbaren technis
 Einbindungen. Diese Gruppierung verändert keine Auswahl; gespeicherte Ausnahmen
 bleiben direkt sichtbar. Hinweistexte sind gegen globale LoxBerry-Schriftregeln
 abgegrenzt und ausführliche Erläuterungen lassen sich separat öffnen.
+Kontextbezogene Infobuttons erklären ausserdem die Prüf- und Schutzaktionen,
+Speicher- und Laufzeitbereinigung, erweiterte Aufbewahrung und Restore-Eingaben.
+Sie unterscheiden ausdrücklich zwischen Strukturprüfung, Prüfsummenvergleich
+und persönlich dokumentiertem Restore-Test. Das Öffnen einer Hilfe startet
+keine Aktion und verändert keine Einstellung; lange Hilfen sind auch mobil
+und per Tastatur scrollbar. Einfache Navigations- und Speicherbuttons bleiben
+ohne zusätzliche, wiederholende Erklärung.
 
 > [!IMPORTANT]
 > **Update auf 1.0.0:** Das reguläre Release ist ohne Beta-Zusatz erhältlich.
@@ -545,22 +552,36 @@ keine pauschale Behandlung von rsync-Code 23 als Erfolg.
 Unter **Laufwerke und Netzfreigaben** lassen sich die Grundregel und einzelne
 eingebundene Quellen auswählen. Änderungen wirken erst nach dem Speichern,
 auch bei zeitgesteuerten Backups.
+Der Infobutton neben **Datenquellen** erklärt beide Regeln, den Unterschied
+zwischen Quelle, Backup-Ziel und Metadaten-Profil sowie Ausnahmen, Ausschlüsse,
+Automount und das Speichern. Längere Hinweise sind scrollbar, auch per Tastatur.
 
-- **Neue Konfiguration:** Lokale Laufwerke bleiben enthalten, Netzfreigaben und
+- **Lokale Laufwerke; Netzfreigaben einzeln (empfohlen):** Standard bei einer
+  Neuinstallation, unabhängig vom Gerätetyp. Lokale Laufwerke bleiben enthalten, Netzfreigaben und
   Automount-Bereiche dagegen nicht automatisch. Eine gewünschte Netzfreigabe
   zuerst einbinden, aktualisieren und ausdrücklich auswählen.
+- **Alle eingebundenen Laufwerke und Netzfreigaben:** Bezieht Netzfreigaben
+  automatisch ein und kann dadurch sehr grosse Backups erzeugen. Ausschlüsse
+  und gespeicherte Ausnahmen bleiben wirksam. Dieser funktionsbezogene Name
+  ersetzt „Bisheriges Verhalten“ auch für Nutzer einer Neuinstallation.
 - **Bestehende Konfiguration ohne neue Auswahl:** Das bisherige Verhalten bleibt
   erhalten, einschliesslich der bisher mitgesicherten Netzfreigaben. Zum Schutz
   vor unbeabsichtigt grossen Backups die Grundregel bewusst auf lokale Laufwerke
   ändern, gewünschte Freigaben auswählen und speichern. Das Update ändert den
   Sicherungsumfang nicht stillschweigend.
-- Ein `autofs`-Sammelverzeichnis wird nicht pauschal freigegeben: einzelne
+- Bei der empfohlenen Grundregel wird ein `autofs`-Sammelverzeichnis nicht pauschal freigegeben: einzelne
   eingebundene Freigaben auswählen. Eine aktiv ausgewählte, aber nicht mehr
   eingebundene Quelle verhindert den Start, statt unbemerkt im Backup zu fehlen.
 - Zusätzliche Ausschlüsse und der Ausschluss des Backup-Ziels haben Vorrang.
   `/media/usb/PI_Backup` kann ausgeschlossen bleiben, während Nutzdaten auf
   `/media/usb/USB_Loxberry` mitgesichert werden. `/media` nicht pauschal ausschliessen,
   wenn dort gewünschte Nutzdaten liegen.
+- Bei einer Sicherung auf eine lokale ext4-USB-Platte passt diese empfohlene
+  Grundregel auch auf einem ODROID N2+. Datenquellen ändern weder das Metadaten-
+  Profil noch Backup-Modus, Ziel oder Zeitplan: ein bisher passendes Native Strict
+  und ein inkrementeller Snapshot können beibehalten werden. Nach der Umstellung
+  Nutzdaten-Laufwerk und Backup-Ausschluss kontrollieren, speichern und die
+  Vorschau prüfen; der geänderte Sicherungsumfang gilt erst für folgende Backups.
 - **Nächstes Backup prüfen** zeigt den gespeicherten Umfang. Beim Backup wird die
   Dateiliste nach dem Dienst-Stopp erfasst und ohne rekursives Nachladen kopiert.
   Dies verhindert, dass ausgeschlossene Netzfreigaben nachträglich betreten

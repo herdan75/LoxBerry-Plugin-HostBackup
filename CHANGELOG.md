@@ -21,6 +21,19 @@ validiert werden.
   LoxBerry-Schriftregeln isoliert, Hinweise gekürzt und technische System-/Docker-
   Einbindungen in aufklappbare Details gruppiert. Die Sicherungsauswahl bleibt
   unverändert; bewusst gesetzte Ausnahmen bleiben in der Hauptliste sichtbar.
+- Grundregel „Bisheriges Verhalten“ verständlich in „Alle eingebundenen Laufwerke
+  und Netzfreigaben“ umbenannt, lokale Regel als Empfehlung/Standard bei
+  Neuinstallation beschrieben und Infobutton neben Datenquellen ergänzt.
+  Ausführliche Hilfe erklärt Quellen, Ziele, Profile, Ausschlüsse, Automount
+  und Speichern; lange Infofenster bleiben scrollbar innerhalb des Sichtbereichs.
+  Gespeicherte Werte und Auswahlregeln bleiben unverändert.
+- Kontextbezogene Infobuttons für Struktur-/Inhaltsprüfung, Prüfbericht,
+  Wiederherstellungsblatt, Löschschutz und persönliche Restore-Testeinträge
+  ergänzt. Weitere Hilfen erklären Übersicht-Prüfaktionen, Diagnose-Download,
+  Dienst-Wiederanlauf, Backup-Stopp, erweiterte Aufbewahrung, Prüfsummenintervalle,
+  Löschvorschau sowie getrennten Restore, Restore-Ziel und Volume-Zuordnungen.
+  Hilfen nennen Voraussetzungen, Dauer und Grenzen und lösen selbst keine
+  Aktion aus. Keine Änderung an Sicherungsumfang oder Backend-Abläufen.
 - Kein Backup-Start ohne gespeichertes Ziel, kein stilles Übergehen einer
   ausgewählten, nicht eingebundenen Freigabe. Explizite Dateilisten und
   Mount-Prüfung begrenzen Vollbackups, Snapshots und Portable Archives.

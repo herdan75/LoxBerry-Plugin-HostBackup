@@ -174,7 +174,7 @@ class SourcePlan:
             elif parent and not self.enabled[parent] and not local_automount_child:
                 included, reason = False, "Uebergeordnetes Laufwerk ist nicht ausgewaehlt."
             elif self.selection["policy"] == "legacy":
-                included, reason = True, "Bisheriges Verhalten: eingebundene Quellen werden mitgesichert."
+                included, reason = True, "Grundregel Alle eingebundenen Quellen: Quelle wird mitgesichert."
             elif kind == "local":
                 included, reason = True, "Lokales Dateisystem ist in der lokalen Quellenauswahl enthalten."
             else:
@@ -187,7 +187,7 @@ class SourcePlan:
             elif not enabled and path not in self.mounts:
                 self.notices.append(f"Deaktivierte Quelle ist momentan nicht eingebunden: {path}.")
         if self.selection["policy"] == "legacy":
-            self.notices.append("Bestehende Konfiguration: bisheriger Sicherungsumfang bleibt erhalten. Fuer einen begrenzten Umfang lokale Quellen waehlen und Netzfreigaben einzeln aktivieren.")
+            self.notices.append("Alle eingebundenen Quellen: Auch Netzfreigaben werden mitgesichert. Fuer einen begrenzten Umfang lokale Laufwerke waehlen und Netzfreigaben einzeln aktivieren.")
         self.descendant_routes = {}
         for path in self.mounts:
             if path == "/" or not self.included(path):

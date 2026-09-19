@@ -29,6 +29,16 @@ let html;
 if (process.platform === 'win32') {
   html = execFileSync('C:/Program Files/Git/bin/bash.exe', ['-s'], {cwd:repo, input:`PERL5LIB=${quote(perlLib)} LBPDATADIR=${quote(posix(temp))} REQUEST_METHOD=GET REMOTE_USER=fixture HTTP_USER_AGENT=fixture perl -MHostBackupFixture webfrontend/htmlauth/index.cgi\n`, encoding:'utf8'});
 } else html = execFileSync('perl',['-MHostBackupFixture','webfrontend/htmlauth/index.cgi'], {cwd:repo,env:{...process.env, PERL5LIB:perlLib,LBPDATADIR:temp,REQUEST_METHOD:'GET',REMOTE_USER:'fixture',HTTP_USER_AGENT:'fixture'},encoding:'utf8'});
+// Exercise the real lazy backup-row CGI renderer, not hand-maintained action
+// markup. Only its list response and GET action are overridden in this process.
+const backupFixture=[{backup_id:'fixture-ok',status:'complete',validation:{status:'ok'},host:{hostname:'fixture'},size_bytes:3221225472,files_count:100,finished_at:'2026-09-13T12:00:00Z',storage_format:'directory',export_status:'missing'}];
+backupFixture.push({...backupFixture[0],backup_id:'fixture-second',host:{hostname:'second-fixture'}});
+const backupRow='#backup-list-body tr:has([name="backup_id"][value="fixture-ok"])';
+const backupRowsProgram=`BEGIN { require HostBackupFixture; require CGI; my $original=\\&CORE::GLOBAL::readpipe; no warnings 'redefine'; *CORE::GLOBAL::readpipe=sub { my ($command)=@_; if ($command =~ /'list'\\s+2>&1$/) { $?=0; return ${quote(JSON.stringify(backupFixture))}; } return $original->(@_); }; *CGI::param=sub { return ($_[1] || '') eq 'action' ? 'backup-list' : ''; }; } do './webfrontend/htmlauth/index.cgi'; die $@ if $@;`;
+let backupRows;
+if(process.platform==='win32')backupRows=execFileSync('C:/Program Files/Git/bin/bash.exe',['-s'],{cwd:repo,input:`PERL5LIB=${quote(perlLib)} LBPDATADIR=${quote(posix(temp))} REQUEST_METHOD=GET REMOTE_USER=fixture HTTP_USER_AGENT=fixture perl -e ${quote(backupRowsProgram)}\n`,encoding:'utf8'});
+else backupRows=execFileSync('perl',['-e',backupRowsProgram],{cwd:repo,env:{...process.env,PERL5LIB:perlLib,LBPDATADIR:temp,REQUEST_METHOD:'GET',REMOTE_USER:'fixture',HTTP_USER_AGENT:'fixture'},encoding:'utf8'});
+assert.match(backupRows,/<details class="backup-extra-actions">/);assert.match(backupRows,/value="fixture-ok"/);
 assert.match(html,/value="\/fixture\/backup"/);
 assert.doesNotMatch(html,/Speichern und Backup-Start bleiben gesperrt/);
 assert.match(html, /<!doctype html><html><head>/);
@@ -88,10 +98,10 @@ const server=http.createServer(async(req,res)=>{
     if(action==='csrf-token'){await new Promise(resolve=>setTimeout(resolve,tokenDelay));return json(res,{csrf_token:'fresh-'+(++tokenNumber),expires_at:Date.now()/1000+3600});}
     if(action==='source-info')return json(res,failSources?{ok:false,error:'Mountliste momentan nicht erreichbar'}:{selection:savedSources,volumes:sourceVolumes,notices:['Netzfreigaben bewusst auswählen.']},failSources?500:200);
     if(action==='task-overview')return json(res,{tasks:[{task,state:taskFinished?'finished':'running'}],active_task:taskFinished?null:task,last_success:{backup_id:overviewBackupId,finished_at:overviewFinishedAt},next_run:{local:'14.09.2026 02:00'},last_failure:overviewIssues?{task:'backup-old-failure.log',state:'failed'}:null,pending_service_recovery:overviewIssues?1:0,target:{configured:true,readable:true,path:overviewTarget,available_mb:20000}});
-    if(['backup-preview','storage-info','runtime-cleanup-preview','diagnostics'].includes(action))reportRequests++;
+    if(['backup-preview','storage-info','runtime-cleanup-preview','diagnostics','inspect-backup','verification-report','recovery-sheet'].includes(action))reportRequests++;
     if(action==='task-status'){statusCount++;return json(res,{state:taskFinished?'finished':'running',phase:taskFinished?'complete':taskPhase,now:100,mtime:99,content_b64:Buffer.from(longLog()).toString('base64')});}
     if(action==='target-notice'){res.end('<section class="inline-notice">Fixture-Ziel verfügbar</section>');return;}
-    if(action==='backup-list'){res.end('<tr><td data-label="ID">fixture-ok</td><td data-label="Status">complete</td><td data-label="Host">fixture</td><td data-label="Grösse">3 GiB</td><td data-label="Dateien">100</td><td data-label="Fertiggestellt">heute</td><td data-label="Export">–</td><td data-label="Aktionen"><form method="get" class="operation-form"><input type="hidden" name="action" value="verification-report"><input type="hidden" name="backup_id" value="fixture-ok"><button type="submit">Prüfbericht anzeigen</button></form><details class="restore-test-record"><summary>Externen Restoretest dokumentieren</summary><form method="post" class="restore-test-form"><input type="hidden" name="action" value="record-restore-test"><input type="hidden" name="backup_id" value="fixture-ok"><label>Ergebnis<select name="result" required><option value="">Bitte wählen</option><option value="passed">Erfolgreich</option><option value="failed">Fehlgeschlagen</option></select></label><label>Datum und Uhrzeit<input name="tested_at" type="datetime-local" required></label><label>Notiz<textarea name="note" maxlength="2000"></textarea></label><button type="submit">Persönlichen Testeintrag speichern</button></form></details><span class="info-help"><button type="button" class="info-button" aria-label="Information">i</button><span class="info-bubble">Dynamisch geladene Information</span></span></td></tr>');return;}
+    if(action==='backup-list'){res.end(backupRows);return;}
     if(action==='stop-targets'){await new Promise(resolve=>setTimeout(resolve,100));res.end('<input type="hidden" name="stop_targets_loaded" value="1"><label><input type="checkbox" name="stop_targets" value="systemd:test.service" checked>Testdienst</label><button type="button" data-stop-target-preset="none">Keine Dienste</button>');return;}
     if(action==='backup-preview')return json(res,{saved_config:true,backup_mode:'snapshot',metadata_mode:'network-compatible',full_baseline_required:true,excludes:['/fixture/backup/***'],source_volumes:[{path:'/',included:true,reason:'System'}],available_mb:20000,baseline_estimate_mb:3000,metadata_probe:probe});
     if(action==='verification-report')return json(res,verificationReport);
@@ -103,6 +113,71 @@ const server=http.createServer(async(req,res)=>{
 async function visible(page,selector){await page.locator(selector).waitFor({state:'visible'});}
 async function sourceTypographyFailures(page){
   return page.locator('#source-selection-panel').evaluate(node=>Array.from(node.querySelectorAll('p,summary')).map(item=>{const style=getComputedStyle(item);return {tag:item.tagName,text:item.textContent.slice(0,90),size:parseFloat(style.fontSize),weight:parseInt(style.fontWeight,10),spacing:style.letterSpacing};}).filter(item=>item.size>(item.tag==='SUMMARY'?15:14)||item.weight>(item.tag==='SUMMARY'?700:400)||!['normal','0px'].includes(item.spacing)));
+}
+async function checkSourceHelp(page,viewportName){
+  const legend=page.locator('#source-selection-legend'),button=legend.locator('.info-button'),bubble=legend.locator('.info-bubble');
+  const selectionBefore=await page.locator('#source-selection-json').inputValue(),dirtyBefore=await page.locator('#settings-change-popup').getAttribute('aria-hidden'),postsBefore=postCount;
+  assert.equal(await button.count(),1,'Data sources use the same single info button as the other setting groups');
+  assert.equal(await button.getAttribute('type'),'button');
+  assert.ok(await button.getAttribute('aria-label'),'Info button has an accessible name');
+  assert.equal(await button.getAttribute('aria-describedby'),await bubble.getAttribute('id'),'Help text is associated with its trigger for assistive technology');
+  const helpText=await bubble.textContent();
+  for(const topic of ['Backup-Ziel','Metadaten-Profil','USB','Automount','speichern'])assert.ok(helpText.includes(topic),'Source help explains '+topic);
+  await button.evaluate(node=>node.scrollIntoView({block:'center'}));
+  await button.click();
+  assert.equal(await button.getAttribute('aria-expanded'),'true');
+  assert.equal(await bubble.getAttribute('role'),'tooltip');
+  await visible(page,'#source-selection-legend .info-bubble');
+  const geometry=await bubble.evaluate(node=>{const rect=node.getBoundingClientRect(),style=getComputedStyle(node);return {left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:window.innerWidth,height:window.innerHeight,client:node.clientHeight,scroll:node.scrollHeight,overflow:style.overflowY,whiteSpace:style.whiteSpace,fontSize:parseFloat(style.fontSize),weight:parseInt(style.fontWeight,10),spacing:style.letterSpacing};});
+  assert.ok(geometry.left>=-1&&geometry.right<=geometry.width+1&&geometry.top>=-1&&geometry.bottom<=geometry.height+1,viewportName+': full help stays within viewport '+JSON.stringify(geometry));
+  assert.ok(geometry.fontSize<=14&&geometry.weight<=400&&['normal','0px'].includes(geometry.spacing),viewportName+': tooltip is normal setting copy, not host-theme heading text '+JSON.stringify(geometry));
+  assert.equal(geometry.whiteSpace,'pre-line','Paragraph breaks remain readable without interpreting HTML');
+  if(geometry.scroll>geometry.client+1){
+    await bubble.focus();await page.keyboard.press('Home');
+    await page.waitForFunction(()=>document.querySelector('#source-selection-legend .info-bubble').scrollTop===0);
+  }
+  await page.screenshot({path:path.join(temp,'source-help-'+viewportName+'.png')});
+  if(geometry.scroll>geometry.client+1){
+    assert.ok(['auto','scroll'].includes(geometry.overflow),'Long help must be scrollable');
+    await bubble.focus();await page.keyboard.press('End');
+    await page.waitForFunction(()=>{const node=document.querySelector('#source-selection-legend .info-bubble');return node.scrollTop>=node.scrollHeight-node.clientHeight-2;});
+    await page.screenshot({path:path.join(temp,'source-help-'+viewportName+'-scrolled.png')});
+  }
+  await page.keyboard.press('Escape');
+  assert.equal(await button.getAttribute('aria-expanded'),'false');
+  await page.mouse.move(1,1);await bubble.waitFor({state:'hidden'});
+  await button.focus();await page.keyboard.press('Enter');
+  assert.equal(await button.getAttribute('aria-expanded'),'true','Source help can be opened by keyboard');
+  await page.keyboard.press('Escape');await page.mouse.move(1,1);await bubble.waitFor({state:'hidden'});
+  assert.equal(await page.locator('#source-selection-json').inputValue(),selectionBefore,'Reading source help never changes selection');
+  assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),dirtyBefore,'Reading source help never changes dirty state');
+  assert.equal(postCount,postsBefore,'Reading source help never saves or starts a backup');
+}
+async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScreenshot=false){
+  const id='help-'+key,bubble=page.locator('[id="'+id+'"]'),button=page.locator('.info-button[aria-describedby="'+id+'"]');
+  assert.equal(await button.count(),1,'Actual CGI action has one contextual info button: '+key);
+  assert.equal(await button.getAttribute('type'),'button');assert.ok(await button.getAttribute('aria-label'));
+  assert.equal(await bubble.getAttribute('role'),'tooltip');assert.equal(await bubble.getAttribute('tabindex'),'0');
+  const helpText=await bubble.textContent();assert.ok(helpText.length>=60,'Context help is explanatory: '+key);
+  for(const topic of expectedTopics)assert.match(helpText,topic,key+' explains its scope and limits');
+  const stateBefore=await page.evaluate(()=>Array.from(document.querySelectorAll('#settings-save-form [name],#maintenance-settings-form [name]')).map(node=>[node.name,node.value,node.checked||false]));
+  const dirtyBefore=await page.locator('#settings-change-popup').getAttribute('aria-hidden'),postsBefore=postCount,reportsBefore=reportRequests;
+  const detailsBefore=await button.evaluate(node=>{const details=node.closest('details');return details?details.open:null;});
+  await button.evaluate(node=>node.scrollIntoView({block:'center'}));await button.click();
+  assert.equal(await button.getAttribute('aria-expanded'),'true');
+  assert.equal(await button.evaluate(node=>{const details=node.closest('details');return details?details.open:null;}),detailsBefore,'Info clicks must not toggle their details container: '+key);
+  const bounds=await bubble.evaluate(node=>{const rect=node.getBoundingClientRect();return {left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:window.innerWidth,height:window.innerHeight};});
+  assert.ok(bounds.left>=-1&&bounds.right<=bounds.width+1&&bounds.top>=-1&&bounds.bottom<=bounds.height+1,viewportName+' '+key+' tooltip stays in viewport '+JSON.stringify(bounds));
+  if(saveScreenshot)await page.screenshot({path:path.join(temp,'action-help-'+key+'-'+viewportName+'.png')});
+  // Reading/copying tooltip text inside a label or summary must not activate its
+  // native checkbox/disclosure default action either.
+  await bubble.click({position:{x:12,y:12}});
+  assert.equal(await button.evaluate(node=>{const details=node.closest('details');return details?details.open:null;}),detailsBefore,'Clicking help text must not toggle its details container: '+key);
+  await page.keyboard.press('Escape');await page.mouse.move(1,1);await bubble.waitFor({state:'hidden'});
+  assert.equal(await button.getAttribute('aria-expanded'),'false');
+  assert.equal(postCount,postsBefore,'Info button must not POST: '+key);assert.equal(reportRequests,reportsBefore,'Info button must not run a report: '+key);
+  assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),dirtyBefore,'Reading help never changes dirty state: '+key);
+  assert.deepEqual(await page.evaluate(()=>Array.from(document.querySelectorAll('#settings-save-form [name],#maintenance-settings-form [name]')).map(node=>[node.name,node.value,node.checked||false])),stateBefore,'Info inside labels must not toggle any settings: '+key);
 }
 (async()=>{
   let browser;
@@ -120,6 +195,15 @@ async function sourceTypographyFailures(page){
     await page.goto(base);await visible(page,'#download-task-log');
     await page.locator('#source-selection-panel').evaluate(node=>node.open=true);
     await page.waitForFunction(()=>!document.querySelector('#source-policy').disabled);
+    assert.deepEqual(await page.locator('#source-policy option').evaluateAll(options=>options.map(node=>({value:node.value,label:node.textContent}))),[
+      {value:'local',label:'Lokale Laufwerke; Netzfreigaben einzeln (empfohlen)'},
+      {value:'legacy',label:'Alle eingebundenen Laufwerke und Netzfreigaben'},
+    ],'Scope labels are meaningful on a first install; persisted policy values remain unchanged');
+    assert.equal(await page.locator('#source-policy').inputValue(),'legacy','Existing missing-key fixture remains legacy; help/labels do not migrate settings');
+    assert.doesNotMatch(await page.locator('#source-selection-summary').textContent(),/bisherig/i);
+    assert.doesNotMatch(await page.locator('#source-policy-note').textContent(),/Bisheriges Verhalten|Bisherige Grundregel|Bisheriger Umfang/i);
+    await checkSourceHelp(page,'desktop');
+    receipts.push('Data-source labels describe both policies explicitly; desktop info tooltip is accessible, bounded and cannot alter saved settings');
     const typographyFailures=await sourceTypographyFailures(page);
     if(typographyFailures.length) {
       await page.locator('#source-selection-panel').screenshot({path:path.join(temp,'source-typography-regression.png')});
@@ -207,6 +291,23 @@ async function sourceTypographyFailures(page){
     receipts.push('Compact overview has four primary values, keyboard-accessible details and complete IDs/paths; polling preserves disclosure state');
     receipts.push('Last failure and pending service recovery remain visible with details closed; expanding never runs checks');
     assert.equal(await page.locator('#task-history').inputValue(),task);receipts.push('Running task discovered without URL');
+    assert.equal(await page.locator('#backup-list-body .backup-extra-actions').count(),2,'Real CGI fixture includes two completed backup rows');
+    const extraActions=page.locator(backupRow+' .backup-extra-actions');await extraActions.evaluate(node=>node.open=true);
+    const actionTopics=[['inspect-backup',[/Manifest/,/keine Prüfsummen/]],['verify-backup',[/SHA-256/,/Vergleichsbasis/,/Restore-Test/]],['verification-report',[/keine neue Prüfung/,/JSON/]],['recovery-sheet',[/keinen Restore/,/Bootloader/]],['protect-backup',[/ausserhalb/,/Datenträger/]]];
+    for(const [action,topics] of actionTopics){
+      await checkActionHelp(page,action+'-fixture-ok','desktop',topics,action==='verify-backup');
+      const submit=page.locator(backupRow+' form:has([name="action"][value="'+action+'"]) button[type="submit"]');
+      assert.equal(await submit.isVisible(),true);assert.equal(await submit.isEnabled(),true,'Actual action remains enabled next to help: '+action);
+      assert.equal(await page.locator('.info-button[aria-describedby="help-'+action+'-fixture-second"]').count(),1,'Second backup has independently associated contextual help: '+action);
+    }
+    assert.equal(await page.locator(backupRow+' .restore-test-record').evaluate(node=>node.open),false);
+    await checkActionHelp(page,'record-restore-test-fixture-ok','desktop',[/kein Restore gestartet/,/persönliche/]);
+    assert.equal(await page.locator(backupRow+' .restore-test-record').evaluate(node=>node.open),false,'Summary info does not open the restore-test form');
+    const maintenance=page.locator('.maintenance-card');await maintenance.evaluate(node=>node.open=true);
+    await checkActionHelp(page,'integrity-enabled','desktop',[/Standard: aus/,/Vergleichsbasis/]);await maintenance.evaluate(node=>node.open=false);
+    await disclosure.evaluate(node=>node.open=true);await checkActionHelp(page,'backup-preview','desktop',[/gespeicherten Einstellungen/,/kein Backup/]);await disclosure.evaluate(node=>node.open=false);
+    const helpIds=await page.locator('.info-bubble[id]').evaluateAll(nodes=>nodes.map(node=>node.id));assert.equal(new Set(helpIds).size,helpIds.length,'Context help IDs are unique across actual page and dynamically rendered backup rows');
+    receipts.push('Actual CGI backup-action help and overview/maintenance help explain scope without POST, report requests, dirty changes or disclosure/label toggles; adjacent actions stay reachable');
     taskPhase='retention';
     await page.waitForFunction(()=>document.querySelector('#task-heartbeat').textContent.includes('Aufbewahrung prüfen und alte Backups bereinigen'));
     assert.match(await page.locator('#task-state').textContent(),/läuft/);
@@ -220,10 +321,15 @@ async function sourceTypographyFailures(page){
     assert.equal(await page.locator('[data-source-path="/media/smb/disconnected"]').isChecked(),true);
     assert.equal(await page.locator('[data-source-path="/fixture/backup"]').isEnabled(),false);
     await page.locator('#source-policy').selectOption('local');await visible(page,'#settings-change-popup');
+    assert.match(await page.locator('#settings-change-list').textContent(),/Lokale Laufwerke; Netzfreigaben einzeln/);
+    assert.doesNotMatch(await page.locator('#source-selection-summary').textContent(),/bisherig/i);
+    assert.doesNotMatch(await page.locator('#settings-change-list').textContent(),/Bisherige Grundregel|Bisheriges Verhalten/i);
     assert.equal(await nasSource.isChecked(),false);assert.equal(await usbSource.isChecked(),true,'Recommended policy must preserve local USB data');
     assert.equal(await page.locator('[data-source-path="/media/usb"]').isChecked(),false,'Autofs container remains excluded');assert.equal(await page.locator('[data-source-path="/media/usb/network"]').isChecked(),false,'Nested network sibling must not follow local USB');
     await page.locator('#source-policy').selectOption('legacy');assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true','Reverting policy restores the exact clean baseline');
     await nasSource.uncheck();await visible(page,'#settings-change-popup');
+    assert.match(await page.locator('#settings-change-list').textContent(),/Alle eingebundenen Laufwerke und Netzfreigaben/);
+    assert.doesNotMatch(await page.locator('#settings-change-list').textContent(),/Bisherige Grundregel|Bisheriges Verhalten/i);
     const sourceDraft=await page.locator('#source-selection-json').inputValue();
     await page.locator('#source-selection-reload').click();await page.waitForFunction(()=>!document.querySelector('#source-selection-reload').disabled);
     assert.equal(await page.locator('#source-selection-json').inputValue(),sourceDraft,'Reload must not replace draft with saved server selection');
@@ -273,20 +379,29 @@ async function sourceTypographyFailures(page){
     await page.locator('[name="metadata_mode"][value="network-compatible"]').check();await page.locator('[name="backup_mode"][value="snapshot"]').check();
     assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true');
     receipts.push('Blocked metadata preflight exposes exact failed check, expected/actual values, rsync error and profile advice safely without warning override');
-    await page.locator('#backup-list-body .operation-form button').click();await visible(page,'#verification-download');assert.match(await page.locator('#operation-result').textContent(),/Dateien stimmen/);
+    await page.locator(backupRow+' .backup-extra-actions').evaluate(node=>node.open=true);
+    await page.locator(backupRow+' form:has([name="action"][value="verification-report"]) button[type="submit"]').click();await visible(page,'#verification-download');assert.match(await page.locator('#operation-result').textContent(),/Dateien stimmen/);
     const downloadEvent=page.waitForEvent('download');await page.locator('#verification-download').click();const downloaded=await downloadEvent;
     assert.equal(downloaded.suggestedFilename(),'fixture-ok-verification.json');await downloaded.saveAs(path.join(temp,'verification-report.json'));
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(temp,'verification-report.json'),'utf8')),verificationReport);receipts.push('Verification JSON report renders and downloads identical content');
-    await page.locator('.restore-test-record').evaluate(node=>node.open=true);
-    await page.locator('.restore-test-form [name="result"]').selectOption('passed');await page.locator('.restore-test-form [name="tested_at"]').fill('2026-09-12T10:30');await page.locator('.restore-test-form [name="note"]').fill('Rescue-Test in separater Testumgebung; eigene Beobachtung.');
-    await page.locator('.restore-test-form button').click();await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('Persönlich dokumentierter Restore-Test: Erfolgreich'));
+    await page.locator(backupRow+' .restore-test-record').evaluate(node=>node.open=true);
+    await page.locator(backupRow+' .restore-test-form [name="result"]').selectOption('passed');await page.locator(backupRow+' .restore-test-form [name="tested_at"]').fill('2026-09-12T10:30');await page.locator(backupRow+' .restore-test-form [name="note"]').fill('Rescue-Test in separater Testumgebung; eigene Beobachtung.');
+    await page.locator(backupRow+' .restore-test-form button[type="submit"]').click();await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('Persönlich dokumentierter Restore-Test: Erfolgreich'));
     assert.match(await page.locator('#operation-result').textContent(),/Vom Plugin nicht überprüft/);assert.match(await page.locator('#operation-result').textContent(),/Rescue-Test in separater/);assert.match(await page.locator('#operation-result').textContent(),/keine Restore-Freigaben/);
-    await page.locator('#backup-list-body .operation-form button').click();await visible(page,'#verification-download');assert.match(await page.locator('#operation-result').textContent(),/Persönlich dokumentierter Restore-Test: Erfolgreich/);receipts.push('External restore test recorded with UTC date and displayed only as manual evidence');
+    await page.locator(backupRow+' .backup-extra-actions').evaluate(node=>node.open=true);
+    await page.locator(backupRow+' form:has([name="action"][value="verification-report"]) button[type="submit"]').click();await visible(page,'#verification-download');assert.match(await page.locator('#operation-result').textContent(),/Persönlich dokumentierter Restore-Test: Erfolgreich/);receipts.push('External restore test recorded with UTC date and displayed only as manual evidence');
     await summary.click();await page.locator('[data-load-action="backup-preview"]').click();await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('vollständige Basiskopie'));
     assert.match(await page.locator('#operation-result .metadata-probe').textContent(),/CIFS erzwingt feste Rechte/);
     await summary.click();assert.equal(await page.locator('#operation-result').isVisible(),true,'Loaded results remain visible when details close');
     await page.screenshot({path:path.join(temp,'desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});
+    await checkSourceHelp(page,'mobile');
+    receipts.push('Long data-source help stays within mobile viewport, supports keyboard scrolling and does not change selection or dirty state');
+    await page.locator(backupRow+' .backup-extra-actions').evaluate(node=>node.open=true);
+    await checkActionHelp(page,'verify-backup-fixture-ok','mobile',[/SHA-256/,/Restore-Test/],true);
+    await checkActionHelp(page,'record-restore-test-fixture-ok','mobile',[/kein Restore gestartet/]);
+    await page.locator('.maintenance-card').evaluate(node=>node.open=true);await checkActionHelp(page,'integrity-enabled','mobile');await page.locator('.maintenance-card').evaluate(node=>node.open=false);
+    receipts.push('Real lazily rendered action tooltips stay in the mobile viewport without toggling forms, settings or disclosure state');
     assert.deepEqual(await sourceTypographyFailures(page),[],'Real mobile wide-class rules must not resize or space source copy');
     const compactSourceMobile=await page.locator('#source-selection-panel').evaluate(node=>({height:node.getBoundingClientRect().height,mainHeight:node.querySelector('#source-volume-list').getBoundingClientRect().height,technicalOpen:node.querySelector('#source-technical-details').open}));
     assert.ok(compactSourceMobile.height<1450&&compactSourceMobile.mainHeight<=422&&!compactSourceMobile.technicalOpen,JSON.stringify(compactSourceMobile));
@@ -300,13 +415,15 @@ async function sourceTypographyFailures(page){
     assert.ok(await page.locator('#overview-detail-values').evaluate(node=>Array.from(node.children).every(child=>child.getBoundingClientRect().right<=392)));
     await page.locator('#operational-overview').screenshot({path:path.join(temp,'overview-mobile-expanded.png')});
     receipts.push('Responsive overview has four/two/one columns; expanded mobile details keep full long backup paths inside the viewport');
-    await page.locator('#backup-list-body .info-button').click();
-    const tip=await page.locator('#backup-list-body .info-bubble').boundingBox();assert.ok(tip.x>=0&&tip.x+tip.width<=392);
+    await page.locator(backupRow+' .backup-extra-actions').evaluate(node=>node.open=true);
+    const mobileActionButton=page.locator('.info-button[aria-describedby="help-inspect-backup-fixture-ok"]');
+    await mobileActionButton.click();
+    const tip=await page.locator('#help-inspect-backup-fixture-ok').boundingBox();assert.ok(tip.x>=0&&tip.x+tip.width<=392);
     assert.equal(await page.locator('#backup-list-body td').first().evaluate(node=>getComputedStyle(node,'::before').content),'"ID"');
     const overflow=await page.evaluate(()=>({width:window.innerWidth,scroll:document.documentElement.scrollWidth,nodes:Array.from(document.querySelectorAll('body *')).filter(node=>{const r=node.getBoundingClientRect();return r.right>window.innerWidth+2&&r.width>0&&getComputedStyle(node).position!=='absolute';}).slice(0,12).map(node=>({tag:node.tagName,id:node.id,cls:node.className,width:node.getBoundingClientRect().width,right:node.getBoundingClientRect().right}))}));
     assert.ok(overflow.scroll<=overflow.width+2,JSON.stringify(overflow));
     await page.screenshot({path:path.join(temp,'mobile.png'),fullPage:true});receipts.push('Mobile labels, delegated tooltip inside viewport and no page overflow');
-    await page.keyboard.press('Escape');assert.equal(await page.locator('#backup-list-body .info-button').getAttribute('aria-expanded'),'false');
+    await page.keyboard.press('Escape');assert.equal(await mobileActionButton.getAttribute('aria-expanded'),'false');
     assert.deepEqual(errors,[]);
     const result={status:'passed',tests:receipts,artifacts:temp,renderer:'actual CGI with mocked backend; read-only mount discovery',browser:await browser.version()};
     fs.writeFileSync(path.join(temp,'receipt.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));
