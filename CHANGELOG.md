@@ -3,13 +3,57 @@
 Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
-Dieses Projekt ist in einer ersten vorsichtig freigegebenen Version verfügbar.
+Der Hauptstand auf `main` bereitet Version 1.0.0 vor; die öffentliche
+Veröffentlichung und die LoxBerry-Pluginseite sind noch nicht freigegeben.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
 ## [Unreleased]
 
 Noch keine weiteren Änderungen.
+
+## [1.0.0] - vorbereitet am 2026-09-19, noch nicht veröffentlicht
+
+### Übernahme auf main und erste Hauptversion
+
+- Vollständigen develop-Stand `4da7cf6` per Fast-forward auf `main` übernommen,
+  einschliesslich sämtlicher Korrekturen bis zum aktualisierten 0.7.1-Vorabpaket.
+- Plugin-Version auf `1.0.0` ohne Beta-Zusatz gesetzt; der Paketbau erzeugt
+  `LoxBerryHostBackup_1.0.0.zip` und die dazu passende Laufzeit-Version.
+- Gegenüber dem übernommenen Stand keine Änderung der Backup-/Restorelogik.
+  README, aktuelle Release Notes, Sicherheitsmodell, Testplan, Umsetzungsbericht
+  und Beschreibungsentwürfe auf den Hauptstand nachgeführt. Historische
+  Versionsverläufe und Prüfnachweise behalten ihre damaligen Bezeichnungen.
+- Keine Veröffentlichung auf der LoxBerry-Pluginseite, kein neuer Release-Tag
+  und kein automatisches Stable-Update. `release.cfg` bleibt auf 0.5.8;
+  `prerelease.cfg` und der veröffentlichte Vorabkanal bleiben unverändert.
+
+### Enthalten gegenüber dem bisherigen main-Stand 0.5.8
+
+- Vier Metadaten-Profile einschliesslich Network Compatible für geeignete
+  CIFS-/NFS-/NAS-Ziele; keine blockierende Warnung allein durch dieses Profil.
+- Sicherere Ziele, Importe, Exporte, Downloads, Restore-Vorschauen, geschützte
+  Root-Helfer und Neustart-Journale. Einstellungen bleiben bei Updates erhalten;
+  Root-Laufzeitdaten liegen ausserhalb der von LoxBerry neu angelegten Logordner.
+- Reparierte Installation mit Cron-Symlink-Unterstützung und begrenzter
+  Zeitplaneinrichtung; keine rekursive Launcher-/Backend-Startschleife.
+- Kompakte Übersicht, Speicherhinweis für ungespeicherte Änderungen, lesbare Logs,
+  Aufgabenhistorie, Wartungs- und Integritätsprüfungen sowie Diagnosepaket.
+- Automatischer Dienst-Wiederanlauf setzt bei belegter Sperre still aus;
+  echte Fehler bleiben sichtbar. Eigene Live-Phase für die Aufbewahrung.
+- Ausführliche Einzeländerungen stehen in den historischen Abschnitten darunter.
+
+### Updatehinweise und Prüfgrenzen
+
+- Von 0.5.8 oder älter erstellt der erste inkrementelle Lauf wegen fehlender
+  Profilinformationen eine neue vollständige Basiskopie. Genügend Platz und Zeit
+  einplanen. Von 0.6.x/0.7.x erzwingt die Versionsänderung allein keine Basiskopie.
+- Geänderte Einstellungen vor Backup oder Vorschau ausdrücklich speichern.
+- Der übernommene Stand bestand 203 Linux-Tests ohne Skips und 15 Browserprüfungen;
+  der tatsächliche 1.0.0-main-Commit wird erneut unter Linux geprüft.
+- Vollständiger Offline-Restore mit Systemstart und NAS-/Hardwarematrix bleiben
+  offen. Ebenso Speicherberechnung ohne Zwischenfortschritt und generische
+  HTTP-500-Anzeige bei einer gesperrten Laufzeitprüfung. AP-14 bleibt ausgenommen.
 
 ## [0.7.1-beta] - 2026-09-13
 
@@ -724,7 +768,8 @@ nicht überarbeitet worden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.7.1-beta...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v0.7.1-beta...main
+[1.0.0]: docs/RELEASE-1.0.0.md
 [0.7.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.1-beta
 [0.7.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.0-beta
 [0.6.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.6.1-beta

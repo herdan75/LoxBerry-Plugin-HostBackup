@@ -34,10 +34,13 @@ The compact overview keeps four primary values visible and puts full IDs, target
 paths and report actions in a native disclosure. Tests exercise Enter/Space,
 initially closed state, preserved state during polling, no report request on
 expansion, and visible failure/recovery notices and loaded reports while closed.
-The suite currently emits 14 browser-check receipts. Dedicated
+The suite currently emits 15 browser-check receipts, including the readable
+retention phase while the task is still running. Dedicated
 `overview-desktop.png`, `overview-expanded.png`, `overview-mobile.png` and
 `overview-mobile-expanded.png` screenshots supplement the full-page screenshots.
 Storage calculation and runtime-check backend behavior are not validated by
-these UI fixtures; their known limitations are documented in the 0.7.1 release
-notes. The generic fixture styles are not a full LoxBerry
+these UI fixtures; their known limitations are documented in the
+[1.0.0 release notes](../../docs/RELEASE-1.0.0.md). A successful main-branch build
+creates a test artifact, not a published release or a plugin-page update.
+The generic fixture styles are not a full LoxBerry
 theme or a substitute for testing the installed plugin on a real device.

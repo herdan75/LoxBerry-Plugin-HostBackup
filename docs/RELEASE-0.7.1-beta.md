@@ -1,5 +1,8 @@
 # LoxBerry Host Backup 0.7.1-beta
 
+Historisches Dokument zum veröffentlichten Vorabpaket. Der vorbereitete
+Hauptstand auf `main` ist [Version 1.0.0](RELEASE-1.0.0.md), ohne neue Veröffentlichung.
+
 Pre-Release vom 13.09.2026 · interne Plugin-Version 0.7.1 · Stable bleibt 0.5.8.
 
 Die Erstveröffentlichung übernahm die Installationskorrektur und die kompakte

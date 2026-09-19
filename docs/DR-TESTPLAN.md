@@ -5,12 +5,13 @@ bei Änderungen an rsync-/tar-Optionen, Mount-Prüfung, Import, Restore oder
 Retention auszuführen. Produktive Daten werden durch synthetische Marker und
 Testdienste ersetzt.
 
-## Ergänzende Upgrade- und Bedienungsabnahme für 0.7.1-beta
+## Ergänzende Upgrade- und Bedienungsabnahme für 1.0.0
 
 Diese Szenarien sind ein Prüfplan, kein Nachweis bereits bestandener Hardwaretests:
 
-1. Auf einem isolierten LoxBerry von 0.7.0 einschliesslich des manuellen
-   Testpakets auf 0.7.1-beta aktualisieren. Vorher Konfiguration exportieren und
+1. Auf einem isolierten LoxBerry Updates von 0.5.8, 0.6.x und 0.7.x
+   einschliesslich manueller Testpakete auf das CI-Testpaket 1.0.0 prüfen.
+   Keine öffentliche Freigabe daraus ableiten. Vorher Konfiguration exportieren und
    alle aktiven Aufgaben beenden lassen; keinen zweiten Installer parallel starten.
 2. Ziel, Aufbewahrung, Profil, Ausschlüsse, ausgewählte Dienste und Zeitplan vor
    und nach dem Update vergleichen. Alte Backups und geschützte Helferstände
@@ -28,12 +29,19 @@ Diese Szenarien sind ein Prüfplan, kein Nachweis bereits bestandener Hardwarete
 6. Speicherberechnung und Laufzeitdateien-Prüfung zunächst getrennt beobachten.
    Dauer, Prozessstatus und eventuelle HTTP-Fehler protokollieren. Die fehlende
    Fortschrittsanzeige und der bekannte Sperrkonflikt mit generischer HTTP-500-
-   Meldung sind in 0.7.1-beta noch offen, nicht als behoben zu bewerten.
+   Meldung sind in 1.0.0 noch offen, nicht als behoben zu bewerten.
+7. Von 0.5.8 oder älter eine neue vollständige Basiskopie einplanen. Von
+   0.6.x/0.7.x eine passende validierte Referenz und deren tatsächliche
+   Hardlink-Wiederverwendung prüfen; die neue Versionsnummer allein darf diese
+   Referenz nicht ausschliessen. Das letzte brauchbare Backup erhalten.
+8. Plugin- und Diagnoseversion müssen 1.0.0 ohne Beta-Zusatz anzeigen. Die
+   Update-Kanaldateien bleiben bis zur separaten Veröffentlichung auf ihren
+   bisherigen Versionen; weder Pluginseite noch öffentliche Releases ändern.
 
-## Ergänzende Cron-/Aufbewahrungsabnahme im aktualisierten 0.7.1-beta
+## Ergänzende Cron-/Aufbewahrungsabnahme für 1.0.0
 
-Diese Prüfungen gelten für das am 13.09.2026 aktualisierte Paket, nicht für
-zuvor heruntergeladene 0.7.1-beta-ZIPs. Nur auf einem
+Diese Prüfungen gelten für den übernommenen Korrekturstand vom 13.09.2026
+und das darauf aufbauende Paket 1.0.0. Nur auf einem
 isolierten Testsystem mit Testdiensten und entbehrlichen Testbackups ausführen:
 
 1. Nach Installation enthalten sowohl die Boot- als auch die Fünfminuten-Regel

@@ -17,6 +17,7 @@ POSTROOT = (ROOT / "postroot.sh").read_text(encoding="utf-8")
 BACKEND = (ROOT / "bin" / "hostbackup.sh").read_text(encoding="utf-8")
 PLUGIN_CFG = (ROOT / "plugin.cfg").read_text(encoding="utf-8")
 PRERELEASE_CFG = (ROOT / "prerelease.cfg").read_text(encoding="utf-8")
+RELEASE_CFG = (ROOT / "release.cfg").read_text(encoding="utf-8")
 README = (ROOT / "README.md").read_text(encoding="utf-8")
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 PACKAGE_SH = (ROOT / "package.sh").read_text(encoding="utf-8")
@@ -103,22 +104,51 @@ class InstallHookTests(unittest.TestCase):
             POSTROOT,
         )
 
-    def test_prerelease_version_and_download_are_consistent(self) -> None:
+    def test_update_channels_match_their_published_versions(self) -> None:
         plugin = configparser.ConfigParser()
-        channel = configparser.ConfigParser()
         plugin.read_string(PLUGIN_CFG)
-        channel.read_string(PRERELEASE_CFG)
         version = plugin["PLUGIN"]["VERSION"]
         self.assertRegex(version, r"^\d+\.\d+\.\d+$")
-        tag = f"v{version}-beta"
         base = "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases"
-        archive_url = f"{base}/download/{tag}/LoxBerryHostBackup_{version}.zip"
-        self.assertEqual(channel["AUTOUPDATE"]["VERSION"], version)
-        self.assertEqual(channel["AUTOUPDATE"]["ARCHIVEURL"], archive_url)
-        self.assertEqual(channel["AUTOUPDATE"]["INFOURL"], f"{base}/tag/{tag}")
-        self.assertIn(archive_url, README)
-        self.assertIn(f"## [{version}-beta]", CHANGELOG)
+        # The prepared package may be newer than the channels already published.
+        # Never require an unreleased package to change the live update feed.
+        for source, suffix in ((RELEASE_CFG, ""), (PRERELEASE_CFG, "-beta")):
+            with self.subTest(channel=suffix or "stable"):
+                channel = configparser.ConfigParser()
+                channel.read_string(source)
+                published = channel["AUTOUPDATE"]["VERSION"]
+                self.assertRegex(published, r"^\d+\.\d+\.\d+$")
+                self.assertLessEqual(tuple(map(int, published.split("."))), tuple(map(int, version.split("."))))
+                tag = f"v{published}{suffix}"
+                archive_url = f"{base}/download/{tag}/LoxBerryHostBackup_{published}.zip"
+                self.assertEqual(channel["AUTOUPDATE"]["ARCHIVEURL"], archive_url)
+                self.assertEqual(channel["AUTOUPDATE"]["INFOURL"], f"{base}/tag/{tag}")
+                self.assertIn(archive_url, README)
+                self.assertIn(f"## [{published}{suffix}]", CHANGELOG)
         self.assertIn("prerelease: ${{ contains(github.ref_name, '-') }}", WORKFLOW)
+
+    def test_main_version_and_documentation_have_no_beta_suffix(self) -> None:
+        plugin = configparser.ConfigParser()
+        plugin.read_string(PLUGIN_CFG)
+        version = plugin["PLUGIN"]["VERSION"]
+        self.assertEqual(version, "1.0.0")
+        notes = (ROOT / "docs" / f"RELEASE-{version}.md").read_text(encoding="utf-8")
+        self.assertTrue(notes.startswith(f"# LoxBerry Host Backup {version}\n"))
+        self.assertIn(f"**Version {version}", README)
+        self.assertIn(f"## [{version}]", CHANGELOG)
+        self.assertNotIn(f"{version}-beta", README + notes + PLUGIN_CFG)
+        self.assertIn(f"LoxBerryHostBackup_{version}.zip", notes)
+
+    def test_1_0_0_preparation_keeps_publication_on_hold(self) -> None:
+        # Update this explicit publication guard only when release is authorized.
+        for source, expected in ((RELEASE_CFG, "0.5.8"), (PRERELEASE_CFG, "0.7.1")):
+            channel = configparser.ConfigParser()
+            channel.read_string(source)
+            self.assertEqual(channel["AUTOUPDATE"]["VERSION"], expected)
+        self.assertIn("if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')", WORKFLOW)
+        notes = (ROOT / "docs" / "RELEASE-1.0.0.md").read_text(encoding="utf-8")
+        self.assertIn("**Noch nicht veröffentlicht.**", notes)
+        self.assertIn("Noch keinen `v1.0.0`-Tag", README)
 
     def test_trusted_install_and_webuser_permissions(self) -> None:
         self.run_linux_install_child("--trusted-install-child")

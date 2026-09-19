@@ -1,0 +1,100 @@
+====== LoxBerry Host Backup ======
+
+**ENTWURF – noch nicht auf der LoxBerry-Pluginseite veröffentlichen.**
+Vorbereiteter Hauptstand: **Version 1.0.0**, ohne Beta-Zusatz. Stand: 19.09.2026.
+Ein reguläres Release, ein öffentlicher 1.0.0-Download und die Umstellung des Update-Kanals sind noch nicht freigegeben.
+
+===== Kurzbeschreibung =====
+
+Dateibasiertes Host-Backup und Restore für LoxBerry, Docker, DietPi und native Linux-Dienste. Das Plugin sichert System- und Anwendungsdateien als Vollbackup oder inkrementellen Snapshot und ergänzt Export/Import, Datei-Explorer, Wiederherstellungsvorschau, Aufbewahrung, Inhaltsprüfungen und Live-Protokolle.
+
+Es erstellt kein sektorweises Disk-Image. Ein vollständiger Offline-Restore mit anschliessendem Systemstart ist weiterhin separat auf der eigenen Hardware zu prüfen. Für kritische Systeme ein zweites unabhängiges Backup vorhalten.
+
+++++ Version History... |
+
+Version 1.0.0 – auf main vorbereitet, noch nicht veröffentlicht:
+
+**Hauptversion und übernommener Stand**
+
+  * Vollständigen develop-Stand einschliesslich der letzten Installations- und Laufzeitkorrekturen auf main übernommen
+  * Versionsnummer 1.0.0 ohne Beta-Zusatz; Paketname LoxBerryHostBackup_1.0.0.zip
+  * Gegenüber dem übernommenen Stand keine Änderung der Backup-/Restorelogik
+  * README, Changelog, Release Notes, Sicherheitsmodell und Testplan nachgeführt
+
+**Daten- und Wiederherstellungssicherheit**
+
+  * Backup-Ziele anhand von Marker, Mountpoint, Quelle und Dateisystem prüfen
+  * Lokale Journale für den Wiederanlauf zuvor gestoppter Dienste und Container
+  * Root-geschützte Helfer, Konfiguration und Laufzeitdaten; Einstellungen bei Updates erhalten
+  * Importarchive auf unsichere Pfade, Links, Duplikate, Inhalt und Ressourcenbedarf prüfen
+  * Restore mit Vorschau, gespeicherten Ausschlüssen und ausdrücklicher Volume-Zuordnung
+  * Aufbewahrung mit Schutzmarkierungen, Schutz des letzten geeigneten Backups und bestätigter Löschvorschau
+
+**Metadaten, NAS und Zeitpläne**
+
+  * Native Strict als Standard, ergänzt um Network Compatible, Fake Super und Portable Archive
+  * Network Compatible lässt xattrs und File Capabilities bewusst aus; der Hinweis blockiert keine manuellen oder geplanten Backups
+  * Echte Übertragungs- oder Metadatenfehler bleiben Fehler; NAS-Eignung muss geprüft werden
+  * Automatischer Dienst-Wiederanlauf setzt bei belegter Sperre still aus; keine Cron-Mail allein deshalb
+  * Echte Wiederanlauffehler und manuelle Sperrkonflikte bleiben sichtbar
+
+**Installation und Bedienung**
+
+  * Unprivilegierten Dateiaustausch bei Updates, Cron-Symlink-Unterstützung und Launcher-Prüfung korrigiert
+  * Zeitplaneinrichtung zeitlich begrenzt und Root-Laufzeitdaten neustartfest abgelegt
+  * Kompakte Übersicht mit aufklappbaren Details, Aufgabenhistorie und vollständigem Logdownload
+  * Speicherhinweis bei allen Einstellungsänderungen; Eingaben bleiben bei Fehlern erhalten
+  * Eigene Live-Phase für Aufbewahrung statt stehengebliebener Validierungsanzeige
+  * Optionale Inhaltsprüfungen, manuell dokumentierbare Restoretests und Diagnosepaket
+
+Frühere Versionen und Einzeländerungen: [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup/blob/main/CHANGELOG.md|vollständiger Changelog]].
+++++
+
+===== Voraussetzungen =====
+
+  * Linux-basiertes LoxBerry, laut Plugin-Metadaten mindestens LoxBerry 2.0.0
+  * Bash, Perl mit JSON::PP und CGI, Python 3, rsync, tar, cron und sudo
+  * Ein geeignetes separates Backup-Ziel mit genügend freiem Speicher
+  * Root-Freigabe für die erforderlichen Systemaktionen
+  * Docker ist optional
+
+===== Einrichtung und Verwendung =====
+
+  - Erst nach Freigabe das Release-ZIP verwenden; vorher nur bewusst ein geprüftes CI-Testpaket manuell installieren.
+  - Vor einem Update laufende Vorgänge beenden lassen und Einstellungen exportieren. Nicht vorher deinstallieren.
+  - Separates Backup-Ziel und passendes Metadaten-Profil wählen.
+  - Ausschlüsse prüfen: insbesondere weitere Backup-Ordner oder ganze Backup-Datenträger ausschliessen. Gemountete Anwendungsdaten können dagegen bewusst mitgesichert werden.
+  - Backup-Modus, Aufbewahrung sowie zu stoppende Dienste und Container festlegen.
+  - **Alle Änderungen ausdrücklich speichern – erst danach Backup oder Vorschau starten.** Das gilt auch für Optionsfelder, Dienste und Container. Der Zeitplan verwendet ausschliesslich gespeicherte Werte.
+  - Erstes Testbackup, Live-Log und Prüfergebnis kontrollieren. Einen Restore-Test in einer separaten Test-/Rescue-Umgebung vorsehen.
+
+===== Metadaten-Profile =====
+
+  * **Native Strict – Standard:** Für geeignete lokale Linux-Dateisysteme wie ext4, xfs oder btrfs. Sichert Linux-Metadaten einschliesslich ACLs, xattrs, File Capabilities und Hardlinks; fehlende erforderliche Funktionen führen zum Fehler.
+  * **Network Compatible:** Für geeignete CIFS-/NFS-/NAS-Ziele. xattrs und File Capabilities werden bewusst ausgelassen; Besitzer, Rechte, ACLs und Hardlinks benötigen weiterhin passende Zielunterstützung. Ein erfolgreicher Lauf erhält den normalen Erfolgsstatus.
+  * **Fake Super:** Für Ziele mit zuverlässigen user-xattrs, aber ohne vollständige native Unix-Metadaten. Privilegierte Informationen werden von rsync in speziellen user.rsync-Attributen gespeichert. Nur nach erfolgreicher Zielprüfung verwenden.
+  * **Portable Archive:** Speichert Metadaten in einem Archivcontainer. Keine inkrementellen Snapshots; Restore nur in einer Offline-/Rescue-Umgebung.
+
+===== Wichtig für inkrementelle Backups =====
+
+**Beim Umstieg von Version 0.5.8 oder älter wird zuerst wieder eine vollständige Basiskopie erstellt.** Den alten Backups fehlen Metadaten-Profilinformationen, weshalb sie nicht als Hardlink-Referenz verwendet werden. Dafür genügend Platz und Zeit einplanen. Erst nach einer erfolgreichen neuen Basiskopie können Folgeläufe wieder inkrementell arbeiten.
+
+Beim Wechsel von 0.6.x oder 0.7.x auf 1.0.0 erzwingt die Versionsnummer allein keine neue Basiskopie. Entscheidend sind eine passende, validierte Referenz und dasselbe Profil. Ein Profilwechsel kann eine neue Basiskopie nötig machen.
+
+===== Grenzen und offene Punkte =====
+
+  * Vollständiger Offline-Restore mit Systemstart und die NAS-/Hardwarematrix sind noch separat nachzuweisen; kein garantiert bootfähiges Disk-Image.
+  * Datenbankkonsistenz hängt von Diensten, Stop-Auswahl und gegebenenfalls zusätzlichen anwendungseigenen Backups ab.
+  * Speicherberechnung liefert noch keinen Zwischenfortschritt. Ein Browserabbruch beendet den Backendlauf nicht zwingend.
+  * Laufzeitdateien-Prüfung kann bei belegter Sperre noch eine generische HTTP-500-Meldung zeigen. Prüfungen nacheinander ausführen.
+  * Die zurückgestellte Überarbeitung der Mail-/Benachrichtigungssemantik (AP-14) ist nicht enthalten.
+
+===== Download und Freigabe =====
+
+Version 1.0.0 ist noch nicht öffentlich freigegeben. Der Stable-Kanal bleibt auf 0.5.8, der vorhandene Vorabkanal unverändert. Noch keinen 1.0.0-Downloadlink als verfügbar eintragen.
+
+  * [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup|Repository]]
+  * [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup/blob/main/README.md|Anleitung]]
+  * [[https://github.com/herdan75/LoxBerry-Plugin-HostBackup/blob/main/docs/RELEASE-1.0.0.md|Vorbereitung und Freigabeschritte für 1.0.0]]
+
+Nach separater Freigabe den geprüften Release-Link und den tatsächlichen Veröffentlichungsstatus ergänzen; diesen Entwurf nicht unverändert als bereits veröffentlichten Release-Eintrag einstellen.

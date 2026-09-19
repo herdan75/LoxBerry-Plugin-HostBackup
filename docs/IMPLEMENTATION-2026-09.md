@@ -1,15 +1,17 @@
 # Umsetzung der Analyse vom 13.09.2026
 
 Entwicklungsbasis: develop, da9aa80. Reihenfolge: Sicherheit, Betrieb, Bedienung,
-Erweiterungen. Aktueller Zielstand: **0.7.1-beta**, interne Plugin-Version **0.7.1**.
+Erweiterungen. Aktueller Hauptstand: **1.0.0 auf main**, interne Plugin-Version **1.0.0**.
 Die bisher zurückgestellte AP-14 zur Mail-/Benachrichtigungssemantik ist ausgenommen.
-Das bestehende Pre-Release wird mit korrigiertem ZIP unter derselben Version und
-Adresse aktualisiert; der stabile Kanal bleibt auf 0.5.8. Die
-[Release Notes](RELEASE-0.7.1-beta.md) beschreiben Update und Prüfgrenzen.
+Am 19.09.2026 wird der vollständige develop-Stand `4da7cf6` auf `main` übernommen.
+Nur Version, Tests der Versions-/Kanaltrennung und aktuelle Dokumentation ändern
+sich gegenüber diesem Programmstand. Die Veröffentlichung ist noch nicht freigegeben;
+der stabile Kanal bleibt auf 0.5.8, der Vorabkanal unverändert. Die
+[Release Notes](RELEASE-1.0.0.md) beschreiben Update, Freigabeschritte und Prüfgrenzen.
 Die ursprüngliche Analyse wurde mit 0.7.0-beta veröffentlicht; historische
 Prüfläufe darunter behalten ihre damaligen Versions- und Commitangaben.
 
-## Ergänzungen für 0.7.1-beta
+## Historie: Ergänzungen für 0.7.1-beta am 13.09.2026
 
 - Nachbesserung am 13.09.2026 ohne Versionssprung: automatisches `recover-services
   --scheduled` setzt bei belegter Sperre still aus; echte Fehler bleiben sichtbar.
@@ -196,14 +198,18 @@ Vor einer stabilen Freigabe sind zusätzlich
 die Szenarien in `DR-TESTPLAN.md` einschliesslich realem Neustart, Zielverlust,
 NAS-Profilen und vollständigem Offline-Systemstart abzuarbeiten.
 
-## Veröffentlichung
+## Hauptstand 1.0.0 und zurückgestellte Veröffentlichung
 
-- Pre-Release: `v0.7.1-beta`, Plugin-Version `0.7.1`.
-- Paket: `LoxBerryHostBackup_0.7.1.zip` im zugehörigen GitHub-Pre-Release.
-- `prerelease.cfg` behält Version 0.7.1 und denselben ZIP-Link. Das ZIP und der
-  Pre-Release-Tag werden auf den korrigierten Stand aktualisiert. Bereits
-  installierte 0.7.1-Versionen benötigen eine erneute Installation, da die
-  Updateerkennung keine höhere Version findet; `release.cfg` bleibt bei 0.5.8.
-- Produktänderungen und zugehörige Dokumentation werden auf `develop` versioniert.
+- Plugin-Version `1.0.0`, Paket `LoxBerryHostBackup_1.0.0.zip`, kein Beta-Zusatz.
+- `main` übernimmt alle 23 bisherigen develop-Commits seit `47f75ef`; Ausgangsstand
+  ist `4da7cf6fc47bd6ac9f0dd27c9f7f9a2b41b59e37`. Die Programmdateien bleiben
+  gegenüber diesem Stand unverändert. `develop` und `pre-develop` werden nicht verschoben.
+- Ein `main`-Push prüft den neuen Stand und erzeugt nur ein CI-Artefakt.
+  Noch keinen `v1.0.0`-Tag, GitHub-Release oder Pluginseiten-Eintrag anlegen.
+- `release.cfg` bleibt bei 0.5.8; `prerelease.cfg` und die vorhandenen öffentlichen
+  Pakete bleiben unverändert. Die Version des vorbereiteten Pakets ist bewusst
+  von den noch nicht umgestellten öffentlichen Update-Kanälen getrennt.
+- README, Changelog, Release Notes, Sicherheits-/Testdokumentation und lokale
+  Pluginseiten-/Forum-Entwürfe werden auf `main` committet und geprüft.
   Fremde unversionierte Arbeitsdateien sind kein Teil des Releases und werden
   weder übernommen noch bereinigt.
