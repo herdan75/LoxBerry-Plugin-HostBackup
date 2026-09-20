@@ -47,6 +47,26 @@ def stage_installer_helper(package_root, sandbox, rewrite):
 
 
 class InstallHookTests(unittest.TestCase):
+    def test_fatal_hook_exit_mapping_preserves_other_statuses(self) -> None:
+        bash = shutil.which("bash")
+        if os.name == "nt":
+            git_bash = pathlib.Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "Git/bin/bash.exe"
+            if git_bash.is_file():
+                bash = str(git_bash)
+        if not bash:
+            self.skipTest("bash is required for hook exit-status tests")
+        for name, source in (("preroot", PREROOT), ("uninstall", UNINSTALL)):
+            # Execute only the trap, never the actual privileged installer body.
+            prefix, body = source.split('[ "$(id -u)"', 1)
+            self.assertIn("trap hook_exit EXIT", prefix)
+            self.assertTrue(body)
+            for command, expected in (("exit 0", 0), ("false", 2), ("exit 1", 2),
+                                      ("exit 2", 2), ("exit 64", 64)):
+                with self.subTest(hook=name, command=command):
+                    result = subprocess.run([bash, "-c", prefix + command],
+                                            capture_output=True, text=True, timeout=10)
+                    self.assertEqual(result.returncode, expected, result.stderr)
+
     def test_postinstall_contains_no_root_only_operations(self) -> None:
         for forbidden in (
             "/var/lib/",
