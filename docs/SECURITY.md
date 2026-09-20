@@ -1,7 +1,8 @@
 # Sicherheitsmodell
 
-Stand: reguläres Release 1.0.0 auf `main`. Enthalten ist die Absicherung des
-unprivilegierten Update-Dateiaustauschs und die Launcher-/Backend-Trennung.
+Stand: Vorabversion 1.1.0-beta auf `develop`; Stable 1.0.0 bleibt auf `main`.
+Enthalten sind der unprivilegierte Dateiaustausch auch bei Neuinstallation mit
+Restdateien und die unveränderte Launcher-/Backend-Trennung.
 Die kompakte Übersicht verändert keine Berechtigungen, Locks oder
 Bestätigungsanforderungen. Die noch offene HTTP-500-Darstellung bei gesperrter
 Laufzeitprüfung ist kein Anlass, den Sperrschutz abzuschalten; siehe
@@ -41,17 +42,35 @@ der gesamten Installation, Konfiguration oder Cron-Regeln. Diese Schutzprüfung
 gilt für die Plugin-Helfer; gemeinsam genutzte LoxBerry-/Systembibliotheken und
 deren Updates bleiben Verantwortung der Plattform.
 
-Vor einem Update sichert PREROOT zuerst die Konfiguration und übergibt dann
-nur die Verzeichnisse des alten Plugin-Bin-Baums an den Plattformbenutzer.
-LoxBerry löscht/kopiert dort als unprivilegierter Benutzer; Root-eigene
-Verzeichnisse würden den Austausch verhindern. Symlink-Verzeichnisse werden
-nicht verfolgt, Dateibesitzer und die geschützten Helferstände ausserhalb
-dieses Baums werden nicht geändert. POSTROOT schützt den neuen Bin-Baum wieder
+Vor dem Austausch sichert PREROOT zuerst die Konfiguration dauerhaft in einem
+geschützten, installationsübergreifend wiederauffindbaren Verzeichnis unter
+`/var/lib/loxberryhostbackup-install-recovery`. Die Sicherung bleibt auch bei
+Abbruch, einer neuen Installations-ID oder Neustart erhalten und wird erst nach
+erfolgreichem Abschluss entfernt. Die gesicherte alte Konfigurationsdatei und die genau
+validierte veraltete Plugin-Programmkopie werden vor dem Plattform-Kopieren
+entfernt. So ist kein Upgrade-Purge erforderlich, der bei einer als neu erkannten
+Installation ausbleibt. Symlink-Pfadkomponenten und eingebundene Mounts werden
+abgewiesen; die Bereinigung verwendet verankerte Verzeichnisdeskriptoren und
+folgt keinen Links. Dateibesitzer ausführbarer
+Helfer und geschützte Helferstände ausserhalb dieses Baums werden nicht geändert.
+Die eigentlichen Backup-Ziele und dauerhaften Laufzeitdaten sind keine
+PREROOT-Bereinigungsziele. POSTROOT stellt die gesicherte Konfiguration wieder her
+und schützt den neuen Bin-Baum wieder
 während der Übernahme. Eine Backend-Kennungsprüfung vor dem Umschalten von
 `current` verhindert, dass ein alter Weiterleitungs-Launcher als Backend
 veröffentlicht wird. Dieselbe Prüfung im Root-Einstieg verhindert rekursive
 Starts auch bei einem bereits falsch gesetzten Programmverweis. Sie ist eine
 Strukturprüfung, keine kryptografische Echtheitsprüfung des Installationspakets.
+Eine fehlgeschlagene Sicherheitsvorbereitung liefert einen fatalen Hook-Status,
+damit LoxBerry nicht mit einem unsicheren Dateiaustausch fortfährt. Bei einer
+Deinstallation wird vor der Entfernung privilegierter Helfer auf aktive Vorgänge
+und vorhandene Wiederanlaufjournale geprüft. Geschützte Reste der vorgesehenen
+Plugin-Bäume werden vor der nachfolgenden Plattformbereinigung entfernt;
+externe Symlink-Ziele und ausführbare Datei-Inodes werden nicht umgewidmet.
+Die bestehende Operationssperrdatei wird nicht gelöscht, um parallele unabhängige
+Sperr-Inodes zu vermeiden. Ein konfiguriertes Backup-Ziel innerhalb eines
+Deinstallationsbaums blockiert die Deinstallation.
+
 Die abschliessende Zeitplan-Einrichtung ist auf 30 Sekunden plus höchstens
 5 Sekunden zum Beenden begrenzt.
 

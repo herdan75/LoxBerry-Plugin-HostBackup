@@ -3,14 +3,28 @@
 Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
-Version 1.0.0 ist als reguläres GitHub-Release und über die Update-Kanäle verfügbar.
+Version 1.0.0 bleibt das reguläre Release; 1.1.0-beta ist der neue Vorabstand.
 Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
-## [Unreleased]
+## [1.1.0-beta] - 2026-09-20
 
-### Datenquellen und NAS-Diagnose (nur develop, noch nicht veröffentlicht)
+### Installation und Fehleranzeige
+
+- Neuinstallation nach einer unvollständigen früheren Deinstallation abgesichert:
+  gespeicherte Konfiguration vor dem Austausch sichern und geschützte alte
+  Programmkopien gezielt vorbereiten, auch ohne die Upgrade-Bereinigung der Plattform.
+  Der echte unprivilegierte Kopierweg wird unter Linux geprüft. Eine dauerhafte
+  geschützte Konfigurationssicherung übersteht abgebrochene Installationen,
+  neue Installations-IDs und Neustarts bis zum erfolgreichen Abschluss.
+- Schutz vor der Aktivierung eines zurückgebliebenen Weiterleitungs-Launchers
+  bleibt erhalten. Backup-Ziele werden nicht bereinigt oder in ihren Rechten geändert.
+- Eine nicht erreichbare Dateisystem-Prüfung erscheint als normale Hinweisbox
+  mit erneutem Prüfversuch statt als übergrosser unformatierter Text. Gespeicherte
+  Einstellungen und offene Eingaben bleiben erhalten.
+
+### Datenquellen, NAS-Diagnose und Bedienung
 
 - Neue Konfigurationen sichern lokale Laufwerke und nur ausdrücklich gewählte
   Netzfreigaben; autofs-Sammelbereiche werden nicht ungewollt rekursiv kopiert.
@@ -51,7 +65,9 @@ validiert werden.
   Network Compatible überspringt ausschliesslich xattrs und File Capabilities.
 - Zusätzliche Regressionstests und isolierter echter Linux-Samba/CIFS-Test für
   feste Eigentümer/Rechte, Archiv-Roundtrip und ausgewählte Datenquellen.
-- Versionsnummer, Release-Tags, Update-Kanäle und öffentliche ZIPs unverändert.
+- Plugin- und ZIP-Version `1.1.0`, GitHub-Tag `v1.1.0-beta`. Der Vorabkanal wird
+  erst nach Prüfung des öffentlichen ZIP-Downloads umgestellt. Das reguläre
+  Release 1.0.0 und sein Download bleiben unverändert.
 
 ## [1.0.0] - 2026-09-19
 
@@ -816,7 +832,8 @@ nicht überarbeitet worden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.0.0...main
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.1.0-beta...develop
+[1.1.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.1.0-beta
 [1.0.0]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.0.0
 [0.7.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.1-beta
 [0.7.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.0-beta

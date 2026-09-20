@@ -1,16 +1,15 @@
 # LoxBerry Host Backup
 
-**Version 1.0.0 · Reguläres Release · veröffentlicht am 19.09.2026.**
-Die erste Hauptversion übernimmt den vollständigen develop-Stand `4da7cf6`
-einschliesslich der Installations-, Sicherheits- und Bedienungskorrekturen.
-Programm- und Paketversion lauten `1.0.0`, ohne Beta-Zusatz. Gegenüber diesem
-develop-Stand werden keine Backup-/Restoreabläufe geändert.
-Details stehen in den [Release Notes für 1.0.0](docs/RELEASE-1.0.0.md).
+**Version 1.1.0-beta · Vorabversion auf develop · 20.09.2026.**
+Das reguläre Release bleibt **1.0.0**. Programm- und Paketversion des neuen
+Vorabstands lauten `1.1.0`; GitHub kennzeichnet ihn mit dem Tag `v1.1.0-beta`.
+Details stehen in den [Release Notes für 1.1.0-beta](docs/RELEASE-1.1.0-beta.md).
 
-**Noch unveröffentlicht auf `develop`:** Eine explizite Auswahl von Laufwerken
-und Netzfreigaben sowie eine schrittweise Metadaten-Diagnose werden im
-[NAS-Teststand](docs/DEVELOP-NAS-SOURCES.md) beschrieben. Diese Änderungen sind
-nicht im bestehenden öffentlichen Download von 1.0.0 enthalten.
+**Neu gegenüber 1.0.0:** Eine explizite Auswahl von Laufwerken und Netzfreigaben,
+schrittweise Metadaten-Diagnosen und Korrekturen für die Neuinstallation nach
+zurückgebliebenen Programmdateien. Die [NAS- und Datenquellen-Anleitung](docs/DEVELOP-NAS-SOURCES.md)
+beschreibt die Anwendung. Diese Änderungen sind nicht im unveränderten
+öffentlichen Download von 1.0.0 enthalten.
 Die Datenquellen-Ansicht trennt auswählbare Laufwerke von aufklappbaren technischen
 Einbindungen. Diese Gruppierung verändert keine Auswahl; gespeicherte Ausnahmen
 bleiben direkt sichtbar. Hinweistexte sind gegen globale LoxBerry-Schriftregeln
@@ -22,7 +21,7 @@ und persönlich dokumentiertem Restore-Test. Das Öffnen einer Hilfe startet
 keine Aktion und verändert keine Einstellung; lange Hilfen sind auch mobil
 und per Tastatur scrollbar. Einfache Navigations- und Speicherbuttons bleiben
 ohne zusätzliche, wiederholende Erklärung.
-Die Kurzanleitung des develop-Teststands führt von Ziel und Quellenauswahl über
+Die Kurzanleitung führt von Ziel und Quellenauswahl über
 bewusst gewählte Stop-Dienste, Speichern und Vorschau zum Testbackup und Restore-Test.
 Sie erklärt den Unterschied zwischen technischen Einbindungen und gesicherten
 Ordnern, Zielordner- und Datenträgerausschluss sowie die Grenzen des dateibasierten
@@ -30,9 +29,9 @@ Backups: keine automatische Einrichtung von Partitionen oder Bootloader und
 ausdrückliche Zuordnung separater Boot-/Datenlaufwerke beim Restore.
 
 > [!IMPORTANT]
-> **Update auf 1.0.0:** Das reguläre Release ist ohne Beta-Zusatz erhältlich.
-> Auch Nutzer des bisherigen Vorabkanals erhalten über dessen Kanaldatei dasselbe
-> stabile Paket, solange keine neuere Vorabversion angeboten wird.
+> **Update auf 1.1.0-beta:** Bewusster Wechsel auf eine Vorabversion, kein neues
+> stabiles Release. Der Vorabkanal wird erst nach Prüfung des öffentlichen
+> Downloads aktiviert; der stabile Kanal bleibt auf 1.0.0.
 > Vor einem Update Einstellungen exportieren, aktive Vorgänge beenden lassen
 > und nicht vorher deinstallieren.
 
@@ -41,9 +40,10 @@ bei einer belegten Vorgangssperre still aus, statt dadurch Cron-Mails auszulöse
 Die abschliessende Aufbewahrungsprüfung erhält eine eigene Live-Status-Phase.
 Alle übernommenen Änderungen sind im [Changelog](CHANGELOG.md) dokumentiert.
 
-**Installation und Wiederinstallation:** Der alte Plugin-Bin-Baum wird vor dem Update für
-LoxBerrys unprivilegierten Dateiaustausch vorbereitet, die Konfiguration vorher
-gesichert und das eigentliche Backup-Programm vor seiner Aktivierung geprüft.
+**Installation und Wiederinstallation:** Vor dem Dateiaustausch wird die vorhandene
+Konfiguration gesichert. Veraltete Programmkopien werden auch dann gezielt
+vorbereitet, wenn LoxBerry nach einer früheren Deinstallation kein Upgrade erkennt.
+Das eigentliche Backup-Programm wird vor seiner Aktivierung geprüft.
 Ein zurückgebliebenes Weiterleitungs-Startskript wird nicht mehr als Backend
 übernommen. Die Zeitplan-Einrichtung ist auf 30 Sekunden plus höchstens
 5 Sekunden zum Beenden begrenzt. Die bereits vorhandene Unterstützung für
@@ -55,11 +55,14 @@ Systemrechte werden nicht geändert.
 > Installationsversuch parallel starten und nicht deinstallieren. Ein neues
 > ZIP beendet bereits laufende fehlerhafte Altprozesse nicht automatisch.
 > Erst nach Wiederherstellung einer bedienbaren Plugin-Verwaltung aktualisieren.
-> Frühere Versionspakete bleiben unverändert; 1.0.0 besitzt einen eigenen Download.
+> Frühere Versionspakete und insbesondere der stabile 1.0.0-Download bleiben unverändert.
 
-Die geschützten Programmstände unter `/usr/libexec/loxberryhostbackup` bleiben
-erhalten. Die Tests bilden Löschen und Kopieren als unprivilegierter
-Plattformbenutzer nach; Kopieren als Root allein reicht nicht als Update-Test.
+Bei Updates bleiben die geschützten Programmstände unter `/usr/libexec/loxberryhostbackup`
+erhalten. Tests bilden den Dateiaustausch als unprivilegierter Plattformbenutzer
+nach, einschliesslich Neuinstallation mit Restdateien ohne Upgrade-Bereinigung.
+Kopieren als Root allein reicht nicht als Installationstest. Die Fehleranzeige
+der Dateisystem-Prüfung behält ihre Hinweisformatierung und erlaubt einen erneuten
+lesenden Prüfversuch; sie verändert weder Einstellungen noch Backup-Auswahl.
 
 > [!IMPORTANT]
 > **Erst Einstellungen speichern, dann sichern.** Auch ausgewählte Optionen,
@@ -247,7 +250,7 @@ Eine echte LoxBerry-/NAS-/Offline-Hardwareabnahme ist damit nicht nachgewiesen
 und bleibt für den verlässlichen produktiven Disaster-Recovery-Einsatz separat erforderlich.
 Die Veröffentlichung bescheinigt keine bestandene Hardware-Abnahme.
 
-### Bekannte offene Punkte in 1.0.0
+### Weiterhin bekannte Grenzen
 
 - **Speicherbelegung berechnen:** durchsucht alle erkannten Backup-Dateien und
   liefert erst am Ende ein Ergebnis, derzeit ohne Fortschrittsanzeige. Auf
@@ -265,8 +268,9 @@ Die Veröffentlichung bescheinigt keine bestandene Hardware-Abnahme.
 
 ## Installation
 
-1. Das Release-ZIP 1.0.0 über den Link unten herunterladen oder das angebotene
-   Update in der LoxBerry-Plugin-Verwaltung verwenden.
+1. Bewusst zwischen stabilem Release 1.0.0 und Vorabversion 1.1.0-beta wählen.
+   Das entsprechende ZIP unten herunterladen oder das angebotene Update des
+   gewählten Kanals in der LoxBerry-Plugin-Verwaltung verwenden.
 2. In LoxBerry unter **Plugins > Plugin installieren** hochladen.
 3. Nach der Installation die Plugin-Oberfläche öffnen.
 4. Root-Freigabe in den Einstellungen bewusst bestätigen.
@@ -283,23 +287,28 @@ Aktuelles reguläres Release-Paket:
 
 [**LoxBerryHostBackup_1.0.0.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip)
 
-Der Vorabkanal verweist ebenfalls auf dieses reguläre Release, solange keine
-neuere Vorabversion existiert. Alte Downloads bleiben in der
+Neue Vorabversion mit Datenquellenauswahl und Installationskorrektur:
+
+[**LoxBerryHostBackup_1.1.0.zip herunterladen (Pre-Release)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.1.0-beta/LoxBerryHostBackup_1.1.0.zip)
+
+Dieses öffentliche Release-ZIP direkt installieren, **nicht entpacken**.
+Ein GitHub-Konto ist für den Release-Download nicht nötig. Nur Downloads aus
+GitHub Actions sind äussere Artefakt-ZIPs, aus denen das innere Plugin-ZIP
+zuerst entpackt werden muss. Alte Downloads bleiben in der
 [Release-Historie](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases) erhalten.
 
-### Update auf 1.0.0
+### Update auf 1.1.0-beta
 
 In der LoxBerry-Plugin-Verwaltung nach Updates suchen oder das ZIP manuell
-installieren. Je nach persönlicher Update-Einstellung wird die neue Version
-angeboten oder automatisch installiert. Es ist nicht erforderlich, Vorabversionen
-zu aktivieren. Programmversion, Release-Tag und Paket lauten `1.0.0`,
-`v1.0.0` und `LoxBerryHostBackup_1.0.0.zip`, ohne Beta-Zusatz.
+installieren. Für Update-Angebote dieser Vorabversion muss in LoxBerry der
+Vorabkanal gewählt sein. Die automatische Installation hängt von der persönlichen
+Update-Einstellung ab. Programmversion, Release-Tag und Paket lauten `1.1.0`,
+`v1.1.0-beta` und `LoxBerryHostBackup_1.1.0.zip`.
 
-**Bereits das manuelle 1.0.0-Testpaket installiert?** Bei gleicher Versionsnummer
-erscheint kein höheres Update. Für exakt das veröffentlichte Paket das Release-ZIP
-erneut installieren, ohne vorher zu deinstallieren. Die Backup-/Restorelogik
-entspricht dem vorbereiteten 1.0.0-Stand; ergänzt sind finale Kanalmetadaten und
-Veröffentlichungsdokumentation.
+**Bereits das manuelle 1.0.0-Testpaket installiert?** 1.1.0 ist nun eine höhere,
+eindeutig unterscheidbare Paketversion. Das neue ZIP als Update installieren,
+**nicht vorher deinstallieren**. Bestehende Datenquellenregeln und Ausnahmen
+bleiben erhalten; für die lokale Empfehlung diese bewusst auswählen und speichern.
 
 Vor dem Update laufende Backup-/Restoreaufgaben beenden lassen und die
 Plugin-Einstellungen exportieren. Vorhandene Einstellungen und Backupdaten
@@ -533,7 +542,7 @@ seinen gesicherten Metadaten, Voraussetzungen und Restore-Einschränkungen:
 
 Vor jedem Backup führt das Backend einen kleinen Metadaten-Roundtrip auf dem
 registrierten Ziel aus. Ein Profil wird nicht stillschweigend herabgestuft.
-Im unveröffentlichten develop-Teststand zeigt eine fehlgeschlagene Prüfung die
+Ab 1.1.0-beta zeigt eine fehlgeschlagene Prüfung die
 betroffenen Schritte mit Soll-/Ist-Werten, Exit-Code und begrenzter
 Werkzeugausgabe. Die letzte Diagnose liegt zusätzlich root-geschützt unter
 `/var/lib/loxberryhostbackup/metadata-probe.json`; sie wird bei der nächsten
@@ -1092,13 +1101,14 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 Branches:
 
 - `main`: veröffentlichter Hauptstand 1.0.0
-- `develop`: auf die Release-Basis nachgeführt; Ausgangspunkt weiterer Entwicklung
+- `develop`: Vorabstand 1.1.0-beta mit Datenquellenauswahl und Installationskorrekturen
 - `pre-develop`: älterer Referenzstand; unverändert
 
 Update-Dateien:
 
 - `main/release.cfg`: Stable 1.0.0 mit dem geprüften Release-ZIP
-- `develop/prerelease.cfg`: vorerst dasselbe reguläre 1.0.0-Paket für Vorabkanal-Nutzer
+- `develop/prerelease.cfg`: bis zur öffentlichen ZIP-Prüfung noch 1.0.0;
+  anschliessend ausschliesslich für Vorabkanal-Nutzer 1.1.0-beta
 
 Die in `plugin.cfg` hinterlegten Kanaladressen bleiben unverändert, damit
 bestehende Installationen die neuen Metadaten finden. Sobald eine neuere

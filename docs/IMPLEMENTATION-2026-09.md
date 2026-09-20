@@ -1,7 +1,8 @@
 # Umsetzung der Analyse vom 13.09.2026
 
 Entwicklungsbasis: develop, da9aa80. Reihenfolge: Sicherheit, Betrieb, Bedienung,
-Erweiterungen. Aktueller Hauptstand: **1.0.0 auf main**, interne Plugin-Version **1.0.0**.
+Erweiterungen. Stabiler Hauptstand: **1.0.0 auf main**. Aktueller Vorabstand:
+**1.1.0-beta auf develop**, interne Plugin-Version **1.1.0**.
 Die bisher zurückgestellte AP-14 zur Mail-/Benachrichtigungssemantik ist ausgenommen.
 Am 19.09.2026 wird der vollständige develop-Stand `4da7cf6` auf `main` übernommen.
 Nur Version, Tests der Versions-/Kanaltrennung und aktuelle Dokumentation ändern
@@ -11,6 +12,22 @@ Prüfung des öffentlichen Downloads diesen Stand. Die
 [Release Notes](RELEASE-1.0.0.md) beschreiben Update, Freigabeschritte und Prüfgrenzen.
 Die ursprüngliche Analyse wurde mit 0.7.0-beta veröffentlicht; historische
 Prüfläufe darunter behalten ihre damaligen Versions- und Commitangaben.
+
+## Vorabversion 1.1.0-beta am 20.09.2026
+
+- Datenquellenauswahl, NAS-Metadaten-Diagnosen, kompakte Darstellung, Infobuttons
+  und erweiterte Kurzanleitung aus dem bisherigen develop-Teststand aufgenommen.
+- Nach dem gemeldeten Deinstallations-/Neuinstallationsfehler den Austausch
+  geschützter Restdateien auch ohne Upgrade-Purge abgesichert. Konfiguration wird
+  zuvor gesichert, alte Programmkopien gezielt vorbereitet und die Aktivierung
+  eines Weiterleitungs-Launchers weiterhin abgewiesen.
+- Fehlerpfad der Dateisystem-Prüfung normal formatiert; Wiederholung nur als
+  lesende Prüfung ohne Speichern oder Verlust offener Eingaben.
+- Neue Linux-Installations- und Browserregressionen sind Freigabekriterien.
+  Tatsächliche Hardware-/VM-/NAS-Abnahme bleibt separat; die Nachricht von Klaus
+  allein bestätigt keine bereits gelungene Reparatur auf seinem System.
+- Version 1.1.0 im Paket, Tag v1.1.0-beta; Vorabkanal erst nach geprüftem
+  öffentlichen Download aktivieren. main, Stable-Kanal und 1.0.0-ZIP unverändert.
 
 ## Historie: Ergänzungen für 0.7.1-beta am 13.09.2026
 

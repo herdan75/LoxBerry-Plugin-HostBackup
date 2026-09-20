@@ -344,6 +344,24 @@ body.is-loading .loading-overlay {
   color: #506071;
 }
 
+/* Failed asynchronous checks must keep the same compact notice as successes,
+   even inside the legacy host theme's typography-bearing .wide container. */
+#hostbackup-app #target-notice .inline-notice {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
+  overflow-wrap: anywhere;
+}
+
+#hostbackup-app #target-notice .target-notice-retry {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  letter-spacing: normal;
+}
+
 #hostbackup-app table {
   width: 100%;
   border-collapse: collapse;

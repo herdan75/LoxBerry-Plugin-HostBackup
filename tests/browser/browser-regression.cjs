@@ -59,6 +59,7 @@ const verificationReport={backup_id:'fixture-ok',status:'verified',checked_files
 let failSave=true, taskFinished=false, tokenNumber=0, postCount=0, htmlCount=0, statusCount=0, tokenDelay=0, saveDelay=0, lastSavedPath='';
 let overviewIssues=false, reportRequests=0, taskPhase='copying';
 let lastSavedSources, failSources=false, failBackupMetadata=false;
+let targetNoticeMode='http-error',targetNoticeRequests=0;
 const probe={status:'error',mode:'network-compatible',message:'Der Test kann Eigentümer nicht erhalten.',checks:[{name:'Eigentümer und Rechte',status:'error',details:'CIFS erzwingt feste Rechte.',expected:'0:0 640',actual:'1000:1000 666',exit_code:23,stderr:'rsync: <img src=x onerror="window.unsafeProbe=true"> Operation not permitted'},{name:'xattrs',status:'skipped',details:'Bewusst ausgelassen.'}],advice:['Mount-Einstellungen prüfen oder Portable Archive mit Vollbackup und Offline-Restore verwenden.']};
 const sourceVolumes=[{path:'/',kind:'system',fstype:'ext4',included:true,selectable:false,reason:'Systemdaten'},{path:'/media/usb',kind:'automount',fstype:'autofs',included:true,selectable:false,reason:'Automount-Bereich; einzelne Laufwerke auswählen'},{path:'/media/usb/data',kind:'local',fstype:'ext4',included:true,selectable:true},{path:'/media/usb/network',kind:'network',fstype:'cifs',included:true,selectable:true},{path:'/media/smb/nas',kind:'network',fstype:'cifs',included:true,selectable:true},{path:'/fixture/backup',kind:'local',fstype:'ext4',included:false,selectable:false,forced_excluded:true,reason:'Backup-Ziel'}];
 sourceVolumes.push(...Array.from({length:72},(_,index)=>({path:'/var/lib/docker/overlay2/'+('mount-'+index+'-').repeat(3)+'/merged',kind:'local',fstype:'overlay',included:true,selectable:true})));
@@ -100,7 +101,12 @@ const server=http.createServer(async(req,res)=>{
     if(action==='task-overview')return json(res,{tasks:[{task,state:taskFinished?'finished':'running'}],active_task:taskFinished?null:task,last_success:{backup_id:overviewBackupId,finished_at:overviewFinishedAt},next_run:{local:'14.09.2026 02:00'},last_failure:overviewIssues?{task:'backup-old-failure.log',state:'failed'}:null,pending_service_recovery:overviewIssues?1:0,target:{configured:true,readable:true,path:overviewTarget,available_mb:20000}});
     if(['backup-preview','storage-info','runtime-cleanup-preview','diagnostics','inspect-backup','verification-report','recovery-sheet'].includes(action))reportRequests++;
     if(action==='task-status'){statusCount++;return json(res,{state:taskFinished?'finished':'running',phase:taskFinished?'complete':taskPhase,now:100,mtime:99,content_b64:Buffer.from(longLog()).toString('base64')});}
-    if(action==='target-notice'){res.end('<section class="inline-notice">Fixture-Ziel verfügbar</section>');return;}
+    if(action==='target-notice'){
+      targetNoticeRequests++;
+      if(targetNoticeMode==='pending')return; // Real browser AbortController timeout, no shortened production timer.
+      if(targetNoticeMode==='http-error'){res.writeHead(500,{'Content-Type':'text/html'});res.end('<img src=x onerror="window.unsafeTargetError=true">Backend failure');return;}
+      res.end('<section class="inline-notice">Fixture-Ziel verfügbar</section>');return;
+    }
     if(action==='backup-list'){res.end(backupRows);return;}
     if(action==='stop-targets'){await new Promise(resolve=>setTimeout(resolve,100));res.end('<input type="hidden" name="stop_targets_loaded" value="1"><label><input type="checkbox" name="stop_targets" value="systemd:test.service" checked>Testdienst</label><button type="button" data-stop-target-preset="none">Keine Dienste</button>');return;}
     if(action==='backup-preview')return json(res,{saved_config:true,backup_mode:'snapshot',metadata_mode:'network-compatible',full_baseline_required:true,excludes:['/fixture/backup/***'],source_volumes:[{path:'/',included:true,reason:'System'}],available_mb:20000,baseline_estimate_mb:3000,metadata_probe:probe});
@@ -193,6 +199,41 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     await page.goto(base+'legacy-ui');
     assert.equal(assetRequests.filter(value=>value==='/assets/style.css').length,1,'The obsolete unversioned stylesheet really is cached');
     await page.goto(base);await visible(page,'#download-task-log');
+    await page.waitForFunction(()=>document.querySelector('#target-notice .inline-notice.warning'));
+    const targetNotice=page.locator('#target-notice'),targetDraft='/fixture/unsaved-target',targetSourceBefore=await page.locator('#source-selection-json').inputValue(),targetPostsBefore=postCount;
+    assert.equal(await targetNotice.getAttribute('role'),'status');assert.equal(await targetNotice.getAttribute('aria-live'),'polite');
+    assert.equal(await targetNotice.getAttribute('aria-busy'),'false');
+    assert.match(await targetNotice.textContent(),/Gespeicherte Einstellungen bleiben erhalten/);
+    assert.equal(await targetNotice.locator('img').count(),0);assert.equal(await page.evaluate(()=>window.unsafeTargetError),undefined,'HTTP error HTML is never interpreted as a notice');
+    await page.locator('#backup-root-input').fill(targetDraft);
+    await visible(page,'#settings-change-popup');
+    for(const [name,width,height] of [['desktop',1440,1100],['mobile',390,844]]){
+      await page.setViewportSize({width,height});await targetNotice.evaluate(node=>node.scrollIntoView({block:'center'}));
+      const layout=await targetNotice.locator('.inline-notice').evaluate(node=>{const rect=node.getBoundingClientRect(),style=getComputedStyle(node);return {size:parseFloat(style.fontSize),weight:parseInt(style.fontWeight,10),spacing:style.letterSpacing,left:rect.left,right:rect.right,height:rect.height,overflow:node.scrollWidth-node.clientWidth};});
+      assert.ok(layout.size<=14&&layout.weight<=400&&['normal','0px'].includes(layout.spacing)&&layout.height<230&&layout.left>=0&&layout.right<=width+1&&layout.overflow<=1,name+' failed target notice stays compact under host-theme rules '+JSON.stringify(layout));
+      await page.screenshot({path:path.join(temp,'target-notice-error-'+name+'.png')});
+    }
+    targetNoticeMode='pending';
+    const retryCount=targetNoticeRequests;
+    await targetNotice.locator('[data-target-notice-retry]').focus();await page.keyboard.press('Enter');
+    await page.waitForFunction(()=>document.querySelector('#target-notice').getAttribute('aria-busy')==='true');
+    assert.equal(await targetNotice.locator('[data-target-notice-retry]').isEnabled(),false,'Retry is disabled while its read-only request is running');
+    await page.waitForFunction(()=>document.querySelector('#target-notice').getAttribute('aria-busy')==='false',{},{timeout:30000});
+    assert.equal(targetNoticeRequests,retryCount+1,'Retry starts one read-only target request');
+    assert.equal(await targetNotice.locator('.inline-notice.warning').count(),1,'Timeout keeps the same standard warning layout');
+    assert.equal(await targetNotice.locator('[data-target-notice-retry]').isEnabled(),true,'Timed-out request can be retried');
+    assert.equal(await page.locator('#backup-root-input').inputValue(),targetDraft);
+    assert.equal(await page.locator('#source-selection-json').inputValue(),targetSourceBefore);
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false');
+    targetNoticeMode='ok';await targetNotice.locator('[data-target-notice-retry]').click();
+    await page.waitForFunction(()=>document.querySelector('#target-notice').textContent.includes('Fixture-Ziel verfügbar'));
+    assert.equal(await targetNotice.locator('.warning').count(),0,'Successful retry replaces the failure notice');
+    assert.equal(await targetNotice.locator('[data-target-notice-retry]').count(),0);
+    assert.equal(await page.locator('#backup-root-input').inputValue(),targetDraft);assert.equal(postCount,targetPostsBefore,'Neither retry nor timeout saves settings or starts a backup');
+    await page.locator('#backup-root-input').fill('/fixture/backup');
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true');
+    await page.setViewportSize({width:1440,height:1100});
+    receipts.push('HTTP failure and real target-notice timeout keep compact desktop/mobile warning layout and preserve draft; keyboard retry recovers without POST or settings loss');
     const quickGuide=page.locator('.wizard-panel details'),guideSummary=quickGuide.locator('summary');
     const guidePosts=postCount,guideSources=await page.locator('#source-selection-json').inputValue();
     assert.equal(await quickGuide.evaluate(node=>node.open),false,'Quick guide remains collapsed initially');

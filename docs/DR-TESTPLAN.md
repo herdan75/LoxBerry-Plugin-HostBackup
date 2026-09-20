@@ -5,7 +5,33 @@ bei Änderungen an rsync-/tar-Optionen, Mount-Prüfung, Import, Restore oder
 Retention auszuführen. Produktive Daten werden durch synthetische Marker und
 Testdienste ersetzt.
 
-## Ergänzende Upgrade- und Bedienungsabnahme für 1.0.0
+## Ergänzende Abnahme für 1.1.0-beta
+
+Nur auf einem isolierten Testsystem; vorhandene produktive Backups nicht löschen:
+
+1. Reguläres Update von 1.0.0 auf 1.1.0 ohne vorherige Deinstallation. Einstellungen,
+   Referenzbackups und Root-Helferstände vergleichen; kein stiller Wechsel der Quellen.
+2. Die alte Fehlerkonstellation gezielt mit geschützten Restdateien nachbilden:
+   Konfiguration und Weiterleitungs-Launcher vorhanden, neue Plattforminstallation
+   ohne Upgrade-Purge. Kopie als unprivilegierter Plattformbenutzer und danach
+   POSTROOT ausführen; korrekter Backend-Marker, Dispatcher und gespeicherte Werte
+   müssen stimmen. Kopieren als Root ist kein Ersatz für diesen Test.
+3. Korrigierte Deinstallation, anschliessende Plattformbereinigung und Neuinstallation
+   getrennt testen. Pfadverwechslung, Symlinks, Mounts und fremde Dateien dürfen
+   nicht über die vorgesehenen Pluginpfade hinaus verändert werden.
+4. Fehler und Zeitüberschreitung der Dateisystem-Prüfung unter LoxBerry-Schriftregeln
+   auslösen: normal formatierte Hinweisbox, erneuter lesender Prüfversuch,
+   unveränderte gespeicherte Einstellungen und offene Formulareingaben.
+5. Lokale USB-Quelle, ausgeschlossene Backup-Platte und zehn nicht gewählte
+   Netzfreigaben prüfen; danach eine Netzquelle ausdrücklich auswählen.
+   CIFS mit festen Rechten muss konkrete Metadatenfehler statt Scheinerfolg zeigen.
+6. Erst nach erfolgreichem öffentlichen ZIP-Download den Vorabkanal auf 1.1.0
+   aktivieren. Stable-Kanal, main-Commit, v1.0.0-Tag und dessen ZIP unverändert prüfen.
+
+Linux-/Browser-CI prüft isolierte Szenarien. Eine tatsächliche Reparatur von Klaus'
+VM, QNAP-Kompatibilität und vollständiger Hardware-Restore sind separat abzunehmen.
+
+## Historische Upgrade- und Bedienungsabnahme für 1.0.0
 
 Diese Szenarien sind ein Prüfplan, kein Nachweis bereits bestandener Hardwaretests:
 

@@ -248,6 +248,7 @@
   }
   async function fragment(action, target) {
     if (!target) return;
+    if (action === 'target-notice') { target.setAttribute('role', 'status'); target.setAttribute('aria-live', 'polite'); target.setAttribute('aria-atomic', 'true'); target.setAttribute('aria-busy', 'true'); }
     var controller = new AbortController(), timer = root.setTimeout(function () { controller.abort(); }, 20000);
     try {
       var response = await root.fetch(url(action, currentTask ? { active_task: currentTask } : {}), { cache: 'no-store', credentials: 'same-origin', signal: controller.signal });
@@ -261,8 +262,12 @@
       // Never replace existing settings or a usable old fragment after a refresh error.
       if (action === 'backup-list' && !target.querySelector('form')) target.innerHTML = '<tr><td colspan="8">Backup-Liste konnte nicht geladen werden. Bitte später erneut versuchen.</td></tr>';
       else if (action === 'stop-targets' && !target.querySelector('input')) target.textContent = 'Dienste konnten nicht geladen werden; ihre gespeicherte Auswahl wird beim Speichern beibehalten.';
-      else if (action === 'target-notice') target.textContent = 'Dateisystem-Prüfung momentan nicht erreichbar. Gespeicherte Einstellungen bleiben erhalten.';
-    } finally { root.clearTimeout(timer); }
+      else if (action === 'target-notice') {
+        var notice = el('section', 'Dateisystem-Prüfung momentan nicht erreichbar. Gespeicherte Einstellungen bleiben erhalten.', 'inline-notice warning');
+        var retry = el('button', 'Erneut prüfen', 'target-notice-retry'); retry.type = 'button'; retry.dataset.role = 'none'; retry.dataset.targetNoticeRetry = '1';
+        notice.append(retry); target.replaceChildren(notice);
+      }
+    } finally { root.clearTimeout(timer); if (action === 'target-notice') target.setAttribute('aria-busy', 'false'); }
   }
   function updateSchedule() {
     var mode = controlState(controls('schedule_mode'));
@@ -489,6 +494,8 @@
     var resetSource = event.target.closest('[data-source-reset]');
     if (resetSource) { event.preventDefault(); var sourceInput = byId('source-selection-json'), selectedSources = sourceSelection(sourceInput.value); delete selectedSources.overrides[resetSource.dataset.sourceReset]; sourceInput.value = JSON.stringify(sourceSelection(selectedSources)); updateDirty(initial, changed, sourceInput.name, sourceInput.value, new Date()); renderSources(); renderDirty(); clearPreflight(); return; }
     if (event.target.closest('#source-selection-reload')) { event.preventDefault(); loadSources(); return; }
+    var retryTargetNotice = event.target.closest('[data-target-notice-retry]');
+    if (retryTargetNotice) { event.preventDefault(); var targetNotice = byId('target-notice'); if (targetNotice.getAttribute('aria-busy') === 'true') return; retryTargetNotice.disabled = true; await fragment('target-notice', targetNotice); return; }
     var info = event.target.closest('.info-button');
     if (info) { event.preventDefault(); var help = info.closest('.info-help'); help.classList.toggle('is-open'); info.setAttribute('aria-expanded', help.classList.contains('is-open') ? 'true' : 'false'); positionInfoBubble(help); return; }
     var picker = event.target.closest('[data-backup-root]');

@@ -1,0 +1,18 @@
+Ergänzung zum bestehenden stabilen Pluginseiten-Eintrag (kein neuer Stable-Stand)
+
+Autor: Daniel Hermann
+Logo: :plugins:host-backup:icon_256.png
+Status: STABLE
+Version: 1.0.0
+Min. LB Version: 2.0.0
+Release Download: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip
+Pre-Release Download: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.1.0-beta/LoxBerryHostBackup_1.1.0.zip
+Beschreibung: Dateibasiertes Host-Backup und Restore für LoxBerry, Docker und native Linux-Dienste mit Vollbackups, inkrementellen Snapshots, Metadaten-Profilen für lokale und geeignete NAS-Ziele, Zeitplanung, Integritätsprüfungen sowie Export und Import.
+Sprachen: DE
+Diskussion: vorhandenen Diskussionslink unverändert lassen.
+
+Zusammenfassung der Seitenänderung:
+Pre-Release 1.1.0-beta mit Datenquellenauswahl, NAS-Diagnosen und Installationskorrekturen ergänzt; Stable bleibt 1.0.0.
+
+Nur nach bestätigter Veröffentlichung des ZIPs eintragen. Der öffentliche
+Release-Download benötigt kein GitHub-Konto und kann direkt installiert werden.

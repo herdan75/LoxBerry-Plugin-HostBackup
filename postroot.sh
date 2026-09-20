@@ -53,6 +53,8 @@ ROOT_IMPORT_DIR="$ROOT_STATE_DIR/imports"
 QUARANTINE_DIR="$ROOT_STATE_DIR/import-quarantine"
 UPGRADE_DIR="/tmp/${INSTALL_ID}_loxberryhostbackup_upgrade"
 CONFIG_BACKUP="$UPGRADE_DIR/config.json"
+PACKAGE_DIR="${6:-$(cd -- "$(dirname -- "$0")" && pwd)}"
+INSTALL_SAFETY="$PACKAGE_DIR/bin/hostbackup-install-safety.py"
 
 if [ -L "$CONFIG_DIR" ]; then
   echo "Refusing unsafe symlink directory: $CONFIG_DIR" >&2
@@ -75,7 +77,11 @@ if [ -e "$UPGRADE_DIR" ]; then
   echo "Existing HostBackup configuration restored after upgrade."
 fi
 
-for required_file in "$BACKEND" "$DISPATCHER_SOURCE" "$LAUNCHER_SOURCE" "$SOURCE_BIN/validate-import-archive.py" "$CGI" "$RESTORE" "$NOTIFY" "$CONFIG"; do
+# Durable recovery survives interrupted installs, new installer IDs and reboots.
+# It takes precedence over a freshly copied package default.
+python3 -I "$INSTALL_SAFETY" restore "$LBHOMEDIR" "$PLUGIN_FOLDER"
+
+for required_file in "$BACKEND" "$DISPATCHER_SOURCE" "$LAUNCHER_SOURCE" "$SOURCE_BIN/validate-import-archive.py" "$SOURCE_BIN/hostbackup-install-safety.py" "$CGI" "$RESTORE" "$NOTIFY" "$CONFIG"; do
   if [ ! -f "$required_file" ] || [ -L "$required_file" ]; then
     echo "Required installed file is missing or unsafe: $required_file" >&2
     exit 1
@@ -226,4 +232,6 @@ else
   exit "$status"
 fi
 
+# Clear durable recovery only after activation and schedule installation succeed.
+python3 -I "$release/hostbackup-install-safety.py" complete "$LBHOMEDIR" "$PLUGIN_FOLDER"
 exit 0

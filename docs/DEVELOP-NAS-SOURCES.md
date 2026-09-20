@@ -1,7 +1,8 @@
-# NAS- und Datenquellen-Teststand auf develop
+# NAS- und Datenquellenauswahl ab 1.1.0-beta
 
-Unveröffentlichte Änderungen auf Basis von 1.0.0. Kein neues Release und keine
-Änderung an den öffentlichen Download- oder Update-Kanälen.
+Die Datenquellenauswahl und detaillierte NAS-Diagnose sind Teil der Vorabversion
+1.1.0-beta auf Basis von 1.0.0. Das stabile Release 1.0.0 bleibt unverändert.
+Installationskorrekturen und Grenzen stehen in den [Release Notes](RELEASE-1.1.0-beta.md).
 
 ## Die beiden Forum-Befunde
 
@@ -18,7 +19,16 @@ Unveröffentlichte Änderungen auf Basis von 1.0.0. Kein neues Release und keine
 
 ## Sichere Anwendung des Testpakets
 
-### Test-ZIP herunterladen
+### Öffentliches Pre-Release herunterladen
+
+[**LoxBerryHostBackup_1.1.0.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.1.0-beta/LoxBerryHostBackup_1.1.0.zip)
+
+Dieses ZIP **ohne Entpacken** in der LoxBerry-Plugin-Verwaltung installieren.
+Der öffentliche Release-Download erfordert keine Anmeldung bei GitHub.
+Programm- und Paketversion sind 1.1.0; der Release-Tag lautet v1.1.0-beta.
+Der Vorabkanal wird nach erfolgreicher Downloadprüfung auf dieses Paket gesetzt.
+
+### Alternativ: neuere GitHub-Actions-Testpakete
 
 1. Bei GitHub mit dem eigenen Konto anmelden und die
    [Builds des develop-Teststands](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/workflows/build-plugin.yml?query=branch%3Adevelop)
@@ -27,14 +37,14 @@ Unveröffentlichte Änderungen auf Basis von 1.0.0. Kein neues Release und keine
    alten Stand; er wechselt nach einem Push nicht automatisch zum neuesten ZIP.
 2. Unten unter **Artifacts** auf **LoxBerryHostBackup** klicken.
 3. Das heruntergeladene Artefakt-ZIP **einmal entpacken**. Es enthält das eigentliche
-   Installationspaket **LoxBerryHostBackup_1.0.0.zip**. Dieses innere ZIP unverändert
+   Installationspaket **LoxBerryHostBackup_1.1.0.zip**. Dieses innere ZIP unverändert
    in der LoxBerry-Plugin-Verwaltung hochladen, nicht das äussere Artefakt-ZIP.
 
-Das Testpaket behält die Version 1.0.0. Es ist kein neues öffentliches Release
-und wird nicht automatisch als Plugin-Update angeboten. Der öffentliche
-Release-Download und die Update-Kanäle bleiben unverändert. GitHub-Artefakte
-sind zeitlich befristet; bei einem abgelaufenen Download einen neueren
-erfolgreichen develop-Lauf verwenden.
+GitHub-Artefakte sind zeitlich befristet. Spätere develop-Commits werden nicht
+allein durch einen Push zum veröffentlichten Release; ein einzelner Run-Link
+bleibt auf seinem Commit. Für das veröffentlichte Paket den direkten Link oben
+verwenden. Frühere Testpakete trugen noch dieselbe Versionsnummer wie 1.0.0;
+1.1.0-beta ist nun davon unterscheidbar.
 
 ### Installation und erster Test
 
@@ -95,5 +105,5 @@ Metadaten erfolgreich sichern und lokal wiederherstellen. Die CIFS-Quelle darf
 nur nach ausdrücklicher Auswahl durch rsync/tar kopiert werden.
 
 Windows-Tests ersetzen diese Linux-Prüfung nicht. Ein grüner CIFS-Test ersetzt
-seinerseits keinen Gegencheck auf der konkreten Synology mit deren Mount-Optionen,
+seinerseits keinen Gegencheck auf der konkreten QNAP/Synology mit deren Mount-Optionen,
 keinen vollständigen System-/Boot-Restore und keinen echten LoxBerry-Neustarttest.
