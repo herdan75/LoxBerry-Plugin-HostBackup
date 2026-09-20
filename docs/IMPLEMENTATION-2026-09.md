@@ -26,8 +26,13 @@ Prüfläufe darunter behalten ihre damaligen Versions- und Commitangaben.
 - Neue Linux-Installations- und Browserregressionen sind Freigabekriterien.
   Tatsächliche Hardware-/VM-/NAS-Abnahme bleibt separat; die Nachricht von Klaus
   allein bestätigt keine bereits gelungene Reparatur auf seinem System.
-- Version 1.1.0 im Paket, Tag v1.1.0-beta; Vorabkanal erst nach geprüftem
-  öffentlichen Download aktivieren. main, Stable-Kanal und 1.0.0-ZIP unverändert.
+- Version 1.1.0 im Paket, Tag v1.1.0-beta auf `bfeb897`; Vorabkanal nach geprüftem
+  öffentlichen Download aktiviert. main, Stable-Kanal und 1.0.0-ZIP unverändert.
+- Release-Lauf [35500522353](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/35500522353):
+  276 Python-Tests ohne Skips, echter Samba/CIFS-Mount, Browserprüfungen und
+  privilegierte Einstiegspunkte erfolgreich. Öffentliches ZIP ohne Anmeldung
+  mit HTTP 200, 733697 Bytes, korrekter Paketstruktur und SHA-256 geprüft;
+  vollständige Prüfsumme in [RELEASE-1.1.0-beta.md](RELEASE-1.1.0-beta.md).
 
 ## Historie: Ergänzungen für 0.7.1-beta am 13.09.2026
 

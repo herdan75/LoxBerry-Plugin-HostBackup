@@ -26,7 +26,7 @@ Installationskorrekturen und Grenzen stehen in den [Release Notes](RELEASE-1.1.0
 Dieses ZIP **ohne Entpacken** in der LoxBerry-Plugin-Verwaltung installieren.
 Der öffentliche Release-Download erfordert keine Anmeldung bei GitHub.
 Programm- und Paketversion sind 1.1.0; der Release-Tag lautet v1.1.0-beta.
-Der Vorabkanal wird nach erfolgreicher Downloadprüfung auf dieses Paket gesetzt.
+Der Vorabkanal ist nach erfolgreicher Downloadprüfung auf dieses Paket gesetzt.
 
 ### Alternativ: neuere GitHub-Actions-Testpakete
 

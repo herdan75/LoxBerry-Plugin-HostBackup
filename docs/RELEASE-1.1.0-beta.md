@@ -57,12 +57,12 @@ Laufzeitdaten oder vorhandene Backups löschen.
 ## Update-Kanäle und Pluginseite
 
 - `main/release.cfg` und das stabile ZIP bleiben bei 1.0.0.
-- `develop/prerelease.cfg` wird erst nach erfolgreicher Prüfung des öffentlichen
+- `develop/prerelease.cfg` ist nach erfolgreicher Prüfung des öffentlichen
   ZIP-Downloads auf 1.1.0 umgestellt. Automatische Update-Angebote setzen den
   bewusst gewählten Vorabkanal voraus; die Installationsart bestimmt LoxBerry.
 - Die mit dem ZIP archivierte Vorabkanaldatei kann noch auf 1.0.0 stehen.
   Für Update-Angebote zählt die in `plugin.cfg` hinterlegte entfernte Kanaladresse,
-  nicht diese archivierte Kopie; sie wird nach der Downloadprüfung aktiviert.
+  nicht diese archivierte Kopie; der entfernte Vorabkanal ist aktiviert.
 - Auf der Pluginseite bleiben Status **STABLE**, Version **1.0.0** und regulärer
   Download bestehen. Nur **Pre-Release Download** erhält den Direktlink oben.
 - Pluginseite und Forum werden nicht automatisch durch GitHub geändert.
@@ -73,7 +73,20 @@ Freigabekriterien sind die vollständige Linux-Testpipeline mit echten
 Root-/Plattformbenutzerrechten, Neuinstallation mit Restdateien ohne Upgrade-Purge,
 reguläre Deinstallation/Neuinstallation, unveränderte Schutzgrenzen, tatsächlichem
 Samba/CIFS-Mount, Browser-Fehler-/Wiederholungsprüfung und gebautem Plugin-ZIP.
-Die Release-Seite nennt den zugehörigen Prüflauf und die SHA-256-Prüfsumme.
+Diese Kriterien sind für den Release-Commit `bfeb8979e60534c54d33ed524fce0b1cbb7e114d`
+erfüllt: [Release-Prüflauf 35500522353](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/35500522353)
+erfolgreich, einschliesslich **276 Python-Tests ohne Skips**, echtem Samba/CIFS-Mount,
+Browserprüfungen, ShellCheck, sudoers- und PHP-Prüfung sowie Paketbau.
+
+Der öffentliche Download wurde am 20.09.2026 ohne Anmeldung geprüft: HTTP 200,
+**733697 Bytes**, Plugin-Konfiguration direkt im ZIP-Hauptverzeichnis, Version 1.1.0,
+enthaltene Installations-/UI-Korrekturen und ausführbare Unix-Skriptberechtigungen.
+
+SHA-256 für `LoxBerryHostBackup_1.1.0.zip`:
+
+```text
+7d16791ad43eeda8cfcfa442f5cc54ae8986f010f14bfb90135d6224a5bf9012
+```
 
 Das ist kein Nachweis einer Reparatur auf Klaus' konkreter VM oder einer
 vollständigen LoxBerry-/QNAP-/Boot-Restore-Abnahme. Die tatsächliche Ursache auf

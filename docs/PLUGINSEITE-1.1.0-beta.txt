@@ -14,5 +14,5 @@ Diskussion: vorhandenen Diskussionslink unverändert lassen.
 Zusammenfassung der Seitenänderung:
 Pre-Release 1.1.0-beta mit Datenquellenauswahl, NAS-Diagnosen und Installationskorrekturen ergänzt; Stable bleibt 1.0.0.
 
-Nur nach bestätigter Veröffentlichung des ZIPs eintragen. Der öffentliche
-Release-Download benötigt kein GitHub-Konto und kann direkt installiert werden.
+Das ZIP wurde am 20.09.2026 veröffentlicht und der öffentliche Download geprüft.
+Der Release-Download benötigt kein GitHub-Konto und kann direkt installiert werden.

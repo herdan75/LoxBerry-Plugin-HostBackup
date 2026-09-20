@@ -30,8 +30,8 @@ ausdrückliche Zuordnung separater Boot-/Datenlaufwerke beim Restore.
 
 > [!IMPORTANT]
 > **Update auf 1.1.0-beta:** Bewusster Wechsel auf eine Vorabversion, kein neues
-> stabiles Release. Der Vorabkanal wird erst nach Prüfung des öffentlichen
-> Downloads aktiviert; der stabile Kanal bleibt auf 1.0.0.
+> stabiles Release. Der Vorabkanal ist nach Prüfung des öffentlichen
+> Downloads auf 1.1.0 aktiviert; der stabile Kanal bleibt auf 1.0.0.
 > Vor einem Update Einstellungen exportieren, aktive Vorgänge beenden lassen
 > und nicht vorher deinstallieren.
 
@@ -1107,8 +1107,8 @@ Branches:
 Update-Dateien:
 
 - `main/release.cfg`: Stable 1.0.0 mit dem geprüften Release-ZIP
-- `develop/prerelease.cfg`: bis zur öffentlichen ZIP-Prüfung noch 1.0.0;
-  anschliessend ausschliesslich für Vorabkanal-Nutzer 1.1.0-beta
+- `develop/prerelease.cfg`: geprüftes Paket 1.1.0-beta, ausschliesslich für
+  Nutzer des bewusst gewählten Vorabkanals
 
 Die in `plugin.cfg` hinterlegten Kanaladressen bleiben unverändert, damit
 bestehende Installationen die neuen Metadaten finden. Sobald eine neuere

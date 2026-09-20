@@ -189,6 +189,15 @@ class InstallHookTests(unittest.TestCase):
         self.assertNotIn(f"VERSION={version}-beta", PLUGIN_CFG)
         self.assertIn(f"LoxBerryHostBackup_{version}.zip", notes)
 
+    def test_active_prerelease_channel_points_to_verified_1_1_0_package(self) -> None:
+        channel = configparser.ConfigParser()
+        channel.read_string(PRERELEASE_CFG)
+        self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.1.0")
+        base = "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases"
+        self.assertEqual(channel["AUTOUPDATE"]["ARCHIVEURL"],
+                         f"{base}/download/v1.1.0-beta/LoxBerryHostBackup_1.1.0.zip")
+        self.assertEqual(channel["AUTOUPDATE"]["INFOURL"], f"{base}/tag/v1.1.0-beta")
+
     def test_stable_channel_remains_1_0_0_during_prerelease_publication(self) -> None:
         expected_archive = "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip"
         for source in (RELEASE_CFG,):

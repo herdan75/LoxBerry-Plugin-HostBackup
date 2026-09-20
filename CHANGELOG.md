@@ -65,8 +65,8 @@ validiert werden.
   Network Compatible überspringt ausschliesslich xattrs und File Capabilities.
 - Zusätzliche Regressionstests und isolierter echter Linux-Samba/CIFS-Test für
   feste Eigentümer/Rechte, Archiv-Roundtrip und ausgewählte Datenquellen.
-- Plugin- und ZIP-Version `1.1.0`, GitHub-Tag `v1.1.0-beta`. Der Vorabkanal wird
-  erst nach Prüfung des öffentlichen ZIP-Downloads umgestellt. Das reguläre
+- Plugin- und ZIP-Version `1.1.0`, GitHub-Tag `v1.1.0-beta`. Der Vorabkanal wurde
+  nach Prüfung des öffentlichen ZIP-Downloads auf 1.1.0 umgestellt. Das reguläre
   Release 1.0.0 und sein Download bleiben unverändert.
 
 ## [1.0.0] - 2026-09-19
