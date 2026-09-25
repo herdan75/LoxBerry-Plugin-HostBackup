@@ -35,6 +35,11 @@ jobs:
         # installer/security cases still explicitly run attacks/copies as nobody.
         run: sudo -n env HOSTBACKUP_REQUIRE_LINUX_INTEGRATION=1 bash tests/run.sh
 
+      - name: Test downloads as unprivileged platform user
+        env:
+          HOSTBACKUP_REQUIRE_LINUX_INTEGRATION: '1'
+        run: python3 -m unittest discover -s tests -p 'test_download_behavior.py' -v
+
       - name: Fetch checksum-pinned portable runtime
         run: python3 bin/hostbackup-engine.py fetch .tmp/restic-engines
 
