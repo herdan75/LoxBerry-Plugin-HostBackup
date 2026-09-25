@@ -92,16 +92,31 @@ isolierten Testsystem mit Testdiensten und entbehrlichen Testbackups ausführen:
 
 ## Testmatrix
 
-| Ziel | Profil | Backup-Modus | Erwartung |
+| Ziel | Profil | Sicherungsart | Erwartung |
 |---|---|---|---|
-| ext4/xfs/btrfs | Native Strict | Full + Snapshot | `complete`, Validierung `ok`, Metadaten vollständig |
-| CIFS Synology | Network Compatible | Full | `complete`, Validierung `ok`, neutraler Hinweis auf bewusst ausgelassene xattrs |
-| NFS Synology | Network Compatible | Full | `complete`, Validierung `ok`, neutraler Hinweis auf bewusst ausgelassene xattrs |
-| Ziel mit stabilen user-xattrs | Fake Super | Full + Snapshot | `complete`, `user.rsync.*` nachweisbar |
-| CIFS/NFS | Portable Archive | Full | `complete`, `rootfs.tar`, Restore nur offline |
+| ext4/xfs/btrfs | Linux-Dateisicherung | Full + Snapshot | `complete`, Validierung `ok`, Metadaten vollständig |
+| CIFS Synology | Dateisicherung mit reduzierten Metadaten | Full | `complete`, Validierung `ok`, neutraler Hinweis auf bewusst ausgelassene xattrs |
+| NFS Synology | Dateisicherung mit reduzierten Metadaten | Full | `complete`, Validierung `ok`, neutraler Hinweis auf bewusst ausgelassene xattrs |
+| Ziel mit stabilen user-xattrs | Metadaten in Dateiattributen speichern | Full + Snapshot | `complete`, `user.rsync.*` nachweisbar |
+| CIFS/NFS | Portable Sicherung | Full | `complete`, `rootfs.tar`, Restore nur offline |
+| CIFS mit festen UID/GID und Rechten, ohne ACL/xattrs | Portable Sicherung | Platzsparende Sicherungsstände | Repository nach Einrichtung/Schlüsselbestätigung, drei Stände mit Wiederverwendung, vollständiger Metadaten-Restore auf Linux-Staging |
 
-Snapshot ist mit Portable Archive abzulehnen. Native Strict muss auf einem Ziel,
-das die Probe nicht besteht, vor dem eigentlichen Backup fehlschlagen.
+Portable Sicherungsstände sind ohne verfügbare Engine, initialisiertes Repository
+am gespeicherten Ziel oder bestätigte Schlüsselaufbewahrung abzulehnen. Ebenso
+blockiert ein eingeschalteter automatischer tar.gz-Export; kein automatisches
+Umstellen auf Vollbackup oder stilles Ausschalten des Exports. Linux-Dateisicherung
+muss auf einem Ziel, das die Probe nicht besteht, vor dem eigentlichen Backup
+fehlschlagen. Die CIFS-Testzeile simuliert NAS-Mount-Einschränkungen; sie ist kein
+Nachweis für jedes NAS-Modell oder für einen bootfähigen Hardware-Restore.
+
+Zusätzliche Repository-Prüfungen: Wiederanbindung nur mit richtiger Recovery-Datei,
+falscher Schlüssel/Repository-Identität, verlorener Mount, fremde Standdaten,
+abgebrochene Sicherung und gefülltes Ziel dürfen keinen neuen gültigen Stand
+erzeugen. Schutz/Aufbewahrung, Inhaltsprüfung, leerer Linux-Staging-Pfad mit
+genügend Platz, tatsächlicher Offline-Datei-Restore sowie Architektur-Abweisung
+prüfen. In der Oberfläche dürfen Repository-Stände weder normalen Einzelarchiv-
+Export noch direkten Online-/Einzeldatei-Restore anbieten. Alte TAR-Vollarchive
+müssen weiterhin lesbar bleiben; siehe [Recovery-Ablauf](PORTABLE-REPOSITORY.md).
 
 ## Testdaten
 
@@ -136,7 +151,7 @@ Prüfsummen und Metadaten vorab mit `sha256sum`, `stat`, `getfacl`, `getfattr`,
    Sparse-Belegung vergleichen.
 10. Dienste, Container, LoxBerry-Weboberfläche, Netzwerk und Testdatenbank prüfen.
 
-Bei Network Compatible sind fehlende xattrs/Capabilities der erwartete und zu
+Bei Dateisicherung mit reduzierten Metadaten sind fehlende xattrs/Capabilities der erwartete und zu
 dokumentierende Unterschied. Alle regulären Dateiinhalte, UID/GID, Modi, ACLs,
 Hardlinks und Symlinks müssen trotzdem übereinstimmen.
 

@@ -39,9 +39,8 @@ class OverviewTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     overview.check_settings("full", "native-strict", "true", mode, "02:00", weekdays, monthdays, months)
 
-    def test_portable_snapshot_rejected_even_when_schedule_disabled(self):
-        with self.assertRaises(ValueError):
-            overview.check_settings("snapshot", "portable-archive", "false", "daily", "02:00", "0", "1", "*")
+    def test_portable_snapshot_configuration_is_valid_runtime_is_checked_separately(self):
+        overview.check_settings("snapshot", "portable-archive", "false", "daily", "02:00", "0", "1", "*")
 
     def test_network_snapshot_is_valid(self):
         overview.check_settings("snapshot", "network-compatible", "true", "weekly", "02:00", "0,2,4", "1", "*")

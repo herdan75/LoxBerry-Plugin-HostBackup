@@ -14,8 +14,11 @@
     }
     return items[0].value || '';
   }
-  function validateSettings(values) {
-    if (values.metadata_mode === 'portable-archive' && values.backup_mode === 'snapshot') return 'Portable Archive unterstützt keine inkrementellen Snapshots. Bitte ausdrücklich „Volles Backup“ wählen.';
+  function validateSettings(values, repository) {
+    if (values.metadata_mode === 'portable-archive' && values.backup_mode === 'snapshot') {
+      if (values.create_export_after_backup === '1') return 'Für portable Sicherungsstände den automatischen tar.gz-Export ausdrücklich deaktivieren. Repository-Stände teilen Datenblöcke und sind keine einzelnen Exportarchive.';
+      if (!repository || repository.target_matches !== true || repository.available !== true || repository.initialized !== true || repository.key_confirmed !== true) return 'Portable Sicherungsstände benötigen ein geprüftes Repository am gespeicherten Backup-Ziel und die bestätigte Aufbewahrung der Wiederherstellungsdatei. Ziel und Root-Freigabe zuerst mit Vollbackup speichern; unten „Portable Sicherungsstände einrichten“ abschliessen und den Status prüfen. Danach diese Sicherungsart erneut wählen.';
+    }
     if (values.schedule_enabled === '1') {
       if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(values.schedule_time || '')) return 'Bitte eine gültige Startzeit wählen.';
       if (values.schedule_mode === 'weekly' && !values.schedule_weekdays) return 'Für den wöchentlichen Zeitplan mindestens einen Wochentag wählen.';
@@ -31,6 +34,9 @@
   }
   function logViewport(scrollTop, clientHeight, scrollHeight) { return scrollHeight - scrollTop - clientHeight < 40; }
   function phaseLabel(phase) { return ({ retention: 'Aufbewahrung prüfen und alte Backups bereinigen', selecting_sources: 'Ausgewählte Datenquellen erfassen' })[phase] || phase; }
+  function metadataLabel(mode) { return ({ 'native-strict': 'Linux-Dateisicherung', 'portable-archive': 'Portable Sicherung', 'network-compatible': 'Dateisicherung mit reduzierten Metadaten', 'fake-super': 'Metadaten in Dateiattributen speichern' })[mode] || String(mode || 'Unbekannt'); }
+  function backupModeLabel(mode) { return ({ full: 'Vollbackup', snapshot: 'Platzsparende Sicherungsstände' })[mode] || String(mode || 'Unbekannt'); }
+  function advancedMetadata(mode) { return mode === 'network-compatible' || mode === 'fake-super'; }
   function sourceSelection(value) {
     var selection = typeof value === 'string' ? JSON.parse(value) : value;
     if (!selection || !/^(local|legacy)$/.test(selection.policy) || !selection.overrides || Array.isArray(selection.overrides) || typeof selection.overrides !== 'object') throw new Error('Die gespeicherte Datenquellenauswahl ist ungültig. Bitte nicht überschreiben.');
@@ -66,7 +72,7 @@
     var allSourcesNotice = 'Alle eingebundenen Quellen: Auch Netzfreigaben werden mitgesichert. Fuer einen begrenzten Umfang lokale Laufwerke waehlen und Netzfreigaben einzeln aktivieren.';
     return (notices || []).filter(function (notice) { return notice !== legacyNotice && notice !== allSourcesNotice; }).concat(errors || []);
   }
-  var core = { normalizeLogForDisplay: normalizeLogForDisplay, controlState: controlState, validateSettings: validateSettings, updateDirty: updateDirty, logViewport: logViewport, phaseLabel: phaseLabel, sourceSelection: sourceSelection, sourceIncluded: sourceIncluded, sourceDisplayGroup: sourceDisplayGroup, sourceNotices: sourceNotices };
+  var core = { normalizeLogForDisplay: normalizeLogForDisplay, controlState: controlState, validateSettings: validateSettings, updateDirty: updateDirty, logViewport: logViewport, phaseLabel: phaseLabel, metadataLabel: metadataLabel, backupModeLabel: backupModeLabel, advancedMetadata: advancedMetadata, sourceSelection: sourceSelection, sourceIncluded: sourceIncluded, sourceDisplayGroup: sourceDisplayGroup, sourceNotices: sourceNotices };
   if (typeof module !== 'undefined' && module.exports) module.exports = core;
   if (!root.document) return;
   var document = root.document;
@@ -78,8 +84,9 @@
   var csrfRefresh = null, busyForms = new WeakSet(), busyCount = 0, pendingImport = false, intentionalNavigation = false;
   var reportDownloadUrl = null;
   var sourceVolumes = [], sourceLoading = false;
+  var repositoryState = null, repositoryLoading = false, repositoryWriting = false, repositoryStatusTarget = null;
   var labels = {
-    backup_root: 'Backup-Verzeichnis', keep_backups: 'Anzahl Backups behalten', metadata_mode: 'Metadaten-Profil', backup_mode: 'Backup-Modus',
+    backup_root: 'Backup-Verzeichnis', keep_backups: 'Anzahl Backups behalten', metadata_mode: 'Sicherungsverfahren', backup_mode: 'Sicherungsart',
     schedule_enabled: 'Automatische Backups', schedule_mode: 'Zeitplan', schedule_time: 'Startzeit', schedule_weekdays: 'Wochentage',
     schedule_monthdays: 'Monatstage', schedule_months: 'Monate', pre_backup_hook: 'Skript vor dem Backup', post_backup_hook: 'Skript nach dem Backup',
     rsync_extra_excludes: 'Zusätzliche Ausschlüsse', root_permission_ack: 'Root-Freigabe', mail_notify_enabled: 'Mailbenachrichtigung',
@@ -101,6 +108,8 @@
   function capture(form) { names().forEach(function (name) { if (!form || controls(name).some(function (item) { return item.form === form; })) { initial[name] = controlState(controls(name)); delete changed[name]; } }); }
   function dirty() { return pendingDraft || Object.keys(changed).length > 0; }
   function readable(name, value) {
+    if (name === 'metadata_mode') return metadataLabel(value);
+    if (name === 'backup_mode') return backupModeLabel(value);
     if (name === 'source_selection_json') { try { var selection = sourceSelection(value); return (selection.policy === 'legacy' ? 'Alle eingebundenen Laufwerke und Netzfreigaben' : 'Lokale Laufwerke; Netzfreigaben einzeln (empfohlen)') + ' · ' + Object.keys(selection.overrides).length + ' gespeicherte Ausnahmen'; } catch (ignore) { return 'Ungültige Auswahl – bitte prüfen'; } }
     if (/hook$/.test(name)) return value ? 'Eingetragen' : 'Leer';
     if (name === 'rsync_extra_excludes') return value.split(/\r?\n/).filter(function (line) { return line.trim(); }).length + ' Einträge';
@@ -134,7 +143,72 @@
     }
     if (!settingsForm(event.target.form) || !event.target.name || event.target.type === 'hidden') return;
     updateDirty(initial, changed, event.target.name, controlState(controls(event.target.name)), new Date());
-    updateSchedule(); renderDirty(); clearPreflight();
+    updateSchedule(); if (event.target.name === 'metadata_mode') updateMetadataSelection(); renderDirty(); clearPreflight();
+  }
+  function updateMetadataSelection() {
+    var panel = byId('metadata-advanced'), summary = byId('metadata-advanced-selection');
+    var mode = controlState(controls('metadata_mode'));
+    if (panel && advancedMetadata(mode)) panel.open = true;
+    if (summary) summary.textContent = advancedMetadata(mode) ? '· ' + metadataLabel(mode) + ' ausgewählt' : '';
+    var repositoryPanel = byId('portable-repository-panel');
+    if (repositoryPanel && mode === 'portable-archive') repositoryPanel.open = true;
+  }
+  function renderRepositoryStatus(errorMessage) {
+    var panel = byId('portable-repository-panel'), status = byId('repository-status'); if (!panel || !status) return;
+    var data = repositoryState, usable = !!(data && data.available === true && panel.dataset.configLoaded === '1');
+    status.textContent = errorMessage || (repositoryLoading ? 'Repository-Status wird gelesen…' : !data ? 'Status noch nicht geladen. Es wird nichts automatisch eingerichtet.' : !data.available ? 'Portable Sicherungsstände sind mit dieser Laufzeit oder diesem Ziel noch nicht verfügbar. Vollarchive und bestehende Sicherungen bleiben unverändert.' : !data.initialized ? 'Am gespeicherten Ziel ist noch kein Repository eingerichtet.' : data.key_confirmed ? 'Repository eingerichtet; sichere Aufbewahrung der Wiederherstellungsdatei bestätigt.' : data.key_exported ? 'Wiederherstellungsdatei wurde zum Download bereitgestellt. Jetzt ausserhalb dieses LoxBerry aufbewahren und anschliessend bestätigen.' : 'Repository eingerichtet. Die Wiederherstellungsdatei muss noch heruntergeladen und sicher aufbewahrt werden.');
+    status.setAttribute('aria-busy', repositoryLoading || repositoryWriting ? 'true' : 'false');
+    byId('repository-status-refresh').disabled = repositoryLoading || repositoryWriting;
+    [['repository-init-form', usable && !data.initialized], ['repository-key-export-form', usable && data.initialized], ['repository-confirm-key-form', usable && data.initialized && data.key_exported && !data.key_confirmed]].forEach(function (item) {
+      all('button[type="submit"],input[type="checkbox"]', byId(item[0])).forEach(function (control) { control.disabled = repositoryLoading || repositoryWriting || !item[1]; });
+    });
+  }
+  async function loadRepositoryStatus() {
+    if (!byId('repository-status') || repositoryLoading || repositoryWriting) return;
+    var savedTarget = initial.backup_root;
+    repositoryLoading = true; renderRepositoryStatus();
+    try { var data = await request('repository-status'); repositoryState = savedTarget === initial.backup_root ? data : null; repositoryStatusTarget = repositoryState ? savedTarget : null; }
+    catch (error) { repositoryState = null; repositoryLoading = false; renderRepositoryStatus('Repository-Status momentan nicht verfügbar. Bitte später erneut prüfen. Es wird nichts automatisch eingerichtet.'); return; }
+    finally { repositoryLoading = false; }
+    renderRepositoryStatus();
+  }
+  function repositoryForSettings() {
+    if (!repositoryState || repositoryLoading || repositoryWriting) return null;
+    return Object.assign({}, repositoryState, { target_matches: repositoryStatusTarget === initial.backup_root && controlState(controls('backup_root')) === initial.backup_root });
+  }
+  async function submitRepositoryForm(form) {
+    if (repositoryWriting || repositoryLoading || !requireSaved() || !form.reportValidity()) return;
+    var action = actionOf(form);
+    var keySaved = action === 'repository-confirm-key' && form.querySelector('[name="recovery_key_saved"]').checked;
+    if (!repositoryState || repositoryState.available !== true) { feedback('Zuerst den Repository-Status erfolgreich prüfen.', 'warning'); return; }
+    if (action === 'repository-init' && !root.confirm('Am gespeicherten Backup-Ziel einen verschlüsselten Speicher für portable Sicherungsstände einrichten? Bestehende Archive bleiben unverändert. Danach muss die Wiederherstellungsdatei ausserhalb dieses LoxBerry aufbewahrt werden.')) return;
+    repositoryWriting = true; setBusy(form, true); renderRepositoryStatus();
+    try {
+      var token = await refreshCSRF();
+      if (!requireSaved()) return;
+      var body = new URLSearchParams(new FormData(form)); body.set('csrf_token', token);
+      if (action === 'repository-confirm-key') body.set('recovery_key_saved', keySaved ? '1' : '');
+      var options = { method: 'POST', headers: { 'X-HostBackup-Request': '1', 'X-CSRF-Token': token }, body: body };
+      if (action === 'repository-key-export') {
+        var controller = new AbortController(), timer = root.setTimeout(function () { controller.abort(); }, 120000);
+        try {
+          var response = await root.fetch(url(action), Object.assign({ cache: 'no-store', credentials: 'same-origin', signal: controller.signal }, options));
+          if (!response.ok || !/^application\/json(?:;|$)/i.test(response.headers.get('Content-Type') || '') || !/attachment/i.test(response.headers.get('Content-Disposition') || '')) throw new Error('Download fehlgeschlagen. Status prüfen und die Wiederherstellungsdatei erneut herunterladen.');
+          // Never decode or render secret contents. Only the explicit download
+          // receives the body; normal reports and diagnostics cannot reuse it.
+          var blob = await response.blob();
+          if (!blob.size || blob.size > 1048576) throw new Error('Wiederherstellungsdatei hat eine unerwartete Grösse.');
+          var downloadUrl = URL.createObjectURL(blob), link = el('a'); link.href = downloadUrl; link.download = 'loxberryhostbackup-recovery-key.json'; link.hidden = true; document.body.append(link); link.click(); link.remove();
+          root.setTimeout(function () { URL.revokeObjectURL(downloadUrl); }, 30000);
+          feedback('Wiederherstellungsdatei zum Download bereitgestellt. Bitte ausserhalb dieses LoxBerry sicher aufbewahren und erst danach bestätigen.', 'ok');
+        } finally { root.clearTimeout(timer); }
+      } else {
+        var result = await request(action, {}, Object.assign({ timeout: 120000 }, options));
+        repositoryState = result.data || null; feedback(result.message || 'Repository-Aktion abgeschlossen. Status prüfen.', 'ok');
+        if (action === 'repository-confirm-key') form.querySelector('[name="recovery_key_saved"]').checked = false;
+      }
+    } catch (error) { feedback(error.name === 'AbortError' ? 'Die Repository-Antwort dauert zu lange. Vor einem erneuten Versuch den Status prüfen.' : error.message, 'error'); }
+    finally { repositoryWriting = false; setBusy(form, false); await loadRepositoryStatus(); }
   }
   function feedback(text, kind) { var node = byId('action-feedback'); node.textContent = text; node.className = 'notice ' + (kind || ''); node.hidden = false; }
   function requireSaved() {
@@ -218,7 +292,7 @@
   }
   function renderMetadataProbe(target, probe) {
     if (!probe || !Array.isArray(probe.checks)) return;
-    var panel = el('section', undefined, 'metadata-probe'); panel.append(el('h3', 'Metadatenprüfung: ' + (probe.mode || '')));
+    var panel = el('section', undefined, 'metadata-probe'); panel.append(el('h3', 'Metadatenprüfung: ' + metadataLabel(probe.mode)));
     if (probe.message) panel.append(el('p', probe.message));
     probe.checks.forEach(function (check) {
       var details = el('details', undefined, 'metadata-probe-check'), status = ({ ok: 'OK', error: 'Fehler', skipped: 'Nicht geprüft' })[check.status] || check.status || 'Unbekannt';
@@ -229,9 +303,9 @@
     });
     (probe.advice || []).forEach(function (advice) { panel.append(el('p', advice)); });
     if (probe.mode === 'network-compatible' && probe.status === 'error') {
-      panel.append(el('p', 'Network Compatible lässt nur xattrs und File Capabilities weg. Echte Fehler bei Eigentümern, Rechten, Links oder ACLs bleiben blockierend. Portable Archive kann Metadaten im Archiv bewahren, erfordert aber ausdrücklich ein Vollbackup und einen Offline-/Rescue-Restore.'));
-      panel.append(el('p', 'Für dieses Verfahren: Metadaten-Profil „Portable Archive“ und Backup-Modus „Volles Backup“ auswählen, Änderungen speichern und danach das Backup erneut starten. Es gibt dabei keine inkrementellen Snapshots.'));
-      var apply = el('button', 'Portable Archive und Vollbackup auswählen'); apply.type = 'button'; apply.dataset.archiveProfileDraft = '1'; apply.dataset.role = 'none'; panel.append(apply);
+      panel.append(el('p', 'Dateisicherung mit reduzierten Metadaten (bisher Network Compatible) lässt nur xattrs und File Capabilities weg. Fehler bei Eigentümern, Rechten, Links oder ACLs bleiben blockierend. Portable Sicherung kann Metadaten innerhalb des Backupformats bewahren; auch ihre Zielprüfung muss erfolgreich sein. Der System-Restore erfolgt offline.'));
+      panel.append(el('p', 'Als nächsten Versuch Sicherungsverfahren „Portable Sicherung“ und Sicherungsart „Vollbackup“ auswählen, Änderungen speichern und danach „Nächstes Backup prüfen“ ausführen. Das erstellt ein eigenständiges Vollarchiv.'));
+      var apply = el('button', 'Portable Sicherung und Vollbackup auswählen'); apply.type = 'button'; apply.dataset.archiveProfileDraft = '1'; apply.dataset.role = 'none'; panel.append(apply);
       panel.append(el('small', 'Ändert nur die Auswahl in den Einstellungen. Speichern und Backup-Start erfolgen ausdrücklich durch dich.'));
     }
     target.append(panel);
@@ -309,7 +383,7 @@
     if (reportDownloadUrl) { URL.revokeObjectURL(reportDownloadUrl); reportDownloadUrl = null; }
     var target = byId('operation-result'); target.replaceChildren(); target.hidden = false;
     if (action === 'backup-preview') {
-      target.append(el('h3', 'Vorschau des nächsten Backups'), el('p', 'Gespeicherter Stand: ' + data.backup_mode + ' / ' + data.metadata_mode));
+      target.append(el('h3', 'Vorschau des nächsten Backups'), el('p', 'Gespeicherter Stand: ' + backupModeLabel(data.backup_mode) + ' / ' + metadataLabel(data.metadata_mode)));
       target.append(el('p', data.full_baseline_required ? 'Neue vollständige Basiskopie erforderlich. Der erste Lauf benötigt erneut Platz für alle ausgewählten Daten; erst danach können passende Snapshots Platz teilen.' : 'Inkrementelle Referenz: ' + (data.reference_id || 'keine')));
       target.append(el('p', 'Verfügbar: ' + byteLabel(data.available_mb == null ? null : data.available_mb * 1048576) + ' · geschätzte Basiskopie: ' + byteLabel(data.baseline_estimate_mb == null ? null : data.baseline_estimate_mb * 1048576)));
       reportRows(target, ['Datenquelle', 'Im Backup', 'Grund'], (data.source_volumes || []).map(function (volume) { return [volume.path, volume.included ? 'Ja' : 'Nein', volume.reason]; }));
@@ -426,7 +500,7 @@
     var action = actionOf(form);
     if (action === 'backup' && !requireSaved()) return false;
     if (action === 'maintenance-preview' && !requireSaved()) return false;
-    if (action === 'save-config') { var error = validateSettings(states()); if (error) { feedback(error, 'warning'); return false; } }
+    if (action === 'save-config') { var error = validateSettings(states(), repositoryForSettings()); if (error) { feedback(error, 'warning'); return false; } }
     if (action === 'import-config' && dirty() && !root.confirm('Die importierten Einstellungen ersetzen den gespeicherten Stand und deine ungespeicherten Eingaben. Trotzdem importieren?')) return false;
     var confirmations = { 'delete-backup': 'Dieses Backup dauerhaft löschen? Geschützte und die letzte geeignete Sicherung bleiben gesperrt.', 'delete-export': 'Nur dieses Exportarchiv löschen? Der Backup-Snapshot bleibt erhalten.', 'restore-backup': 'Restore wirklich starten? Die Ziel-Systemdateien werden überschrieben. Ausschlüsse und Volume-Zuordnung in der Vorschau vorher prüfen.', 'stop-backup': 'Backup stoppen? Bereits gestoppte Dienste und Container werden anhand des Wiederanlauf-Journals neu gestartet.', 'maintenance-run': 'Genau die angezeigte Löschvorschau ausführen? Diese Dateien werden dauerhaft entfernt.' };
     if (action === 'runtime-cleanup-run') confirmations[action] = 'Die angezeigten alten Log- und Quarantänedateien endgültig löschen? Offene Wiederanlauf-Journale bleiben erhalten.';
@@ -436,7 +510,7 @@
     try {
       var token = await refreshCSRF();
       if ((action === 'backup' || action === 'maintenance-preview') && !requireSaved()) return false;
-      if (action === 'save-config') { var validationError = validateSettings(states()); if (validationError) { feedback(validationError, 'warning'); return false; } }
+      if (action === 'save-config') { var validationError = validateSettings(states(), repositoryForSettings()); if (validationError) { feedback(validationError, 'warning'); return false; } }
       // One synchronous snapshot: inputs may change while the token request is in flight.
       submitted = states();
       var body = new FormData(form); body.set('csrf_token', token);
@@ -454,6 +528,7 @@
         Object.keys(submitted).forEach(function (name) { if (controls(name).some(function (item) { return item.form === form; })) { initial[name] = submitted[name]; updateDirty(initial, changed, name, controlState(controls(name)), new Date()); } });
         if (action === 'save-config') { pendingDraft = false; pendingImport = false; }
         renderDirty(); clearPreflight(); fragment('target-notice', byId('target-notice')); overview();
+        if (action === 'save-config' && byId('portable-repository-panel')) { repositoryState = null; repositoryStatusTarget = null; renderRepositoryStatus(); if (byId('portable-repository-panel').open) loadRepositoryStatus(); }
         feedback(dirty() ? 'Gespeichert. Währenddessen geänderte Eingaben sind noch ungespeichert.' : 'Einstellungen gespeichert. Backups verwenden jetzt diesen Stand.', 'ok');
       } else if (action === 'import-config') {
         // Only this explicitly requested replacement navigates; never task completion.
@@ -477,6 +552,7 @@
       try { renderReport(params.action, await request(params.action, params)); } catch (error) { feedback(error.message, 'error'); } return;
     }
     event.preventDefault();
+    if (/^repository-(?:init|key-export|confirm-key)$/.test(actionOf(form))) { await submitRepositoryForm(form); return; }
     if (form.id === 'settings-save-form' && byId('maintenance-settings-form')) {
       if (await submitForm(form)) { var advanced = byId('maintenance-settings-form'); if (Object.keys(changed).some(function (name) { return controls(name).some(function (control) { return control.form === advanced; }); })) await submitForm(advanced); }
     } else await submitForm(form);
@@ -489,11 +565,12 @@
     if (event.target.closest('[data-archive-profile-draft]')) {
       event.preventDefault();
       [['metadata_mode', 'portable-archive'], ['backup_mode', 'full']].forEach(function (choice) { var control = controls(choice[0]).find(function (item) { return item.value === choice[1]; }); if (control) { control.checked = true; control.dispatchEvent(new Event('change', { bubbles: true })); } });
-      feedback('Portable Archive und Volles Backup sind ausgewählt, aber noch nicht gespeichert. Bitte Änderungen speichern und danach das Backup erneut starten. Der Restore ist nur offline möglich.'); return;
+      updateMetadataSelection(); feedback('Portable Sicherung und Vollbackup sind ausgewählt, aber noch nicht gespeichert. Bitte Änderungen speichern und danach „Nächstes Backup prüfen“ ausführen. Der System-Restore ist nur offline möglich.'); return;
     }
     var resetSource = event.target.closest('[data-source-reset]');
     if (resetSource) { event.preventDefault(); var sourceInput = byId('source-selection-json'), selectedSources = sourceSelection(sourceInput.value); delete selectedSources.overrides[resetSource.dataset.sourceReset]; sourceInput.value = JSON.stringify(sourceSelection(selectedSources)); updateDirty(initial, changed, sourceInput.name, sourceInput.value, new Date()); renderSources(); renderDirty(); clearPreflight(); return; }
     if (event.target.closest('#source-selection-reload')) { event.preventDefault(); loadSources(); return; }
+    if (event.target.closest('#repository-status-refresh')) { event.preventDefault(); await loadRepositoryStatus(); return; }
     var retryTargetNotice = event.target.closest('[data-target-notice-retry]');
     if (retryTargetNotice) { event.preventDefault(); var targetNotice = byId('target-notice'); if (targetNotice.getAttribute('aria-busy') === 'true') return; retryTargetNotice.disabled = true; await fragment('target-notice', targetNotice); return; }
     var info = event.target.closest('.info-button');
@@ -519,7 +596,9 @@
   root.addEventListener('pagehide', function () { if (reportDownloadUrl) URL.revokeObjectURL(reportDownloadUrl); });
   root.addEventListener('focus', function () { refreshCSRF().catch(function () {}); overview(); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { refreshCSRF().catch(function () {}); overview(); pollTask(); } });
-  capture(); renderDirty(); updateSchedule(); enhanceTables(app); byId('stop-task-form').hidden = true;
+  capture(); renderDirty(); updateSchedule(); updateMetadataSelection(); enhanceTables(app); byId('stop-task-form').hidden = true;
+  var repositoryPanel = byId('portable-repository-panel');
+  if (repositoryPanel) { renderRepositoryStatus(); repositoryPanel.addEventListener('toggle', function () { if (this.open && !repositoryState) loadRepositoryStatus(); }); if (repositoryPanel.open) loadRepositoryStatus(); }
   try { renderSources(); } catch (error) { feedback(error.message, 'error'); } loadSources();
   fragment('target-notice', byId('target-notice')); fragment('backup-list', byId('backup-list-body')); fragment('stop-targets', byId('stop-targets-list'));
   overview(); pollTask(); root.setInterval(function () { if (!document.hidden) { overview(); pollTask(); } }, 5000);

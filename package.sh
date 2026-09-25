@@ -22,6 +22,10 @@ mkdir -p -- "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
 ZIP_PATH="$OUTPUT_DIR/$ZIP_NAME"
 
+# Pinned compressed Linux runtimes are fetched at build time, never by a
+# privileged installer. Existing checked cache files are reused verbatim.
+python3 "$ROOT/bin/hostbackup-engine.py" fetch "$ROOT/.tmp/restic-engines"
+
 rm -f "$ZIP_PATH"
 
 cd "$ROOT"
@@ -52,5 +56,6 @@ mkdir "$version_stage/bin"
 printf '%s\n' "$VERSION" > "$version_stage/bin/runtime-version"
 chmod 0644 "$version_stage/bin/runtime-version"
 ( cd "$version_stage"; zip "$ZIP_PATH" bin/runtime-version )
+( cd "$ROOT/.tmp/restic-engines"; zip -j "$ZIP_PATH" restic_*.bz2 )
 
 printf '%s\n' "$ZIP_PATH"

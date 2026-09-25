@@ -1,5 +1,14 @@
 # LoxBerry Host Backup
 
+> [!NOTE]
+> **Unveröffentlichter develop-Teststand:** Die neu benannten Sicherungsverfahren
+> und portablen, platzsparenden NAS-Sicherungsstände sind nur im manuell
+> installierbaren ZIP eines erfolgreich geprüften develop-Builds enthalten.
+> Sie sind **nicht** Teil des bereits veröffentlichten `1.1.0-beta`-Downloads.
+> Für diesen Test bleibt die Paketversion `1.1.0`; Update-Kanäle und Releases
+> werden nicht verändert. Einrichtung und Schlüssel-Recovery erklärt die
+> [Anleitung für portable Sicherungsstände](docs/PORTABLE-REPOSITORY.md).
+
 **Version 1.1.0-beta · Vorabversion auf develop · 20.09.2026.**
 Das reguläre Release bleibt **1.0.0**. Programm- und Paketversion des neuen
 Vorabstands lauten `1.1.0`; GitHub kennzeichnet ihn mit dem Tag `v1.1.0-beta`.
@@ -320,7 +329,7 @@ benötigen zusätzlichen Speicher und Zeit.
 
 **Wichtig beim Umstieg von 0.5.8 und älter:** Der erste inkrementelle Lauf
 benötigt nochmals eine vollständige Basiskopie, weil diesen alten Backups die
-Metadaten-Profilinformation fehlt. Erst ein nachfolgender erfolgreicher Lauf
+Information zum Sicherungsverfahren fehlt. Erst ein nachfolgender erfolgreicher Lauf
 kann wieder Hardlinks verwenden. Genügend zusätzlichen freien Platz einplanen;
 das letzte brauchbare Backup wird nicht vorab zur Platzbeschaffung gelöscht.
 Ein Update von 0.6.x oder 0.7.x auf 1.0.0 erzwingt allein durch die Versionsnummer keine
@@ -381,7 +390,7 @@ Backup vollständig abgeschlossen ist.
 > Eine Auswahl oder Eingabe in der Weboberfläche ist zunächst nur eine
 > ungespeicherte Änderung. Erst mit **Änderungen speichern** werden die Werte in
 > die Plugin-Konfiguration übernommen. Das gilt insbesondere für
-> Backup-Verzeichnis, Ausschlüsse, Aufbewahrung, Metadaten-Profil, Backup-Modus,
+> Backup-Verzeichnis, Ausschlüsse, Aufbewahrung, Sicherungsverfahren, Sicherungsart,
 > ausgewählte Dienste und Container sowie den Zeitplan. Speichere die Änderungen
 > deshalb **vor dem Start eines manuellen Backups und bevor du dich auf ein
 > automatisches Backup verlässt**. Ohne Speichern verwendet das Plugin weiterhin
@@ -398,7 +407,7 @@ unteren Fensterrand vollständig lesbar bleiben.
 Sobald eine Einstellung geändert wird, erscheint unten rechts ein nicht
 blockierender Speicherhinweis. Er nennt den geänderten Bereich, den neuen Wert
 und die Uhrzeit der Änderung und bietet direkt **Änderungen speichern** an. Das
-gilt auch für Optionsfelder wie Metadaten-Profil, Backup-Modus und Zeitplan. Wird
+gilt auch für Optionsfelder wie Sicherungsverfahren, Sicherungsart und Zeitplan. Wird
 ein Feld auf seinen zuletzt gespeicherten Wert zurückgestellt, verschwindet sein
 Eintrag wieder; ohne Änderungen bleibt der Hinweis vollständig ausgeblendet.
 
@@ -420,7 +429,7 @@ LoxBerry als Root ausgeführten Hook `postroot.sh` eingerichtet. Bei einem
 Upgrade sichert `preroot.sh` zuvor die bestehende `config.json`. `postroot.sh`
 stellt sie unmittelbar zu Beginn der privilegierten Nacharbeiten wieder her,
 bevor weitere Installationsprüfungen laufen. Damit bleiben Backup-Ziel,
-Metadaten-Profil, Ausschlüsse, Zeitplan, Stop-Ziele und die übrigen
+Sicherungsverfahren, Ausschlüsse, Zeitplan, Stop-Ziele und die übrigen
 Plugin-Einstellungen bei künftigen Updates erhalten.
 
 ### Backup-Verzeichnis
@@ -440,9 +449,11 @@ Das konfigurierte Backup-Verzeichnis wird automatisch vom Backup ausgeschlossen,
 damit das Backup sich nicht selbst wieder mitsichert.
 
 Das Plugin prüft den eingestellten Speicherort und zeigt in der Oberfläche den
-erkannten Dateisystemtyp an. Für inkrementelle Snapshots wird ein Linux-
-Dateisystem wie `ext4`, `xfs` oder `btrfs` empfohlen. Unabhängig vom
-Backup-Modus ist `ext4` für dieses Plugin in der Praxis meist deutlich
+erkannten Dateisystemtyp an. Für platzsparende **Dateisicherungen mit Hardlinks**
+wird ein Linux-Dateisystem wie `ext4`, `xfs` oder `btrfs` empfohlen.
+**Portable Sicherungsstände** benötigen dagegen keine Linux-Rechte oder Hardlinks
+auf dem NAS: Metadaten und gemeinsame Blöcke liegen im Repository. Seine eigene
+Zielprüfung bleibt erforderlich. Bei der Dateisicherung ist `ext4` in der Praxis meist deutlich
 schneller als NTFS/FUSE, besonders bei sehr vielen kleinen Dateien. NTFS/FUSE
 kann zusätzlich Hardlinks, Besitzer, Rechte oder Linux-Metadaten nur
 eingeschränkt abbilden.
@@ -472,14 +483,24 @@ HostBackup wird dort unter `loxberry-hostbackup` gespeichert, ohne diesen
 Datenträger einschliesslich alter DietPi-Backups und Images nochmals zu sichern.
 Nutzdaten unter `/media/usb/USB_Loxberry` bleiben dagegen eingeschlossen.
 
-### Backup-Modus
+### Sicherungsart
 
-Das Plugin kann Backups in zwei Modi erstellen:
+Die Sicherungsart ist vom Sicherungsverfahren getrennt. Es gibt zwei Arten:
 
-- `Vollbackup`: Jeder Backup-Ordner enthält eine vollständige Kopie.
-- `Inkrementeller Snapshot`: Das Backup nutzt `rsync --link-dest` und Hardlinks
-  auf das vorherige vollständige Backup. Jeder Snapshot sieht weiterhin wie ein
-  vollständiges Backup aus und kann direkt für Restore gewählt werden.
+- `Vollbackup`: Jeder Stand enthält eine eigenständige vollständige Kopie; beim
+  portablen Verfahren ist das ein Vollarchiv.
+- `Platzsparende Sicherungsstände`: Die Dateisicherung nutzt `rsync --link-dest`
+  und Hardlinks auf eine geeignete vorherige Sicherung. **Portable Sicherung**
+  verwendet stattdessen ein verschlüsseltes Restic-Repository, in dem vorhandene
+  Datenblöcke wiederverwendet werden. Jeder Stand beschreibt den vollständigen
+  gesicherten Dateibaum. Ein Repository-Stand ist jedoch kein eigenständiger
+  Backup-Ordner und benötigt für den Restore die gemeinsame Datenbasis sowie den
+  Schlüssel. Bisher hiess diese Auswahl `Inkrementeller Snapshot`.
+
+Portable Sicherungsstände sind erst nach bewusster Repository-Einrichtung und
+bestätigter externer Schlüsselaufbewahrung verfügbar. Einrichtung, Grenzen und
+Offline-Wiederherstellung stehen in [Portable Repository](docs/PORTABLE-REPOSITORY.md).
+Die folgenden Angaben zu Hardlink-Referenzen gelten für die Dateisicherungsverfahren.
 
 Beim ersten inkrementellen Snapshot existiert noch kein vorheriges vollständiges
 Backup. Das Plugin erstellt dann automatisch eine vollständige Basiskopie. Ab
@@ -487,11 +508,11 @@ dem zweiten erfolgreichen Snapshot werden unveränderte Dateien per Hardlink auf
 das vorherige Backup referenziert.
 
 Als Referenz wird nur ein erfolgreich validierter Snapshot mit demselben
-Metadaten-Profil verwendet. Backups aus Version 0.5.8 und älter enthalten diese
+Sicherungsverfahren verwendet. Backups aus Version 0.5.8 und älter enthalten diese
 Profilinformation noch nicht und können daher nicht als `--link-dest` dienen.
 Nach einem Update von einem solchen Altbestand wird der erste inkrementelle Lauf
 nochmals als vollständige Basiskopie erstellt. Der nächste erfolgreiche Lauf
-mit unverändertem Metadaten-Profil kann diese neue Basiskopie wieder
+mit unverändertem Sicherungsverfahren kann diese neue Basiskopie wieder
 inkrementell verwenden. Im Live-Log zeigt `Snapshot reference: .../rootfs` die
 verwendete Referenz; `No complete previous backup found. Creating first snapshot
 as full copy.` kennzeichnet eine neue vollständige Basiskopie.
@@ -509,36 +530,52 @@ Dateisystem wie `ext4`, `xfs` oder `btrfs` als Backup-Ziel empfohlen. Auf
 NTFS/FUSE-Zielen kann die Speicherersparnis oder Metadatenunterstützung
 eingeschränkt sein.
 
-### Metadaten-Profil
+### Sicherungsverfahren
 
-Das Metadaten-Profil muss zum Ziel passen. Die Standardeinstellung bei einer
-Neuinstallation ist `Native Strict`. Sie ist für lokale Linux-Dateisysteme
-gedacht; bei CIFS/NFS oder einem NAS muss bewusst das passende Profil gewählt
-werden. In der Weboberfläche besitzt jedes Profil einen eigenen Info-Button mit
-seinen gesicherten Metadaten, Voraussetzungen und Restore-Einschränkungen:
+Das Sicherungsverfahren (bisher `Metadaten-Profil`) muss zum Ziel passen.
+Normal angezeigt werden **Linux-Dateisicherung** und **Portable Sicherung**.
+Die zwei Spezialverfahren stehen unter **Erweiterte Einstellungen**; ist eines
+davon bereits ausgewählt, ist dieser Bereich beim Öffnen aufgeklappt. Das
+Aufklappen allein ändert nichts. Die Standardeinstellung einer Neuinstallation
+bleibt Linux-Dateisicherung; NAS-Ziele verlangen eine bewusste Auswahl und eine
+erfolgreiche Zielprüfung, keine automatische Herabstufung.
 
-- `Native Strict`: für lokale Linux-Ziele mit ext4, xfs oder btrfs. `rsync`
+Die technischen Konfigurationswerte und bestehende Sicherungen bleiben kompatibel:
+
+| Anzeige | Bisheriger Name | Unveränderter Konfigurationswert |
+| --- | --- | --- |
+| Linux-Dateisicherung | Native Strict | `native-strict` |
+| Portable Sicherung | Portable Archive | `portable-archive` |
+| Dateisicherung mit reduzierten Metadaten | Network Compatible | `network-compatible` |
+| Metadaten in Dateiattributen speichern | Fake Super | `fake-super` |
+
+Jedes Verfahren hat einen Infobutton mit Voraussetzungen und Restore-Grenzen:
+
+- `Linux-Dateisicherung`: für lokale Linux-Ziele mit ext4, xfs oder btrfs. `rsync`
   sichert Besitzer, Rechte, ACLs, xattrs, File Capabilities und Hardlinks
   vollständig. Fehlt eine benötigte Funktion, wird das Backup als Fehler
   beendet.
-- `Network Compatible`: `rsync -aHA` ohne xattrs. Dieses Profil ist für CIFS-
+- `Dateisicherung mit reduzierten Metadaten`: `rsync -aHA` ohne xattrs. Dieses Profil ist für CIFS-
   oder NFS-Ziele gedacht, die einzelne Linux-xattrs mit `Operation not
   supported` ablehnen. Das bewusste Auslassen wird als neutraler Hinweis im
   Manifest und in der Oberfläche dokumentiert. Ein ansonsten erfolgreiches
   Backup erhält `complete`/`ok` und läuft auch per Zeitplan ohne Bestätigung;
   ein Restore benötigt wegen der reduzierten Metadaten weiterhin eine
   zusätzliche Bestätigung.
-- `Fake Super`: für Ziele mit user-xattrs, aber ohne native Unix-Metadaten.
+- `Metadaten in Dateiattributen speichern`: für Ziele mit user-xattrs, aber ohne native Unix-Metadaten.
   rsync speichert privilegierte Angaben in `user.rsync.*`; das Profil darf nur
   verwendet werden, wenn das Ziel user-xattrs zuverlässig unterstützt.
   Dieses Profil verwendet zwei lokale rsync-Prozesse mit einem fest definierten
   lokalen Transport, um einen bekannten Fehler lokaler `-M`-Aufrufe in rsync
   3.2.7 zu umgehen. Dafür werden weder SSH noch ein Netzwerkdienst benötigt;
   die Sicherung bleibt auf dem eingebundenen lokalen/NAS-Dateisystem.
-- `Portable Archive`: für Ziele ohne geeignete Linux-Metadatenfunktionen. Das
-  Profil erzeugt einen metadatentreuen `rootfs.tar`-Container, ist nicht mit
-  inkrementellen Snapshots kombinierbar und darf nur aus einer Rescue-/Offline-
-  Umgebung wiederhergestellt werden.
+- `Portable Sicherung`: für Ziele ohne geeignete Linux-Metadatenfunktionen.
+  `Vollbackup` erzeugt weiterhin einen eigenständigen metadatentreuen `rootfs.tar`-
+  Container. `Platzsparende Sicherungsstände` verwenden ein verschlüsseltes
+  Repository mit inkrementell gespeicherten Datenblöcken, getrennt gesichertem
+  Schlüssel und expliziter Einrichtung. Beide Varianten erfordern einen Offline-
+  System-Restore; Repository-Stände benötigen zusätzlich Linux-Zwischenspeicher
+  für den vollständigen Stand plus Reserve. Es gibt kein zusätzliches Profil.
 
 Vor jedem Backup führt das Backend einen kleinen Metadaten-Roundtrip auf dem
 registrierten Ziel aus. Ein Profil wird nicht stillschweigend herabgestuft.
@@ -549,18 +586,54 @@ Werkzeugausgabe. Die letzte Diagnose liegt zusätzlich root-geschützt unter
 Metadatenprüfung ersetzt. Bei zeitgesteuerten Startfehlern stehen die Details
 auch im Aufgabenlog.
 
-**Network Compatible ist kein allgemeiner Kompatibilitätsmodus für jede
+**Dateisicherung mit reduzierten Metadaten ist kein allgemeiner Kompatibilitätsmodus für jede
 CIFS-Einbindung:** Besitzer, Gruppe, Rechte, ACLs und Links müssen weiterhin
 erhalten bleiben. Feste CIFS-Eigentümer oder Dateirechte können diese Prüfung
 zu Recht scheitern lassen. Falls das Ziel diese Eigenschaften nicht speichern
-kann: **Portable Archive und Vollbackup wählen, Einstellungen speichern und
-erneut prüfen.** Dieser Modus sichert die Metadaten innerhalb von `rootfs.tar`,
-unterstützt keine inkrementellen Snapshots und verlangt einen Offline-/Rescue-
-Restore. Die Zielprüfung muss auch für dieses Profil erfolgreich sein.
+kann: **Portable Sicherung und Vollbackup wählen, Einstellungen speichern und
+erneut prüfen.** Das ist der einfache Weg zu einem eigenständigen Vollarchiv mit
+Metadaten in `rootfs.tar`. Für inkrementelle NAS-Sicherungen kann anschliessend
+ausdrücklich ein Repository eingerichtet und auf platzsparende Sicherungsstände
+umgestellt werden. Die eigene Zielprüfung muss in beiden Fällen erfolgreich sein.
+Der System-Restore erfolgt offline; siehe [Repository-Anleitung](docs/PORTABLE-REPOSITORY.md).
 
 File Capabilities können für einzelne Systemprogramme sicherheitsrelevant sein;
 deshalb ist das Weglassen von xattrs eine bewusste, sichtbare Entscheidung und
 keine pauschale Behandlung von rsync-Code 23 als Erfolg.
+
+### Portable Sicherungsstände sicher einrichten (develop)
+
+Die Einrichtung eines Repositorys ist eine ausdrückliche Zusatzaktion, kein
+automatischer Formatwechsel bestehender Vollarchive. Der Bereich **Portable
+Sicherungsstände einrichten** führt durch drei getrennte Schritte:
+
+1. Backup-Ziel und Root-Freigabe zunächst mit `Vollbackup` speichern; danach das Repository am gespeicherten
+   Ziel einrichten. Ungespeicherte Änderungen blockieren die Aktion in der Oberfläche.
+2. Die **geheime Wiederherstellungsdatei** herunterladen und ausserhalb des
+   LoxBerry sicher aufbewahren. Diese Datei enthält den Schlüssel; sie gehört
+   nicht in öffentliche Logs, Forenbeiträge oder Diagnosepakete.
+3. Erst nach der tatsächlichen Aufbewahrung die separate Checkbox bestätigen.
+   Ein Download bestätigt diesen Schritt nicht automatisch.
+
+Danach **Portable Sicherung** und **Platzsparende Sicherungsstände** wählen,
+den automatischen tar.gz-Export bewusst deaktivieren, speichern und **Nächstes
+Backup prüfen** ausführen. Der erste Stand benötigt eine vollständige Basiskopie;
+spätere Stände verwenden gespeicherte Datenblöcke wieder. Vollarchive werden weder
+umgewandelt noch als Repository-Basiskopie verwendet. Bei einem neuen Backup-Ziel
+die Einrichtung dort wiederholen; eine Bestätigung des alten Ziels reicht nicht.
+
+Die Statusabfrage ist rein lesend. Einrichtung, Download und Bestätigung sind
+CSRF-geschützte POST-Aktionen und erfordern die gespeicherte Root-Freigabe. Der
+Schlüsseldownload wird als nicht zwischenspeicherbares Attachment ausgegeben;
+sein Inhalt erscheint nicht in Status, Einstellungsdatei oder Berichtsansicht.
+Der Download kann später wiederholt werden. Ein bestehendes Repository wird
+nicht durch erneutes Öffnen oder Aktualisieren der Seite neu eingerichtet.
+
+Die Wiederherstellungsdatei ersetzt nicht die Daten auf dem Backup-Ziel.
+Ein Repository und die Schlüsselbestätigung sind ausserdem kein Nachweis eines
+erfolgreichen System-Restores. Die konkrete Engine-/Zielprüfung sowie ein
+Offline-Restore-Test bleiben Voraussetzung der Freigabe. Die Einrichtung selbst
+startet kein Backup und stellt weder Sicherungsverfahren noch Sicherungsart um.
 
 ### Laufwerke und Netzfreigaben auswählen (develop-Teststand)
 
@@ -568,7 +641,7 @@ Unter **Laufwerke und Netzfreigaben** lassen sich die Grundregel und einzelne
 eingebundene Quellen auswählen. Änderungen wirken erst nach dem Speichern,
 auch bei zeitgesteuerten Backups.
 Der Infobutton neben **Datenquellen** erklärt beide Regeln, den Unterschied
-zwischen Quelle, Backup-Ziel und Metadaten-Profil sowie Ausnahmen, Ausschlüsse,
+zwischen Quelle, Backup-Ziel und Sicherungsverfahren sowie Ausnahmen, Ausschlüsse,
 Automount und das Speichern. Längere Hinweise sind scrollbar, auch per Tastatur.
 
 - **Lokale Laufwerke; Netzfreigaben einzeln (empfohlen):** Standard bei einer
@@ -592,8 +665,8 @@ Automount und das Speichern. Längere Hinweise sind scrollbar, auch per Tastatur
   `/media/usb/USB_Loxberry` mitgesichert werden. `/media` nicht pauschal ausschliessen,
   wenn dort gewünschte Nutzdaten liegen.
 - Bei einer Sicherung auf eine lokale ext4-USB-Platte passt diese empfohlene
-  Grundregel auch auf einem ODROID N2+. Datenquellen ändern weder das Metadaten-
-  Profil noch Backup-Modus, Ziel oder Zeitplan: ein bisher passendes Native Strict
+  Grundregel auch auf einem ODROID N2+. Datenquellen ändern weder das
+  Sicherungsverfahren noch Sicherungsart, Ziel oder Zeitplan: eine bisher passende Linux-Dateisicherung
   und ein inkrementeller Snapshot können beibehalten werden. Nach der Umstellung
   Nutzdaten-Laufwerk und Backup-Ausschluss kontrollieren, speichern und die
   Vorschau prüfen; der geänderte Sicherungsumfang gilt erst für folgende Backups.
@@ -617,7 +690,7 @@ Bei einem manuellen Start prüft das Plugin zuerst die Voraussetzungen. Eine
 Bestätigung zum Fortfahren wird nur eingeblendet, wenn dabei eine übergehbare
 Warnung erkannt wurde, beispielsweise sehr wenig freier Speicher oder laufende
 Docker-Container ohne Stop-Auswahl. Echte Fehler können nicht bestätigt und
-übergangen werden. Ein neutraler Hinweis des Profils `Network Compatible` löst
+übergangen werden. Ein neutraler Hinweis des Profils `Dateisicherung mit reduzierten Metadaten` löst
 diese Bestätigung nicht aus.
 
 - Täglich: Nur die Uhrzeit ist relevant.
@@ -657,12 +730,18 @@ Bereinigung zeigt die Vorschau die betroffenen Sicherungen und Gründe; verände
 sich die Grundlage, muss die Vorschau erneuert werden. Das letzte gute Backup
 wird nicht vor einer neuen Basiskopie zur Platzbeschaffung gelöscht.
 
-Bei inkrementellen Snapshots ist das sicher, weil jeder Snapshot als eigener
+Bei Hardlink-basierten Dateisicherungsständen ist das sicher, weil jeder Stand als eigener
 Backup-Ordner sichtbar bleibt. Unveränderte Dateien sind per Hardlink mehrfach
 referenziert. Wird ein alter Snapshot gelöscht, verschwinden nur dessen
 Verzeichniseinträge; Datei-Inhalte bleiben erhalten, solange sie noch von einem
 jüngeren Snapshot referenziert werden. Erst wenn kein verbleibender Snapshot
 mehr auf einen Datei-Inhalt zeigt, wird der Speicher freigegeben.
+
+Portable Repository-Stände teilen dagegen Datenblöcke im Repository. Nur die
+integrierte Aufbewahrung und Löschfunktion verwenden; Standordner oder interne
+Repository-Dateien nicht manuell löschen oder verschieben. Die Entfernung eines
+Standes bedeutet nicht, dass sofort dessen ganze logische Grösse frei wird.
+Gemeinsame Blöcke müssen für verbleibende Stände erhalten bleiben.
 
 Logische Dateigrösse, belegte Blöcke und gemeinsam genutzte Hardlinks sind
 verschiedene Werte. Die zusätzliche Speicherübersicht misst diese ausdrücklich
@@ -768,7 +847,7 @@ Neuinstallation wieder importiert werden.
 Enthalten sind zum Beispiel:
 
 - Backup-Verzeichnis
-- Backup-Modus
+- Sicherungsart
 - Ausschlüsse
 - ausgewählte Stop-Ziele für Container und Dienste
 - Export-Option
@@ -916,7 +995,7 @@ eine Rescue-/Offline-Umgebung vorzuziehen.
 Nur finalisierte Backups mit passender Validierung sind restorefähig. Die
 Quelle wird durch Marker und Manifest-ID gebunden, laufende Operationen sind
 global und pro Backup gesperrt, und ein Restore wertet nur Exit-Code 0 als
-Erfolg. Portable Archive ist in der Weboberfläche absichtlich nicht startbar;
+Erfolg. Portable Sicherung ist in der Weboberfläche absichtlich nicht startbar;
 hierfür ist der Offline-Helper vorgesehen.
 
 Separate Quell-Volumes werden nicht stillschweigend auf das Root-Dateisystem
@@ -1018,11 +1097,16 @@ Wichtige Backend-Kommandos:
 /usr/local/sbin/loxberryhostbackup restore-plan BACKUP_ID /mnt/recovery-root
 ```
 
-Offline-Restore eines Portable Archive:
+Offline-Restore eines eigenständigen portablen Vollarchivs (`portable-tar`):
 
 ```sh
 ALLOW_RESTORE=1 HOSTBACKUP_OFFLINE_RESTORE=1 /usr/local/sbin/loxberryhostbackup restore BACKUP_ID confirm-degraded /mnt/recovery-root
 ```
+
+Für `portable-repository` gilt stattdessen der dokumentierte
+[Repository-Recovery-Ablauf](docs/PORTABLE-REPOSITORY.md#offline-wiederherstellung)
+mit Schlüssel und leerem Linux-Zwischenspeicher. Der obige direkte Archivbefehl,
+Einzelordner-Export und Verschieben eines einzelnen Standes sind dafür nicht geeignet.
 
 Weitere Backend-Kommandos wie `cat-file` oder `move` sind vorhanden, werden in
 der Weboberfläche aber nicht als Standardworkflow geführt.
@@ -1082,8 +1166,11 @@ Prüfung möglich bleibt.
 - Plattformmigration kann manuelle Nacharbeit erfordern
 - Bootloader-, Kernel- und Partitionslayout-Themen werden nicht gelöst
 - sehr grosse Backups und Exporte müssen auf Speicherplatz und Laufzeit getestet werden
-- inkrementelle Snapshots setzen für optimale Speicherersparnis ein Dateisystem
-  mit zuverlässiger Hardlink-Unterstützung voraus, z. B. `ext4`
+- platzsparende Dateisicherungsstände benötigen zuverlässige Hardlinks, z. B.
+  auf `ext4`; portable Sicherungsstände verwenden stattdessen ein Repository
+- portable Repository-Stände benötigen einen extern aufbewahrten Schlüssel und
+  für den System-Restore vollständigen zusätzlichen Linux-Zwischenspeicher;
+  kein direkter Online-Restore und kein Export eines einzelnen Standordners
 - kein sektorbasiertes Raw-Disk-/Blockdevice-Image wie z. B. `dd` oder Clonezilla
 
 Der verbindliche Restore-Testplan steht in

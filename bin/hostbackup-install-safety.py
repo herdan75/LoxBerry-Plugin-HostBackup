@@ -210,6 +210,28 @@ def acquire_lock(folder):
         raise
 
 
+def protect_repository_keys(state):
+    """Never silently erase the only surviving decryption/recovery material.
+
+    Even an empty, partial or renamed state may require administrator review.
+    A previously confirmed key download is not evidence that a usable external
+    copy still exists. There is deliberately no uninstall force flag here.
+    """
+    directory = optional_dir(state)
+    if directory is None:
+        return
+    try:
+        try:
+            os.stat("repositories", dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            return
+        fail("Portable Repository-Schluessel/Status sind vorhanden; Deinstallation zum Schutz der Sicherungen blockiert. "
+             "Wiederherstellungsschluessel ausserhalb des LoxBerry sichern und pruefen, danach den Repository-Status "
+             "bewusst administrativ migrieren. Ein bestaetigter Download allein erlaubt kein Loeschen der Schluessel.")
+    finally:
+        os.close(directory)
+
+
 def main():
     if os.geteuid() != 0 or len(sys.argv) != 4:
         fail("Installer safety helper requires root, action, home and plugin folder.")
@@ -277,6 +299,7 @@ def main():
                 os.unlink("config.json", dir_fd=recovery)
                 os.fsync(recovery)
         else:
+            protect_repository_keys(state)
             journals = optional_dir(state + "/restart-journals")
             if journals is not None:
                 try:

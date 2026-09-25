@@ -4,6 +4,11 @@ Die Datenquellenauswahl und detaillierte NAS-Diagnose sind Teil der Vorabversion
 1.1.0-beta auf Basis von 1.0.0. Das stabile Release 1.0.0 bleibt unverändert.
 Installationskorrekturen und Grenzen stehen in den [Release Notes](RELEASE-1.1.0-beta.md).
 
+Die folgenden verständlicheren Bezeichnungen gehören zum aktuellen develop-Stand.
+Bereits veröffentlichte Pakete können noch die alten Namen anzeigen. Die Zuordnung
+steht unter [Sicherungsverfahren](../README.md#sicherungsverfahren); vorhandene
+Konfigurationswerte werden durch die Umbenennung nicht verändert.
+
 ## Die beiden Forum-Befunde
 
 1. Netzfreigaben unter `/media/smb/...` konnten zusammen mit `/` ungewollt
@@ -11,10 +16,10 @@ Installationskorrekturen und Grenzen stehen in den [Release Notes](RELEASE-1.1.0
    mit ausdrücklich gewählten Netzfreigaben. Bestehende Einstellungen bleiben
    unverändert; diese Nutzer müssen die neue Grundregel bewusst speichern.
    Ohne gespeichertes Ziel wird nicht mehr auf den lokalen Standardpfad ausgewichen.
-2. Network Compatible benötigt weiterhin echte Eigentümer, Rechte, ACLs und
+2. Dateisicherung mit reduzierten Metadaten benötigt weiterhin echte Eigentümer, Rechte, ACLs und
    Links. Ein CIFS-Mount mit festen Werten kann das nicht erfüllen. Jeder
    Prüfschritt wird nun sichtbar; ein unpassendes Profil bleibt blockiert.
-   Portable Archive mit Vollbackup ist der vorgesehene Weg für ein solches Ziel,
+   Portable Sicherung mit Vollbackup ist der vorgesehene Weg für ein solches Ziel,
    sofern dessen eigener Roundtrip gelingt. Kein stiller Profilwechsel.
 
 ## Sichere Anwendung des Testpakets
@@ -70,12 +75,22 @@ Regeln und ihre Folgen. Die internen Werte local/legacy, der Standard für neue
 Konfigurationen und vorhandene Einstellungen werden dadurch nicht geändert.
 Auch bei einem ODROID N2+ mit USB-Nutzdaten ist die lokale Regel passend: den
 Nutzdatenträger eingeschlossen und den reinen Backup-Datenträger ausgeschlossen
-lassen. Ziel, Metadaten-Profil, Backup-Modus und Zeitplan bleiben bestehen.
+lassen. Ziel, Sicherungsverfahren, Sicherungsart und Zeitplan bleiben bestehen.
 
 Bei einem Metadatenfehler die einzelnen Prüfschritte lesen. Falls das NAS feste
-Eigentümer/Rechte erzwingt, Portable Archive **und** Vollbackup auswählen und
+Eigentümer/Rechte erzwingt, Portable Sicherung **und** Vollbackup auswählen und
 speichern; erneut prüfen. Archive sind nicht inkrementell und erfordern für
 den System-Restore eine Offline-/Rescue-Umgebung.
+
+Der aktuelle develop-Stand ergänzt **Portable Sicherung** um **Platzsparende
+Sicherungsstände** in einem verschlüsselten Repository. Das ist kein fünftes
+Profil und keine Änderung bestehender Vollarchive. Erst nach Einrichtung am
+gespeicherten Ziel und bestätigter externer Schlüsselaufbewahrung umstellen;
+automatischen tar.gz-Export bewusst deaktivieren. Dafür ist beim Offline-Restore
+zusätzlicher Linux-Zwischenspeicher nötig. Die
+[Repository-Anleitung](PORTABLE-REPOSITORY.md) beschreibt Voraussetzungen und
+Recovery. Ein bereits veröffentlichtes 1.1.0-beta-Paket enthält diese neue
+develop-Erweiterung nicht automatisch.
 
 ## Technische Schutzmassnahmen
 
@@ -100,7 +115,7 @@ Dateilistentransport, Restore-Schutz und sichere Anzeige/Übernahme im Browser.
 `tests/run-cifs.sh` erzeugt nur auf einem ausdrücklich freigegebenen, isolierten
 Linux-Testsystem einen temporären lokalen Samba-Server mit echtem CIFS-Mount.
 Mit `forceuid`, `forcegid`, festen Dateirechten und `nounix` muss Network
-Compatible einen detaillierten Fehler liefern. Portable Archive muss dort
+Compatible einen detaillierten Fehler liefern. Portable Sicherung muss dort
 Metadaten erfolgreich sichern und lokal wiederherstellen. Die CIFS-Quelle darf
 nur nach ausdrücklicher Auswahl durch rsync/tar kopiert werden.
 

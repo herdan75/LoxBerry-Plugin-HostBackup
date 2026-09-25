@@ -34,7 +34,7 @@ class MetadataDiagnosticTests(unittest.TestCase):
     def test_cifs_fixture_embedded_python_is_syntactically_valid(self):
         script = (ROOT / "tests/run-cifs.sh").read_text(encoding="utf-8")
         blocks = re.findall(r"<<'PY'\n(.*?)\nPY\n", script, flags=re.S)
-        self.assertEqual(len(blocks), 4)
+        self.assertEqual(len(blocks), 5)
         for number, block in enumerate(blocks):
             compile(block, "run-cifs.sh Python block %s" % number, "exec")
 

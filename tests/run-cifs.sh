@@ -161,6 +161,28 @@ test "$probe_status" -eq 1
 python3 "$repo_dir/bin/hostbackup-metadata.py" --root "$mount_dir" \
   --state-dir "$fixture_dir/state" --mode portable-archive > "$fixture_dir/archive.json"
 
+if [ -n "${HOSTBACKUP_PORTABLE_RUNTIME:-}" ]; then
+  # A real SMB repository with forced UID/GID/modes, followed by restore onto
+  # local Linux storage. Only a trusted test runtime supplies the binary.
+  python3 "$HOSTBACKUP_PORTABLE_RUNTIME/hostbackup-portable.py" --root "$mount_dir" \
+    --state-dir "$fixture_dir/state" probe > "$fixture_dir/repository.json"
+  python3 - "$fixture_dir/repository.json" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1]))
+assert result['status'] == 'ok', result
+for key in ('uid', 'gid', 'permissions', 'file-content', 'symlink', 'hardlink',
+            'sparse-allocation', 'acl-values', 'xattr-values', 'capability-values', 'fifo', 'device'):
+    assert any(row['id'] == key and row['status'] == 'ok' for row in result['checks']), (key, result)
+print('Portable repository: real CIFS full metadata roundtrip passed.')
+PY
+  HOSTBACKUP_RESTIC_BINARY="$HOSTBACKUP_PORTABLE_RUNTIME/restic" \
+    HOSTBACKUP_REPOSITORY_TEST_TARGET="$mount_dir" HOSTBACKUP_REQUIRE_REPOSITORY_INTEGRATION=1 \
+    python3 "$repo_dir/tests/test_repository.py"
+  HOSTBACKUP_PORTABLE_RUNTIME="$HOSTBACKUP_PORTABLE_RUNTIME" \
+    HOSTBACKUP_PORTABLE_TEST_TARGET="$mount_dir" HOSTBACKUP_REQUIRE_PORTABLE_INTEGRATION=1 \
+    python3 "$repo_dir/tests/test_portable.py"
+fi
+
 python3 - "$fixture_dir" "$repo_dir" <<'PY'
 import importlib.util
 import json

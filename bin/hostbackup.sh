@@ -1112,6 +1112,66 @@ metadata_mode() {
   esac
 }
 
+portable_snapshot() {
+  [ "$(metadata_mode)" = portable-archive ] && [ "$(json_get_string backup_mode)" = snapshot ]
+}
+
+portable_helper() {
+  python3 "$LBP_BINDIR/hostbackup-portable.py" --root "$(backup_root)" --state-dir "$ROOT_STATE_DIR" "$@"
+}
+
+repository_helper() {
+  [ ! -L "$ROOT_STATE_DIR/repositories" ] || return 13
+  [ -d "$ROOT_STATE_DIR/repositories" ] || mkdir -m 700 -- "$ROOT_STATE_DIR/repositories"
+  python3 "$LBP_BINDIR/hostbackup-repository.py" --backup-root "$(backup_root)" --state-dir "$ROOT_STATE_DIR/repositories" "$@"
+}
+
+repository_action() {
+  local action="$1"
+  require_root_for_write
+  require_root_permission_ack
+  verify_backup_target "$(backup_root)" false
+  acquire_operation_lock exclusive
+  portable_helper "$action"
+}
+
+repository_stage() {
+  require_root_for_write
+  require_root_permission_ack
+  require_backup_id "$1"
+  verify_backup_target "$(backup_root)" false
+  acquire_operation_lock exclusive
+  # Explicit local Linux destination, never an implicit copy onto the SD card.
+  portable_helper stage --backup-id "$1" --destination "$2"
+}
+
+repository_recover() {
+  require_root_for_write
+  require_root_permission_ack
+  require_backup_id "$1"
+  verify_backup_target "$(backup_root)" false
+  acquire_operation_lock exclusive
+  local backup_id="$1" staging="$2" destination="$3" mappings="$4" execute="${5:-}"
+  local -a options=()
+  case "$execute" in '') ;; --execute) options+=(--execute) ;; *) return 13 ;; esac
+  portable_helper recover --backup-id "$backup_id" --staging "$staging" --destination "$destination" --map-json "$mappings" "${options[@]}"
+}
+
+repository_prune() {
+  require_root_for_write
+  require_root_permission_ack
+  verify_backup_target "$(backup_root)" false
+  acquire_operation_lock exclusive
+  case "$#" in
+    0) repository_helper prune ;;
+    2)
+      [ "$1" = --confirm-repository-id ] && [[ "$2" =~ ^[0-9a-f]{64}$ ]] || return 13
+      repository_helper prune --confirm-repository-id "$2"
+      ;;
+    *) echo 'Use repository-prune [--confirm-repository-id FULL_REPOSITORY_ID].' >&2; return 13 ;;
+  esac
+}
+
 rsync_metadata_options() {
   local mode="$1" side="${2:-backup}"
   case "$mode:$side" in
@@ -1159,7 +1219,11 @@ metadata_capability_probe() {
   METADATA_PROBE_MESSAGE=""
   METADATA_PROBE_JSON='{}'
   verify_backup_target "$root" true || return 1
-  output="$(python3 "$LBP_BINDIR/hostbackup-metadata.py" --root "$root" --mode "$mode" --state-dir "$ROOT_STATE_DIR" 2>&1)" || status=1
+  if portable_snapshot; then
+    output="$(portable_helper probe 2>&1)" || status=1
+  else
+    output="$(python3 "$LBP_BINDIR/hostbackup-metadata.py" --root "$root" --mode "$mode" --state-dir "$ROOT_STATE_DIR" 2>&1)" || status=1
+  fi
   if ! METADATA_PROBE_JSON="$(printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert isinstance(d,dict) and d.get("status") in ("ok","error") and isinstance(d.get("message"),str); print(json.dumps(d,ensure_ascii=True))' 2>/dev/null)"; then
     METADATA_PROBE_MESSAGE="Metadatenpruefung konnte nicht ausgefuehrt werden: ${output:0:2000}"
     METADATA_PROBE_JSON="{\"status\":\"error\",\"message\":$(json_escape "$METADATA_PROBE_MESSAGE"),\"checks\":[],\"advice\":[]}"
@@ -1323,7 +1387,7 @@ write_manifest() {
       files_count => 0 + $files,
       backup => {
         mode => $backup_mode,
-        storage_format => ($metadata_mode eq "portable-archive" ? "portable-tar" : "directory"),
+        storage_format => ($metadata_mode eq "portable-archive" ? ($backup_mode eq "snapshot" ? "portable-repository" : "portable-tar") : "directory"),
       },
       metadata => {
         mode => $metadata_mode,
@@ -1627,10 +1691,35 @@ restart_journal_create() {
 }
 
 restart_journal_finish() {
-  local state_dir="$1" pending
+  local state_dir="$1" pending control name entry
   restart_journal_path_is_safe "$state_dir" || return 13
   pending="$(restart_journal_update "$state_dir" pending)" || return 20
   [ -z "$pending" ] || { log "ERROR: Service recovery is still pending in $state_dir"; return 20; }
+  # Preserve the journal itself when unexpected material needs investigation.
+  for entry in "$state_dir"/* "$state_dir"/.[!.]* "$state_dir"/..?*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    case "${entry##*/}" in
+      repository-controls) ;;
+      journal.json|selected-stop-targets.tsv|docker-to-stop.tsv|post-hook.started|post-hook.done|restart.done|source-files.nul|repository-candidate.json)
+        [ -f "$entry" ] && [ ! -L "$entry" ] || return 20 ;;
+      *) return 20 ;;
+    esac
+  done
+  # Portable workers keep recovery controls private until publication. Remove
+  # only these known temporary files, never repository keys or unknown data.
+  control="$state_dir/repository-controls"
+  if [ -e "$control" ] || [ -L "$control" ]; then
+    [ -d "$control" ] && [ ! -L "$control" ] || return 20
+    local -a names=(manifest.json rsync-excludes.txt source-selection.json source-mounts.json
+      mounts.txt metadata-probe.json package-list.txt systemd-services.txt docker.json backup-validation.json)
+    for name in "${names[@]}"; do
+      [ ! -L "$control/$name" ] && { [ ! -e "$control/$name" ] || [ -f "$control/$name" ]; } || return 20
+    done
+    for name in "${names[@]}"; do rm -f -- "$control/$name" || return 20; done
+    rmdir -- "$control" || return 20
+  fi
+  [ ! -L "$state_dir/repository-candidate.json" ] && { [ ! -e "$state_dir/repository-candidate.json" ] || [ -f "$state_dir/repository-candidate.json" ]; } || return 20
+  rm -f -- "$state_dir/repository-candidate.json" || return 20
   # Remove only the known local control files; retain unexpected data for diagnosis.
   rm -f -- "$state_dir/journal.json" "$state_dir/selected-stop-targets.tsv" "$state_dir/docker-to-stop.tsv" "$state_dir/post-hook.started" "$state_dir/post-hook.done" "$state_dir/restart.done" "$state_dir/source-files.nul" || return 20
   rmdir -- "$state_dir" || return 20
@@ -2199,7 +2288,7 @@ preflight_backup() {
   local root available_mb docker_available docker_running excludes_count status warnings_json notices_json checks_json rsync_available target_writable backup_mode fs_type mode probe_ok target_ok target_message copy_tool_name
   local full_baseline_required baseline_estimate_mb baseline_required_mb baseline_space_ok baseline_reference estimate_backup estimate_bytes baseline_check_value available_inodes
   local -a notices=()
-  local source_json source_ok=true source_message=""
+  local source_json source_ok=true source_message="" repository_ok=true repository_message="" repository_status repository_lineage
   METADATA_PROBE_JSON='{}'
   METADATA_PROBE_MESSAGE=""
   require_root_permission_ack
@@ -2207,6 +2296,15 @@ preflight_backup() {
   backup_mode="$(json_get_string backup_mode)"
   [ "$backup_mode" = "snapshot" ] || backup_mode="full"
   mode="$(metadata_mode)"
+  if portable_snapshot; then
+    repository_ok=false
+    repository_message="Portable Sicherungsstaende: Repository einrichten, Wiederherstellungsschluessel herunterladen und extern aufbewahren."
+    if repository_status="$(portable_helper status 2>/dev/null)" && printf '%s' "$repository_status" | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("initialized") and d.get("key_confirmed") and d.get("available") else 1)'; then
+      repository_ok=true
+      repository_message="Repository und externe Schluesselbestaetigung vorhanden."
+    fi
+    notices+=("Portable Sicherungsstaende teilen Datenbloecke im Repository. Einzelne Stand-Verzeichnisse sind kein eigenstaendiges Backup. Wiederherstellungsschluessel und gesamtes Repository aufbewahren.")
+  fi
   target_ok=false
   target_message=""
   if [ -z "$(json_get_string backup_root)" ]; then
@@ -2239,6 +2337,9 @@ preflight_backup() {
   if [ "$target_ok" = "true" ]; then
     if [ "$backup_mode" = "snapshot" ] && [ "$mode" != "portable-archive" ]; then
       baseline_reference="$(latest_complete_backup "$root")"
+    elif portable_snapshot && [ "$repository_ok" = true ] && [ "$source_ok" = true ]; then
+      repository_lineage="$(printf '%s' "$source_json" | python3 -c 'import hashlib,json,sys; d=json.load(sys.stdin); print(hashlib.sha256(json.dumps(d["selection"],sort_keys=True).encode()).hexdigest())')"
+      baseline_reference="$(portable_helper parent --lineage "$repository_lineage" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("backup_id") or "")')" || baseline_reference=""
     fi
     if [ -z "$baseline_reference" ]; then
       full_baseline_required=true
@@ -2269,6 +2370,11 @@ preflight_backup() {
   if [ "$mode" = "portable-archive" ]; then
     copy_tool_name="tar"
     command -v tar >/dev/null 2>&1 && rsync_available=true
+    if portable_snapshot; then
+      copy_tool_name="Restic (gepruefte Laufzeit)"
+      rsync_available=false
+      [ -x "$LBP_BINDIR/restic" ] && rsync_available=true
+    fi
   else
     command -v rsync >/dev/null 2>&1 && rsync_available=true
   fi
@@ -2284,18 +2390,21 @@ preflight_backup() {
   warnings_json="[]"
   notices_json="[]"
   probe_ok=false
-  if [ "$target_ok" = "true" ] && metadata_capability_probe "$root" "$mode"; then
+  if [ "$target_ok" = "true" ] && [ "$repository_ok" = true ] && metadata_capability_probe "$root" "$mode"; then
     probe_ok=true
   fi
-  if [ "$source_ok" != true ]; then
+  if portable_snapshot && [ "$(json_get_bool create_export_after_backup)" = true ]; then
+    status="error"
+    warnings_json='["Automatischen tar.gz-Export fuer portable Sicherungsstaende bewusst deaktivieren. Fuer ein eigenstaendiges TAR weiterhin Portable Sicherung mit Vollbackup verwenden; bestehende Vollarchive bleiben unveraendert."]'
+  elif [ "$repository_ok" != true ]; then
+    status="error"
+    warnings_json="[$(json_escape "$repository_message")]"
+  elif [ "$source_ok" != true ]; then
     status="error"
     warnings_json="[$(json_escape "$source_message")]"
   elif [ "$rsync_available" != "true" ] || [ "$target_writable" != "true" ] || [ "$probe_ok" != "true" ]; then
     status="error"
     warnings_json="$(perl -MJSON::PP -e 'print encode_json([$ARGV[0]])' "${target_message:-${METADATA_PROBE_MESSAGE:-Pflichtcheck fehlgeschlagen: rsync, Zielidentitaet, Schreibzugriff oder Metadatenprobe.}}")"
-  elif [ "$backup_mode" = "snapshot" ] && [ "$mode" = "portable-archive" ]; then
-    status="error"
-    warnings_json='["Portable Archive kann nicht mit inkrementellen Snapshots kombiniert werden."]'
   elif [ "$available_inodes" -eq 0 ]; then
     status="error"
     warnings_json='["Auf dem Backup-Ziel sind keine freien Inodes mehr verfuegbar. Neue Dateien koennen nicht angelegt werden."]'
@@ -2319,6 +2428,7 @@ preflight_backup() {
   {"name":"Backup-Ziel beschreibbar","ok":$target_writable},
   {"name":"Backup-Modus","ok":true,"value":"$backup_mode"},
   {"name":"Metadaten-Modus","ok":$probe_ok,"value":"$mode","details":$(json_escape "${METADATA_PROBE_MESSAGE:-}")},
+  {"name":"Portable Repository und Wiederherstellungsschluessel","ok":$repository_ok,"details":$(json_escape "$repository_message")},
   {"name":"Datenquellen-Auswahl","ok":$source_ok,"details":$(json_escape "$source_message")},
   {"name":"Dateisystem","ok":true,"value":"$fs_type"},
   {"name":"Freier Speicher MB","ok":$([ "$available_mb" -ge 1024 ] && echo true || echo false),"value":"$available_mb"},
@@ -2369,6 +2479,10 @@ restore_eligibility() {
     [ "$degraded_confirmation" = "confirm-degraded" ] || { echo "Hinweis zu reduzierten Metadaten muss vor dem Restore separat bestaetigt werden." >&2; return 18; }
   fi
   if [ "$storage_format" = "portable-tar" ] || [ "$metadata_value" = "portable-archive" ]; then
+    if [ "$storage_format" = portable-repository ]; then
+      echo "Portable Sicherungsstaende nur offline aus dem authentifizierten Repository wiederherstellen. Siehe docs/PORTABLE-REPOSITORY.md und repository-stage." >&2
+      return 18
+    fi
     [ -f "$target/rootfs.tar" ] && [ ! -L "$target/rootfs.tar" ] || { echo "Portable rootfs archive is missing." >&2; return 18; }
     [ "${HOSTBACKUP_OFFLINE_RESTORE:-0}" = "1" ] || { echo "Portable Archive Restore ist nur mit HOSTBACKUP_OFFLINE_RESTORE=1 in einer Offline-/Rescue-Umgebung erlaubt." >&2; return 18; }
   else
@@ -2408,7 +2522,11 @@ preflight_restore() {
   rsync_available=false
   copy_tool_name="rsync"
   data_ok=false
-  if [ "$storage_format" = "portable-tar" ]; then
+  if [ "$storage_format" = portable-repository ]; then
+    copy_tool_name="Restic + Linux-Staging"
+    [ -x "$LBP_BINDIR/restic" ] && rsync_available=true
+    if maintenance_helper repository-check "$root" "$backup_id" >/dev/null; then data_ok=true; fi
+  elif [ "$storage_format" = "portable-tar" ]; then
     copy_tool_name="tar"
     command -v tar >/dev/null 2>&1 && rsync_available=true
     [ -f "$target/rootfs.tar" ] && [ ! -L "$target/rootfs.tar" ] && data_ok=true
@@ -2431,6 +2549,10 @@ preflight_restore() {
       status="error"
       warnings_json='["Backup ist nicht vollstaendig und erfolgreich validiert."]'
     fi
+  elif [ "$storage_format" = portable-repository ]; then
+    status="warning"
+    requires_offline=true
+    warnings_json='["Portable Sicherungsstaende benoetigen Wiederherstellungsschluessel und ausreichend leeres Linux-Staging. Nur Offline-Recovery; siehe PORTABLE-REPOSITORY.md. Kein automatischer Wechsel zwischen x86 und ARM."]'
   elif [ "$storage_format" = "portable-tar" ]; then
     status="warning"
     requires_offline=true
@@ -2471,7 +2593,8 @@ create_backup() {
 
   local root backup_id target rootfs log_file started finished size files exclude_file backup_mode previous_backup
   local mode task validation_status final_status post_hook pre_hook rsync_status export_status portable_excludes state_dir preflight_json preflight_status cleanup_trap
-  local source_list="" selection_active=false source_plan_json
+  local source_list="" selection_active=false source_plan_json repository_candidate="" repository_validation="" lineage=""
+  local control_dir="" source_report=""
   local -a rsync_opts=() metadata_opts=() tar_opts=()
   root="$(backup_root)"
   backup_mode="$(json_get_string backup_mode)"
@@ -2516,9 +2639,6 @@ create_backup() {
   write_backup_marker "$target" "$backup_id"
   if [ "$mode" != "portable-archive" ]; then
     mkdir -p -- "$rootfs"
-  elif [ "$backup_mode" = "snapshot" ]; then
-    echo "Portable Archive cannot be combined with snapshot mode." >&2
-    exit 17
   fi
   started="$(date -Iseconds)"
   backup_excludes "$root" > "$exclude_file"
@@ -2531,6 +2651,15 @@ create_backup() {
   HB_BACKUP_RESTART_DONE=false
   task_state_write "$task" running initializing "$log_file" "$$" ""
   state_dir="$(restart_journal_create "$task")"
+  control_dir="$target"
+  if portable_snapshot; then
+    control_dir="$state_dir/repository-controls"
+    mkdir -m 700 -- "$control_dir"
+    exclude_file="$control_dir/rsync-excludes.txt"
+    (umask 077; backup_excludes "$root" > "$exclude_file")
+    (umask 077; write_manifest "$control_dir" "$backup_id" running "$started" "" 0 0)
+  fi
+  source_report="$control_dir/source-selection.json"
   # Errexit can unwind function locals before EXIT executes. Freeze paths now.
   printf -v cleanup_trap 'HB_BACKUP_EXIT_STATUS=$?; trap - EXIT; backup_cleanup_on_exit "$HB_BACKUP_EXIT_STATUS" %q %q "${HB_BACKUP_RESTART_DONE:-false}" %q %q %q || { [ "$HB_BACKUP_EXIT_STATUS" -ne 0 ] || HB_BACKUP_EXIT_STATUS=20; }; exit "$HB_BACKUP_EXIT_STATUS"' "$target" "$log_file" "$post_hook" "$task" "$state_dir"
   # Intentionally freeze shell-quoted cleanup arguments.
@@ -2557,12 +2686,17 @@ create_backup() {
   # are not missed. Any enumeration failure uses the normal restart EXIT trap.
   source_plan_json="$(source_info)" || return 18
   selection_active="$(printf '%s' "$source_plan_json" | python3 -c 'import json,sys; s=json.load(sys.stdin)["selection"]; print("true" if s["policy"] != "legacy" or s["overrides"] else "false")')"
+  local -a source_options=()
+  if portable_snapshot; then selection_active=true; source_options+=(--omit-sockets); fi
   if [ "$selection_active" = true ]; then
     task_state_write "$task" running selecting_sources "$log_file" "$$" ""
     log "Preparing explicit file list for selected local volumes and network shares" | tee -a "$log_file"
     source_list="$state_dir/source-files.nul"
-    (umask 077; set -o noclobber; python3 "$LBP_BINDIR/hostbackup-sources.py" files --config "$CONFIG_FILE" --excludes "$exclude_file" --report "$target/source-selection.json" > "$source_list") 2>> "$log_file" || return 18
+    (umask 077; set -o noclobber; python3 "$LBP_BINDIR/hostbackup-sources.py" files --config "$CONFIG_FILE" --excludes "$exclude_file" --report "$source_report" "${source_options[@]}" > "$source_list") 2>> "$log_file" || return 18
     [ -s "$source_list" ] || { log "ERROR: Source file list is empty" | tee -a "$log_file"; return 18; }
+    if portable_snapshot; then
+      python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); s=d.get("omitted_runtime_sockets",{}); print("Portable source selection: %s transient Unix sockets omitted (IPC endpoints, not persistent files); details in source-selection.json." % s.get("count",0))' "$source_report" | tee -a "$log_file"
+    fi
   fi
 
   while IFS= read -r opt; do
@@ -2584,7 +2718,15 @@ create_backup() {
 
   task_state_write "$task" running copying "$log_file" "$$" ""
   set +e
-  if [ "$mode" = "portable-archive" ]; then
+  if portable_snapshot; then
+    repository_candidate="$state_dir/repository-candidate.json"
+    lineage="$(printf '%s' "$source_plan_json" | python3 -c 'import hashlib,json,sys; d=json.load(sys.stdin); print(hashlib.sha256(json.dumps(d["selection"],sort_keys=True).encode()).hexdigest())')"
+    log "Creating portable repository snapshot; unchanged data blocks are reused" | tee -a "$log_file"
+    (umask 077; repository_helper backup --backup-id "$backup_id" --files-from "$source_list" --lineage "$lineage" > "$repository_candidate") 2>> "$log_file"
+    rsync_status=$?
+    # stdout is a bounded machine receipt, not progress or secret material.
+    [ "$rsync_status" -ne 0 ] || python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps(d["summary"]))' "$repository_candidate" | tee -a "$log_file"
+  elif [ "$mode" = "portable-archive" ]; then
     portable_excludes="$target/tar-excludes.txt"
     sed 's#^/##; /^$/d' "$exclude_file" > "$portable_excludes"
     while IFS= read -r opt; do tar_opts+=("$opt"); done < <(tar_metadata_options)
@@ -2608,7 +2750,7 @@ create_backup() {
   set -e
   # Docker/service restart can legitimately change mounts, so verify the source
   # snapshot now, while the quiesced source state is still expected to match.
-  if [ "$selection_active" = true ] && ! python3 "$LBP_BINDIR/hostbackup-sources.py" verify --report "$target/source-selection.json" >> "$log_file" 2>&1; then
+  if [ "$selection_active" = true ] && ! python3 "$LBP_BINDIR/hostbackup-sources.py" verify --report "$source_report" >> "$log_file" 2>&1; then
     log "ERROR: Source mounts changed during the copy; backup cannot be accepted" | tee -a "$log_file"
     rsync_status=18
   fi
@@ -2648,8 +2790,20 @@ create_backup() {
   log "Checking completed backup" | tee -a "$log_file"
   task_state_write "$task" running validating "$log_file" "$$" ""
   set +e
-  validate_completed_backup "$target" "$backup_mode" "${previous_backup:-}" "$size" "$files" "$rsync_status" 2>&1 | tee -a "$log_file"
-  validation_status=${PIPESTATUS[0]}
+  if portable_snapshot; then
+    repository_validation="$(portable_helper validate-candidate --candidate "$repository_candidate" --controls "$control_dir" --min-files "${HOSTBACKUP_MIN_FILES:-100}" --min-bytes "${HOSTBACKUP_MIN_SIZE_BYTES:-104857600}" 2>> "$log_file")"
+    validation_status=$?
+    if [ "$validation_status" -eq 0 ]; then
+      read -r size files final_status < <(printf '%s' "$repository_validation" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["size_bytes"],d["files_count"],d["status"])')
+      [ "$final_status" != warning ] || validation_status=1
+    else
+      validation_status=2
+    fi
+    printf '%s\n' "$repository_validation" | tee -a "$log_file"
+  else
+    validate_completed_backup "$target" "$backup_mode" "${previous_backup:-}" "$size" "$files" "$rsync_status" 2>&1 | tee -a "$log_file"
+    validation_status=${PIPESTATUS[0]}
+  fi
   set -e
   case "$validation_status" in
     0) final_status="complete" ;;
@@ -2660,7 +2814,17 @@ create_backup() {
       exit 19
       ;;
   esac
-  write_manifest "$target" "$backup_id" "$final_status" "$started" "$finished" "$size" "$files"
+  if portable_snapshot; then
+    write_manifest "$target" "$backup_id" validating "$started" "$finished" "$size" "$files"
+    (umask 077; write_manifest "$control_dir" "$backup_id" validating "$started" "$finished" "$size" "$files")
+    verify_backup_target "$root" false
+    if ! portable_helper publish --candidate "$repository_candidate" --controls "$control_dir" --destination "$target" >> "$log_file" 2>&1; then
+      log "Repository-Commit/cache publication incomplete. Do not delete repository data; inspect authenticated repository." | tee -a "$log_file"
+      return 19
+    fi
+  else
+    write_manifest "$target" "$backup_id" "$final_status" "$started" "$finished" "$size" "$files"
+  fi
 
   if [ "$(json_get_bool integrity_enabled)" = true ]; then
     task_state_write "$task" running recording_integrity "$log_file" "$$" ""
@@ -3176,6 +3340,10 @@ export_backup() {
   acquire_backup_lock "$backup_id" shared
   target="$(safe_backup_target "$root" "$backup_id")"
   archive="$root/$backup_id.tar.gz"
+  if [ "$(manifest_field "$target/manifest.json" backup.storage_format)" = portable-repository ]; then
+    echo "Portable Sicherungsstaende zuerst mit repository-stage ID LEERES_LINUX_VERZEICHNIS bereitstellen. Ein einzelner Repository-Ordner ist kein exportierbares Backup. Siehe Wiederherstellungsschritte." >&2
+    return 18
+  fi
   tmp="$archive.tmp.$$"
   lock_file="$LOCK_DIR/export-$backup_id.lock"
   status="$(manifest_field "$target/manifest.json" status 2>/dev/null || true)"
@@ -3368,6 +3536,14 @@ validate_import_archive() {
 
 inspect_backup_directory() {
   local target="$1" max_bytes="${2:-9223372036854775807}"
+  if [ "$(manifest_field "$target/manifest.json" backup.storage_format 2>/dev/null || true)" = portable-repository ]; then
+    local root id expected
+    root="$(backup_root)"; id="${target##*/}"
+    expected="$(safe_backup_target "$root" "$id")" || return 18
+    [ "$target" = "$expected" ] || { echo 'Repository-Kontrolldateien koennen nicht als Einzelarchiv importiert werden.' >&2; return 18; }
+    maintenance_helper repository-check "$root" "$id"
+    return
+  fi
   python3 "$LBP_BINDIR/validate-import-archive.py" --backup-dir --json "$target" "$max_bytes"
 }
 
@@ -3587,6 +3763,10 @@ move_backup() {
   acquire_operation_lock exclusive
   acquire_backup_lock "$backup_id" exclusive
   target="$(safe_backup_target "$root" "$backup_id")"
+  if [ "$(manifest_field "$target/manifest.json" backup.storage_format)" = portable-repository ]; then
+    echo "Repository-Sicherungsstaende teilen Datenbloecke. Einzelne Stand-Verzeichnisse duerfen nicht verschoben werden; gesamtes Repository samt Wiederherstellungsschluessel benoetigt." >&2
+    return 18
+  fi
   archive="$root/$backup_id.tar.gz"
   canonical_destination="$(canonicalize_path "$destination_root")" || { echo "Destination must be absolute." >&2; exit 13; }
   require_allowed_backup_root "$canonical_destination"
@@ -3687,6 +3867,9 @@ delete_backup() {
   acquire_backup_lock "$backup_id" exclusive
   target="$(safe_backup_target "$root" "$backup_id")"
   maintenance_helper delete-check "$root" "$backup_id" >/dev/null
+  if [ "$(manifest_field "$target/manifest.json" backup.storage_format)" = portable-repository ]; then
+    maintenance_helper repository-forget "$root" "$backup_id" >/dev/null
+  fi
   archive="$root/$backup_id.tar.gz"
   trash="$(strict_child_path "$root" "$root/.trash-$backup_id-$(date +%s)-$$")" || { echo "Unsafe trash path." >&2; exit 7; }
   mv -- "$target" "$trash"
@@ -3906,6 +4089,30 @@ print('Backup:', backup_id, '\nQuelle:', target, '\nStatus:', manifest.get('stat
 print('Metadaten:', manifest.get('metadata', {}).get('mode', 'legacy-unknown'))
 print('Format:', manifest.get('backup', {}).get('storage_format', 'directory'))
 print('Architektur:', manifest.get('host', {}).get('architecture', 'unbekannt'))
+if manifest.get('backup', {}).get('storage_format') == 'portable-repository':
+    print('''
+Dieser Stand besteht aus geteilten Repository-Daten, nicht aus einem eigenstaendigen TAR.
+Wiederherstellung benoetigt das gesamte .portable-repository UND die separat gesicherte
+geheime Recovery-JSON-Datei. Dieses Blatt enthaelt keinen Schluessel.
+
+1. Vertrauenswuerdige HostBackup-Laufzeit in einem passenden Linux-Rescue-System verwenden.
+2. Repository einbinden. Bei Verlust des alten Hosts mit Recovery-Datei WIEDERANBINDEN;
+   niemals ein neues Repository ueber die alten Daten initialisieren.
+3. Fuer die Bereitstellung einen separaten leeren, rootgeschuetzten Linux-Staging-Ordner
+   mit Platz fuer alle logischen Daten plus 20 Prozent und mindestens 1 GiB Reserve waehlen.
+4. Details und vollstaendige Befehle: docs/PORTABLE-REPOSITORY.md im Plugin-Paket.
+5. Vorschau (laedt die Daten ins Staging, schreibt noch nicht ins Ziel):
+''')
+    print('/usr/local/sbin/loxberryhostbackup repository-recover', shlex.quote(backup_id),
+          '/mnt/staging/leerer-ordner /mnt/recovery-root', "'[]'")
+    print('''
+Separaten Quell-Volumes bewusst Ziel-Volumes zuordnen. Vor jeder Ausfuehrung Datenverlust
+durch ersetzte/geloeschte Zieldateien pruefen. HOSTBACKUP_OFFLINE_RESTORE=1 und --execute
+sind erst nach dieser Kontrolle zu verwenden. Pro Lauf leeres Staging verwenden; es wird
+nicht automatisch bereinigt. Das Ziel / bleibt gesperrt. Kein automatischer x86/ARM-Umzug.
+Bootloader, Partitionen, fstab, Dienste und erfolgreicher Systemstart sind separat zu pruefen.
+''')
+    raise SystemExit(0)
 print('''
 1. Backup-Datentraeger getrennt verwahren; dieses Blatt ist kein Nachweis eines Restoretests.
 2. Passendes Rescue-System starten. Backup-Medium lesbar und Zielsystem separat mounten.
@@ -4129,6 +4336,13 @@ Actions:
   recover-services [--scheduled] Retry recovery journals; scheduled mode silently skips a busy operation lock
   task-overview          Show current/history tasks, target and next scheduled start
   backup-preview         Show saved sources, excludes and snapshot reference
+  repository-status     Show portable repository readiness without exposing keys
+  repository-init       Initialise repository at the saved registered target
+  repository-key-export Stream secret recovery JSON; save off-host, never into logs
+  repository-confirm-key Confirm the separately downloaded recovery key
+  repository-stage ID EMPTY_LINUX_DIR Materialise one authenticated stand offline
+  repository-recover ID STAGE DEST [MAP_JSON] [--execute] Offline staged system restore
+  repository-prune [--confirm-repository-id ID] Preview, or explicitly reclaim wholly unused packs
   storage-info           Measure logical/allocated/shared and local state storage
   tasks                  List task logs as JSON
   task-log TASK [LINES]  Print recent task log lines
@@ -4176,6 +4390,13 @@ case "$action" in
   config) show_config ;;
   target-info) backup_target_info ;;
   source-info) source_info ;;
+  repository-status) repository_action status ;;
+  repository-init) repository_action init ;;
+  repository-key-export) repository_action key-export ;;
+  repository-confirm-key) repository_action confirm-key ;;
+  repository-stage) shift; repository_stage "${1:?BACKUP_ID required}" "${2:?EMPTY_LINUX_STAGING_DIRECTORY required}" ;;
+  repository-recover) shift; repository_recover "${1:?BACKUP_ID required}" "${2:?EMPTY_LINUX_STAGING_DIRECTORY required}" "${3:?OFFLINE_DESTINATION required}" "${4:-[]}" "${5:-}" ;;
+  repository-prune) shift; repository_prune "$@" ;;
   stop-targets) discover_stop_targets ;;
   save-config) shift; save_config "${1:-}" "${2:-}" "${3:-false}" "${4:-false}" "${5:-10}" "${6:-false}" "${7:-daily}" "${8:-02:00}" "${9:-0}" "${10:-1}" "${11-*}" "${12-0}" "${13-1}" "${14:-}" "${15:-}" "${16:-false}" "${17:-full}" "${18:-}" "${19:-false}" "${20:-}" "${21:-true}" "${22:-true}" "${23:-true}" "${24:-true}" "${25:-native-strict}" "${26:-}" ;;
   install-schedule) install_schedule ;;

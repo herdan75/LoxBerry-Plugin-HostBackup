@@ -1,12 +1,15 @@
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
 import tarfile
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -152,6 +155,20 @@ class SourceSelectionTests(unittest.TestCase):
         result = subprocess.run(command + ["null"], capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
 
+    def test_socket_omission_flag_requires_files_action_and_a_report(self):
+        command = [sys.executable, "-B", str(ROOT / "bin/hostbackup-sources.py")]
+        for arguments in [
+            ["validate", "--selection", '{"policy":"local","overrides":{}}', "--omit-sockets"],
+            ["source-info", "--config", "/unused", "--report", "/unused-report", "--omit-sockets"],
+            ["verify", "--report", "/unused-report", "--omit-sockets"],
+            ["files", "--config", "/unused", "--omit-sockets"],
+        ]:
+            with self.subTest(arguments=arguments):
+                result = subprocess.run(command + arguments, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("--omit-sockets ist nur fuer files mit --report erlaubt", result.stderr)
+                self.assertEqual(result.stdout, "")
+
     def test_report_is_private_exclusive_and_mount_identity_is_verified(self):
         mounts = [{**mount("/"), "device": "8:1", "mount_id": "23"}]
         with tempfile.TemporaryDirectory() as tmp:
@@ -198,6 +215,150 @@ class EnumerationTests(unittest.TestCase):
         for forbidden in ["media/smb", "nfs", "tmp", "media/usb/PI_Backup"]:
             self.assertFalse(any(value == forbidden or value.startswith(forbidden + "/") for value in entries))
         self.assertEqual(len(entries), len(set(entries)))
+
+    def test_socket_omission_is_opt_in_lstat_only_and_keeps_other_special_types(self):
+        directory = self.root / "var/lib/fixture"
+        directory.mkdir(parents=True)
+        kinds = {"runtime.sock": sources.stat.S_IFSOCK, "fifo": sources.stat.S_IFIFO,
+                 "character": sources.stat.S_IFCHR, "block": sources.stat.S_IFBLK,
+                 "socket-link": sources.stat.S_IFLNK, "regular.sock": sources.stat.S_IFREG}
+        for name in kinds:
+            (directory / name).write_bytes(b"fixture")
+        original = Path.lstat
+
+        def typed(path):
+            value = original(path)
+            if path.parent == directory and path.name in kinds:
+                items = list(value)
+                items[0] = kinds[path.name] | (value.st_mode & 0o777)
+                return os.stat_result(items)
+            return value
+
+        selection = self.selection()
+        with patch.object(Path, "lstat", typed):
+            original_entries = list(sources.enumerate_files(selection, self.root))
+            self.assertNotIn("omitted_runtime_sockets", selection.report())
+            filtered = list(sources.enumerate_files(selection, self.root, omit_sockets=True))
+        self.assertEqual(set(original_entries) - set(filtered), {"var/lib/fixture/runtime.sock"})
+        for name in kinds.keys() - {"runtime.sock"}:
+            self.assertIn("var/lib/fixture/" + name, filtered)
+        omitted = selection.report()["omitted_runtime_sockets"]
+        self.assertEqual(omitted["count"], 1)
+        self.assertEqual(omitted["paths"], ["/var/lib/fixture/runtime.sock"])
+        self.assertIn("Kommunikationsendpunkte", omitted["reason"])
+        self.assertEqual(selection.report()["status"], "ok")
+        self.assertTrue(any("1 laufzeitgebundene Unix-Sockets" in note for note in selection.report()["notices"]))
+
+    def test_socket_report_bounds_paths_without_losing_total_and_resets_per_enumeration(self):
+        directory = self.root / "var/lib/fixture"
+        directory.mkdir(parents=True)
+        for index in range(27):
+            (directory / f"socket-{index:02}").touch()
+        original = Path.lstat
+
+        def typed(path):
+            value = original(path)
+            if path.parent == directory:
+                items = list(value)
+                items[0] = sources.stat.S_IFSOCK | 0o600
+                return os.stat_result(items)
+            return value
+
+        selection = self.selection()
+        with patch.object(Path, "lstat", typed):
+            for _ in range(2):
+                list(sources.enumerate_files(selection, self.root, omit_sockets=True))
+                report = selection.report()["omitted_runtime_sockets"]
+                self.assertEqual(report["count"], 27)
+                self.assertEqual(report["paths"], [f"/var/lib/fixture/socket-{index:02}" for index in range(20)])
+            list(sources.enumerate_files(selection, self.root))
+            self.assertNotIn("omitted_runtime_sockets", selection.report())
+
+    def test_socket_omission_still_fails_on_unreadable_lstat_and_directory(self):
+        original_lstat = Path.lstat
+        original_scandir = os.scandir
+
+        def denied_stat(path):
+            if path == self.root / "etc/data.txt":
+                raise PermissionError("not a confirmed socket")
+            return original_lstat(path)
+
+        def denied_directory(path):
+            if Path(path) == self.root / "etc":
+                raise PermissionError("cannot enumerate directory")
+            return original_scandir(path)
+
+        with patch.object(Path, "lstat", denied_stat), self.assertRaises(sources.SourceError):
+            list(sources.enumerate_files(self.selection(), self.root, omit_sockets=True))
+        with patch.object(sources.os, "scandir", side_effect=denied_directory), self.assertRaises(sources.SourceError):
+            list(sources.enumerate_files(self.selection(), self.root, omit_sockets=True))
+
+    def test_files_cli_records_socket_omission_with_mount_identity(self):
+        report_path = self.root / "selection-report.json"
+        root_info = self.root.stat()
+        device = f"{os.major(root_info.st_dev)}:{os.minor(root_info.st_dev)}" if os.name == "posix" else "1:1"
+        mounts = [{**mount("/"), "device": device, "mount_id": "1"}]
+        original_enumerate = sources.enumerate_files
+        seen = []
+
+        def fixture_enumerate(selection, omit_sockets=False):
+            seen.append(omit_sockets)
+            yield from original_enumerate(selection, self.root, omit_sockets=omit_sockets)
+
+        output = io.BytesIO()
+        with patch.object(sources, "read_config", return_value={"source_selection": {"policy": "local", "overrides": {}}}), \
+             patch.object(sources, "read_mounts", return_value=mounts), \
+             patch.object(sources, "enumerate_files", side_effect=fixture_enumerate), \
+             patch.object(sources.sys, "stdout", io.TextIOWrapper(output, encoding="utf-8")):
+            result = sources.main(["files", "--config", "/fixture/config", "--report", str(report_path), "--omit-sockets"])
+        self.assertEqual(result, 0)
+        self.assertEqual(seen, [True])
+        report = json.loads(report_path.read_text())
+        self.assertEqual(report["omitted_runtime_sockets"]["count"], 0)
+        self.assertEqual(report["omitted_runtime_sockets"]["paths"], [])
+        self.assertEqual(report["mount_identity"], sources.mount_identity(mounts))
+
+    def test_socket_omission_does_not_bypass_mount_identity_checks(self):
+        selection = self.selection()
+        original = Path.lstat
+        target = self.root / "etc/data.txt"
+
+        def changed_socket(path):
+            value = original(path)
+            if path == target:
+                items = list(value)
+                items[0] = sources.stat.S_IFSOCK | 0o600
+                items[2] = 999
+                return os.stat_result(items)
+            return value
+
+        # Exercise the Linux mount check on every platform, using synthetic
+        # device values on lstat records, without touching real mounts.
+        selection.mounts["/"]["device"] = "8:1"
+        with patch.object(Path, "lstat", changed_socket), \
+             patch.object(sources, "os", SimpleNamespace(name="posix", scandir=os.scandir,
+                                                         major=lambda value: 9 if value == 999 else 8,
+                                                         minor=lambda value: 1)), \
+             self.assertRaisesRegex(sources.SourceError, "Mount-Zuordnung"):
+            list(sources.enumerate_files(selection, self.root, omit_sockets=True))
+        self.assertEqual(selection.report()["omitted_runtime_sockets"]["count"], 0)
+
+    @unittest.skipUnless(os.name == "posix", "Real Linux Unix sockets, FIFO and symlink required")
+    def test_real_runtime_socket_is_omitted_but_fifo_and_link_to_socket_remain(self):
+        directory = self.root / "var/lib/fixture"
+        directory.mkdir(parents=True)
+        path = directory / "runtime.sock"
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as endpoint:
+            endpoint.bind(str(path))
+            os.mkfifo(directory / "fifo")
+            (directory / "socket-link").symlink_to("runtime.sock")
+            selection = self.selection()
+            self.assertIn("var/lib/fixture/runtime.sock", list(sources.enumerate_files(selection, self.root)))
+            entries = list(sources.enumerate_files(selection, self.root, omit_sockets=True))
+        self.assertNotIn("var/lib/fixture/runtime.sock", entries)
+        self.assertIn("var/lib/fixture/fifo", entries)
+        self.assertIn("var/lib/fixture/socket-link", entries)
+        self.assertEqual(selection.report()["omitted_runtime_sockets"]["paths"], ["/var/lib/fixture/runtime.sock"])
 
     def test_selected_share_does_not_scan_autofs_parent_or_siblings(self):
         original = os.scandir

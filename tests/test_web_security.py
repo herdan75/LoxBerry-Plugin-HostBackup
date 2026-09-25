@@ -43,8 +43,76 @@ class WebSecurityTests(unittest.TestCase):
             "$info_metadata_portable",
         ):
             self.assertIn(helper, CGI)
-        self.assertIn("Standardeinstellung:</strong> Native Strict", CGI)
+        self.assertIn("Standardeinstellung:</strong> Linux-Dateisicherung", CGI)
         self.assertIn('class="metadata-default-badge">Standard', CGI)
+
+    def test_advanced_profiles_keep_saved_values_without_crowding_normal_choices(self) -> None:
+        advanced = re.search(r'<details class="metadata-advanced" id="metadata-advanced"\$metadata_advanced_open>(.*?)</details>', CGI, re.DOTALL)
+        self.assertIsNotNone(advanced)
+        for mode in ("network-compatible", "fake-super"):
+            self.assertIn(f'value="{mode}"', advanced.group(1))
+        for mode in ("native-strict", "portable-archive"):
+            self.assertNotIn(f'value="{mode}"', advanced.group(1))
+        self.assertIn("$cfg_metadata_mode =~ /^(?:network-compatible|fake-super)$/ ? ' open' : ''", CGI)
+        self.assertIn("updateMetadataSelection", JS)
+        self.assertIn("panel.open = true", JS)
+
+    def test_profile_names_explain_storage_not_universal_nas_compatibility(self) -> None:
+        for label in ("Linux-Dateisicherung", "Portable Sicherung", "Dateisicherung mit reduzierten Metadaten", "Metadaten in Dateiattributen speichern"):
+            self.assertIn(f"<strong>{label}</strong>", CGI)
+            self.assertIn(label, JS)
+        for old in ("Native Strict", "Portable Archive", "Network Compatible", "Fake Super"):
+            self.assertIn(f"bisher {old}", CGI)
+        self.assertIn("<legend>Sicherungsverfahren", CGI)
+        self.assertIn("<legend>Sicherungsart", CGI)
+        self.assertNotIn("meistens Network Compatible passend", CGI)
+
+    def test_repository_actions_require_post_csrf_and_saved_root_ack(self) -> None:
+        block = re.search(r"if \(\$action =~ /\\Arepository-.*?\n\}\n", CGI, re.DOTALL)
+        self.assertIsNotNone(block)
+        text = block.group(0)
+        self.assertIn("unless $q->request_method eq 'POST'", text)
+        self.assertIn("unless valid_csrf_request()", text)
+        self.assertIn("JSON::PP::is_bool($saved->{root_permission_ack})", text)
+        self.assertIn("$q->param('recovery_key_saved')", text)
+        self.assertLess(text.index("unless valid_csrf_request()"), text.index("repository_key_download()"))
+        self.assertLess(text.index("$saved->{root_permission_ack}"), text.index("repository_key_download()"))
+        self.assertNotIn("$q->param('sha256')", text)
+        dispatcher = (ROOT / "bin" / "hostbackup-sudo.sh").read_text(encoding="utf-8")
+        for action in ("repository-status", "repository-init", "repository-key-export", "repository-confirm-key"):
+            self.assertIn(action, dispatcher)
+        self.assertIn('[ "$#" -eq 1 ] || fail "unexpected arguments for $action"', dispatcher)
+
+    def test_repository_secret_is_only_an_explicit_nostore_attachment(self) -> None:
+        helper = re.search(r"sub repository_key_download \{(?P<body>.*?)\n\}", CGI, re.DOTALL)
+        self.assertIsNotNone(helper)
+        text = helper.group("body")
+        for marker in ("'-|'", "'repository-key-export'", "1048576", "-attachment => 'loxberryhostbackup-recovery-key.json'", "-Cache_Control => 'no-store'", "ref($decoded) eq 'HASH'"):
+            self.assertIn(marker, text)
+        self.assertNotRegex(text, r"reject_request\([^;]*\$content")
+        self.assertNotRegex(text, r"(?:print STDERR|warn).*\$content")
+        public = re.search(r"sub repository_public_status \{(?P<body>.*?)\n\}", CGI, re.DOTALL)
+        self.assertIn("qw(initialized key_confirmed key_exported available)", public.group("body"))
+        self.assertIn("qw(repository_id engine_version)", public.group("body"))
+        self.assertNotIn("return $data", public.group("body"))
+        self.assertIn("response.blob()", JS)
+        self.assertIn("URL.revokeObjectURL(downloadUrl)", JS)
+
+    def test_portable_snapshot_save_requires_root_state_and_explicit_export_choice(self) -> None:
+        helper = re.search(r"sub portable_settings_error \{(?P<body>.*?)\n\}", CGI, re.DOTALL)
+        self.assertIsNotNone(helper)
+        text = helper.group("body")
+        self.assertIn("$metadata eq 'portable-archive' && $kind eq 'snapshot'", text)
+        self.assertIn("if $export eq 'true'", text)
+        self.assertIn("$saved->{backup_root} eq $target", text)
+        self.assertIn("backend_cmd('repository-status')", text)
+        for key in ("available", "initialized", "key_confirmed"):
+            self.assertIn(f"$public->{{{key}}}", text)
+        self.assertIn("$error ||= portable_settings_error($metadata_mode, $backup_mode, $create_export, $backup_root)", CGI)
+        self.assertIn("repositoryStatusTarget === initial.backup_root", JS)
+        self.assertIn("validateSettings(states(), repositoryForSettings())", JS)
+        self.assertNotIn("Portable Sicherung ist hier noch nicht", CGI)
+        self.assertNotIn("Portable Sicherung ist hier noch nicht", JS)
 
     def test_network_compatible_is_informational_for_backup(self) -> None:
         target_info = re.search(

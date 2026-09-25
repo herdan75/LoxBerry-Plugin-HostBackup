@@ -5,7 +5,27 @@ assert.equal(ui.normalizeLogForDisplay('a\rb\r\nc\u001b[31md\u001b[0m'), 'a\nb\n
 assert.equal(ui.controlState([{type:'radio',value:'native',checked:false},{type:'radio',value:'network',checked:true}]), 'network');
 assert.equal(ui.controlState([{type:'checkbox',name:'stop_targets',value:'docker:x',checked:true}]), 'docker:x');
 assert.equal(ui.controlState([{type:'checkbox',name:'root_permission_ack',value:'1',checked:false}]), '0');
-assert.match(ui.validateSettings({metadata_mode:'portable-archive',backup_mode:'snapshot'}), /keine inkrementellen/);
+const portableSnapshot={metadata_mode:'portable-archive',backup_mode:'snapshot',create_export_after_backup:'0'};
+const repositoryReady={available:true,initialized:true,key_confirmed:true,target_matches:true};
+assert.match(ui.validateSettings(portableSnapshot), /bestätigte Aufbewahrung/);
+assert.equal(ui.validateSettings(portableSnapshot,repositoryReady),'');
+for(const field of Object.keys(repositoryReady))for(const bad of [false,undefined,'true',1]) {
+  assert.match(ui.validateSettings(portableSnapshot,{...repositoryReady,[field]:bad}),/bestätigte Aufbewahrung/,'Repository gate requires exact booleans: '+field);
+}
+assert.match(ui.validateSettings({...portableSnapshot,create_export_after_backup:'1'},repositoryReady),/tar.gz-Export ausdrücklich deaktivieren/);
+assert.equal(ui.validateSettings({...portableSnapshot,backup_mode:'full'}),'','Standalone portable full archive needs no repository');
+assert.deepEqual(repositoryReady,{available:true,initialized:true,key_confirmed:true,target_matches:true},'Validation never changes repository or user configuration');
+assert.equal(ui.metadataLabel('native-strict'),'Linux-Dateisicherung');
+assert.equal(ui.metadataLabel('portable-archive'),'Portable Sicherung');
+assert.equal(ui.metadataLabel('network-compatible'),'Dateisicherung mit reduzierten Metadaten');
+assert.equal(ui.metadataLabel('fake-super'),'Metadaten in Dateiattributen speichern');
+assert.equal(ui.metadataLabel('future-format'),'future-format');
+assert.equal(ui.backupModeLabel('full'),'Vollbackup');
+assert.equal(ui.backupModeLabel('snapshot'),'Platzsparende Sicherungsstände');
+assert.equal(ui.advancedMetadata('native-strict'),false);
+assert.equal(ui.advancedMetadata('portable-archive'),false);
+assert.equal(ui.advancedMetadata('network-compatible'),true);
+assert.equal(ui.advancedMetadata('fake-super'),true);
 assert.match(ui.validateSettings({schedule_enabled:'1',schedule_time:'02:00',schedule_mode:'weekly',schedule_weekdays:''}), /Wochentag/);
 assert.match(ui.validateSettings({schedule_enabled:'1',schedule_time:'02:00',schedule_mode:'monthly',schedule_monthdays:'1',schedule_months:''}), /Monat/);
 assert.equal(ui.validateSettings({metadata_mode:'network-compatible',backup_mode:'snapshot',schedule_enabled:'1',schedule_time:'02:00',schedule_mode:'daily'}), '');

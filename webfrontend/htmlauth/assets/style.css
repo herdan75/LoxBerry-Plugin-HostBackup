@@ -976,6 +976,51 @@ td .muted {
   text-transform: uppercase;
 }
 
+#hostbackup-app .metadata-advanced {
+  border-top: 1px solid #dce5ec;
+  margin: 12px 18px 0;
+  padding: 10px 0 0;
+}
+
+#hostbackup-app .metadata-advanced > summary,
+#hostbackup-app .metadata-advanced > p,
+#hostbackup-app #metadata-advanced-selection {
+  font-family: "Helvetica Neue", Arial, Helvetica, sans-serif !important;
+  font-size: 13px !important;
+  letter-spacing: normal !important;
+  line-height: 1.45 !important;
+  text-transform: none !important;
+  word-spacing: normal !important;
+}
+
+#hostbackup-app .metadata-advanced > summary { cursor: pointer; font-weight: 600; }
+#hostbackup-app .metadata-advanced > p,
+#hostbackup-app #metadata-advanced-selection { color: #526678; font-weight: 400; }
+#hostbackup-app .metadata-advanced > p { margin: 9px 0; }
+#hostbackup-app .metadata-advanced .metadata-modes { margin: 0; }
+
+#hostbackup-app .repository-setup { margin: 14px 0; padding: 14px 18px; }
+#hostbackup-app .repository-setup > summary,
+#hostbackup-app .repository-setup > p,
+#hostbackup-app .repository-setup #repository-status,
+#hostbackup-app .repository-setup .checkline span {
+  font-family: "Helvetica Neue", Arial, Helvetica, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+  word-spacing: normal !important;
+}
+#hostbackup-app .repository-setup > summary { cursor: pointer; font-weight: 600 !important; }
+#hostbackup-app .repository-setup > p { margin: 10px 0; }
+#hostbackup-app .repository-setup #repository-status { background: #f3f6f8; padding: 9px; margin-bottom: 9px; }
+#hostbackup-app .repository-actions { display: grid; gap: 12px; margin-top: 12px; }
+#hostbackup-app .repository-actions form { margin: 0; }
+#hostbackup-app .repository-actions button { white-space: normal; max-width: 100%; }
+#hostbackup-app .repository-restore-note { max-width: 420px; font-size: 13px; line-height: 1.45; }
+#hostbackup-app .repository-restore-note a { display: inline-block; }
+
 .schedule-detail {
   border-top: 1px solid #dddddd;
   margin-top: 13px;

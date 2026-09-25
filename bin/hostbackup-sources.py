@@ -24,6 +24,8 @@ NETWORK_FS = {"cifs", "smb3", "smbfs", "nfs", "nfs4", "ncpfs", "afs", "openafs",
 SYSTEM_FS = {"proc", "sysfs", "devtmpfs", "devpts", "tmpfs", "cgroup", "cgroup2", "debugfs", "securityfs", "pstore", "tracefs", "configfs", "mqueue", "hugetlbfs", "fusectl", "rpc_pipefs", "binfmt_misc", "nsfs", "bpf"}
 MAX_SELECTION_BYTES = 65536
 MAX_OVERRIDES = 256
+MAX_SOCKET_REPORT_PATHS = 20
+SOCKET_OMISSION_REASON = "Unix-Sockets sind laufzeitgebundene Kommunikationsendpunkte und werden von den Diensten neu angelegt; portable Repository-Staende sichern sie nicht."
 
 
 class SourceError(ValueError):
@@ -139,6 +141,7 @@ class SourcePlan:
                 self.literal_excludes.append((re.compile(expression + r"(?=/|$)"), rule.endswith("/")))
         self.errors = []
         self.notices = []
+        self.omitted_runtime_sockets = None
         self.enabled = {}
         self.reasons = {}
         for path in sorted(self.mounts, key=lambda value: (value.count("/"), value)):
@@ -236,11 +239,18 @@ class SourcePlan:
                             "included": self.included(path), "reason": self.reasons[path],
                             "forced_excluded": forced_excluded,
                             "selectable": path != "/" and not forced_excluded and item["kind"] not in ("system", "automount")})
-        return {"selection": self.selection, "volumes": volumes, "notices": self.notices,
-                "errors": self.errors, "status": "error" if self.errors else "ok"}
+        report = {"selection": self.selection, "volumes": volumes, "notices": self.notices,
+                  "errors": self.errors, "status": "error" if self.errors else "ok"}
+        if self.omitted_runtime_sockets is not None:
+            report["omitted_runtime_sockets"] = {**self.omitted_runtime_sockets,
+                                                 "paths": list(self.omitted_runtime_sockets["paths"])}
+            if self.omitted_runtime_sockets["count"]:
+                report["notices"] = self.notices + [
+                    f"{self.omitted_runtime_sockets['count']} laufzeitgebundene Unix-Sockets fuer portable Repository-Sicherung ausgelassen; Details unter omitted_runtime_sockets."]
+        return report
 
 
-def enumerate_files(plan, root=Path("/")):
+def enumerate_files(plan, root=Path("/"), omit_sockets=False):
     """Yield relative paths exactly once; never recursively list a denied mount.
 
     root is injectable solely for fixture tests. Production always uses '/'.
@@ -250,6 +260,8 @@ def enumerate_files(plan, root=Path("/")):
     if plan.errors:
         raise SourceError(" ".join(plan.errors))
     root = Path(root)
+    plan.omitted_runtime_sockets = ({"count": 0, "paths": [], "reason": SOCKET_OMISSION_REASON}
+                                    if omit_sockets else None)
 
     def visit(logical, ancestors):
         included = plan.included(logical)
@@ -273,6 +285,14 @@ def enumerate_files(plan, root=Path("/")):
             raise SourceError(f"Mount-Zuordnung hat sich geaendert: {logical}. Backup erneut pruefen.")
         if not included and not is_dir:
             raise SourceError(f"Pfad zur ausgewaehlten Quelle ist kein Verzeichnis: {logical}")
+        # Only an lstat-confirmed Unix socket may be omitted, and only after
+        # selection/mount checks. Never follow symlinks or suppress read errors,
+        # FIFO/device entries, or errors on a route to a selected descendant.
+        if omit_sockets and stat.S_ISSOCK(info.st_mode):
+            plan.omitted_runtime_sockets["count"] += 1
+            if len(plan.omitted_runtime_sockets["paths"]) < MAX_SOCKET_REPORT_PATHS:
+                plan.omitted_runtime_sockets["paths"].append(logical)
+            return
         yield "." if logical == "/" else logical.lstrip("/")
         if not is_dir:
             return
@@ -335,8 +355,12 @@ def main(argv=None):
     parser.add_argument("--excludes")
     parser.add_argument("--selection")
     parser.add_argument("--report", help="New private report file, only for files action")
+    parser.add_argument("--omit-sockets", action="store_true",
+                        help="For portable repository files only: omit lstat-confirmed Unix sockets; requires --report")
     args = parser.parse_args(argv)
     try:
+        if args.omit_sockets and (args.action != "files" or not args.report):
+            raise SourceError("--omit-sockets ist nur fuer files mit --report erlaubt.")
         if args.action == "verify":
             if not args.report:
                 raise SourceError("Quellenauswahl-Bericht fehlt.")
@@ -356,7 +380,7 @@ def main(argv=None):
             mounts = read_mounts()
             plan = SourcePlan(config.get("source_selection"), mounts, read_excludes(args.excludes))
             if args.action == "files":
-                for path in enumerate_files(plan):
+                for path in enumerate_files(plan, omit_sockets=args.omit_sockets):
                     sys.stdout.buffer.write(os.fsencode(path) + b"\0")
                 # Detect source mounts changed while building the list, before
                 # its caller is allowed to start the actual copy.

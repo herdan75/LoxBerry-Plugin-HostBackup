@@ -6,9 +6,12 @@ integrity baseline from a verified one, and inspected data from tested restores.
 All durable reports and protection settings live in the root-controlled state.
 """
 import argparse
+import base64
 from contextlib import closing
 import datetime as dt
+from functools import lru_cache
 import hashlib
+import importlib.util
 import json
 import os
 import pathlib
@@ -129,7 +132,41 @@ def root_identity(root):
     return {"path": str(root), "marker": marker}
 
 
-def backup_record(root, backup_id):
+@lru_cache(maxsize=8)
+def repository_adapter(root, state):
+    """Import only the helper beside this trusted runtime, never a target file."""
+    spec = importlib.util.spec_from_file_location("hostbackup_repository_maintenance", pathlib.Path(__file__).with_name("hostbackup-repository.py"))
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    return helper.Repository(root, state_dir(state, "repositories"))
+
+
+def repository_binding(root, state, target):
+    reference = read_json(target / "repository-reference.json")
+    if reference.get("format") != "hostbackup-restic-v1" or reference.get("backup_id") != target.name:
+        fail("Repository reference format/backup identity mismatch.")
+    commit_id = reference.get("commit_snapshot_id", reference.get("commit_id"))
+    for value in (commit_id, reference.get("data_snapshot_id"), reference.get("repository_id")):
+        if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+            fail("Repository references require complete immutable IDs.")
+    if reference.get("commit_id", commit_id) != commit_id:
+        fail("Conflicting repository commit references.")
+    if state is None:
+        fail("Repository validation requires the protected local repository state.")
+    adapter = repository_adapter(root, state)
+    committed = adapter.read_commit(commit_id)
+    for key in ("backup_id", "repository_id", "data_snapshot_id"):
+        if reference.get(key) != committed.get(key):
+            fail("Repository reference does not match its authenticated commit.")
+    # A rewritten local wrapper must not override authenticated restore controls.
+    for name in ("manifest.json", "rsync-excludes.txt", "source-selection.json", "backup-validation.json"):
+        encoded = committed.get("controls", {}).get(name)
+        if not isinstance(encoded, str) or base64.b64decode(encoded, validate=True) != read_bytes(target / name):
+            fail("Local recovery control differs from the authenticated repository copy: " + name)
+    return adapter, committed
+
+
+def backup_record(root, backup_id, state=None):
     identifier(backup_id)
     target = real_dir(root / backup_id)
     if target.parent != root or target.stat().st_dev != root.stat().st_dev:
@@ -147,16 +184,41 @@ def backup_record(root, backup_id):
               "mtime_ns": info.st_mtime_ns,
               "manifest_sha256": hashlib.sha256(read_bytes(target / "manifest.json")).hexdigest(),
               "inode": [target.stat().st_dev, target.stat().st_ino]}
+    backup = manifest.get("backup", {})
+    metadata = manifest.get("metadata", {})
+    if not isinstance(backup, dict) or not isinstance(metadata, dict):
+        fail("Invalid backup storage or metadata description.")
+    storage_format = backup.get("storage_format")
+    if not storage_format:
+        storage_format = "portable-archive" if (target / "rootfs.tar").exists() else "directory"
+    if storage_format not in ("directory", "portable-tar", "portable-archive", "portable-repository"):
+        fail("Unknown backup storage format.")
+    host = manifest.get("host", {})
+    if not isinstance(host, dict):
+        fail("Invalid backup host metadata.")
+    source_host_id = host.get("source_id") or host.get("machine_id") or host.get("hostname") or "legacy-unknown"
+    metadata_mode = metadata.get("mode", "unknown")
+    if not isinstance(source_host_id, str) or len(source_host_id) > 1024 or not isinstance(metadata_mode, str) or len(metadata_mode) > 128:
+        fail("Invalid host or metadata profile identity.")
+    result.update(storage_format=storage_format, metadata_mode=metadata_mode, source_host_id=source_host_id)
+    if storage_format == "portable-repository":
+        _, committed = repository_binding(root, state, target)
+        logical = manifest.get("size_bytes", 0)
+        if type(logical) is not int or logical < 0:
+            fail("Invalid repository backup logical size.")
+        result.update(repository_id=committed["repository_id"], commit_snapshot_id=committed["commit_id"],
+                      data_snapshot_id=committed["data_snapshot_id"], source_host_id=committed["host_id"],
+                      repository_lineage=committed["lineage"], repository_logical_bytes=logical)
     return target, result
 
 
-def records(root):
+def records(root, state=None):
     result, ignored = [], []
     for entry in sorted(root.iterdir()):
         if entry.name.startswith(".") or not entry.is_dir() or entry.is_symlink():
             continue
         try:
-            _, record = backup_record(root, entry.name)
+            _, record = backup_record(root, entry.name, state)
             result.append(record)
         except (OSError, ValueError) as error:
             ignored.append({"name": entry.name, "reason": str(error)})
@@ -228,7 +290,7 @@ def pins(root, state):
 
 
 def protect(root, state, backup_id, value):
-    backup_record(root, backup_id)
+    backup_record(root, backup_id, state)
     protected = pins(root, state)
     if value:
         protected.add(backup_id)
@@ -251,7 +313,7 @@ def runtime_storage(state):
 
 def storage(root, state):
     root_identity(root)
-    backups, ignored = records(root)
+    backups, ignored = records(root, state)
     protected, all_inodes = pins(root, state), set()
     failed_bytes = 0
     for record in backups:
@@ -262,10 +324,20 @@ def storage(root, state):
         elif (target / "rootfs.tar").is_file() and not (target / "rootfs.tar").is_symlink():
             with tarfile.open(target / "rootfs.tar", "r:") as container:
                 record["logical_bytes"] = sum(member.size for member in container if member.isfile())
+        elif record["storage_format"] == "portable-repository":
+            record["logical_bytes"] = record["repository_logical_bytes"]
+            record["shared_repository_data"] = True
         record["pinned"] = record["backup_id"] in protected
         if record["status"] in TERMINAL_BAD:
             failed_bytes += record["allocated_bytes"]
     backup_allocation = sum(item["unique_added_bytes"] for item in backups)
+    repository_allocation = 0
+    repository_path = root / ".portable-repository"
+    if repository_path.exists() or repository_path.is_symlink():
+        # Count shared chunks once, never once per logical snapshot. Identity is
+        # checked before traversing so an unrelated hidden folder is not counted.
+        repository_adapter(root, state).load()
+        repository_allocation = tree_storage(repository_path, all_inodes)["unique_added_bytes"]
     export_allocation = 0
     for entry in root.iterdir():
         if entry.name.endswith((".tar.gz", ".tar.gz.sha256", ".tar.gz.json")) and not entry.is_symlink() and entry.is_file():
@@ -275,11 +347,12 @@ def storage(root, state):
                 export_allocation += allocated(info)
                 all_inodes.add(inode)
     return {"status": "ok", "measured_at": now(), "expensive": True, "backups": backups,
-            "backups_unique_allocated_bytes": backup_allocation, "exports_bytes": export_allocation,
+            "backups_unique_allocated_bytes": backup_allocation + repository_allocation,
+            "repository_shared_allocated_bytes": repository_allocation, "exports_bytes": export_allocation,
             "failed_bytes": failed_bytes,
-            "total_unique_allocated_bytes": backup_allocation + export_allocation,
+            "total_unique_allocated_bytes": backup_allocation + repository_allocation + export_allocation,
             "shared_file_count_note": "Files with nlink > 1, including links within one backup",
-            "measured_scope": "Recognized backup directories and export files; other target data is not included",
+            "measured_scope": "Recognized backup directories, registered shared repository and export files; other target data is not included",
             "failed_bytes_are_reclaimable": False,
             "root_state": runtime_storage(state),
             "ignored": ignored}
@@ -335,7 +408,7 @@ def integrity_entries(target, connection):
 
 
 def integrity_paths(root, state, backup_id):
-    target, record = backup_record(root, backup_id)
+    target, record = backup_record(root, backup_id, state)
     identity = {"root": root_identity(root), "backup_id": backup_id,
                 "backup_marker": read_bytes(target / ".loxberry-hostbackup-backup", 4096).decode().strip()}
     key = digest(identity)
@@ -475,6 +548,21 @@ def integrity(root, state, backup_id, report_only=False, record_only=False):
         return {**report, **restore_test_summary(state, identity, record)}
     if not record["good"]:
         fail("Only completed validated backups can have an integrity baseline.")
+    if record["storage_format"] == "portable-repository":
+        adapter, committed = repository_binding(root, state, target)
+        # There is no mutable per-file baseline for encrypted immutable objects.
+        # --record validates structure; the explicit content check reads shared
+        # repository data through the engine and remains distinct from a restore.
+        adapter.check(read_data=not record_only)
+        report = {"backup_id": backup_id, "status": "structure_verified" if record_only else "verified",
+                  "checked_at": now(), "manifest_sha256": record["manifest_sha256"],
+                  "content_verified": not record_only, "metadata_compared": [], "restore_tested": False,
+                  "repository_id": committed["repository_id"], "commit_snapshot_id": committed["commit_id"],
+                  "data_snapshot_id": committed["data_snapshot_id"],
+                  "verification_scope": "repository-structure" if record_only else "entire-shared-repository-data",
+                  "message": "Repository integrity is not a metadata roundtrip or a boot/restore test."}
+        atomic_json(report_path, report)
+        return {**report, **restore_test_summary(state, identity, record)}
     baseline = None
     if baseline_path.exists() or baseline_path.is_symlink():
         info = file_info(baseline_path)
@@ -624,26 +712,60 @@ def export_files(root, backup_id):
 
 def delete_check(root, state, backup_id):
     root_identity(root)
-    backup_record(root, backup_id)
+    backup_record(root, backup_id, state)
     if backup_id in pins(root, state):
         fail("Backup ist geschuetzt. Schutz vor dem Loeschen bewusst aufheben.")
-    backups, _ = records(root)
+    backups, _ = records(root, state)
     good = sorted((item for item in backups if item["good"]), key=backup_time, reverse=True)
-    if good and good[0]["backup_id"] == backup_id:
-        fail("Die juengste brauchbare Sicherung bleibt geschuetzt; zuerst ein neues erfolgreiches Backup erstellen.")
+    if backup_id in newest_per_storage_line(good):
+        fail("Die juengste brauchbare Sicherung dieses Formats/Quellsystems bleibt geschuetzt; zuerst einen neuen erfolgreichen Stand erstellen.")
     return {"backup_id": backup_id, "allowed": True}
+
+
+def newest_per_storage_line(good):
+    """Keep the last proven old-format backup across an opt-in format migration."""
+    latest = {}
+    for record in sorted(good, key=backup_time, reverse=True):
+        key = (record.get("storage_format", "directory"), record.get("metadata_mode", "unknown"),
+               record.get("source_host_id", "legacy-unknown"))
+        latest.setdefault(key, record["backup_id"])
+    return set(latest.values())
+
+
+def repository_check(root, state, backup_id):
+    target, record = backup_record(root, backup_id, state)
+    if record["storage_format"] != "portable-repository":
+        fail("Repository structure check requires a repository backup.")
+    adapter, committed = repository_binding(root, state, target)
+    adapter.check(read_data=False)
+    return {"status": "ok", "backup_id": backup_id, "commit_snapshot_id": committed["commit_id"],
+            "data_snapshot_id": committed["data_snapshot_id"], "content_verified": False, "restore_tested": False}
+
+
+def repository_forget(root, state, backup_id):
+    """Unpublish exact IDs before the caller removes this backup's wrapper."""
+    delete_check(root, state, backup_id)
+    target, record = backup_record(root, backup_id, state)
+    if record["storage_format"] != "portable-repository":
+        fail("Repository forget requires a repository backup.")
+    adapter, committed = repository_binding(root, state, target)
+    adapter.forget(committed["commit_id"])
+    return {"backup_id": backup_id, "forgotten_commit_snapshot_id": committed["commit_id"],
+            "wrapper_removed": False, "repository_space_reclaimed": False}
 
 
 def retention(root, state, config, apply=None, caller_pid=None):
     identity = root_identity(root)
     selected = policy(config)
-    backups, ignored = records(root)
+    backups, ignored = records(root, state)
     protected = pins(root, state)
     good = sorted((item for item in backups if item["good"]), key=backup_time, reverse=True)
     reasons = {item["backup_id"]: [] for item in backups}
     latest = good[0]["backup_id"] if good else None
     if latest:
         reasons[latest].append("latest-good-backup")
+    for backup_id in newest_per_storage_line(good):
+        reasons[backup_id].append("latest-good-format-host-backup")
     for backup_id in protected:
         if backup_id in reasons:
             reasons[backup_id].append("user-protected")
@@ -684,13 +806,16 @@ def retention(root, state, config, apply=None, caller_pid=None):
         if apply != preview_digest:
             fail("Maintenance preview is stale; review the current deletion plan first.")
         for item in delete:
-            target, fresh = backup_record(root, item["backup_id"])
+            target, fresh = backup_record(root, item["backup_id"], state)
             if fresh != next(record for record in backups if record["backup_id"] == item["backup_id"]):
                 fail("Backup changed after the deletion preview.")
             # Walk first to reject mounted children and enumerate a safe tree.
             list(walk_data(target))
             if export_files(root, item["backup_id"]) != item["exports"]:
                 fail("Associated export changed after the deletion preview.")
+            if item["storage_format"] == "portable-repository":
+                adapter, committed = repository_binding(root, state, target)
+                adapter.forget(committed["commit_id"])
             for export in item["exports"]:
                 (root / export["name"]).unlink()
             shutil.rmtree(target)
@@ -702,6 +827,8 @@ def retention(root, state, config, apply=None, caller_pid=None):
                 cleanup_warnings.append({"backup_id": item["backup_id"], "message": str(error)})
     return {"policy": selected, "keep": keep, "delete": delete, "ignored": ignored,
             "protected_latest": latest, "preview_digest": preview_digest,
+            "protected_latest_per_format_host": sorted(newest_per_storage_line(good)),
+            "repository_space_reclaimed": False,
             "cleanup_warnings": cleanup_warnings,
             "active_tasks": current_tasks, "applied": apply is not None}
 
@@ -717,7 +844,7 @@ def integrity_due(root, state, config):
         return {"enabled": enabled, "interval_days": interval, "backup_ids": [],
                 "active_verifications": live_checks}
     if enabled:
-        backups, _ = records(root)
+        backups, _ = records(root, state)
         attempts = {}
         task_directory = pathlib.Path(state) / "tasks"
         if task_directory.exists():
@@ -849,7 +976,7 @@ def diagnostics(root, state, config, version, task=None, output=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("storage", "integrity", "integrity-due", "record-restore-test", "forget-integrity", "delete-check", "pins", "protect", "retention", "cleanup-runtime", "diagnostics"))
+    parser.add_argument("action", choices=("storage", "integrity", "integrity-due", "repository-check", "repository-forget", "record-restore-test", "forget-integrity", "delete-check", "pins", "protect", "retention", "cleanup-runtime", "diagnostics"))
     parser.add_argument("root", nargs="?")
     parser.add_argument("backup_id", nargs="?")
     parser.add_argument("value", nargs="?", choices=("true", "false"))
@@ -871,7 +998,7 @@ def main():
     root = real_dir(args.root) if args.root else None
     if args.action not in ("cleanup-runtime", "diagnostics") and root is None:
         parser.error("root is required")
-    if args.action in ("integrity", "protect", "record-restore-test", "forget-integrity", "delete-check") and not args.backup_id:
+    if args.action in ("integrity", "repository-check", "repository-forget", "protect", "record-restore-test", "forget-integrity", "delete-check") and not args.backup_id:
         parser.error("backup_id is required")
     if args.action == "storage":
         result = storage(root, args.state)
@@ -881,6 +1008,10 @@ def main():
         result = integrity_due(root, args.state, config)
     elif args.action == "integrity":
         result = integrity(root, args.state, args.backup_id, args.report, args.record)
+    elif args.action == "repository-check":
+        result = repository_check(root, args.state, args.backup_id)
+    elif args.action == "repository-forget":
+        result = repository_forget(root, args.state, args.backup_id)
     elif args.action == "record-restore-test":
         result = record_restore_test(root, args.state, args.backup_id, args.result, args.tested_at, args.note)
     elif args.action == "forget-integrity":

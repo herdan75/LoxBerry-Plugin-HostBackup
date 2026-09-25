@@ -11,6 +11,9 @@ $outputDir = if ($env:HOSTBACKUP_PACKAGE_OUTPUT_DIR) { $env:HOSTBACKUP_PACKAGE_O
 $outputDir = [System.IO.Path]::GetFullPath($outputDir)
 [System.IO.Directory]::CreateDirectory($outputDir) | Out-Null
 $zip = Join-Path $outputDir "LoxBerryHostBackup_$version.zip"
+$engineCache = Join-Path $root '.tmp/restic-engines'
+python (Join-Path $root 'bin/hostbackup-engine.py') fetch $engineCache
+if ($LASTEXITCODE -ne 0) { throw 'Pinned Restic runtime download/validation failed.' }
 
 if (Test-Path $zip) {
   Remove-Item -LiteralPath $zip
@@ -65,6 +68,10 @@ try {
     $versionStream.Write($versionBytes, 0, $versionBytes.Length)
   } finally {
     $versionStream.Dispose()
+  }
+  Get-ChildItem -LiteralPath $engineCache -Filter 'restic_*.bz2' -File | ForEach-Object {
+    $entry = [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $_.FullName, $_.Name, [System.IO.Compression.CompressionLevel]::NoCompression)
+    $entry.ExternalAttributes = -2119958528
   }
 } finally {
   $archive.Dispose()

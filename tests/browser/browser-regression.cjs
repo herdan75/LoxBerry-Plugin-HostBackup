@@ -15,7 +15,14 @@ const quote = value => "'" + value.replace(/'/g, "'\\''") + "'";
 const perlLib = ['tests/browser/perl','tests/perl-stub','tests/perl'].join(':');
 const cgiSource=fs.readFileSync(path.join(repo,'webfrontend/htmlauth/index.cgi'),'utf8');
 const sourceValidator=cgiSource.match(/^sub source_selection_json \{[\s\S]*?^\}/m)[0];
-const validatorProgram='use strict; use warnings; use JSON::PP;\n'+sourceValidator+'\n'+String.raw`
+const publicRepositoryStatus=cgiSource.match(/^sub repository_public_status \{[\s\S]*?^\}/m)[0];
+const portableSettingsValidator=cgiSource.match(/^sub portable_settings_error \{[\s\S]*?^\}/m)[0];
+const validatorProgram='use strict; use warnings; use JSON::PP;\n'+sourceValidator+'\n'+publicRepositoryStatus+'\n'+String.raw`
+my $public=repository_public_status({initialized=>JSON::PP::true,key_confirmed=>JSON::PP::false,key_exported=>JSON::PP::true,available=>JSON::PP::true,repository_id=>'fixture',engine_version=>'0.19.1',secret=>'NEVER-PUBLIC',password=>'NEVER-PUBLIC',message=>'NEVER-PUBLIC'});
+die "repository status leaks extra fields" unless join(',',sort keys %$public) eq 'available,engine_version,initialized,key_confirmed,key_exported,repository_id';
+die "repository status booleans changed" unless $public->{initialized} && !$public->{key_confirmed};
+die "truthy string accepted as capability" if repository_public_status({available=>'false'})->{available};
+eval { repository_public_status([]) }; die "invalid repository status accepted" unless $@;
 my $valid = source_selection_json('{"policy":"local","overrides":{"/media/usb/data":true,"/media/smb/nas":false}}');
 my $decoded = decode_json($valid); die "source JSON values changed" unless $decoded->{overrides}{'/media/usb/data'} && !$decoded->{overrides}{'/media/smb/nas'};
 for my $bad ('{}', '{"policy":"all","overrides":{}}', '{"policy":"local","overrides":{"/mnt":1}}', '{"policy":"local","overrides":{"/":true}}', '{"policy":"local","overrides":{"/mnt/../secret":true}}', '{"policy":"local","overrides":{"/mnt//nas":true}}', '{"policy":"local","overrides":{"/mnt/nas/":true}}', '{"policy":"local","overrides":{},"extra":true}') {
@@ -25,14 +32,71 @@ print "CGI source selection validator passed\n";
 `;
 if(process.platform==='win32')execFileSync('C:/Program Files/Git/bin/bash.exe',['-s'],{cwd:repo,input:`perl -e ${quote(validatorProgram)}\n`,encoding:'utf8'});
 else execFileSync('perl',['-e',validatorProgram],{cwd:repo,encoding:'utf8'});
-let html;
-if (process.platform === 'win32') {
-  html = execFileSync('C:/Program Files/Git/bin/bash.exe', ['-s'], {cwd:repo, input:`PERL5LIB=${quote(perlLib)} LBPDATADIR=${quote(posix(temp))} REQUEST_METHOD=GET REMOTE_USER=fixture HTTP_USER_AGENT=fixture perl -MHostBackupFixture webfrontend/htmlauth/index.cgi\n`, encoding:'utf8'});
-} else html = execFileSync('perl',['-MHostBackupFixture','webfrontend/htmlauth/index.cgi'], {cwd:repo,env:{...process.env, PERL5LIB:perlLib,LBPDATADIR:temp,REQUEST_METHOD:'GET',REMOTE_USER:'fixture',HTTP_USER_AGENT:'fixture'},encoding:'utf8'});
+const repositoryHandler=cgiSource.match(/^if \(\$action =~ \/\\Arepository-[\s\S]*?^\}/m)[0];
+const repositoryGuardProgram='use strict; use warnings; use JSON::PP;\n'+publicRepositoryStatus+'\n'+String.raw`
+{ package Request; sub request_method { $_[0]->{method} } sub param { $_[0]->{$_[1]} || '' } }
+my ($action,$q,$ajax_request,$csrf_valid,$root_ack,@calls,$response);
+sub reject_request { die 'REJECT:'.$_[0]; }
+sub json_response { $response=$_[0]; die 'RESPONSE'; }
+sub redirect_with { die 'REDIRECT'; }
+sub valid_csrf_request { return $csrf_valid; }
+sub backend_cmd { return join(' ',@_); }
+sub repository_key_download { push @calls,'SECRET_ATTACHMENT'; die 'DOWNLOAD'; }
+sub run_shell { my ($cmd)=@_;push @calls,$cmd;return (0,encode_json({root_permission_ack=>$root_ack?JSON::PP::true:JSON::PP::false})) if $cmd eq 'config';return (0,encode_json({available=>JSON::PP::true,initialized=>JSON::PP::true,key_confirmed=>JSON::PP::false,key_exported=>JSON::PP::false,secret=>'NEVER-PUBLIC'})); }
+`+'my $handler=sub {\n'+repositoryHandler+'\n};\n'+String.raw`
+sub exercise { my ($a,$method,$csrf,$ack,$confirm)=@_;$action=$a;$q=bless({method=>$method,recovery_key_saved=>$confirm},'Request');$ajax_request=1;$csrf_valid=$csrf;$root_ack=$ack;@calls=();$response=undef;eval {$handler->()};return $@; }
+for my $a ('repository-init','repository-key-export','repository-confirm-key') {
+ die 'write action accepted GET' unless exercise($a,'GET',1,1,'1') =~ /REJECT:405/ && !@calls;
+ die 'write action accepted invalid CSRF' unless exercise($a,'POST',0,1,'1') =~ /REJECT:403/ && !@calls;
+ die 'write action accepted missing saved root ack' unless exercise($a,'POST',1,0,'1') =~ /REJECT:403/ && join(',',@calls) eq 'config';
+}
+die 'key confirmation accepted unchecked acknowledgement' unless exercise('repository-confirm-key','POST',1,1,'') =~ /REJECT:400/ && join(',',@calls) eq 'config';
+die 'key download not isolated attachment' unless exercise('repository-key-export','POST',1,1,'') =~ /DOWNLOAD/ && join(',',@calls) eq 'config,SECRET_ATTACHMENT';
+die 'status accepted POST' unless exercise('repository-status','POST',1,1,'') =~ /REJECT:405/ && !@calls;
+die 'read-only status failed' unless exercise('repository-status','GET',0,0,'') =~ /RESPONSE/ && join(',',@calls) eq 'repository-status' && !exists $response->{secret};
+die 'valid init failed' unless exercise('repository-init','POST',1,1,'') =~ /RESPONSE/ && join(',',@calls) eq 'config,repository-init,repository-status' && !exists $response->{data}{secret};
+die 'valid key confirmation failed' unless exercise('repository-confirm-key','POST',1,1,'1') =~ /RESPONSE/ && join(',',@calls) eq 'config,repository-confirm-key,repository-status';
+print "Actual CGI repository guard cases passed\n";
+`;
+if(process.platform==='win32')execFileSync('C:/Program Files/Git/bin/bash.exe',['-s'],{cwd:repo,input:`perl -e ${quote(repositoryGuardProgram)}\n`,encoding:'utf8'});
+else execFileSync('perl',['-e',repositoryGuardProgram],{cwd:repo,encoding:'utf8'});
+const portableSettingsProgram='use strict; use warnings; use JSON::PP;\n'+publicRepositoryStatus+'\n'+portableSettingsValidator+'\n'+String.raw`
+my ($repo_status,$config_status,$repo_data,$saved_root,@calls)=(0,0,{},'/fixture/saved');
+sub backend_cmd { join(' ',@_) }
+sub run_shell { my ($cmd)=@_;push @calls,$cmd;return ($config_status,encode_json({backup_root=>$saved_root})) if $cmd eq 'config';return ($repo_status,encode_json($repo_data)); }
+sub check { @calls=();portable_settings_error(@_) }
+die 'normal profile queried repository' if check('native-strict','snapshot','false','/new') || @calls;
+die 'portable full requires repository' if check('portable-archive','full','false','/new') || @calls;
+die 'auto export accepted' unless check('portable-archive','snapshot','true','/fixture/saved') =~ /Export/ && !@calls;
+$repo_data={available=>JSON::PP::true,initialized=>JSON::PP::true,key_confirmed=>JSON::PP::true};
+die 'ready repository rejected' if check('portable-archive','snapshot','false','/fixture/saved');
+die 'wrong target accepted' unless check('portable-archive','snapshot','false','/different') && join(',',@calls) eq 'config';
+for my $field ('available','initialized','key_confirmed') {
+ for my $bad (JSON::PP::false,'true',1,undef) { $repo_data->{$field}=$bad;die 'unsafe repository status accepted' unless check('portable-archive','snapshot','false','/fixture/saved'); }
+ $repo_data->{$field}=JSON::PP::true;
+}
+$repo_status=1;die 'failed status accepted' unless check('portable-archive','snapshot','false','/fixture/saved');
+$repo_status=0;$config_status=1;die 'failed saved config accepted' unless check('portable-archive','snapshot','false','/fixture/saved');
+print "Actual CGI portable settings gate passed\n";
+`;
+if(process.platform==='win32')execFileSync('C:/Program Files/Git/bin/bash.exe',['-s'],{cwd:repo,input:`perl -e ${quote(portableSettingsProgram)}\n`,encoding:'utf8'});
+else execFileSync('perl',['-e',portableSettingsProgram],{cwd:repo,encoding:'utf8'});
+function renderFixture(metadataMode) {
+  if (process.platform === 'win32') return execFileSync('C:/Program Files/Git/bin/bash.exe', ['-s'], {cwd:repo, input:`HOSTBACKUP_FIXTURE_METADATA=${quote(metadataMode)} PERL5LIB=${quote(perlLib)} LBPDATADIR=${quote(posix(temp))} REQUEST_METHOD=GET REMOTE_USER=fixture HTTP_USER_AGENT=fixture perl -MHostBackupFixture webfrontend/htmlauth/index.cgi\n`, encoding:'utf8'});
+  return execFileSync('perl',['-MHostBackupFixture','webfrontend/htmlauth/index.cgi'], {cwd:repo,env:{...process.env,HOSTBACKUP_FIXTURE_METADATA:metadataMode,PERL5LIB:perlLib,LBPDATADIR:temp,REQUEST_METHOD:'GET',REMOTE_USER:'fixture',HTTP_USER_AGENT:'fixture'},encoding:'utf8'});
+}
+let html=renderFixture('native-strict');
+for(const mode of ['network-compatible','fake-super']) {
+  const legacyHtml=renderFixture(mode);
+  assert.match(legacyHtml,/<details class="metadata-advanced" id="metadata-advanced" open>/,'Existing advanced selection remains visible without JavaScript: '+mode);
+  assert.ok(legacyHtml.includes('name="metadata_mode" value="'+mode+'" checked'),'Existing enum remains checked: '+mode);
+}
+assert.match(html,/<details class="metadata-advanced" id="metadata-advanced">/,'Normal profile starts with advanced choices collapsed');
 // Exercise the real lazy backup-row CGI renderer, not hand-maintained action
 // markup. Only its list response and GET action are overridden in this process.
 const backupFixture=[{backup_id:'fixture-ok',status:'complete',validation:{status:'ok'},host:{hostname:'fixture'},size_bytes:3221225472,files_count:100,finished_at:'2026-09-13T12:00:00Z',storage_format:'directory',export_status:'missing'}];
 backupFixture.push({...backupFixture[0],backup_id:'fixture-second',host:{hostname:'second-fixture'}});
+backupFixture.push({...backupFixture[0],backup_id:'fixture-repository',backup:{storage_format:'portable-repository'},export_status:'available',export_file:'/fixture/not-a-standalone-export.tar'});
 const backupRow='#backup-list-body tr:has([name="backup_id"][value="fixture-ok"])';
 const backupRowsProgram=`BEGIN { require HostBackupFixture; require CGI; my $original=\\&CORE::GLOBAL::readpipe; no warnings 'redefine'; *CORE::GLOBAL::readpipe=sub { my ($command)=@_; if ($command =~ /'list'\\s+2>&1$/) { $?=0; return ${quote(JSON.stringify(backupFixture))}; } return $original->(@_); }; *CGI::param=sub { return ($_[1] || '') eq 'action' ? 'backup-list' : ''; }; } do './webfrontend/htmlauth/index.cgi'; die $@ if $@;`;
 let backupRows;
@@ -60,6 +124,8 @@ let failSave=true, taskFinished=false, tokenNumber=0, postCount=0, htmlCount=0, 
 let overviewIssues=false, reportRequests=0, taskPhase='copying';
 let lastSavedSources, failSources=false, failBackupMetadata=false;
 let targetNoticeMode='http-error',targetNoticeRequests=0;
+const repositoryState={initialized:false,key_confirmed:false,key_exported:false,available:true,engine_version:'fixture'};
+const repositoryPosts=[],recoveryFixture='{"test_only":true,"secret":"FIXTURE-NOT-A-REAL-RECOVERY-KEY"}\n';
 const probe={status:'error',mode:'network-compatible',message:'Der Test kann Eigentümer nicht erhalten.',checks:[{name:'Eigentümer und Rechte',status:'error',details:'CIFS erzwingt feste Rechte.',expected:'0:0 640',actual:'1000:1000 666',exit_code:23,stderr:'rsync: <img src=x onerror="window.unsafeProbe=true"> Operation not permitted'},{name:'xattrs',status:'skipped',details:'Bewusst ausgelassen.'}],advice:['Mount-Einstellungen prüfen oder Portable Archive mit Vollbackup und Offline-Restore verwenden.']};
 const sourceVolumes=[{path:'/',kind:'system',fstype:'ext4',included:true,selectable:false,reason:'Systemdaten'},{path:'/media/usb',kind:'automount',fstype:'autofs',included:true,selectable:false,reason:'Automount-Bereich; einzelne Laufwerke auswählen'},{path:'/media/usb/data',kind:'local',fstype:'ext4',included:true,selectable:true},{path:'/media/usb/network',kind:'network',fstype:'cifs',included:true,selectable:true},{path:'/media/smb/nas',kind:'network',fstype:'cifs',included:true,selectable:true},{path:'/fixture/backup',kind:'local',fstype:'ext4',included:false,selectable:false,forced_excluded:true,reason:'Backup-Ziel'}];
 sourceVolumes.push(...Array.from({length:72},(_,index)=>({path:'/var/lib/docker/overlay2/'+('mount-'+index+'-').repeat(3)+'/merged',kind:'local',fstype:'overlay',included:true,selectable:true})));
@@ -86,6 +152,13 @@ const server=http.createServer(async(req,res)=>{
       let body='';for await(const chunk of req)body+=chunk;
       postCount++;assert.equal(req.headers['x-hostbackup-request'],'1');assert.equal(req.headers['x-csrf-token'],'fresh-'+tokenNumber);
       const params=new URLSearchParams(body);assert.equal(params.get('csrf_token'),'fresh-'+tokenNumber);
+      if(action&&action.startsWith('repository-')) {
+        repositoryPosts.push(action);
+        if(action==='repository-init') { assert.equal(repositoryState.initialized,false);repositoryState.initialized=true;return json(res,{ok:true,data:repositoryState,message:'Repository eingerichtet. Wiederherstellungsdatei herunterladen.'}); }
+        if(action==='repository-key-export') { assert.equal(repositoryState.initialized,true);repositoryState.key_exported=true;res.writeHead(200,{'Content-Type':'application/json','Content-Disposition':'attachment; filename="loxberryhostbackup-recovery-key.json"','Cache-Control':'no-store'});res.end(recoveryFixture);return; }
+        if(action==='repository-confirm-key') { assert.equal(repositoryState.key_exported,true);assert.equal(params.get('recovery_key_saved'),'1');repositoryState.key_confirmed=true;return json(res,{ok:true,data:repositoryState,message:'Sichere Aufbewahrung bestätigt.'}); }
+        throw new Error('Unexpected repository action');
+      }
       if(action==='save-config') { lastSavedPath=params.get('backup_root');lastSavedSources=JSON.parse(params.get('source_selection_json')); await new Promise(resolve=>setTimeout(resolve,saveDelay)); return json(res,failSave?{ok:false,error:'Simulierter Speicherfehler'}:{ok:true,message:'Gespeichert'},failSave?400:200); }
       if(action==='backup'&&failBackupMetadata)return json(res,{ok:false,error:'Backup nicht gestartet: Metadatenprüfung fehlgeschlagen.',preflight:{status:'error',checks:[{name:'Metadaten-Modus',ok:false,value:'network-compatible'}],metadata_probe:probe},metadata_probe:probe},400);
       if(action==='record-restore-test') {
@@ -97,6 +170,7 @@ const server=http.createServer(async(req,res)=>{
       return json(res,{ok:true,redirect:'?active_task='+task});
     }
     if(action==='csrf-token'){await new Promise(resolve=>setTimeout(resolve,tokenDelay));return json(res,{csrf_token:'fresh-'+(++tokenNumber),expires_at:Date.now()/1000+3600});}
+    if(action==='repository-status')return json(res,repositoryState);
     if(action==='source-info')return json(res,failSources?{ok:false,error:'Mountliste momentan nicht erreichbar'}:{selection:savedSources,volumes:sourceVolumes,notices:['Netzfreigaben bewusst auswählen.']},failSources?500:200);
     if(action==='task-overview')return json(res,{tasks:[{task,state:taskFinished?'finished':'running'}],active_task:taskFinished?null:task,last_success:{backup_id:overviewBackupId,finished_at:overviewFinishedAt},next_run:{local:'14.09.2026 02:00'},last_failure:overviewIssues?{task:'backup-old-failure.log',state:'failed'}:null,pending_service_recovery:overviewIssues?1:0,target:{configured:true,readable:true,path:overviewTarget,available_mb:20000}});
     if(['backup-preview','storage-info','runtime-cleanup-preview','diagnostics','inspect-backup','verification-report','recovery-sheet'].includes(action))reportRequests++;
@@ -199,6 +273,62 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     await page.goto(base+'legacy-ui');
     assert.equal(assetRequests.filter(value=>value==='/assets/style.css').length,1,'The obsolete unversioned stylesheet really is cached');
     await page.goto(base);await visible(page,'#download-task-log');
+    assert.equal(await page.locator('[name="metadata_mode"]').count(),4,'Renaming adds no fifth profile');
+    assert.equal(await page.locator('#metadata-advanced').evaluate(node=>node.open),false);
+    assert.equal(await page.locator('[name="metadata_mode"]:visible').count(),2,'Only two normal choices');
+    assert.equal(await page.locator('[name="metadata_mode"][value="native-strict"]').isChecked(),true);
+    await page.locator('#metadata-advanced > summary').click();
+    assert.equal(await page.locator('[name="metadata_mode"]:visible').count(),4);
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true','Opening advanced settings does not change configuration');
+    receipts.push('Two normal storage methods; advanced legacy profiles preserved and server-rendered selected profiles opened without JavaScript');
+    const repositoryRow=page.locator('#backup-list-body tr:has([name="backup_id"][value="fixture-repository"])');
+    await repositoryRow.waitFor();
+    for(const action of ['start-export','download-export','delete-export']) assert.equal(await repositoryRow.locator('[name="action"][value="'+action+'"]').count(),0,'Repository row cannot invoke generic '+action);
+    assert.equal(await repositoryRow.locator('[name="browse_id"],[name="restore_id"]').count(),0,'Repository row does not offer generic browse or online restore');
+    assert.equal(await repositoryRow.locator('[name="action"][value="verify-backup"]').count(),1);
+    assert.equal(await repositoryRow.locator('[name="action"][value="protect-backup"]').count(),1);
+    assert.match(await repositoryRow.textContent(),/Restore nur offline.*leeren Linux-Zwischenspeicher/);
+    assert.equal(await repositoryRow.locator('a[href$="docs/PORTABLE-REPOSITORY.md"]').count(),1);
+    const methodPanel=page.locator('fieldset.schedule-card').filter({has:page.locator('[name="metadata_mode"][value="native-strict"]')});
+    for(const [view,width,height] of [['desktop',1440,1100],['mobile',390,844]]) {
+      await page.setViewportSize({width,height});
+      const layout=await methodPanel.evaluate(node=>({right:node.getBoundingClientRect().right,overflow:node.scrollWidth-node.clientWidth,cardWidths:Array.from(node.querySelectorAll('.metadata-modes > label')).map(item=>item.getBoundingClientRect().width),headings:Array.from(node.querySelectorAll('.metadata-profile-title strong,.metadata-advanced > summary')).map(item=>({size:parseFloat(getComputedStyle(item).fontSize),spacing:getComputedStyle(item).letterSpacing}))}));
+      assert.ok(layout.right<=width+1&&layout.overflow<=1,view+' storage choices stay inside panel '+JSON.stringify(layout));
+      assert.ok(layout.headings.every(item=>item.size<=16&&['normal','0px'].includes(item.spacing)),view+' storage choices retain normal typography');
+      assert.ok(layout.cardWidths.every(width=>width>=220),view+' profile cards must not inherit narrow calendar columns '+JSON.stringify(layout));
+      await methodPanel.screenshot({path:path.join(temp,'storage-methods-'+view+'.png')});
+    }
+    await page.setViewportSize({width:1440,height:1100});
+    await page.locator('#portable-repository-panel > summary').click();
+    await page.waitForFunction(()=>document.querySelector('#repository-status').textContent.includes('noch kein Repository'));
+    assert.equal(repositoryPosts.length,0,'Reading status never initializes storage');
+    assert.equal(await page.locator('#repository-key-export-form button').isEnabled(),false);
+    await page.locator('#backup-root-input').fill('/fixture/not-yet-saved');
+    await page.locator('#repository-init-form button').click();assert.equal(repositoryPosts.length,0,'Repository setup must not use a stale saved target while form is dirty');
+    await page.locator('#backup-root-input').fill('/fixture/backup');
+    const repositoryConfigBefore=await page.evaluate(()=>Array.from(document.querySelectorAll('#settings-save-form [name]:not([name="csrf_token"])')).map(node=>[node.name,node.value,node.checked||false]));
+    await page.locator('#repository-init-form button').click();
+    await page.waitForFunction(()=>document.querySelector('#repository-key-export-form button').disabled===false);
+    assert.deepEqual(repositoryPosts,['repository-init']);
+    assert.equal(await page.locator('#repository-confirm-key-form button').isEnabled(),false,'Confirmation requires a key export first');
+    const keyDownloadEvent=page.waitForEvent('download');await page.locator('#repository-key-export-form button').click();const keyDownload=await keyDownloadEvent;
+    await keyDownload.saveAs(path.join(temp,'fixture-recovery-key.json'));
+    assert.equal(fs.readFileSync(path.join(temp,'fixture-recovery-key.json'),'utf8'),recoveryFixture);
+    assert.equal(keyDownload.suggestedFilename(),'loxberryhostbackup-recovery-key.json');
+    await page.waitForFunction(()=>document.querySelector('#repository-confirm-key-form button').disabled===false);
+    assert.equal(await page.locator('[name="recovery_key_saved"]').isChecked(),false,'Download does not silently acknowledge safe off-host storage');
+    await page.locator('#repository-confirm-key-form button').click();assert.deepEqual(repositoryPosts,['repository-init','repository-key-export'],'Unchecked acknowledgement does not POST');
+    await page.locator('[name="recovery_key_saved"]').check();await page.locator('#repository-confirm-key-form button').click();
+    await page.waitForFunction(()=>document.querySelector('#repository-status').textContent.includes('Aufbewahrung der Wiederherstellungsdatei bestätigt'));
+    assert.deepEqual(repositoryPosts,['repository-init','repository-key-export','repository-confirm-key']);
+    assert.equal(await page.locator('#repository-init-form button').isEnabled(),false,'Existing repository is not reinitialized');
+    assert.equal(await page.locator('#repository-key-export-form button').isEnabled(),true,'A recovery key can be downloaded again');
+    assert.equal(await page.locator('#repository-confirm-key-form button').isEnabled(),false);
+    assert.equal(await page.locator('body').textContent().then(text=>text.includes('FIXTURE-NOT-A-REAL-RECOVERY-KEY')),false,'Secret file contents never appear in DOM or status');
+    assert.deepEqual(await page.evaluate(()=>Array.from(document.querySelectorAll('#settings-save-form [name]:not([name="csrf_token"])')).map(node=>[node.name,node.value,node.checked||false])),repositoryConfigBefore,'Setup and download do not change profile, backup mode, target or configuration');
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true');
+    await page.locator('#portable-repository-panel > summary').click();
+    receipts.push('Repository setup requires saved settings and explicit POST; secret download remains out of DOM; off-host acknowledgement stays separate and no backup/config change occurs');
     await page.waitForFunction(()=>document.querySelector('#target-notice .inline-notice.warning'));
     const targetNotice=page.locator('#target-notice'),targetDraft='/fixture/unsaved-target',targetSourceBefore=await page.locator('#source-selection-json').inputValue(),targetPostsBefore=postCount;
     assert.equal(await targetNotice.getAttribute('role'),'status');assert.equal(await targetNotice.getAttribute('aria-live'),'polite');
@@ -351,7 +481,7 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     receipts.push('Compact overview has four primary values, keyboard-accessible details and complete IDs/paths; polling preserves disclosure state');
     receipts.push('Last failure and pending service recovery remain visible with details closed; expanding never runs checks');
     assert.equal(await page.locator('#task-history').inputValue(),task);receipts.push('Running task discovered without URL');
-    assert.equal(await page.locator('#backup-list-body .backup-extra-actions').count(),2,'Real CGI fixture includes two completed backup rows');
+    assert.equal(await page.locator('#backup-list-body .backup-extra-actions').count(),3,'Real CGI fixture includes two directory backups and one repository backup');
     const extraActions=page.locator(backupRow+' .backup-extra-actions');await extraActions.evaluate(node=>node.open=true);
     const actionTopics=[['inspect-backup',[/Manifest/,/keine Prüfsummen/]],['verify-backup',[/SHA-256/,/Vergleichsbasis/,/Restore-Test/]],['verification-report',[/keine neue Prüfung/,/JSON/]],['recovery-sheet',[/keinen Restore/,/Bootloader/]],['protect-backup',[/ausserhalb/,/Datenträger/]]];
     for(const [action,topics] of actionTopics){
@@ -423,10 +553,24 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     await page.waitForFunction(()=>document.querySelector('#action-feedback').textContent.includes('Währenddessen geänderte'));
     assert.equal(lastSavedPath,'/fixture/C');assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false');receipts.push('Delayed CSRF / in-flight edits use exact submitted baseline, never false clean');
     tokenDelay=0;saveDelay=0;await page.locator('#settings-change-popup button[type="submit"]').click();await page.waitForFunction(()=>document.querySelector('#action-feedback').textContent.includes('Einstellungen gespeichert'));
-    await page.locator('[name="metadata_mode"][value="portable-archive"]').check();const incompatiblePosts=postCount;await page.locator('#settings-change-popup button[type="submit"]').click();assert.equal(postCount,incompatiblePosts);assert.match(await page.locator('#action-feedback').textContent(),/Portable Archive/);
+    repositoryState.key_confirmed=false;
+    await page.locator('[name="metadata_mode"][value="portable-archive"]').check();
+    await page.locator('#repository-status-refresh').click();await page.waitForFunction(()=>document.querySelector('#repository-status').textContent.includes('Jetzt ausserhalb'));
+    const portablePosts=postCount;await page.locator('#settings-change-popup button[type="submit"]').click();assert.equal(postCount,portablePosts);assert.match(await page.locator('#action-feedback').textContent(),/bestätigte Aufbewahrung/);
+    assert.equal(await page.locator('[name="backup_mode"][value="snapshot"]').isChecked(),true,'Blocked portable choice is not silently switched to full');
+    repositoryState.key_confirmed=true;await page.locator('#repository-status-refresh').click();await page.waitForFunction(()=>document.querySelector('#repository-status').textContent.includes('Aufbewahrung der Wiederherstellungsdatei bestätigt'));
+    await page.locator('[name="create_export_after_backup"]').check();await page.locator('#settings-change-popup button[type="submit"]').click();assert.equal(postCount,portablePosts);assert.match(await page.locator('#action-feedback').textContent(),/tar.gz-Export ausdrücklich deaktivieren/);
+    assert.equal(await page.locator('[name="create_export_after_backup"]').isChecked(),true,'Incompatible export stays visible until user explicitly changes it');
+    await page.locator('[name="create_export_after_backup"]').uncheck();
+    await page.locator('#backup-root-input').fill('/fixture/unregistered-repository');await page.locator('#settings-change-popup button[type="submit"]').click();assert.equal(postCount,portablePosts);assert.match(await page.locator('#action-feedback').textContent(),/gespeicherten Backup-Ziel/);
+    await page.locator('#backup-root-input').fill('/fixture/B');
+    await page.locator('#settings-change-popup button[type="submit"]').click();await page.waitForFunction(()=>document.querySelector('#action-feedback').textContent.includes('Einstellungen gespeichert'));assert.equal(postCount,portablePosts+1);
+    assert.equal(await page.locator('[name="metadata_mode"][value="portable-archive"]').isChecked(),true);assert.equal(await page.locator('[name="backup_mode"][value="snapshot"]').isChecked(),true);
+    receipts.push('Portable snapshot requires saved-target repository and confirmed key; export and target mismatches block without auto-switch; ready configuration saves');
     await page.locator('[name="metadata_mode"][value="network-compatible"]').check();
+    const incompatiblePosts=postCount;
     await page.locator('[name="schedule_enabled"]').check();await page.locator('[name="schedule_mode"][value="weekly"]').check();await page.locator('[data-schedule-panel="weekly"]').evaluate(node=>node.open=true);await page.locator('[name="schedule_weekdays"][value="1"]').uncheck();await page.locator('#settings-change-popup button[type="submit"]').click();assert.equal(postCount,incompatiblePosts);assert.match(await page.locator('#action-feedback').textContent(),/Wochentag/);
-    await page.locator('[name="schedule_enabled"]').uncheck();await page.locator('#settings-change-popup button[type="submit"]').click();await page.waitForFunction(()=>document.querySelector('#action-feedback').textContent.includes('Einstellungen gespeichert'));receipts.push('Incompatible portable snapshot and empty weekly schedule rejected before POST');
+    await page.locator('[name="schedule_enabled"]').uncheck();await page.locator('#settings-change-popup button[type="submit"]').click();await page.waitForFunction(()=>document.querySelector('#action-feedback').textContent.includes('Einstellungen gespeichert'));receipts.push('Empty weekly schedule rejected before POST');
     failBackupMetadata=true;await page.locator('.topbar-actions button[type="submit"]').click();await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('CIFS erzwingt feste Rechte'));
     assert.match(await page.locator('#operation-result').textContent(),/0:0 640/);assert.match(await page.locator('#operation-result').textContent(),/1000:1000 666/);assert.match(await page.locator('#operation-result').textContent(),/Offline/);
     assert.equal(await page.locator('#operation-result img').count(),0);assert.equal(await page.evaluate(()=>window.unsafeProbe),undefined);assert.equal(await page.locator('.preflight-confirm').count(),0);

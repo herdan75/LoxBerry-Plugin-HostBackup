@@ -87,13 +87,14 @@ Die von LoxBerry verwalteten
 Elternverzeichnisse werden nicht umgewidmet. Diese Plattformgrenze gilt nur für
 Cron-Konfigurationen, nicht für ausführbare Root-Helfer oder deren Elternpfade.
 
-Fake Super verwendet für die getrennte Behandlung von Sender und Empfänger
+Das Verfahren „Metadaten in Dateiattributen speichern“ (bisher Fake Super)
+verwendet für die getrennte Behandlung von Sender und Empfänger
 einen festen lokalen rsync-Transport. Der Shellcode ist konstant, führt kein
 `eval` aus und stellt keine SSH-/Netzwerkverbindung her; Zielpfade werden nicht
 in ausführbaren Shelltext eingesetzt. Geschützte rsync-Argumentübertragung
 bewahrt Leerzeichen und Sonderzeichen in Pfaden. Diese Umgehung betrifft den
 [bekannten lokalen rsync-Fehler #505](https://github.com/RsyncProject/rsync/issues/505);
-Native Strict und Network Compatible behalten ihren lokalen Kopierweg.
+Linux-Dateisicherung und Dateisicherung mit reduzierten Metadaten behalten ihren lokalen Kopierweg.
 
 Locks, Task-State und bereits vom Backend angenommene Importdateien liegen unter
 `/var/lib/loxberryhostbackup` in Root-eigenen Verzeichnissen. Ein Web-Upload wird
@@ -181,7 +182,7 @@ Backup zu sperren.
 Restore setzt Root-Freigabe, registriertes Ziel, Marker, exakte Manifest-ID und
 eine gültige Kombination aus Abschluss- und Validierungsstatus voraus.
 Degradierte Backups benötigen eine zusätzliche ausdrückliche Bestätigung.
-Portable Archive benötigt `HOSTBACKUP_OFFLINE_RESTORE=1` und ist nicht aus der
+Portable Sicherung benötigt `HOSTBACKUP_OFFLINE_RESTORE=1` und ist nicht aus der
 Weboberfläche startbar. Die Weboberfläche verlangt zusätzlich die vollständige
 Backup-ID als Challenge.
 
@@ -205,6 +206,46 @@ aber nicht automatisch im Diagnosepaket.
 Ein Dateibackup ersetzt kein Blockdevice-Image. Bootloader, Partitionstabellen,
 Kernel-/Firmware-Kompatibilität und applikationskonsistente Datenbank-Backups
 bleiben ausserhalb dieser Sicherheitsgarantie.
+
+## Portable Repository-Schlüssel
+
+Die Repository-Einrichtung erfolgt ausdrücklich und getrennt vom normalen
+Konfigurationsspeichern. `repository-status` liefert nur freigegebene öffentliche
+Statusfelder. `repository-init`, `repository-key-export` und
+`repository-confirm-key` verlangen POST, gültiges CSRF und die gespeicherte
+Root-Freigabe. Der sudo-Dispatcher erlaubt diesen Aktionen keine zusätzlichen
+Argumente und keinen vom Webbenutzer vorgegebenen Engine-Befehl.
+
+Nur der explizite Schlüsseldownload darf geheime Recovery-Daten ausgeben:
+als JSON-Attachment mit `Cache-Control: no-store`, nicht als UI-Bericht. Fehler
+spiegeln keine teilweise ausgegebene Schlüsseldatei zurück. Eine separate
+Bestätigung der sicheren Aufbewahrung ausserhalb des Hosts ist erforderlich;
+der Browser liefert keinen beliebigen Bestätigungshash. Backend-seitig muss die
+Bestätigung an die zuletzt exportierte Datei und die Repository-Identität gebunden
+sein. Die gespeicherte Plugin-Konfiguration und Diagnosepakete enthalten keinen
+Repository-Schlüssel.
+
+Portable Sicherungsstände werden nur freigegeben, wenn verfügbare Engine,
+Repository-Initialisierung und Schlüsselbestätigung am gespeicherten Ziel
+vorliegen. Sowohl CGI als auch Backend prüfen die Voraussetzungen; der Browser
+darf nicht allein über die Freigabe entscheiden. Ein automatischer tar.gz-Export
+wird als inkompatible gespeicherte Einstellung abgelehnt, nicht still deaktiviert.
+Die gemeinsame Datenbasis wird nicht durch Export oder Verschieben eines einzelnen
+Standordners transportierbar. Direkter Online-Restore und generischer Einzeldatei-
+Restore sind dafür nicht verfügbar. Offline-Recovery benötigt den authentifizierten
+Stand und geeigneten leeren Linux-Zwischenspeicher mit vollständigem Platzbedarf
+plus Reserve. Fremde Metadaten oder ein richtiger Schlüssel allein belegen keine
+passende Architektur, Bootfähigkeit oder Anwendungskonsistenz.
+
+Quellenauswahl, Ausschlüsse, Validierung und Manifest bleiben bis zur
+authentifizierten Veröffentlichung in privaten Root-Kontrolldateien. Der
+Commit übernimmt keine vom beschreibbaren NAS zurückgelesenen Kontrollen.
+Erst nach erfolgreichem Commit werden dessen genaue Kontrollbytes als Cache
+auf das NAS übertragen; das abgeschlossene Manifest folgt zuletzt. Spätere
+Abweichungen zwischen Cache und authentifiziertem Beleg blockieren Verwaltung
+und Wiederherstellung. Bei Abbruch der Cache-Veröffentlichung kann ein gültiger
+Commit vorhanden sein: nicht manuell löschen, sondern die authentifizierte
+Repository-Liste und den Offline-Recovery-Weg verwenden.
 
 ## Sicherheitsmeldungen
 

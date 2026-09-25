@@ -31,12 +31,15 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zip libcgi-pm-perl php-cli python3 rsync acl attr libcap2-bin sudo shellcheck samba cifs-utils
 
       - name: Run automated tests
-        env:
-          HOSTBACKUP_REQUIRE_LINUX_INTEGRATION: '1'
-        run: bash tests/run.sh
+        # Private repository fixtures require root-owned path ancestry. The
+        # installer/security cases still explicitly run attacks/copies as nobody.
+        run: sudo -n env HOSTBACKUP_REQUIRE_LINUX_INTEGRATION=1 bash tests/run.sh
 
-      - name: Test real CIFS metadata compatibility and portable archive
-        run: sudo env HOSTBACKUP_RUN_CIFS_INTEGRATION=1 bash tests/run-cifs.sh
+      - name: Fetch checksum-pinned portable runtime
+        run: python3 bin/hostbackup-engine.py fetch .tmp/restic-engines
+
+      - name: Test real Linux and CIFS portable snapshots and recovery
+        run: sudo env HOSTBACKUP_RUN_REPOSITORY_INTEGRATION=1 bash tests/run-repository.sh "$PWD/.tmp/restic-engines"
 
       - name: Set up Node for mandatory browser regressions
         uses: actions/setup-node@v4
@@ -57,12 +60,18 @@ jobs:
 
       - name: Validate privileged entry points
         run: |
-          shellcheck --severity=warning bin/*.sh preroot.sh postinstall.sh postroot.sh uninstall/uninstall.sh package.sh tests/run.sh tests/run-cifs.sh
+          shellcheck --severity=warning bin/*.sh preroot.sh postinstall.sh postroot.sh uninstall/uninstall.sh package.sh tests/run.sh tests/run-cifs.sh tests/run-repository.sh
           sudo visudo -cf sudoers/sudoers
           php -l bin/notify-hostbackup.php
 
       - name: Build plugin ZIP
         run: bash ./package.sh
+
+      - name: Audit install ZIP and pinned offline engines
+        run: |
+          packages=(LoxBerryHostBackup_*.zip)
+          test "${#packages[@]}" -eq 1
+          HOSTBACKUP_PACKAGE_AUDIT="${packages[0]}" python3 tests/test_engine.py
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4

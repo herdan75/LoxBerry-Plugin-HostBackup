@@ -56,12 +56,13 @@ install_schedule() { printf installed > schedule-called; }
         self.assertTrue(registered)
         self.assertTrue(scheduled)
 
-    def test_incompatible_profile_rejected_before_registration_or_write(self):
+    def test_portable_snapshot_setting_is_preserved_for_root_runtime_preflight(self):
         result, saved, registered, scheduled, original = self.run_save(metadata="portable-archive", mode="snapshot")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(saved, original)
-        self.assertFalse(registered)
-        self.assertFalse(scheduled)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(saved['metadata_mode'], 'portable-archive')
+        self.assertEqual(saved['backup_mode'], 'snapshot')
+        self.assertTrue(registered)
+        self.assertTrue(scheduled)
 
     def test_empty_weekday_rejected_before_registration_or_write(self):
         result, saved, registered, scheduled, original = self.run_save(schedule="true", weekdays="")

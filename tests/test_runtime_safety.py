@@ -54,6 +54,7 @@ LBP_BINDIR="$TEST_ROOT/bin"
 mkdir -p "$TASK_DIR" "$TASK_LOG_DIR" "$RESTART_JOURNAL_DIR" "$LOCK_DIR" "$TEST_ROOT/target"
 require_root_for_write() { :; }
 require_root_permission_ack() { :; }
+portable_snapshot() { return 1; }
 require_backup_id() { :; }
 process_start_ticks() { if [ "${1:-0}" -gt 1 ]; then printf '123\n'; fi; }
 task_process_is_current() { return 1; }

@@ -133,7 +133,7 @@ def preview(config, root, excludes, reference, preflight):
         volumes = selection["volumes"]
     return {"saved_config": True, "backup_root": str(root), "backup_mode": config.get("backup_mode", "full"),
             "metadata_mode": config.get("metadata_mode", "native-strict"), "reference_id": reference or None,
-            "full_baseline_required": config.get("backup_mode") != "snapshot" or not reference,
+            "full_baseline_required": preflight.get("full_baseline_required", config.get("backup_mode") != "snapshot" or not reference),
             "excludes": excludes, "source_volumes": volumes, "preflight": preflight,
             "source_selection": selection,
             "available_mb": preflight.get("available_mb"), "baseline_estimate_mb": preflight.get("baseline_estimate_mb") or None,
@@ -143,8 +143,8 @@ def preview(config, root, excludes, reference, preflight):
 def check_settings(mode, metadata, enabled, schedule_mode, clock, weekdays, monthdays, months):
     if mode not in ("full", "snapshot") or metadata not in ("native-strict", "network-compatible", "fake-super", "portable-archive"):
         raise ValueError("Ungueltiger Backup-Modus oder Metadaten-Profil.")
-    if mode == "snapshot" and metadata == "portable-archive":
-        raise ValueError("Portable Archive unterstuetzt keine inkrementellen Snapshots. Bitte Vollbackup waehlen.")
+    # Portable snapshots are a supported combination; runtime readiness and
+    # external recovery-key confirmation are enforced by the root preflight.
     if enabled != "true":
         return
     if schedule_mode not in ("daily", "weekly", "monthly") or not re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", clock):

@@ -27,7 +27,9 @@ for shell_script in \
   postroot.sh \
   uninstall/uninstall.sh \
   package.sh \
-  tests/run.sh; do
+  tests/run.sh \
+  tests/run-cifs.sh \
+  tests/run-repository.sh; do
   bash -n "$shell_script"
 done
 

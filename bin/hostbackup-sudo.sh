@@ -30,7 +30,7 @@ done
 
 action="${1:-}"
 case "$action" in
-  config|target-info|source-info|stop-targets|preflight-backup|tasks|list|recover-services|task-overview|backup-preview|storage-info|maintenance-preview|runtime-cleanup-preview)
+  config|target-info|source-info|stop-targets|preflight-backup|tasks|list|recover-services|task-overview|backup-preview|storage-info|maintenance-preview|runtime-cleanup-preview|repository-status|repository-init|repository-key-export|repository-confirm-key)
     [ "$#" -eq 1 ] || fail "unexpected arguments for $action"
     ;;
   start)

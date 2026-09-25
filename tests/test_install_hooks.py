@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import pathlib
+import ast
 import configparser
 import json
 import os
@@ -8,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -47,6 +49,26 @@ def stage_installer_helper(package_root, sandbox, rewrite):
 
 
 class InstallHookTests(unittest.TestCase):
+    def test_uninstall_refuses_repository_state_before_any_cleanup(self) -> None:
+        safety = (ROOT / "bin/hostbackup-install-safety.py").read_text(encoding="utf-8")
+        tree = ast.parse(safety)
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "protect_repository_keys")
+        isolated = ast.Module(body=[function], type_ignores=[])
+        fake_os = mock.Mock()
+        namespace = {"os": fake_os, "optional_dir": lambda path: 91,
+                     "fail": lambda message: (_ for _ in ()).throw(ValueError(message))}
+        exec(compile(isolated, "isolated uninstall key guard", "exec"), namespace)
+        with self.assertRaisesRegex(ValueError, "Schluessel"):
+            namespace["protect_repository_keys"]("/private/root-state")
+        fake_os.stat.assert_called_once_with("repositories", dir_fd=91, follow_symlinks=False)
+        fake_os.close.assert_called_once_with(91)
+        self.assertLess(safety.index("protect_repository_keys(state)", safety.index("def main")),
+                        safety.index("journals = optional_dir"))
+        fake_os.reset_mock()
+        fake_os.stat.side_effect = FileNotFoundError
+        namespace["protect_repository_keys"]("/private/root-state")
+        fake_os.close.assert_called_once_with(91)
+
     def test_fatal_hook_exit_mapping_preserves_other_statuses(self) -> None:
         bash = shutil.which("bash")
         if os.name == "nt":
@@ -689,6 +711,19 @@ def platform_upgrade_integration():
         assert (protected_backup / "sentinel").read_bytes() == b"backup"
         config.write_bytes(saved_bytes)
         shutil.rmtree(protected_backup)
+
+        # A confirmed export does not prove an external usable key copy. No
+        # cleanup may run while repository recovery material still lives here.
+        repository_state = state / "repositories"
+        repository_state.mkdir(mode=0o700)
+        (repository_state / "password").write_bytes(b"fixture-only-recovery-secret")
+        refused = hook(uninstall, "repository-key-uninstall", success=False)
+        assert refused.returncode == 2 and "Schluessel" in refused.stderr
+        assert (repository_state / "password").read_bytes() == b"fixture-only-recovery-secret"
+        assert launcher.exists() and trusted.exists() and config.read_bytes() == saved_bytes
+        # Only the disposable test fixture is removed to continue old-format
+        # uninstall regression coverage; production has no force bypass.
+        shutil.rmtree(repository_state)
 
         # Full root-uninstall -> platform purge -> fresh installation. The
         # disposable tree is removed with anchored root operations, not made

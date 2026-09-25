@@ -101,6 +101,64 @@ sub json_response {
   exit;
 }
 
+sub repository_public_status {
+  my ($data) = @_;
+  die "Invalid repository status" unless ref($data) eq 'HASH';
+  # Secrets belong only in the explicit attachment, never in normal JSON/UI.
+  my %public;
+  for my $key (qw(initialized key_confirmed key_exported available)) {
+    $public{$key} = JSON::PP::is_bool($data->{$key}) && $data->{$key} ? JSON::PP::true : JSON::PP::false;
+  }
+  for my $key (qw(repository_id engine_version)) {
+    $public{$key} = "$data->{$key}" if defined $data->{$key} && !ref($data->{$key}) && length($data->{$key}) <= 160;
+  }
+  return \%public;
+}
+
+sub portable_settings_error {
+  my ($metadata, $kind, $export, $target) = @_;
+  return '' unless $metadata eq 'portable-archive' && $kind eq 'snapshot';
+  return 'Fuer portable Sicherungsstaende den automatischen tar.gz-Export ausdruecklich deaktivieren. Repository-Staende sind keine einzelnen Exportarchive.' if $export eq 'true';
+  my $not_ready = 'Portable Sicherungsstaende benoetigen ein verfuegbares Repository am gespeicherten Ziel und die bestaetigte Aufbewahrung der Wiederherstellungsdatei. Ziel und Root-Freigabe zuerst mit Vollbackup speichern, Portable Sicherungsstaende einrichten und danach diese Sicherungsart erneut waehlen.';
+  my ($config_status, $config_out) = run_shell(backend_cmd('config'));
+  my $saved = eval { decode_json($config_out) };
+  return $not_ready unless $config_status == 0 && ref($saved) eq 'HASH' && defined($saved->{backup_root}) && !ref($saved->{backup_root}) && $saved->{backup_root} eq $target;
+  my ($status, $out) = run_shell(backend_cmd('repository-status'));
+  my $public = eval { repository_public_status(decode_json($out)) };
+  return $not_ready unless $status == 0 && $public && $public->{available} && $public->{initialized} && $public->{key_confirmed};
+  return '';
+}
+
+sub repository_key_download {
+  # Do not use run_shell: it merges diagnostics into stdout, and failures must
+  # never echo a partial secret-bearing response into an HTML/JSON error panel.
+  open my $stream, '-|', 'sudo', '-n', $backend, 'repository-key-export'
+    or reject_request('500 Internal Server Error', 'Wiederherstellungsdatei konnte nicht erstellt werden.');
+  binmode $stream;
+  my $content = '';
+  my $oversize = 0;
+  my $read_failed = 0;
+  while (1) {
+    my $count = read($stream, my $chunk, 65536);
+    if (!defined $count) { $read_failed = 1; last; }
+    last if !$count;
+    if (length($content) + length($chunk) > 1048576) { $oversize = 1; last; }
+    $content .= $chunk;
+  }
+  my $closed = close $stream;
+  my $decoded = eval { decode_json($content) };
+  reject_request('409 Conflict', 'Wiederherstellungsdatei nicht verfügbar. Repository-Status prüfen; keine Sicherung wurde gestartet.')
+    unless $closed && !$oversize && !$read_failed && ref($decoded) eq 'HASH'
+      && ($decoded->{format} || '') eq 'hostbackup-restic-v1'
+      && ($decoded->{repository_id} || '') =~ /\A[0-9a-f]{64}\z/
+      && ($decoded->{password} || '') =~ /\A[A-Za-z0-9_-]{64}\z/;
+  print header(-type => 'application/json', -attachment => 'loxberryhostbackup-recovery-key.json',
+    -Cache_Control => 'no-store', -Pragma => 'no-cache', -X_Content_Type_Options => 'nosniff');
+  binmode STDOUT;
+  print $content;
+  exit;
+}
+
 sub source_selection_json {
   my ($value) = @_;
   die "Die Datenquellenauswahl ist zu gross.\n" if length($value || '') > 65536;
@@ -373,13 +431,14 @@ sub info_button {
 sub action_info {
   my ($key, $instance) = @_;
   my %help = (
-    'inspect-backup' => ['Backup-Struktur prüfen', 'Prüft den Aufbau des gespeicherten Backups, Manifest, Metadaten-Profil und Datenformat sowie die Plausibilität der enthaltenen Dateien. Auch diese Prüfung kann bei grossen Backups dauern. Sie verändert keine Backup-Dateien, vergleicht aber keine Prüfsummen aller Dateiinhalte und führt keinen Restore aus.'],
-    'verify-backup' => ['Dateiinhalte prüfen', 'Liest die gesicherten Dateien im Hintergrund und berechnet SHA-256-Prüfsummen. Ohne vorhandene Vergleichsbasis wird diese zuerst angelegt: Das ist noch kein Nachweis unveränderter Inhalte. Spätere Prüfungen vergleichen Inhalte und erfasste Metadaten mit dieser Basis. Bei Portable Archive wird der Archivcontainer geprüft. Das kann lange dauern; Status und Protokoll im Live-Status. Ein erfolgreicher Vergleich ersetzt keinen Restore-Test.'],
+    'inspect-backup' => ['Backup-Struktur prüfen', 'Prüft den Aufbau des gespeicherten Backups, Manifest, Sicherungsverfahren und Datenformat sowie die Plausibilität der enthaltenen Dateien. Auch diese Prüfung kann bei grossen Backups dauern. Sie verändert keine Backup-Dateien, vergleicht aber keine Prüfsummen aller Dateiinhalte und führt keinen Restore aus.'],
+    'repository-restore' => ['Portable Sicherungsstände wiederherstellen', 'Dieses Backup verwendet gemeinsam gespeicherte Datenblöcke in einem Repository. Der einzelne Backup-Ordner ist keine eigenständige Sicherung: nicht verschieben oder als gewöhnliches Archiv exportieren. Für den vollständigen Restore zunächst in einer Offline-/Rescue-Umgebung mit dem CLI-Befehl repository-stage bereitstellen. Erforderlich sind der passende Schlüssel und ein leerer geeigneter Linux-Zwischenspeicher mit Platz für den vollständigen Stand sowie Reserve. Danach den geprüften Recovery-Plan mit Volume-Zuordnungen verwenden. Kein direkter Online-Restore und keine automatische Migration zwischen x86 und ARM. Details stehen in der verlinkten Portable-Repository-Anleitung.'],
+    'verify-backup' => ['Dateiinhalte prüfen', 'Liest die gesicherten Dateien im Hintergrund und berechnet SHA-256-Prüfsummen. Ohne vorhandene Vergleichsbasis wird diese zuerst angelegt: Das ist noch kein Nachweis unveränderter Inhalte. Spätere Prüfungen vergleichen Inhalte und erfasste Metadaten mit dieser Basis. Bei einem portablen Vollbackup wird der Archivcontainer geprüft; portable Repository-Stände werden mit der Repository-Engine auf Lesbarkeit und Integrität geprüft. Das kann lange dauern; Status und Protokoll im Live-Status. Ein erfolgreicher Vergleich ersetzt keinen Restore-Test.'],
     'verification-report' => ['Prüfbericht', 'Zeigt das zuletzt gespeicherte Ergebnis der Dateiinhaltsprüfung und vorhandene persönliche Restore-Testeinträge. Startet keine neue Prüfung. Achte auf Prüfdatum und Status: Eine erstmals erstellte Vergleichsbasis ist noch kein erfolgreicher Inhaltsvergleich; ein persönlich dokumentierter Restore-Test wurde nicht vom Plugin überprüft. Der Bericht kann als JSON heruntergeladen werden.'],
     'recovery-sheet' => ['Wiederherstellungsblatt', 'Lädt ein Textblatt mit Angaben zu diesem Backup und Hinweisen für eine spätere Wiederherstellung herunter. Bewahre es getrennt vom LoxBerry zusammen mit dem Backup auf. Es enthält nicht die gesicherten Dateien, startet keinen Restore und richtet weder Partitionen noch Bootloader ein. Ein erfolgreicher Systemstart ist damit nicht bewiesen.'],
     'protect-backup' => ['Löschschutz', 'Schützt dieses Backup vor der manuellen Backup-Löschung und der automatischen Aufbewahrungsbereinigung im Plugin. Schutz aufheben entfernt nur diese Markierung; es löscht das Backup nicht. Die jüngste brauchbare Sicherung bleibt zusätzlich geschützt. Der Schutz verhindert keine Änderungen oder Löschungen ausserhalb des Plugins und schützt nicht vor einem defekten Datenträger.'],
     'record-restore-test' => ['Externen Restoretest dokumentieren', 'Trägt Ergebnis, Zeitpunkt und Notiz eines von dir bereits durchgeführten Restore-Tests ein, etwa auf einem Testdatenträger oder in einer Rescue-Umgebung. Hier wird kein Restore gestartet. Der Eintrag gehört zum aktuellen Manifest dieses Backups und ist nur deine persönliche Dokumentation, kein automatischer Nachweis. Er verändert weder Prüfergebnis noch Restore-Freigaben.'],
-    'backup-preview' => ['Nächstes Backup prüfen', 'Zeigt anhand der gespeicherten Einstellungen Datenquellen, Ausschlüsse, Metadaten-Profil und die mögliche Referenz für einen inkrementellen Snapshot. Führt auch die Ziel-Vorprüfung aus; dabei werden kurzzeitig Testdateien am Ziel angelegt und wieder entfernt. Es wird kein Backup kopiert und kein Dienst gestoppt. Änderungen zuerst speichern. Das Ergebnis ist eine Momentaufnahme, keine Garantie für den späteren Lauf.'],
+    'backup-preview' => ['Nächstes Backup prüfen', 'Zeigt anhand der gespeicherten Einstellungen Datenquellen, Ausschlüsse, Sicherungsverfahren und die mögliche Referenz für einen platzsparenden Sicherungsstand. Führt auch die Ziel-Vorprüfung aus; dabei werden kurzzeitig Testdateien am Ziel angelegt und wieder entfernt. Es wird kein Backup kopiert und kein Dienst gestoppt. Änderungen zuerst speichern. Das Ergebnis ist eine Momentaufnahme, keine Garantie für den späteren Lauf.'],
     'storage-info' => ['Speicherbelegung berechnen', 'Durchsucht erkannte Backups und Exportarchive und unterscheidet logische Dateigrösse von tatsächlich belegten Blöcken. Gemeinsam genutzte Hardlinks werden in der Gesamtsumme nur einmal gezählt. Zusätzlich wird der lokale Plugin-Laufzeitspeicher erfasst; andere Daten auf dem Backup-Datenträger gehören nicht zur Summe. Das kann bei vielen Dateien lange dauern. Es wird nichts gelöscht; Einzelgrössen sind nicht gleich dem beim Löschen frei werdenden Platz.'],
     'runtime-cleanup-preview' => ['Laufzeitdateien prüfen', 'Zeigt alte lokale Task-Logs und Import-Quarantänedateien, die nach den gespeicherten Aufbewahrungsfristen entfernt werden könnten. Es wird noch nichts gelöscht. Erst die separate Bestätigung führt die unveränderte Vorschau aus. Offene Dienst-Wiederanlauf-Journale und aktive Task-Logs bleiben erhalten; Backups auf dem Ziel sind nicht Gegenstand dieser Bereinigung. Bei einem belegten Vorgang später erneut versuchen.'],
     'diagnostics' => ['Diagnosepaket herunterladen', 'Lädt ein ZIP zur Fehlersuche mit Plugin-Version, gekürzten Einstellungen und Dateisysteminformationen herunter, nicht deine Backup-Dateien. Konfigurationspfade und Mountnamen werden ausgeblendet. Falls ein Original-Log beigefügt ist, kann es private Pfade, Rechnernamen oder Adressen enthalten. Den Inhalt vor dem Teilen im Forum prüfen. Der Download ändert keine Einstellungen.'],
@@ -392,11 +451,11 @@ sub action_info {
     'integrity-enabled' => ['Regelmässige Prüfsummenprüfung', 'Standard: aus. Aktiviert regelmässige Hintergrundprüfungen fälliger, abgeschlossener Backups. Die Prüfung liest die Backup-Daten und benötigt Zeit, Laufzeitspeicher und Datenträgerzugriffe; bei aktiven Vorgängen kann sie später stattfinden. Fehlt eine Vergleichsbasis, wird sie zuerst angelegt; bei aktivierter Prüfung kann dies bereits beim Backup-Abschluss geschehen. Erst ein späterer Vergleich erkennt Änderungen, beweist aber keinen erfolgreichen Restore. Einstellung zuerst speichern.'],
     'integrity-interval' => ['Prüfintervall', 'Standard: 7 Tage, erlaubt 1 bis 365. Nur wirksam, wenn regelmässige Prüfsummenprüfungen aktiviert sind. Beschreibt, wann ein Backup nach seiner letzten Prüfung wieder fällig wird, nicht eine garantierte Startzeit. Fällige Backups werden nacheinander geprüft; laufende Vorgänge und Systemstillstand können den Termin verschieben.'],
     'maintenance-preview' => ['Löschvorschau', 'Berechnet anhand der gespeicherten Aufbewahrungsregel, welche Backups bleiben und welche samt zugehörigen Exportarchiven gelöscht würden. Diese Vorschau löscht nichts. Erst die separate Bestätigung führt genau diese Auswahl aus; hat sich der Bestand geändert, ist eine neue Vorschau nötig. Geschützte Backups und die jüngste brauchbare Sicherung bleiben erhalten.'],
-    'restore-files' => ['Datei oder Ordner getrennt wiederherstellen', 'Kopiert einen gewählten Pfad aus einem abgeschlossenen Verzeichnis-Backup in einen neuen, eindeutig benannten Unterordner des angegebenen bestehenden Zielverzeichnisses. Vorhandene Dateien werden nicht überschrieben. Das ist keine Systemwiederherstellung; prüfe die Dateien vor einer Übernahme. Diese Dateiansicht steht nicht für Portable Archive zur Verfügung. Bei grossen Ordnern kann das Kopieren dauern.'],
+    'restore-files' => ['Datei oder Ordner getrennt wiederherstellen', 'Kopiert einen gewählten Pfad aus einem abgeschlossenen Verzeichnis-Backup in einen neuen, eindeutig benannten Unterordner des angegebenen bestehenden Zielverzeichnisses. Vorhandene Dateien werden nicht überschrieben. Das ist keine Systemwiederherstellung; prüfe die Dateien vor einer Übernahme. Diese Dateiansicht steht nicht für Portable Sicherung zur Verfügung. Bei grossen Ordnern kann das Kopieren dauern.'],
     'restore-destination' => ['Restore-Ziel', 'Achtung: / bezeichnet das aktuell laufende System, nicht einen neuen Ordner. Ein Verzeichnis-Restore kann bestehende Dateien im freigegebenen Zielbereich überschreiben und löschen. Für einen Offline-Datenträger dessen bereits vorbereiteten Einhängepfad verwenden. Nur in einer Test- oder Rescue-Umgebung fortfahren; Daten sichern und zuerst die Restore-Vorschau samt ausgeschlossenen Pfaden und Volume-Zuordnungen prüfen.'],
     'restore-volumes' => ['Volume-Zuordnung', 'Ordnet zusätzliche Datenträger aus dem Backup ausdrücklich einem Wiederherstellungsziel zu. source ist der damalige Einhängepfad, destination das vorbereitete Zielverzeichnis. Die JSON-Liste [] enthält keine Zuordnungen; separate Daten-Volumes werden dann nicht wiederhergestellt. Diese Eingabe formatiert, partitioniert oder mountet keine Datenträger. Alle Zuordnungen in der Restore-Vorschau kontrollieren.'],
     'restore-preview' => ['Restore-Vorschau', 'Erstellt den Wiederherstellungsplan für dieses Backup, das eingegebene Ziel und die Volume-Zuordnungen. Zeigt Prüfungen, Einschränkungen und die vorgesehenen Kopieraktionen; bei einem Verzeichnis-Restore auch die vorgesehenen Löschungen im Ziel. Führt den Restore noch nicht aus. Nach jeder Änderung von Ziel oder Zuordnungen erneut erstellen. Ein fehlerfreier Plan ersetzt keinen Restore-Test und beweist keine Bootfähigkeit.'],
-    'restore-start' => ['Restore starten', 'Startet nach erfolgreicher Prüfung und den geforderten Bestätigungen die tatsächliche Wiederherstellung. Dateien am Restore-Ziel können überschrieben und bei einem Verzeichnis-Restore im freigegebenen Bereich gelöscht werden. Backup-ID, Ziel und Volume-Zuordnungen sorgfältig prüfen und nur in einer Test- oder Rescue-Umgebung starten. Bei Portable Archive ist stattdessen der Offline-Helper erforderlich. Dieser Infobutton allein startet keine Aktion.'],
+    'restore-start' => ['Restore starten', 'Startet nach erfolgreicher Prüfung und den geforderten Bestätigungen die tatsächliche Wiederherstellung. Dateien am Restore-Ziel können überschrieben und bei einem Verzeichnis-Restore im freigegebenen Bereich gelöscht werden. Backup-ID, Ziel und Volume-Zuordnungen sorgfältig prüfen und nur in einer Test- oder Rescue-Umgebung starten. Bei Portable Sicherung ist stattdessen der Offline-Helper erforderlich. Dieser Infobutton allein startet keine Aktion.'],
   );
   die "Unbekannte Aktionshilfe: $key" unless exists $help{$key};
   my ($title, $text) = @{$help{$key}};
@@ -433,6 +492,10 @@ if ($notice eq 'saved') {
   $message = 'Backup abgeschlossen. Die Backup-Liste wurde aktualisiert.';
 } elsif ($notice eq 'restore_finished') {
   $message = 'Restore abgeschlossen.';
+} elsif ($notice eq 'repository_initialized') {
+  $message = 'Repository eingerichtet. Jetzt die Wiederherstellungsdatei herunterladen und ausserhalb dieses LoxBerry sicher aufbewahren.';
+} elsif ($notice eq 'repository_key_confirmed') {
+  $message = 'Sichere Aufbewahrung der Wiederherstellungsdatei bestätigt. Vor einem Backup Einstellungen speichern und die Zielprüfung ausführen.';
 }
 
 my $requested_active_task = $q->param('active_task') || '';
@@ -483,6 +546,33 @@ if ($action eq 'download-export' || $action eq 'download-log' || $action eq 'rec
 
 if ($action eq 'csrf-token') {
   json_response({ csrf_token => $csrf_token, expires_at => (int(time() / 3600) + 2) * 3600 });
+}
+
+if ($action =~ /\Arepository-(?:status|init|key-export|confirm-key)\z/) {
+  if ($action eq 'repository-status') {
+    reject_request('405 Method Not Allowed', 'Repository-Status nur lesend abrufen.') unless $q->request_method eq 'GET';
+    my ($status, $out) = run_shell(backend_cmd('repository-status'));
+    my $public = eval { repository_public_status(decode_json($out)) };
+    reject_request('503 Service Unavailable', 'Repository-Status momentan nicht verfügbar. Bestehende Sicherungen und Einstellungen bleiben unverändert.') if $status != 0 || !$public;
+    json_response($public);
+  }
+  reject_request('405 Method Not Allowed', 'Diese Repository-Aktion benötigt eine ausdrückliche POST-Bestätigung.') unless $q->request_method eq 'POST';
+  reject_request('403 Forbidden', 'Sitzungsbestätigung abgelaufen. Bitte erneut versuchen.') unless valid_csrf_request();
+  my ($config_status, $config_out) = run_shell(backend_cmd('config'));
+  my $saved = eval { decode_json($config_out) };
+  reject_request('403 Forbidden', 'Zuerst die Root-Freigabe in den Einstellungen bestätigen und speichern.')
+    unless $config_status == 0 && ref($saved) eq 'HASH' && JSON::PP::is_bool($saved->{root_permission_ack}) && $saved->{root_permission_ack};
+  reject_request('400 Bad Request', 'Bitte bestätigen, dass die Wiederherstellungsdatei ausserhalb dieses LoxBerry sicher aufbewahrt wird.')
+    if $action eq 'repository-confirm-key' && ($q->param('recovery_key_saved') || '') ne '1';
+  repository_key_download() if $action eq 'repository-key-export';
+  my ($status, $out) = run_shell(backend_cmd($action));
+  reject_request('409 Conflict', 'Repository-Aktion fehlgeschlagen. Ziel und Repository-Status prüfen. Bestehende Sicherungen wurden nicht durch diese Anfrage freigegeben.') if $status != 0;
+  my ($read_status, $read_out) = run_shell(backend_cmd('repository-status'));
+  my $public = eval { repository_public_status(decode_json($read_out)) };
+  reject_request('503 Service Unavailable', 'Die Aktion wurde ausgeführt, der aktuelle Repository-Status konnte jedoch nicht gelesen werden. Bitte Status aktualisieren, bevor du die Aktion wiederholst.') if $read_status != 0 || !$public;
+  my $notice = $action eq 'repository-init' ? 'Repository eingerichtet. Jetzt die Wiederherstellungsdatei herunterladen und ausserhalb dieses LoxBerry sicher aufbewahren.' : 'Aufbewahrung der Wiederherstellungsdatei bestätigt. Vor dem Backup die gespeicherten Einstellungen und die Zielprüfung kontrollieren.';
+  json_response({ ok => JSON::PP::true, data => $public, message => $notice }) if $ajax_request;
+  redirect_with(msg => ($action eq 'repository-init' ? 'repository_initialized' : 'repository_key_confirmed'));
 }
 
 if ($action eq 'restore-plan') {
@@ -714,7 +804,7 @@ if ($q->request_method eq 'POST') {
     my $mail_notify_restore = $q->param('mail_notify_restore') ? 'true' : 'false';
 
     my $root_permission_ack = $q->param('root_permission_ack') ? 'true' : 'false';
-    $error = 'Portable Archive ist nur mit Vollbackup moeglich.' if $metadata_mode eq 'portable-archive' && $backup_mode eq 'snapshot';
+    $error ||= portable_settings_error($metadata_mode, $backup_mode, $create_export, $backup_root);
     my $stop_targets = '';
 
     if ($q->param('stop_targets_loaded')) {
@@ -966,7 +1056,7 @@ if ($q->request_method eq 'POST') {
       if ($check_status != 0 || !$check || (($check->{status} || '') eq 'error')) {
         $error = escapeHTML($check_out || 'Restore-Check fehlgeschlagen.');
       } elsif ($check->{requires_offline_restore}) {
-        $error = 'Portable Archive kann nicht aus der Weboberfläche wiederhergestellt werden. Bitte Rescue-/Offline-Helper verwenden.';
+        $error = 'Portable Sicherung kann nicht aus der Weboberfläche wiederhergestellt werden. Bitte Rescue-/Offline-Helper verwenden.';
       } elsif ($check->{requires_degraded_confirmation} && $confirm_degraded ne 'confirm-degraded') {
         $error = 'Vor dem Restore muss der Hinweis zu den bewusst ausgelassenen Metadaten bestätigt werden.';
       } else {
@@ -1113,6 +1203,8 @@ my $native_strict_checked = $cfg_metadata_mode eq 'native-strict' ? ' checked' :
 my $network_compatible_checked = $cfg_metadata_mode eq 'network-compatible' ? ' checked' : '';
 my $fake_super_checked = $cfg_metadata_mode eq 'fake-super' ? ' checked' : '';
 my $portable_archive_checked = $cfg_metadata_mode eq 'portable-archive' ? ' checked' : '';
+my $metadata_advanced_open = $cfg_metadata_mode =~ /^(?:network-compatible|fake-super)$/ ? ' open' : '';
+my $repository_setup_open = $cfg_metadata_mode eq 'portable-archive' ? ' open' : '';
 my @cfg_weekdays = ref($config->{schedule_weekdays}) eq 'ARRAY' ? @{$config->{schedule_weekdays}} : ($config->{schedule_weekday} || '0');
 my %cfg_weekdays = map { $_ => 1 } @cfg_weekdays;
 my @weekday_checked = map { checked_attr($cfg_weekdays{"$_"}) } 0..6;
@@ -1125,22 +1217,22 @@ my $all_months_checked = checked_attr($cfg_months{'*'});
 my @month_checked = map { checked_attr($cfg_months{'*'} || $cfg_months{"$_"}) } 0..12;
 
 my $info_backup_root = info_button('Hier legst du fest, wohin die Backups geschrieben werden. Für ein echtes Host-Backup sollte das ein externer Datenträger, ein separates Mount oder ein grosser zweiter Datenspeicher sein. Erkannte Ziele können per Klick oder Drag und Drop übernommen werden. Wenn die Systemkarte selbst ausfällt, hilft ein Backup auf derselben Karte nicht.');
-my $info_backup_mode = info_button('Vollbackup kopiert jeden Stand vollständig. Inkrementeller Snapshot nutzt rsync mit Hardlinks auf das vorherige vollständige Backup: jedes Backup bleibt einzeln wiederherstellbar, unveränderte Dateien benötigen aber kaum zusätzlichen Speicher. Für zuverlässige Speicherersparnis wird ein Linux-Dateisystem wie ext4 empfohlen.');
+my $info_backup_mode = info_button('Die Sicherungsart bestimmt, ob vorhandene Daten erneut gespeichert werden. Vollbackup erstellt eine eigenständige vollständige Kopie bzw. ein Vollarchiv. Platzsparende Sicherungsstände verwenden bei der Dateisicherung Hardlinks zu einer geeigneten vorherigen Sicherung (bisher: Inkrementeller Snapshot). Bei Portable Sicherung speichert ein verschlüsseltes Repository gemeinsame Datenblöcke nur einmal; dafür zuerst die Repository-Einrichtung mit externer Schlüsselaufbewahrung abschliessen und den automatischen tar.gz-Export bewusst ausschalten. Jeder Stand beschreibt den vollständigen gesicherten Dateibaum, ist aber als einzelner Repository-Ordner nicht eigenständig. Der erste Lauf benötigt eine vollständige Basiskopie. Ein Sicherungsstand ist kein atomarer Dateisystem-Snapshot laufender Datenbanken; Dienste gezielt stoppen oder Datenbank-Dumps erstellen.');
 my $info_sources = info_button(join("\n\n",
-  'Datenquellen bestimmen, WAS gesichert wird. Das Backup-Ziel bestimmt, WOHIN geschrieben wird. Das Metadaten-Profil regelt die Speicherung von Dateirechten und Zusatzinformationen. Die Quellenauswahl ist unabhängig vom Gerätetyp, also auch für ODROID und Raspberry Pi gleich.',
+  'Datenquellen bestimmen, WAS gesichert wird. Das Backup-Ziel bestimmt, WOHIN geschrieben wird. Das Sicherungsverfahren (bisher Metadaten-Profil) regelt die Speicherung von Dateirechten und Zusatzinformationen. Die Quellenauswahl ist unabhängig vom Gerätetyp, also auch für ODROID und Raspberry Pi gleich.',
   'Lokale Laufwerke; Netzfreigaben einzeln (empfohlen): Standard bei einer Neuinstallation. Das System sowie lokale Boot- und USB-Datenträger werden berücksichtigt, sofern sie nicht ausgeschlossen wurden. Netzfreigaben werden nur nach ausdrücklicher Auswahl einbezogen.',
   'Alle eingebundenen Laufwerke und Netzfreigaben: Bezieht auch Netzfreigaben automatisch ein. Das kann sehr grosse Backups verursachen; auch Automount-Freigaben können beim Sichern gelesen werden. Nur wählen, wenn dieser umfassende Sicherungsumfang gewünscht ist.',
   'Bestehende Installationen ohne neue Quellenauswahl behalten beim Update den umfassenden Modus. Es gibt keine automatische Umstellung. Gespeicherte Ausnahmen bleiben bei einem Wechsel der Grundregel erhalten.',
   'Ausschlüsse haben Vorrang: Das Backup-Ziel selbst wird nicht mitgesichert. Liegen auf seinem Datenträger weitere Backups, den ganzen entsprechenden Backup-Ordner oder Datenträger ausschliessen. Nicht pauschal /media ausschliessen, wenn dort auch USB-Nutzdaten liegen.',
   'Bei der empfohlenen Grundregel: Gewünschte Netzfreigaben zuerst einbinden, Liste aktualisieren und einzeln auswählen. Automount-Sammelbereiche werden nicht pauschal aktiviert. Fehlt eine ausdrücklich ausgewählte Quelle später, wird der Backup-Start blockiert, statt sie unbemerkt auszulassen.',
   'Die technischen Einbindungen sind nur zur Übersicht eingeklappt. Aufklappen verändert keine Auswahl. Mit Grundregel verwenden entfernst du eine einzeln gesetzte Ausnahme.',
-  'Nach Änderungen zuerst speichern und dann Nächstes Backup prüfen ausführen. Erst der gespeicherte Stand gilt für manuelle und zeitgesteuerte Backups. Backup-Ziel, Metadaten-Profil und Zeitplan werden durch den Wechsel der Grundregel nicht geändert.'
+  'Nach Änderungen zuerst speichern und dann Nächstes Backup prüfen ausführen. Erst der gespeicherte Stand gilt für manuelle und zeitgesteuerte Backups. Backup-Ziel, Sicherungsverfahren und Zeitplan werden durch den Wechsel der Grundregel nicht geändert.'
 ), 'source-selection-help-text');
-my $info_metadata_mode = info_button('Das Metadaten-Profil bestimmt, wie Linux-Dateirechte und Zusatzinformationen auf dem Backup-Ziel abgelegt werden. Standard ist Native Strict. Für CIFS/NFS und viele NAS-Systeme ist meistens Network Compatible passend. Die vier Info-Buttons erklären Umfang, Voraussetzungen und Restore-Einschränkungen jedes Profils.');
-my $info_metadata_native = info_button('Standardprofil bei einer Neuinstallation. Native Strict verwendet rsync mit -aHAX, numerischen Benutzer- und Gruppen-IDs sowie Sparse-Dateien. Gesichert werden Dateien, Verzeichnisse, symbolische Links, Besitzer, Gruppen, Rechte, Zeitstempel, ACLs, Hardlinks, xattrs und damit auch File Capabilities. Geeignet für lokale Linux-Dateisysteme wie ext4, xfs und btrfs. Unterstützt das Ziel eine erforderliche Metadatenfunktion nicht, wird das Backup als Fehler beendet.');
-my $info_metadata_network = info_button('Für CIFS/NFS und NAS-Ziele, die nur Linux-xattrs nicht vollständig unterstützen. Network Compatible lässt xattrs und File Capabilities bewusst weg. Dieses Weglassen ist nur ein neutraler Hinweis und blockiert auch zeitgesteuerte Backups nicht. Besitzer, Gruppen, Rechte, Links, ACLs und Sparse-Dateien müssen dagegen weiterhin funktionieren; ein echter Fehler im Metadaten-Test blockiert den Start. CIFS mit fest vorgegebenen Eigentümern oder Rechten kann deshalb ungeeignet sein. Portable Archive bewahrt Metadaten innerhalb einer Archivdatei, benötigt aber ein Vollbackup und einen Offline-Restore. Vor einem Network-Compatible-Restore muss die reduzierte Metadatentreue bestätigt werden.');
-my $info_metadata_fake_super = info_button('Für Ziele, die user-xattrs zuverlässig unterstützen, aber native Unix-Besitzer oder privilegierte Metadaten nicht direkt speichern können. rsync --fake-super legt diese Angaben in Attributen unter user.rsync.* ab und liest sie beim Restore wieder aus. Das Profil hilft nicht, wenn das Ziel auch user-xattrs ablehnt. Deshalb nur verwenden, wenn die automatische Zielprüfung erfolgreich ist.');
-my $info_metadata_portable = info_button('Für Ziele ohne geeignete Linux-Metadatenfunktionen. Portable Archive schreibt statt eines normalen rsync-Dateibaums einen pax-kompatiblen rootfs.tar-Container mit numerischen Besitzern, ACLs, xattrs, SELinux-Informationen und Sparse-Dateien. Dadurch liegen die Metadaten innerhalb des Archivs. Inkrementelle Snapshots sind nicht möglich; die Wiederherstellung erfolgt ausschließlich mit dem Offline-Helper aus einer Rescue- oder Offline-Umgebung.');
+my $info_metadata_mode = info_button('Das Sicherungsverfahren (bisher: Metadaten-Profil) bestimmt, wie Linux-Dateirechte und Zusatzinformationen gespeichert werden. Linux-Dateisicherung nutzt geeignete Linux-Ziele direkt. Portable Sicherung speichert Metadaten innerhalb des Backupformats und ist für NAS und andere Ziele mit eingeschränkter Linux-Unterstützung vorgesehen. Zwei Spezialverfahren bleiben unter Erweiterte Einstellungen erhalten. Die benötigten Eigenschaften werden am konkreten Ziel geprüft; es gibt keine Garantie für jedes NAS und keine automatische Umstellung bestehender Einstellungen.');
+my $info_metadata_native = info_button('Linux-Dateisicherung, bisher Native Strict (native-strict). Standard bei einer Neuinstallation. Verwendet rsync mit -aHAX, numerischen Benutzer- und Gruppen-IDs sowie Sparse-Dateien. Erforderlich sind Eigentümer, Gruppen, Rechte, Zeitstempel, ACLs, Hardlinks, xattrs und damit auch File Capabilities. Geeignet für lokale Linux-Dateisysteme wie ext4, xfs und btrfs. Fehlt eine erforderliche Funktion, darf die Zielprüfung nicht umgangen werden.');
+my $info_metadata_network = info_button('Dateisicherung mit reduzierten Metadaten, bisher Network Compatible (network-compatible). Lässt xattrs und File Capabilities bewusst aus. Das ist ein neutraler Hinweis, kein pauschaler NAS-Kompatibilitätsmodus. Eigentümer, Gruppen, Dateirechte, Links, ACLs und Sparse-Dateien müssen weiterhin funktionieren. Freigaben mit festen Eigentümern oder Rechten können ungeeignet sein. Die Vorprüfung bleibt verbindlich; vor einem Restore muss der reduzierte Metadatenumfang bestätigt werden.');
+my $info_metadata_fake_super = info_button('Metadaten in Dateiattributen speichern, bisher Fake Super (fake-super). Für Ziele, die user-xattrs zuverlässig unterstützen, aber native Unix-Eigentümer oder privilegierte Metadaten nicht direkt speichern können. rsync --fake-super legt diese Angaben unter user.rsync.* ab und liest sie beim Restore wieder aus. Das hilft nicht, wenn die Freigabe auch user-xattrs ablehnt. Nur nach erfolgreicher Zielprüfung verwenden; keine automatische Aktivierung für NAS.');
+my $info_metadata_portable = info_button('Portable Sicherung, bisher Portable Archive (portable-archive). Für NAS und andere Ziele ohne geeignete direkte Linux-Metadatenfunktionen. Ein Vollbackup bewahrt diese Informationen in einem eigenständigen rootfs.tar-Archiv. Platzsparende Sicherungsstände verwenden stattdessen ein verschlüsseltes Repository mit gemeinsam gespeicherten Datenblöcken. Eigentümer, Rechte, ACLs, xattrs und Links bleiben im Sicherungsformat erhalten; die eigene Zielprüfung muss dennoch erfolgreich sein. Vor Repository-Nutzung den geheimen Wiederherstellungsschlüssel ausserhalb des LoxBerry aufbewahren und bestätigen. Vollarchive werden nicht umgewandelt. Der System-Restore erfolgt offline; Repository-Stände benötigen zusätzlich leeren geeigneten Linux-Zwischenspeicher für den vollständigen Stand plus Reserve. Kein direkter Online-Restore oder automatischer Wechsel zwischen x86 und ARM.');
 my $info_retention = info_button('Standard-Aufbewahrung: Anzahl fertiger Backups, erlaubt 1 bis 3650. Unter Erweiterte Aufbewahrung sind alternativ Tages-, Wochen- und Monatsstände möglich. Geschützte Backups und die letzte geeignete Sicherung bleiben erhalten; deshalb kann die tatsächliche Anzahl höher sein. Die Löschvorschau erklärt, was behalten oder entfernt würde. Nach einem erfolgreichen Backup wird die gespeicherte Aufbewahrungsregel angewendet. Hardlinks erhalten die Dateien verbleibender Snapshots; das Löschen einer Referenz löscht nicht deren weiterhin verwendete Daten.');
 my $info_schedule = info_button('Der Zeitplan erstellt Backups automatisch per Cron. Täglich bedeutet jeden Tag zur Startzeit. Wöchentlich bedeutet an den gewählten Wochentagen zur Startzeit. Monatlich bedeutet an den gewählten Tagen in den gewählten Monaten zur Startzeit.');
 my $info_time = info_button('Diese Uhrzeit gilt für alle Zeitplanarten. Bei täglich ist sie die einzige zeitliche Einstellung. Bei wöchentlich und monatlich wird sie mit den gewählten Tagen kombiniert.');
@@ -1151,7 +1243,7 @@ my $info_pre_hook = info_button('Optionales Skript, das direkt vor dem Backup au
 my $info_post_hook = info_button('Optionales Skript, das nach dem Backup ausgeführt wird. Sinnvoll zum Aufräumen, Dienste wieder in einen gewünschten Zustand zu bringen oder Benachrichtigungen auszuführen. Es gelten dieselben Sicherheitsregeln wie beim Skript vor dem Backup.');
 my $info_excludes = info_button('Hier kannst du Pfade vom rsync-Backup ausschliessen, je ein Pfad pro Zeile. Das ist sinnvoll für grosse Medienarchive, Netzwerkshares oder Daten, die separat gesichert werden. Zu viele Ausschlüsse können aber die Wiederherstellung unvollständig machen.');
 my $info_stop_targets = info_button('Wähle gezielt Docker-Container oder sicher steuerbare Dienste aus, die vor dem Backup angehalten und danach wieder gestartet werden. Laufende Dienste werden erkannt; zusätzlich werden LoxBerry-/Plugin-nahe Dienste angezeigt, auch wenn sie gerade inaktiv sind. Kritische LoxBerry-, Web-, SSH- und Backup-Dienste werden nicht angeboten. LoxBerry-Plugins ohne eigenen Dienst werden nicht hart beendet; dafür sind Pre-/Post-Backup-Hooks der sichere Weg. Empfohlene Auswahl setzen ersetzt die aktuelle Auswahl durch die erkannten Empfehlungen. Auswahl leeren entfernt alle Häkchen. Beides stoppt noch keinen Dienst: Auswahl kontrollieren und zuerst speichern; wirksam wird sie beim nächsten Backup.');
-my $info_export = info_button('Erstellt nach jedem Backup zusätzlich ein komprimiertes tar.gz-Archiv. Das ist praktisch zum Download, Kopieren oder Archivieren, benötigt aber zusätzlichen Speicherplatz und Zeit.');
+my $info_export = info_button('Erstellt nach jedem Backup zusätzlich ein komprimiertes tar.gz-Archiv. Das ist praktisch zum Download, Kopieren oder Archivieren, benötigt aber zusätzlichen Speicherplatz und Zeit. Bei portablen Repository-Sicherungsständen ist dieser automatische Export nicht verfügbar und muss ausdrücklich deaktiviert werden: Einzelne Standordner enthalten nicht alle gemeinsam gespeicherten Datenblöcke.');
 my $info_mail = info_button('Sendet Mailbenachrichtigungen über die zentrale LoxBerry-Benachrichtigung. SMTP-Zugangsdaten werden nicht im Plugin gespeichert.');
 my $info_mail_to = info_button('Optional. Wenn leer, verwendet LoxBerry Host Backup die in LoxBerry hinterlegte Standardadresse aus der Mail- und Benachrichtigungskonfiguration.');
 my $info_mail_events = info_button('Wähle aus, bei welchen Ereignissen eine Mailbenachrichtigung gesendet werden soll.');
@@ -1433,7 +1525,9 @@ sub render_backup_rows {
     my $is_complete = ($backup_status eq 'complete' && $validation_status eq 'ok')
       || ($backup_status eq 'complete_with_warnings' && $validation_status eq 'warning');
     my $storage_format = (($backup->{backup} || {})->{storage_format}) || $backup->{storage_format} || 'directory';
-    my $is_portable = $storage_format eq 'portable-tar';
+    my $is_repository = $storage_format eq 'portable-repository';
+    my $is_portable = $storage_format eq 'portable-tar' || $is_repository;
+    $export = '<span class="muted">Repository-Stand; kein Einzelarchiv</span>' if $is_repository;
     my $csrf = csrf_field();
     my $validation_label = '';
     my $delete_label = $is_complete ? 'L&ouml;schen' : 'Unvollst&auml;ndiges Backup l&ouml;schen';
@@ -1462,7 +1556,9 @@ sub render_backup_rows {
       my %backup_help = map { $_ => action_info($_, $raw_id) } qw(
         inspect-backup verify-backup verification-report recovery-sheet protect-backup record-restore-test
       );
-      if ($export_status eq 'available') {
+      if ($is_repository) {
+        $export_action = '';
+      } elsif ($export_status eq 'available') {
         $export_action = qq{
 <form data-ajax="false" method="get" class="inline-form">
 <input data-role="none" type="hidden" name="action" value="download-export">
@@ -1499,8 +1595,8 @@ $active_task_hidden
 };
       }
 
-      my $browse_action = $is_portable
-        ? qq{<span class="pending-action">Dateiansicht bei Portable Archive nicht verf&uuml;gbar</span>$info_browse}
+      my $browse_action = $is_repository ? '' : $is_portable
+        ? qq{<span class="pending-action">Dateiansicht bei portablen Vollarchiven nicht verf&uuml;gbar</span>$info_browse}
         : qq{
 <form data-ajax="false" method="get" class="inline-form" data-return-anchor="backup-browser">
 <input data-role="none" type="hidden" name="browse_id" value="$id">
@@ -1508,13 +1604,20 @@ $active_task_hidden
 <button data-role="none" type="submit">Dateien</button>$info_browse
 </form>
 };
-      $backup_actions = qq{
-$browse_action
+      my $restore_action = qq{
 <form data-ajax="false" method="get" class="inline-form" data-return-anchor="restore-panel">
 <input data-role="none" type="hidden" name="restore_id" value="$id">
 $active_task_hidden
 <button data-role="none" type="submit">Restore</button>$info_restore
 </form>
+};
+      if ($is_repository) {
+        my $repository_help = action_info('repository-restore', $raw_id);
+        $restore_action = qq{<div class="repository-restore-note"><span>Portable Sicherungsstände: Restore nur offline über einen leeren Linux-Zwischenspeicher. Die Standgrösse beschreibt den logischen Sicherungsumfang, nicht den zusätzlich belegten NAS-Speicher.</span>$repository_help <a href="https://github.com/herdan75/LoxBerry-Plugin-HostBackup/blob/develop/docs/PORTABLE-REPOSITORY.md" target="_blank" rel="noopener noreferrer">Anleitung für Repository-Restore</a></div>};
+      }
+      $backup_actions = qq{
+$browse_action
+$restore_action
 $export_action
 <details class="backup-extra-actions"><summary>Prüfen und schützen</summary>
 <form data-ajax="false" method="get" class="inline-form operation-form"><input data-role="none" type="hidden" name="action" value="inspect-backup"><input data-role="none" type="hidden" name="backup_id" value="$id"><button data-role="none" type="submit">Backup-Struktur prüfen</button>$backup_help{'inspect-backup'}</form>
@@ -1760,8 +1863,8 @@ print <<HTML;
 <li><strong>Backup-Ziel wählen und speichern:</strong> Verwende einen separaten Datenträger oder ein geeignetes NAS-Ziel. Ein Backup auf der Systemkarte schützt nicht vor deren Ausfall. Übernimm den Zielpfad, bestätige die Root-Freigabe und speichere; erst danach kann das Plugin Dateisystem, Mount und freien Speicher prüfen.</li>
 <li><strong>Datenquellen verstehen und auswählen:</strong> <code>/</code> enthält die normalen System- und Datenordner, etwa <code>/etc</code>, <code>/opt</code> und <code>/home</code>, soweit nicht ausgeschlossen. Standard bei Neuinstallation ist „Lokale Laufwerke; Netzfreigaben einzeln (empfohlen)“: eingebundene lokale Boot-/Datenlaufwerke sind enthalten, gewünschte Netzfreigaben musst du einzeln auswählen. Bestehende Einstellungen und Ausnahmen bleiben bei Updates erhalten. Die Zahl unter „System- und technische Einbindungen“ zählt nur Einbindungen, nicht sämtliche gesicherten Ordner. Der Infobutton neben Datenquellen erklärt die Auswahl.</li>
 <li><strong>Doppelte Backups vermeiden:</strong> Der Backup-Zielordner wird automatisch ausgeschlossen, nicht unbedingt der gesamte Backup-Datenträger. Weitere alte Backups, Images und Archivordner bewusst ausschliessen. Beispiel: <code>/media/usb/PI_Backup</code> ausschliessen, Nutzdaten auf <code>/media/usb/USB_Loxberry</code> eingeschlossen lassen. Nicht pauschal <code>/media</code> ausschliessen, wenn dort Nutzdaten liegen. Virtuelle Systembereiche wie <code>/proc</code>, <code>/sys</code>, <code>/dev</code>, <code>/run</code> und <code>/tmp</code> bleiben ausgeschlossen; ihre Häkchen sind für einen Restore nicht nötig.</li>
-<li><strong>Metadaten-Profil passend zum Ziel wählen:</strong> Standard ist <em>Native Strict</em> für lokale Linux-Dateisysteme wie ext4, xfs oder btrfs. <em>Network Compatible</em> lässt xattrs und File Capabilities bewusst weg; Eigentümer, Rechte, ACLs und Links müssen am NAS trotzdem funktionieren. Bei einem Fehler die einzelnen Prüfschritte lesen. <em>Portable Archive</em> benötigt ein Vollbackup und einen Offline-Restore. Ein Profilwechsel erfolgt nicht automatisch.</li>
-<li><strong>Backup-Modus und freien Platz beachten:</strong> Ein inkrementeller Snapshot teilt unveränderte Dateien per Hardlink mit einem geeigneten vorherigen Backup. Ohne passende Referenz wird eine vollständige Basiskopie benötigt. Genügend freien Platz vorsehen; ein Vollbackup kopiert jeden Stand vollständig. Portable Archive unterstützt keine inkrementellen Snapshots.</li>
+<li><strong>Sicherungsverfahren passend zum Ziel wählen:</strong> <em>Linux-Dateisicherung</em> ist Standard für geeignete lokale Linux-Ziele. <em>Portable Sicherung</em> speichert Linux-Metadaten innerhalb des Backupformats und ist für NAS mit eingeschränkten Dateirechten vorgesehen; die eigene Zielprüfung bleibt erforderlich. Die beiden Spezialverfahren unter <em>Erweiterte Einstellungen</em> sind keine allgemeine NAS-Lösung. Ihre Infobuttons erklären die Voraussetzungen. Bei einem Fehler die einzelnen Prüfschritte lesen; kein Verfahren wird automatisch umgestellt. Der System-Restore einer portablen Sicherung erfolgt offline.</li>
+<li><strong>Sicherungsart und freien Platz beachten:</strong> <em>Vollbackup</em> speichert jeden Stand vollständig neu; bei Portable Sicherung entsteht ein eigenständiges Vollarchiv. <em>Platzsparende Sicherungsstände</em> verwenden vorhandene Daten wieder: bei der Dateisicherung über Hardlinks, bei Portable Sicherung über gemeinsam gespeicherte Datenblöcke in einem verschlüsselten Repository. Der erste Stand benötigt eine vollständige Basiskopie. Für portable Sicherungsstände zuerst Ziel und Root-Freigabe mit Vollbackup speichern, darunter das Repository einrichten, die geheime Wiederherstellungsdatei ausserhalb des LoxBerry aufbewahren und bestätigen. Danach bewusst auf platzsparende Sicherungsstände umstellen, den automatischen tar.gz-Export deaktivieren, speichern und erneut prüfen. Das Vollarchiv selbst bleibt nicht inkrementell. Für Repository-Restore zusätzlichen leeren Linux-Zwischenspeicher für den gesamten Stand plus Reserve vorsehen.</li>
 <li><strong>Dienste und Container bewusst auswählen:</strong> Bei Neuinstallation sind keine zu stoppenden Dienste oder Container vorausgewählt. Unter „Zu stoppende Dienste vor dem Backup“ die „Empfohlene Auswahl setzen“, kontrollieren und speichern. Diese Dienste werden während des Backups unterbrochen und danach wieder gestartet, sofern sie vorher liefen und vom Plugin gestoppt wurden. Für Datenbanken gegebenenfalls zusätzlich geeignete Dumps über ein Vorab-Skript erstellen. Entscheidend sind auch die tatsächlichen Docker-Volumes und Bind-Mount-Datenquellen; angehakte Overlay-Einbindungen allein garantieren keine konsistente Anwendungssicherung.</li>
 <li><strong>Alle Änderungen zuerst speichern, dann prüfen:</strong> Manuelle und zeitgesteuerte Backups verwenden die gespeicherten Einstellungen. Öffne danach „Nächstes Backup prüfen“ und kontrolliere eingeschlossene Nutzdaten, Ausschlüsse, Ziel und Metadaten-Prüfung. Fehler vor dem Start beheben; eine erfolgreiche Vorschau ist keine Garantie für den späteren Lauf.</li>
 <li><strong>Manuelles Testbackup kontrollieren:</strong> Prüfe nach dem Lauf Abschlussstatus, Live-Log, Dateizahl und Backup-Inhalt. Unter „Prüfen und schützen“ stehen Strukturprüfung und Dateiinhaltsprüfung bereit. Fehlt eine Prüfsummen-Vergleichsbasis, wird sie zuerst angelegt; das ist noch kein erfolgreicher Vergleich und kein Restore-Test.</li>
@@ -1887,23 +1990,29 @@ $backup_target_picker
 </fieldset>
 
 <fieldset class="schedule-card wide">
-<legend>Metadaten-Profil $info_metadata_mode</legend>
+<legend>Sicherungsverfahren $info_metadata_mode</legend>
 <div class="settings-subtitle">Passendes Sicherungsverfahren für das verwendete Backup-Ziel</div>
-<div class="metadata-default-note"><strong>Standardeinstellung:</strong> Native Strict. Für CIFS/NFS oder ein NAS bitte das zum Ziel passende Profil wählen.</div>
+<div class="metadata-default-note"><strong>Standardeinstellung:</strong> Linux-Dateisicherung. Für NAS mit eingeschränkten Linux-Dateirechten Portable Sicherung prüfen. Bestehende Einstellungen werden nicht automatisch geändert.</div>
 <div class="schedule-modes metadata-modes">
-<label><input data-role="none" type="radio" name="metadata_mode" value="native-strict"$native_strict_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Native Strict</strong><span class="metadata-default-badge">Standard</span>$info_metadata_native</span><span class="metadata-profile-summary">Lokale Linux-Dateisysteme wie ext4, xfs und btrfs; vollständige Linux-Metadaten.</span></span></label>
-<label><input data-role="none" type="radio" name="metadata_mode" value="network-compatible"$network_compatible_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Network Compatible</strong>$info_metadata_network</span><span class="metadata-profile-summary">Ohne xattrs und File Capabilities; Unix-Rechte, Eigentümer, ACLs und Links müssen am NAS weiterhin funktionieren.</span></span></label>
-<label><input data-role="none" type="radio" name="metadata_mode" value="fake-super"$fake_super_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Fake Super</strong>$info_metadata_fake_super</span><span class="metadata-profile-summary">Ziele mit zuverlässigen user-xattrs, aber ohne native Unix-Metadaten.</span></span></label>
-<label><input data-role="none" type="radio" name="metadata_mode" value="portable-archive"$portable_archive_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Portable Archive</strong>$info_metadata_portable</span><span class="metadata-profile-summary">Metadatentreuer Archivcontainer; keine Snapshots und Restore nur offline.</span></span></label>
+<label><input data-role="none" type="radio" name="metadata_mode" value="native-strict"$native_strict_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Linux-Dateisicherung</strong><span class="metadata-default-badge">Standard</span>$info_metadata_native</span><span class="metadata-profile-summary">Geeignete Linux-Ziele wie ext4, xfs und btrfs; Dateirechte und Metadaten direkt speichern.</span></span></label>
+<label><input data-role="none" type="radio" name="metadata_mode" value="portable-archive"$portable_archive_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Portable Sicherung</strong>$info_metadata_portable</span><span class="metadata-profile-summary">Für NAS und andere Ziele mit eingeschränkten Linux-Dateirechten. Metadaten innerhalb des Backupformats; System-Restore offline.</span></span></label>
 </div>
+<details class="metadata-advanced" id="metadata-advanced"$metadata_advanced_open>
+<summary>Erweiterte Einstellungen <span id="metadata-advanced-selection"></span></summary>
+<p>Für besondere Ziele und bestehende Konfigurationen. Diese Verfahren sind nicht für jede Netzfreigabe geeignet; die Zielprüfung bleibt erforderlich.</p>
+<div class="schedule-modes metadata-modes">
+<label><input data-role="none" type="radio" name="metadata_mode" value="network-compatible"$network_compatible_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Dateisicherung mit reduzierten Metadaten</strong>$info_metadata_network</span><span class="metadata-profile-summary">Ohne xattrs und File Capabilities. Eigentümer, Rechte, ACLs und Links bleiben erforderlich.</span></span></label>
+<label><input data-role="none" type="radio" name="metadata_mode" value="fake-super"$fake_super_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Metadaten in Dateiattributen speichern</strong>$info_metadata_fake_super</span><span class="metadata-profile-summary">Benötigt zuverlässig unterstützte user.*-Dateiattribute auf dem Ziel.</span></span></label>
+</div>
+</details>
 </fieldset>
 
 <fieldset class="schedule-card wide">
-<legend>Backup-Modus $info_backup_mode</legend>
-<div class="settings-subtitle">Auswahl Backup-Modus</div>
+<legend>Sicherungsart $info_backup_mode</legend>
+<div class="settings-subtitle">Vollständig neu speichern oder vorhandene Daten wiederverwenden</div>
 <div class="schedule-modes">
-<label><input data-role="none" type="radio" name="backup_mode" value="full"$full_mode_checked> Volles Backup</label>
-<label><input data-role="none" type="radio" name="backup_mode" value="snapshot"$snapshot_mode_checked> Inkrementeller Snapshot</label>
+<label><input data-role="none" type="radio" name="backup_mode" value="full"$full_mode_checked> Vollbackup</label>
+<label><input data-role="none" type="radio" name="backup_mode" value="snapshot"$snapshot_mode_checked> Platzsparende Sicherungsstände</label>
 </div>
 </fieldset>
 
@@ -2080,6 +2189,31 @@ $backup_target_picker
 </fieldset>
 
 </form>
+
+<details class="schedule-card repository-setup" id="portable-repository-panel" data-config-loaded="$config_loaded"$repository_setup_open>
+<summary>Portable Sicherungsstände einrichten</summary>
+<p>Nur für platzsparende portable Sicherungsstände. Ein portables Vollbackup bleibt ein eigenständiges Archiv und benötigt diese Einrichtung nicht. Ziel und Root-Freigabe zuerst speichern. Vorhandene Vollarchive werden nicht umgewandelt oder gelöscht.</p>
+<p>Der neue Backup-Speicher wird verschlüsselt. Die Wiederherstellungsdatei enthält den geheimen Schlüssel: ausserhalb dieses LoxBerry sicher aufbewahren, nicht im Forum, per Diagnosepaket oder zusammen mit öffentlichen Logs teilen. Ohne passenden Schlüssel ist nach einem Geräteverlust kein Restore möglich. Sie ersetzt nicht die Sicherungsdaten auf dem NAS.</p>
+<div id="repository-status" role="status" aria-live="polite">Status noch nicht geladen. Es wird nichts automatisch eingerichtet.</div>
+<button data-role="none" type="button" id="repository-status-refresh">Status prüfen</button>
+<div class="repository-actions">
+<form data-ajax="false" method="post" id="repository-init-form">$csrf_html
+<input data-role="none" type="hidden" name="action" value="repository-init">
+<button data-role="none" type="submit"$config_action_disabled>1. Repository am gespeicherten Ziel einrichten</button>
+</form>
+<form data-ajax="false" method="post" id="repository-key-export-form">$csrf_html
+<input data-role="none" type="hidden" name="action" value="repository-key-export">
+<button data-role="none" type="submit"$config_action_disabled>2. Geheime Wiederherstellungsdatei herunterladen</button>
+</form>
+<form data-ajax="false" method="post" id="repository-confirm-key-form">$csrf_html
+<input data-role="none" type="hidden" name="action" value="repository-confirm-key">
+<label class="checkline"><input data-role="none" type="checkbox" name="recovery_key_saved" value="1" required><span>Ich habe die heruntergeladene Wiederherstellungsdatei ausserhalb dieses LoxBerry sicher aufbewahrt und kann sie dort wieder öffnen.</span></label>
+<button data-role="none" type="submit"$config_action_disabled>3. Sichere Aufbewahrung bestätigen</button>
+</form>
+</div>
+<p class="muted">Ein Download beweist noch keinen erfolgreichen Restore. Die Vorprüfung und ein Wiederherstellungstest bleiben erforderlich. Diese Schritte starten kein Backup und verändern die gewählte Sicherungsart nicht.</p>
+<p>Nach erfolgreicher Einrichtung <strong>Portable Sicherung</strong> und <strong>Platzsparende Sicherungsstände</strong> auswählen, den automatischen tar.gz-Export ausdrücklich ausschalten, speichern und <strong>Nächstes Backup prüfen</strong> ausführen. Der erste Stand liest und sichert die vollständigen ausgewählten Daten; spätere Stände verwenden vorhandene Blöcke wieder. Für den Offline-Restore ist zusätzlicher Linux-Zwischenspeicher für den vollständigen Stand plus Reserve nötig. <a href="https://github.com/herdan75/LoxBerry-Plugin-HostBackup/blob/develop/docs/PORTABLE-REPOSITORY.md" target="_blank" rel="noopener noreferrer">Einrichtung und Wiederherstellung im Detail</a></p>
+</details>
 
 <aside class="settings-change-popup" id="settings-change-popup" role="region" aria-live="polite" aria-hidden="true" aria-labelledby="settings-change-title">
 <div class="settings-change-popup-header">
@@ -2292,7 +2426,7 @@ if ($restore_id) {
 </label>};
   }
   if ($restore_check && $restore_check->{requires_offline_restore}) {
-    $offline_notice = '<section class="inline-notice warning">Dieses Portable Archive kann nicht aus der Weboberfl&auml;che zur&uuml;ckgespielt werden. Starte den Restore in einer Rescue-/Offline-Umgebung mit <code>HOSTBACKUP_OFFLINE_RESTORE=1</code>.</section>';
+    $offline_notice = '<section class="inline-notice warning">Diese portable Sicherung kann nicht aus der Weboberfl&auml;che zur&uuml;ckgespielt werden. Starte den Restore in einer Rescue-/Offline-Umgebung mit <code>HOSTBACKUP_OFFLINE_RESTORE=1</code>.</section>';
     $restore_submit_disabled = ' disabled';
   }
 

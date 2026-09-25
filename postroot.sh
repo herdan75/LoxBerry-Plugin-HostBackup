@@ -206,6 +206,13 @@ if [ -e "$SOURCE_BIN/runtime-version" ] || [ -L "$SOURCE_BIN/runtime-version" ];
 else
   printf 'unknown\n' > "$release/runtime-version"
 fi
+# Offline installation from checksum-pinned package assets. An old/source-only
+# package may lack the engine; existing directory/TAR backups remain available.
+if [ -f "$PACKAGE_DIR/restic_0.19.1_linux_amd64.bz2" ]; then
+  python3 -I "$release/hostbackup-engine.py" install "$PACKAGE_DIR" "$release"
+else
+  echo "No bundled portable snapshot engine; directory backups and portable full archives remain available."
+fi
 printf '%s\n' "$LBHOMEDIR" > "$release/runtime-home"
 printf '%s\n' "$PLUGIN_FOLDER" > "$release/runtime-plugin"
 chmod 0644 "$release/runtime-home" "$release/runtime-plugin"

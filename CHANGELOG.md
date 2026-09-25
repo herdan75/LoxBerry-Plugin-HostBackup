@@ -8,6 +8,23 @@ Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
+## Noch nicht veröffentlicht – develop
+
+- Verständliche Namen für weiterhin vier Sicherungsverfahren: Linux-Dateisicherung,
+  Portable Sicherung sowie zwei ausdrücklich erweiterte Metadatenverfahren.
+  Bestehende Konfigurationen werden nicht automatisch umgestellt.
+- Portable Sicherung um platzsparende, verschlüsselte Repository-Stände ergänzt.
+  Folgesicherungen verwenden unveränderte Datenblöcke erneut; das bestehende
+  eigenständige TAR-Vollbackup bleibt unverändert verfügbar.
+- Zielgebundene Einrichtung mit separatem Wiederherstellungsschlüssel,
+  verpflichtender externer Schlüsselbestätigung und echter Metadaten-Vorprüfung.
+- Authentifizierte Veröffentlichung erst nach erfolgreicher Kopier-/Quellprüfung;
+  gemeinsame Repository-Daten werden nicht als einzelne Backup-Ordner gelöscht.
+- Offline-Wiederherstellung mit zusätzlichem Linux-Zwischenspeicher und expliziten
+  Volume-Zuordnungen. Keine automatische Hardware- oder Architekturmigration.
+- Linux-/SMB-Tests für eingeschränkte Zielrechte, inkrementelle Wiederverwendung,
+  Schlüsselverlust-Szenario, Metadaten und sichere Aufbewahrung ergänzt.
+
 ## [1.1.0-beta] - 2026-09-20
 
 ### Installation und Fehleranzeige

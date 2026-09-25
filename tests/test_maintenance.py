@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import datetime as dt
+import base64
 from contextlib import closing
 import importlib.util
 import io
@@ -13,12 +14,36 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("maintenance", ROOT / "bin/hostbackup-maintenance.py")
 MAINT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MAINT)
+
+
+class FakeRepository:
+    def __init__(self):
+        self.commits = {}
+        self.forgotten = []
+        self.checks = []
+
+    def load(self):
+        return {"repository_id": "a" * 64}
+
+    def read_commit(self, sid):
+        if sid not in self.commits:
+            raise ValueError("Repository commit missing")
+        return self.commits[sid]
+
+    def check(self, read_data=False):
+        self.checks.append(read_data)
+        return {"status": "ok"}
+
+    def forget(self, sid):
+        self.forgotten.append(sid)
+        del self.commits[sid]
 
 
 class MaintenanceTests(unittest.TestCase):
@@ -44,6 +69,118 @@ class MaintenanceTests(unittest.TestCase):
         (directory / "backup-validation.json").write_text(json.dumps({"status": "ok" if status == "complete" else "error"}))
         (directory / ".loxberry-hostbackup-backup").write_text(backup_id + "\n")
         return directory
+
+    def repository_fixture(self):
+        fake = FakeRepository()
+        patch = mock.patch.object(MAINT, "repository_adapter", return_value=fake)
+        patch.start()
+        self.addCleanup(patch.stop)
+        shared = self.root / ".portable-repository/data"
+        shared.mkdir(parents=True)
+        (shared / "shared-pack").write_bytes(b"repository bytes" * 500)
+        return fake
+
+    def repository_backup(self, fake, backup_id, when="2026-09-01T12:00:00+00:00", host="host-one"):
+        directory = self.backup(backup_id, when)
+        shutil.rmtree(directory / "rootfs")
+        manifest = json.loads((directory / "manifest.json").read_bytes())
+        manifest.update(backup={"storage_format": "portable-repository"}, metadata={"mode": "portable-archive"}, size_bytes=12345)
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        (directory / "rsync-excludes.txt").write_text("/proc/***\n")
+        (directory / "source-selection.json").write_text('{"volumes": []}')
+        sid = MAINT.hashlib.sha256(backup_id.encode()).hexdigest()
+        reference = {"format": "hostbackup-restic-v1", "backup_id": backup_id, "commit_id": sid,
+                     "data_snapshot_id": MAINT.hashlib.sha256((backup_id + "data").encode()).hexdigest(),
+                     "repository_id": "a" * 64}
+        (directory / "repository-reference.json").write_text(json.dumps(reference))
+        controls = {name: base64.b64encode((directory / name).read_bytes()).decode("ascii")
+                    for name in ("manifest.json", "rsync-excludes.txt", "source-selection.json", "backup-validation.json")}
+        fake.commits[sid] = {**reference, "host_id": host, "lineage": "system", "controls": controls}
+        return directory, reference
+
+    def test_repository_controls_must_match_authenticated_commit(self):
+        fake = self.repository_fixture()
+        target, reference = self.repository_backup(fake, "repo")
+        _, record = MAINT.backup_record(self.root, "repo", self.state)
+        self.assertEqual(record["commit_snapshot_id"], reference["commit_id"])
+        (target / "rsync-excludes.txt").write_text("different excludes")
+        with self.assertRaisesRegex(ValueError, "authenticated repository copy"):
+            MAINT.backup_record(self.root, "repo", self.state)
+        listed, ignored = MAINT.records(self.root, self.state)
+        self.assertFalse(listed)
+        self.assertEqual(ignored[0]["name"], "repo")
+
+    def test_repository_storage_counts_shared_chunks_once(self):
+        fake = self.repository_fixture()
+        self.repository_backup(fake, "one")
+        self.repository_backup(fake, "two")
+        report = MAINT.storage(self.root, self.state)
+        expected_shared = MAINT.tree_storage(self.root / ".portable-repository")["allocated_bytes"]
+        self.assertEqual(report["repository_shared_allocated_bytes"], expected_shared)
+        self.assertEqual(report["total_unique_allocated_bytes"], expected_shared + sum(row["unique_added_bytes"] for row in report["backups"]))
+        self.assertTrue(all(row["logical_bytes"] == 12345 for row in report["backups"]))
+
+    def test_repository_structure_and_content_checks_are_distinct(self):
+        fake = self.repository_fixture()
+        self.repository_backup(fake, "one")
+        structure = MAINT.repository_check(self.root, self.state, "one")
+        self.assertFalse(structure["content_verified"])
+        recorded = MAINT.integrity(self.root, self.state, "one", record_only=True)
+        self.assertEqual(recorded["status"], "structure_verified")
+        report = MAINT.integrity(self.root, self.state, "one")
+        self.assertTrue(report["content_verified"])
+        self.assertFalse(report["restore_tested"])
+        self.assertEqual(report["metadata_compared"], [])
+        self.assertEqual(fake.checks, [False, False, True])
+        self.assertFalse(list((self.state / "integrity").glob("*.sqlite")))
+
+    def test_repository_retention_keeps_last_old_format_and_each_host(self):
+        fake = self.repository_fixture()
+        self.backup("last-old-format", "2026-09-01T12:00:00+00:00")
+        self.repository_backup(fake, "old-repo", "2026-09-02T12:00:00+00:00")
+        self.repository_backup(fake, "another-host", "2026-09-03T12:00:00+00:00", host="host-two")
+        self.repository_backup(fake, "latest", "2026-09-04T12:00:00+00:00")
+        plan = MAINT.retention(self.root, self.state, {"keep_backups": 1})
+        self.assertEqual([row["backup_id"] for row in plan["delete"]], ["old-repo"])
+        self.assertEqual(set(plan["protected_latest_per_format_host"]), {"last-old-format", "another-host", "latest"})
+        for name in ("last-old-format", "another-host", "latest"):
+            with self.assertRaisesRegex(ValueError, "geschuetzt"):
+                MAINT.delete_check(self.root, self.state, name)
+
+    def test_repository_retention_forgets_exact_commit_not_shared_packs(self):
+        fake = self.repository_fixture()
+        _, old = self.repository_backup(fake, "old", "2026-09-01T12:00:00+00:00")
+        self.repository_backup(fake, "new", "2026-09-02T12:00:00+00:00")
+        pack = self.root / ".portable-repository/data/shared-pack"
+        before = pack.read_bytes()
+        plan = MAINT.retention(self.root, self.state, {"keep_backups": 1})
+        result = MAINT.retention(self.root, self.state, {"keep_backups": 1}, apply=plan["preview_digest"])
+        self.assertEqual(fake.forgotten, [old["commit_id"]])
+        self.assertFalse((self.root / "old").exists())
+        self.assertEqual(pack.read_bytes(), before)
+        self.assertFalse(result["repository_space_reclaimed"])
+
+    def test_repository_forget_failure_preserves_wrapper_and_exports(self):
+        fake = self.repository_fixture()
+        self.repository_backup(fake, "old", "2026-09-01T12:00:00+00:00")
+        self.repository_backup(fake, "new", "2026-09-02T12:00:00+00:00")
+        exported = self.root / "old.tar.gz"
+        exported.write_bytes(b"keep export")
+        plan = MAINT.retention(self.root, self.state, {"keep_backups": 1})
+        with mock.patch.object(fake, "forget", side_effect=ValueError("repository unavailable")):
+            with self.assertRaisesRegex(ValueError, "unavailable"):
+                MAINT.retention(self.root, self.state, {"keep_backups": 1}, apply=plan["preview_digest"])
+        self.assertTrue((self.root / "old").exists())
+        self.assertEqual(exported.read_bytes(), b"keep export")
+
+    def test_repository_manual_forget_preserves_wrapper_until_caller_removes_it(self):
+        fake = self.repository_fixture()
+        target, old = self.repository_backup(fake, "old", "2026-09-01T12:00:00+00:00")
+        self.repository_backup(fake, "new", "2026-09-02T12:00:00+00:00")
+        result = MAINT.repository_forget(self.root, self.state, "old")
+        self.assertEqual(fake.forgotten, [old["commit_id"]])
+        self.assertTrue(target.is_dir())
+        self.assertFalse(result["wrapper_removed"])
 
     def test_storage_deduplicates_shared_snapshot_allocation(self):
         first, second = self.backup("one"), self.backup("two")
