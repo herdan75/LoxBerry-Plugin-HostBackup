@@ -3,12 +3,12 @@
 Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
-Version 1.0.0 bleibt das reguläre Release; 1.1.0-beta ist der neue Vorabstand.
+Version 1.0.0 bleibt das reguläre Release; 1.2.0-beta ist der neue Vorabstand.
 Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
-## Noch nicht veröffentlicht – develop
+## [1.2.0-beta] - 2026-09-25
 
 - Verständliche Namen für weiterhin vier Sicherungsverfahren: Linux-Dateisicherung,
   Portable Sicherung sowie zwei ausdrücklich erweiterte Metadatenverfahren.
@@ -35,6 +35,11 @@ validiert werden.
   Volume-Zuordnungen. Keine automatische Hardware- oder Architekturmigration.
 - Linux-/SMB-Tests für eingeschränkte Zielrechte, inkrementelle Wiederverwendung,
   Schlüsselverlust-Szenario, Metadaten und sichere Aufbewahrung ergänzt.
+- Programm- und Paketversion `1.2.0`, GitHub-Tag `v1.2.0-beta`. Der Vorabkanal
+  wird erst nach Prüfung des öffentlichen ZIPs umgestellt; Stable 1.0.0 bleibt
+  unverändert. Freigabestatus und Grenzen stehen in den
+  [Release Notes](docs/RELEASE-1.2.0-beta.md). Automatisierte Tests sind keine
+  pauschale NAS- oder bootfähige Hardware-Restore-Abnahme.
 
 ## [1.1.0-beta] - 2026-09-20
 
@@ -860,7 +865,8 @@ nicht überarbeitet worden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.1.0-beta...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.0-beta...develop
+[1.2.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.0-beta
 [1.1.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.1.0-beta
 [1.0.0]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.0.0
 [0.7.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v0.7.1-beta

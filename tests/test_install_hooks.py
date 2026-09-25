@@ -203,7 +203,7 @@ class InstallHookTests(unittest.TestCase):
         plugin = configparser.ConfigParser()
         plugin.read_string(PLUGIN_CFG)
         version = plugin["PLUGIN"]["VERSION"]
-        self.assertEqual(version, "1.1.0")
+        self.assertEqual(version, "1.2.0")
         notes = (ROOT / "docs" / f"RELEASE-{version}-beta.md").read_text(encoding="utf-8")
         self.assertTrue(notes.startswith(f"# LoxBerry Host Backup {version}-beta\n"))
         self.assertIn(f"**Version {version}", README)

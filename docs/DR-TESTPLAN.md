@@ -5,7 +5,51 @@ bei Änderungen an rsync-/tar-Optionen, Mount-Prüfung, Import, Restore oder
 Retention auszuführen. Produktive Daten werden durch synthetische Marker und
 Testdienste ersetzt.
 
-## Ergänzende Abnahme für 1.1.0-beta
+## Ergänzende Abnahme für 1.2.0-beta
+
+Diese Szenarien gelten für den Vorabstand vom 25.09.2026. Sie sind ein Prüfplan,
+kein Nachweis eines bereits bestandenen bootfähigen Hardware-Restores. Ergebnisse
+der Entwicklungsbasis und der Release-Prüfung in den
+[Release Notes](RELEASE-1.2.0-beta.md) getrennt festhalten. Nur isolierte Testdaten
+verwenden und die ältere, bewährte Sicherung erhalten:
+
+1. Update von 1.0.0, 1.1.0-beta und einem manuell installierten 1.1.0-develop-Paket
+   ohne Deinstallation prüfen. Version `1.2.0`, unveränderte Quellenauswahl,
+   Einstellungen und vorhandene Backupdaten kontrollieren; keine automatische
+   Umstellung alter TAR-Vollbackups in ein Repository erwarten.
+2. Weiterhin vier Verfahren und zwei Sicherungsarten prüfen. Repository-Einrichtung
+   nur bei Portable Sicherung, zunächst zugeklappt; separate Einrichtung,
+   Schlüsseldownload und externe Aufbewahrungsbestätigung. Ohne bestätigten
+   Schlüssel darf keine portable Repository-Sicherung freigegeben werden.
+   Profilwechsel und Aufklappen dürfen keine Einstellungen automatisch ändern.
+3. Portable Vollbackups und den ersten sowie weitere Repository-Stände auf Linux
+   und echtem SMB/CIFS mit festen UID/GID/Rechten prüfen. Datenblock-Wiederverwendung,
+   geänderte/gelöschte Dateien, ACLs, xattrs, Capabilities, Hardlinks, Sparse-Dateien,
+   FIFOs und Gerätedateien kontrollieren. Nur bestätigte Unix-Sockets dürfen mit
+   nachvollziehbarem Bericht ausgelassen werden; Lese-/Mountfehler bleiben Fehler.
+4. Schlüsselverlust und Wiederanbindung auf einem frischen Helferhost nachbilden.
+   Falsches Repository, verlorener Mount, fehlender Schlüssel und zu wenig
+   Linux-Staging-Platz müssen sicher abbrechen. Keine Schlüssel im normalen
+   Konfigurationsexport, Log oder Diagnosepaket; ein Konfigurationsexport ist kein
+   Schlüssel-Backup.
+5. Vollständige Offline-Wiederherstellung mit Linux-Staging und getrenntem Ziel
+   zunächst vorschauen und danach explizit ausführen. Architekturprüfung,
+   Volume-Zuordnungen, Ausschlüsse und Löschgrenzen prüfen; direktes `/` und
+   ungeeignete Metadaten-Ziele müssen abgewiesen werden. Bootloader und passende
+   Bootpartitionen separat vorbereiten, Systemstart und Anwendungen gesondert testen.
+6. Prüfungen, Löschschutz und Aufbewahrung gegen gemeinsame Repository-Daten
+   testen. Stand-Verweise entfernen ist keine automatische Platzbereinigung;
+   explizites Prune darf noch referenzierte Daten nicht entfernen. Keine generischen
+   Einzelordner-Exporte, Explorer-Aktionen oder Online-Restores für Repository-Stände.
+7. Kompakte Einrichtung, Zusatzexport und Aufbewahrung einschliesslich Infobuttons
+   auf Desktop/Mobil mit LoxBerry-Schriftregeln und Tastatur prüfen. Separate
+   Formulare, Speichern, Löschvorschau und ungespeicherte Eingaben müssen getrennt
+   bleiben; eine Hilfe oder Vorschau löst weder Speichern noch Löschen aus.
+8. Paketinhalt, Engine-Prüfsummen und `v1.2.0-beta`-Release-Paket prüfen. Erst nach
+   erfolgreichem öffentlichem ZIP-Download den Vorabkanal auf 1.2.0 umstellen.
+   Stable-Kanal, main-Commit, v1.0.0-Tag und dessen ZIP bleiben unverändert.
+
+## Historische ergänzende Abnahme für 1.1.0-beta
 
 Nur auf einem isolierten Testsystem; vorhandene produktive Backups nicht löschen:
 

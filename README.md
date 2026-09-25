@@ -1,20 +1,28 @@
 # LoxBerry Host Backup
 
 > [!NOTE]
-> **Unveröffentlichter develop-Teststand:** Die neu benannten Sicherungsverfahren
-> und portablen, platzsparenden NAS-Sicherungsstände sind nur im manuell
-> installierbaren ZIP eines erfolgreich geprüften develop-Builds enthalten.
-> Sie sind **nicht** Teil des bereits veröffentlichten `1.1.0-beta`-Downloads.
-> Für diesen Test bleibt die Paketversion `1.1.0`; Update-Kanäle und Releases
-> werden nicht verändert. Einrichtung und Schlüssel-Recovery erklärt die
+> **Vorabversion 1.2.0-beta:** Die neu benannten Sicherungsverfahren und portablen,
+> platzsparenden NAS-Sicherungsstände gehören zu dieser neuen Vorabversion,
+> nicht zum unveränderten Download von `1.1.0-beta`. Der Vorabkanal wird erst
+> nach erfolgreicher Prüfung des öffentlichen 1.2.0-ZIPs umgestellt; bis dahin
+> bleibt dort 1.1.0 aktiv. Das stabile Release 1.0.0 bleibt unverändert.
+> Einrichtung und Schlüssel-Recovery erklärt die
 > [Anleitung für portable Sicherungsstände](docs/PORTABLE-REPOSITORY.md).
 
-**Version 1.1.0-beta · Vorabversion auf develop · 20.09.2026.**
+**Version 1.2.0-beta · Vorabversion auf develop · 25.09.2026.**
 Das reguläre Release bleibt **1.0.0**. Programm- und Paketversion des neuen
-Vorabstands lauten `1.1.0`; GitHub kennzeichnet ihn mit dem Tag `v1.1.0-beta`.
-Details stehen in den [Release Notes für 1.1.0-beta](docs/RELEASE-1.1.0-beta.md).
+Vorabstands lauten `1.2.0`; der zugehörige GitHub-Tag ist `v1.2.0-beta`.
+Freigabestatus und Prüfgrenzen stehen in den
+[Release Notes für 1.2.0-beta](docs/RELEASE-1.2.0-beta.md).
 
-**Neu gegenüber 1.0.0:** Eine explizite Auswahl von Laufwerken und Netzfreigaben,
+**Neu in 1.2.0-beta:** Weiterhin vier, verständlicher benannte Sicherungsverfahren;
+portable, verschlüsselte und platzsparende NAS-Sicherungsstände mit gemeinsamer
+Datenbasis sowie zielgebundener Einrichtung und extern aufzubewahrendem Schlüssel.
+Das eigenständige portable TAR-Vollbackup bleibt erhalten. Bestehende Einstellungen
+werden nicht automatisch umgestellt. Ein NAS muss die eigene Zielprüfung bestehen;
+die Vorabversion ist keine pauschale Kompatibilitätszusage für jedes NAS.
+
+**Aus 1.1.0-beta übernommen:** Eine explizite Auswahl von Laufwerken und Netzfreigaben,
 schrittweise Metadaten-Diagnosen und Korrekturen für die Neuinstallation nach
 zurückgebliebenen Programmdateien. Die [NAS- und Datenquellen-Anleitung](docs/DEVELOP-NAS-SOURCES.md)
 beschreibt die Anwendung. Diese Änderungen sind nicht im unveränderten
@@ -38,9 +46,9 @@ Backups: keine automatische Einrichtung von Partitionen oder Bootloader und
 ausdrückliche Zuordnung separater Boot-/Datenlaufwerke beim Restore.
 
 > [!IMPORTANT]
-> **Update auf 1.1.0-beta:** Bewusster Wechsel auf eine Vorabversion, kein neues
-> stabiles Release. Der Vorabkanal ist nach Prüfung des öffentlichen
-> Downloads auf 1.1.0 aktiviert; der stabile Kanal bleibt auf 1.0.0.
+> **Update auf 1.2.0-beta:** Bewusster Wechsel auf eine Vorabversion, kein neues
+> stabiles Release. Der Vorabkanal wird erst nach Prüfung des öffentlichen
+> Downloads auf 1.2.0 aktiviert; der stabile Kanal bleibt auf 1.0.0.
 > Vor einem Update Einstellungen exportieren, aktive Vorgänge beenden lassen
 > und nicht vorher deinstallieren.
 
@@ -101,9 +109,10 @@ Typische Beispiele:
 - systemd-Units, Cronjobs, Skripte und native Programme
 - Benutzer- und Anwendungsdaten unter `/opt`, `/home`, `/var/lib` usw.
 
-Das Plugin basiert bewusst nicht auf Raspberry-Pi-spezifischen Tools. Der Kern
-ist ein `rsync`-basiertes Host-Backup mit Fokus auf eine möglichst vollständige
-Wiederherstellung von Diensten, Daten, Konfigurationen und Systemumgebung.
+Das Plugin basiert bewusst nicht auf Raspberry-Pi-spezifischen Tools. Es sichert
+Dateien mit `rsync`, als portables TAR-Vollbackup oder in einem verschlüsselten
+portablen Repository. Der Fokus liegt auf der Wiederherstellung von Diensten,
+Daten, Konfigurationen und Systemumgebung, nicht auf einem bootfähigen Disk-Image.
 
 ## Plattform-Kompatibilität
 
@@ -121,6 +130,11 @@ Voraussetzungen:
 - `cron` für automatische Backups
 - `sudo` für privilegierte Aktionen aus der Weboberfläche
 
+Für portable Repository-Stände gelten zusätzliche Werkzeug-, Schlüssel- und
+Speichervoraussetzungen aus der [Repository-Anleitung](docs/PORTABLE-REPOSITORY.md).
+Die checksum-geprüfte Restic-Engine wird für die unterstützten Architekturen mit
+dem Pluginpaket geliefert; fehlende Metadaten-Prüfwerkzeuge werden nicht übergangen.
+
 Docker ist optional. Wenn Docker vorhanden ist, kann das Plugin Container
 inventarisieren und optional vor dem Backup stoppen sowie danach wieder starten.
 
@@ -135,7 +149,7 @@ Das Plugin erstellt:
 
 - kein sektorbasiertes Blockdevice-/Disk-Image
 - kein garantiert hardwareunabhängiges Bare-Metal-Komplettimage
-- ein dateibasiertes Systembackup auf Basis von `rsync`
+- ein dateibasiertes Systembackup als Verzeichniskopie, TAR oder portables Repository
 
 Standardquelle ist `/`.
 
@@ -213,11 +227,16 @@ Empfohlenes Restore-Vorgehen:
 
 Ein Online-Restore auf einem laufenden System ist riskanter, weil Dienste und
 Dateien parallel aktiv sein können.
+Portable Sicherungen werden ausschliesslich offline wiederhergestellt. Für
+Repository-Stände werden die vollständige gemeinsame Datenbasis, die externe
+Wiederherstellungsdatei und ausreichend zusätzlicher Linux-Zwischenspeicher
+benötigt; der normale Einzelarchiv-Import ersetzt diese Schritte nicht.
+Siehe [Offline-Wiederherstellung](docs/PORTABLE-REPOSITORY.md#offline-wiederherstellung).
 
 ## Aktueller Validierungsstand
 
 Bisherige veröffentlichte Stände wurden wie folgt geprüft. Diese historischen
-Praxistests sind **kein** Hardware-Nachweis für den neuen Entwicklungsstand:
+Praxistests sind **kein** Hardware-Nachweis für 1.2.0-beta:
 
 - Bash-Syntax für Backend, Postinstall, Restore-Helper und Uninstall
 - Perl/CGI-Syntax mit lokalem `CGI.pm`-Stub
@@ -259,6 +278,16 @@ Eine echte LoxBerry-/NAS-/Offline-Hardwareabnahme ist damit nicht nachgewiesen
 und bleibt für den verlässlichen produktiven Disaster-Recovery-Einsatz separat erforderlich.
 Die Veröffentlichung bescheinigt keine bestandene Hardware-Abnahme.
 
+Für die Entwicklungsbasis von 1.2.0-beta wurden zusätzlich Repository- und
+Portable-Tests unter Linux sowie auf einem echten, gezielt eingeschränkten
+SMB-/CIFS-Mount ausgeführt. Der
+[Prüflauf zu 667dca2](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/36098171134)
+bezieht sich auf diese Entwicklungsbasis, nicht auf das anschliessend versionierte
+Release-Paket. Die [Release Notes](docs/RELEASE-1.2.0-beta.md) trennen diese Belege
+von der abschliessenden Paket- und Downloadprüfung. Reale QNAP-/Synology-Geräte,
+Stromausfälle und ein bootfähiger vollständiger Hardware-Restore sind damit
+nicht nachgewiesen.
+
 ### Weiterhin bekannte Grenzen
 
 - **Speicherbelegung berechnen:** durchsucht alle erkannten Backup-Dateien und
@@ -277,7 +306,7 @@ Die Veröffentlichung bescheinigt keine bestandene Hardware-Abnahme.
 
 ## Installation
 
-1. Bewusst zwischen stabilem Release 1.0.0 und Vorabversion 1.1.0-beta wählen.
+1. Bewusst zwischen stabilem Release 1.0.0 und Vorabversion 1.2.0-beta wählen.
    Das entsprechende ZIP unten herunterladen oder das angebotene Update des
    gewählten Kanals in der LoxBerry-Plugin-Verwaltung verwenden.
 2. In LoxBerry unter **Plugins > Plugin installieren** hochladen.
@@ -296,9 +325,15 @@ Aktuelles reguläres Release-Paket:
 
 [**LoxBerryHostBackup_1.0.0.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip)
 
-Neue Vorabversion mit Datenquellenauswahl und Installationskorrektur:
+Neue Vorabversion mit portablen, platzsparenden NAS-Sicherungsständen
+(der folgende Download ist erst nach erfolgreicher Freigabe verfügbar):
 
-[**LoxBerryHostBackup_1.1.0.zip herunterladen (Pre-Release)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.1.0-beta/LoxBerryHostBackup_1.1.0.zip)
+[**LoxBerryHostBackup_1.2.0.zip herunterladen (Pre-Release)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0-beta/LoxBerryHostBackup_1.2.0.zip)
+
+Bis der neue öffentliche Download geprüft und der Vorabkanal umgestellt ist,
+verweist dieser weiterhin auf das bisherige
+[**LoxBerryHostBackup_1.1.0.zip**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.1.0-beta/LoxBerryHostBackup_1.1.0.zip).
+Dieses ältere Paket enthält noch keine portablen Repository-Stände.
 
 Dieses öffentliche Release-ZIP direkt installieren, **nicht entpacken**.
 Ein GitHub-Konto ist für den Release-Download nicht nötig. Nur Downloads aus
@@ -306,16 +341,18 @@ GitHub Actions sind äussere Artefakt-ZIPs, aus denen das innere Plugin-ZIP
 zuerst entpackt werden muss. Alte Downloads bleiben in der
 [Release-Historie](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases) erhalten.
 
-### Update auf 1.1.0-beta
+### Update auf 1.2.0-beta
 
 In der LoxBerry-Plugin-Verwaltung nach Updates suchen oder das ZIP manuell
 installieren. Für Update-Angebote dieser Vorabversion muss in LoxBerry der
-Vorabkanal gewählt sein. Die automatische Installation hängt von der persönlichen
-Update-Einstellung ab. Programmversion, Release-Tag und Paket lauten `1.1.0`,
-`v1.1.0-beta` und `LoxBerryHostBackup_1.1.0.zip`.
+Vorabkanal gewählt und nach der öffentlichen ZIP-Prüfung auf 1.2.0 umgestellt sein.
+Die automatische Installation hängt von der persönlichen Update-Einstellung ab.
+Programmversion, Release-Tag und Paket lauten `1.2.0`, `v1.2.0-beta` und
+`LoxBerryHostBackup_1.2.0.zip`.
 
-**Bereits das manuelle 1.0.0-Testpaket installiert?** 1.1.0 ist nun eine höhere,
-eindeutig unterscheidbare Paketversion. Das neue ZIP als Update installieren,
+**Bereits 1.0.0, 1.1.0-beta oder ein manuelles 1.1.0-develop-Paket installiert?**
+1.2.0 ist eine höhere, eindeutig unterscheidbare Paketversion. Das neue ZIP als
+Update installieren,
 **nicht vorher deinstallieren**. Bestehende Datenquellenregeln und Ausnahmen
 bleiben erhalten; für die lokale Empfehlung diese bewusst auswählen und speichern.
 
@@ -348,23 +385,29 @@ Empfohlene Reihenfolge:
 6. Manuelles Backup starten.
 7. Live-Status beobachten.
 8. Nach Abschluss Backup-Liste prüfen.
-9. Dateien über den Backup-Explorer prüfen.
-10. Export herunterladen, falls ein transportierbares Archiv benötigt wird.
+9. Bei Verzeichnissicherungen Dateien über den Backup-Explorer prüfen; bei
+   portablen Repository-Ständen die Struktur-/Inhaltsprüfung und den Offline-Test nutzen.
+10. Falls das Format einen Einzelarchiv-Export unterstützt, diesen bei Bedarf
+    herunterladen. Repository-Stände nicht als einzelne Backup-Ordner kopieren;
+    vollständiges Repository und externe Wiederherstellungsdatei sichern.
 11. Restore nur auf einem Testsystem oder in einer Rescue-Umgebung prüfen.
 
 ## Funktionen
 
-- vollständiges Host-Backup per `rsync`
-- inkrementelle Snapshot-Backups per `rsync --link-dest`
-- vier explizite Metadatenprofile für native Linux-, CIFS-/NFS- und portable Ziele
+- Vollbackups als Verzeichniskopie per `rsync` oder eigenständiges portables TAR
+- platzsparende Verzeichnisstände per `rsync --link-dest` sowie portable,
+  verschlüsselte Repository-Stände mit Wiederverwendung gemeinsamer Datenblöcke
+- weiterhin vier Sicherungsverfahren für native Linux-, geeignete CIFS-/NFS-
+  und portable Ziele; die zwei Spezialverfahren stehen unter erweiterten Einstellungen
 - Restore eines ausgewählten Backups
 - Restore-Check und Restore-Plan vor dem Start
 - Live-Status für laufende Backup-, Restore-, Export- und Import-Jobs
 - Stop-Button für laufende Backups
 - Backup-Liste mit Status, Grösse, Dateianzahl, Abschlusszeit und Exportstatus
-- Backup-Explorer in der Weboberfläche
+- Backup-Explorer für Verzeichnissicherungen in der Weboberfläche
 - Import externer `.tar.gz`-Backup-Archive im Hintergrund
-- Export vorhandener Backups als `.tar.gz` mit SHA-256- und Manifest-Bezug
+- Einzelarchiv-Export geeigneter Backups als `.tar.gz` mit SHA-256- und Manifest-Bezug;
+  nicht für portable Repository-Stände
 - Löschen vorhandener Backups
 - Export und Import der Plugin-Einstellungen als JSON-Datei
 - Docker- und Dienst-Inventarisierung
@@ -382,6 +425,8 @@ Empfohlene Reihenfolge:
 Laufende oder unvollständige Backups können nicht geöffnet, exportiert oder für
 Restore ausgewählt werden. Diese Aktionen werden erst freigegeben, wenn das
 Backup vollständig abgeschlossen ist.
+Formatgrenzen bleiben auch danach bestehen: Portable Repository-Stände bieten
+keinen normalen Einzelarchiv-Export, Backup-Explorer oder direkten Online-Restore.
 
 ## Einstellungen
 
@@ -607,7 +652,7 @@ File Capabilities können für einzelne Systemprogramme sicherheitsrelevant sein
 deshalb ist das Weglassen von xattrs eine bewusste, sichtbare Entscheidung und
 keine pauschale Behandlung von rsync-Code 23 als Erfolg.
 
-### Portable Sicherungsstände sicher einrichten (develop)
+### Portable Sicherungsstände sicher einrichten (ab 1.2.0-beta)
 
 Die Einrichtung eines Repositorys ist eine ausdrückliche Zusatzaktion, kein
 automatischer Formatwechsel bestehender Vollarchive. Unter **Sicherungsverfahren**
@@ -654,7 +699,7 @@ erfolgreichen System-Restores. Die konkrete Engine-/Zielprüfung sowie ein
 Offline-Restore-Test bleiben Voraussetzung der Freigabe. Die Einrichtung selbst
 startet kein Backup und stellt weder Sicherungsverfahren noch Sicherungsart um.
 
-### Laufwerke und Netzfreigaben auswählen (develop-Teststand)
+### Laufwerke und Netzfreigaben auswählen
 
 Unter **Laufwerke und Netzfreigaben** lassen sich die Grundregel und einzelne
 eingebundene Quellen auswählen. Änderungen wirken erst nach dem Speichern,
@@ -1033,7 +1078,7 @@ Offline-Schritte; Bootpartition, Bootloader und Systemtest bleiben eigene Schrit
 
 ## Inhaltsprüfung, Wartung und Diagnose
 
-Im aktuellen develop-Stand liegt **Erweiterte Aufbewahrung und Integritätsprüfung**
+Ab 1.2.0-beta liegt **Erweiterte Aufbewahrung und Integritätsprüfung**
 unter **Optionen und Freigaben**, direkt unter **Zu stoppende Dienste vor dem
 Backup**. Der Bereich ist zunächst zugeklappt und verwendet dieselbe kompakte
 Schriftgrösse wie die übrigen Einstellungsbereiche. Die neue Anordnung und das
@@ -1223,14 +1268,15 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 Branches:
 
 - `main`: veröffentlichter Hauptstand 1.0.0
-- `develop`: Vorabstand 1.1.0-beta mit Datenquellenauswahl und Installationskorrekturen
+- `develop`: Vorabstand 1.2.0-beta mit portablen, platzsparenden NAS-Sicherungsständen
 - `pre-develop`: älterer Referenzstand; unverändert
 
 Update-Dateien:
 
 - `main/release.cfg`: Stable 1.0.0 mit dem geprüften Release-ZIP
-- `develop/prerelease.cfg`: geprüftes Paket 1.1.0-beta, ausschliesslich für
-  Nutzer des bewusst gewählten Vorabkanals
+- `develop/prerelease.cfg`: bis zur Prüfung des öffentlichen 1.2.0-ZIPs weiterhin
+  das geprüfte Paket 1.1.0-beta; die gezielte Umstellung auf 1.2.0 betrifft
+  ausschliesslich Nutzer des bewusst gewählten Vorabkanals
 
 Die in `plugin.cfg` hinterlegten Kanaladressen bleiben unverändert, damit
 bestehende Installationen die neuen Metadaten finden. Sobald eine neuere

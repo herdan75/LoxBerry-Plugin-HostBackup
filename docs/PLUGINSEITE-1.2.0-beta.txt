@@ -1,0 +1,20 @@
+Ergänzung zum bestehenden stabilen Pluginseiten-Eintrag (kein neuer Stable-Stand)
+Nach Veröffentlichung und Prüfung des 1.2.0-beta-Downloads übernehmen.
+
+Autor: Daniel Hermann
+Logo: :plugins:host-backup:icon_256.png
+Status: STABLE
+Version: 1.0.0
+Min. LB Version: 2.0.0
+Release Download: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip
+Pre-Release Download: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0-beta/LoxBerryHostBackup_1.2.0.zip
+Beschreibung: Dateibasiertes Host-Backup und Restore für LoxBerry, Docker und Linux-Dienste. Linux-Dateisicherung oder portable NAS-Sicherung mit Vollbackups und platzsparenden Sicherungsständen; Zeitplanung, Datenquellenauswahl und Integritätsprüfung. Portable System-Restores erfolgen offline. Neue portable Sicherungsstände ab Pre-Release 1.2.0-beta.
+Sprachen: DE
+Diskussion: https://www.loxforum.com/forum/projektforen/loxberry/plugins/485008-neues-loxberry-plugin-host-backup-f%C3%BCr-loxberry-docker-und-dietpi-systeme
+
+Zusammenfassung der Seitenänderung:
+Pre-Release 1.2.0-beta: portable NAS-Sicherungsstände, neue Verfahrensnamen und aktualisierte Einrichtung, Wiederherstellung und Hilfe.
+
+Der öffentliche Release-Download benötigt kein GitHub-Konto. Das eigentliche
+Plugin-ZIP direkt installieren, nicht entpacken und vorher nicht deinstallieren.
+Eine Wiki-Änderung ersetzt nicht die technische Freigabe des Vorabkanals.

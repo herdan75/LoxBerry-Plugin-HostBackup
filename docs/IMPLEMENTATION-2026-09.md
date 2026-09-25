@@ -2,7 +2,7 @@
 
 Entwicklungsbasis: develop, da9aa80. Reihenfolge: Sicherheit, Betrieb, Bedienung,
 Erweiterungen. Stabiler Hauptstand: **1.0.0 auf main**. Aktueller Vorabstand:
-**1.1.0-beta auf develop**, interne Plugin-Version **1.1.0**.
+**1.2.0-beta auf develop**, interne Plugin-Version **1.2.0**.
 Die bisher zurückgestellte AP-14 zur Mail-/Benachrichtigungssemantik ist ausgenommen.
 Am 19.09.2026 wird der vollständige develop-Stand `4da7cf6` auf `main` übernommen.
 Nur Version, Tests der Versions-/Kanaltrennung und aktuelle Dokumentation ändern
@@ -13,7 +13,23 @@ Prüfung des öffentlichen Downloads diesen Stand. Die
 Die ursprüngliche Analyse wurde mit 0.7.0-beta veröffentlicht; historische
 Prüfläufe darunter behalten ihre damaligen Versions- und Commitangaben.
 
-## Vorabversion 1.1.0-beta am 20.09.2026
+## Vorabversion 1.2.0-beta am 25.09.2026
+
+- Portable Sicherung um verschlüsselte, platzsparende Repository-Stände ergänzt;
+  eigenständige Vollarchive und vorhandene Einstellungen bleiben unverändert.
+- Vier verständlich benannte Sicherungsverfahren und zwei Sicherungsarten,
+  zielgebundene Einrichtung, extern aufzubewahrender Wiederherstellungsschlüssel
+  und formatbezogener Offline-Restore mit zusätzlichem Linux-Zwischenspeicher.
+- Repository-Einrichtung, Zusatzexport und erweiterte Aufbewahrung passend in
+  die Oberfläche eingeordnet; Kurzanleitung, kontextbezogene Hilfen und Browser-
+  Regressionen ergänzt. Keine automatische Hardware-/Architekturmigration.
+- Paketversion 1.2.0 und Tag v1.2.0-beta. Der Vorabkanal wird erst nach Prüfung
+  des öffentlichen neuen ZIPs umgestellt; Stable 1.0.0 bleibt unverändert.
+- Prüfstand, sicherer Updateweg und Grenzen stehen in
+  [RELEASE-1.2.0-beta.md](RELEASE-1.2.0-beta.md). Endgültiger Tag-Prüflauf und
+  öffentliche Paketprüfsumme werden bei der Veröffentlichung dokumentiert.
+
+## Historie: Vorabversion 1.1.0-beta am 20.09.2026
 
 - Datenquellenauswahl, NAS-Metadaten-Diagnosen, kompakte Darstellung, Infobuttons
   und erweiterte Kurzanleitung aus dem bisherigen develop-Teststand aufgenommen.

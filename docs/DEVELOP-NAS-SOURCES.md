@@ -1,11 +1,12 @@
 # NAS- und Datenquellenauswahl ab 1.1.0-beta
 
-Die Datenquellenauswahl und detaillierte NAS-Diagnose sind Teil der Vorabversion
-1.1.0-beta auf Basis von 1.0.0. Das stabile Release 1.0.0 bleibt unverändert.
-Installationskorrekturen und Grenzen stehen in den [Release Notes](RELEASE-1.1.0-beta.md).
+Die Datenquellenauswahl und detaillierte NAS-Diagnose wurden mit 1.1.0-beta
+eingeführt. Die aktuelle Vorabversion **1.2.0-beta** ergänzt portable,
+platzsparende NAS-Sicherungsstände. Das stabile Release 1.0.0 bleibt unverändert.
+Updatehinweise und Grenzen stehen in den [Release Notes](RELEASE-1.2.0-beta.md).
 
-Die folgenden verständlicheren Bezeichnungen gehören zum aktuellen develop-Stand.
-Bereits veröffentlichte Pakete können noch die alten Namen anzeigen. Die Zuordnung
+Die folgenden verständlicheren Bezeichnungen gehören zu 1.2.0-beta.
+Ältere Pakete können noch die alten Namen anzeigen. Die Zuordnung
 steht unter [Sicherungsverfahren](../README.md#sicherungsverfahren); vorhandene
 Konfigurationswerte werden durch die Umbenennung nicht verändert.
 
@@ -26,12 +27,13 @@ Konfigurationswerte werden durch die Umbenennung nicht verändert.
 
 ### Öffentliches Pre-Release herunterladen
 
-[**LoxBerryHostBackup_1.1.0.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.1.0-beta/LoxBerryHostBackup_1.1.0.zip)
+[**LoxBerryHostBackup_1.2.0.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0-beta/LoxBerryHostBackup_1.2.0.zip)
 
 Dieses ZIP **ohne Entpacken** in der LoxBerry-Plugin-Verwaltung installieren.
 Der öffentliche Release-Download erfordert keine Anmeldung bei GitHub.
-Programm- und Paketversion sind 1.1.0; der Release-Tag lautet v1.1.0-beta.
-Der Vorabkanal ist nach erfolgreicher Downloadprüfung auf dieses Paket gesetzt.
+Programm- und Paketversion sind 1.2.0; der Release-Tag lautet v1.2.0-beta.
+Das Paket wird nach erfolgreichem Tag-Prüflauf veröffentlicht. Der Vorabkanal
+wird erst nach erfolgreicher Prüfung des öffentlichen Downloads darauf gesetzt.
 
 ### Alternativ: neuere GitHub-Actions-Testpakete
 
@@ -42,14 +44,14 @@ Der Vorabkanal ist nach erfolgreicher Downloadprüfung auf dieses Paket gesetzt.
    alten Stand; er wechselt nach einem Push nicht automatisch zum neuesten ZIP.
 2. Unten unter **Artifacts** auf **LoxBerryHostBackup** klicken.
 3. Das heruntergeladene Artefakt-ZIP **einmal entpacken**. Es enthält das eigentliche
-   Installationspaket **LoxBerryHostBackup_1.1.0.zip**. Dieses innere ZIP unverändert
+   Installationspaket **LoxBerryHostBackup_1.2.0.zip**. Dieses innere ZIP unverändert
    in der LoxBerry-Plugin-Verwaltung hochladen, nicht das äussere Artefakt-ZIP.
 
 GitHub-Artefakte sind zeitlich befristet. Spätere develop-Commits werden nicht
 allein durch einen Push zum veröffentlichten Release; ein einzelner Run-Link
 bleibt auf seinem Commit. Für das veröffentlichte Paket den direkten Link oben
-verwenden. Frühere Testpakete trugen noch dieselbe Versionsnummer wie 1.0.0;
-1.1.0-beta ist nun davon unterscheidbar.
+verwenden. Frühere develop-Testpakete trugen noch die Versionsnummer 1.1.0;
+1.2.0-beta ist durch die höhere interne Version 1.2.0 davon unterscheidbar.
 
 ### Installation und erster Test
 
@@ -82,7 +84,7 @@ Eigentümer/Rechte erzwingt, Portable Sicherung **und** Vollbackup auswählen un
 speichern; erneut prüfen. Archive sind nicht inkrementell und erfordern für
 den System-Restore eine Offline-/Rescue-Umgebung.
 
-Der aktuelle develop-Stand ergänzt **Portable Sicherung** um **Platzsparende
+Version 1.2.0-beta ergänzt **Portable Sicherung** um **Platzsparende
 Sicherungsstände** in einem verschlüsselten Repository. Das ist kein fünftes
 Profil und keine Änderung bestehender Vollarchive. Erst nach Einrichtung am
 gespeicherten Ziel und bestätigter externer Schlüsselaufbewahrung umstellen;
@@ -94,8 +96,7 @@ Einrichtung nicht. Aufklappen oder ein Profilwechsel ändern keine weiteren
 Einstellungen und richten kein Repository ein. Für Repository-Stände ist beim
 Offline-Restore zusätzlicher Linux-Zwischenspeicher nötig. Die
 [Repository-Anleitung](PORTABLE-REPOSITORY.md) beschreibt Voraussetzungen und
-Recovery. Ein bereits veröffentlichtes 1.1.0-beta-Paket enthält diese neue
-develop-Erweiterung nicht automatisch.
+Recovery. Das ältere 1.1.0-beta-Paket enthält diese Erweiterung noch nicht.
 
 ## Technische Schutzmassnahmen
 
