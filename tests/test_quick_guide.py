@@ -31,7 +31,8 @@ class QuickGuideTests(unittest.TestCase):
         )
         if guide is None or not re.search(r"<summary>\s*Kurzanleitung\s*</summary>", guide["body"]):
             raise AssertionError("The setup quick guide must remain available in its existing disclosure")
-        cls.steps = [plain_text(item) for item in re.findall(r"<li\b[^>]*>(.*?)</li>", guide["body"], re.DOTALL)]
+        cls.markup = guide["body"]
+        cls.steps = [plain_text(item) for item in re.findall(r"<li\b[^>]*>(.*?)</li>", cls.markup, re.DOTALL)]
         cls.text = plain_text(guide["body"])
 
     def step_with(self, pattern):
@@ -78,6 +79,39 @@ class QuickGuideTests(unittest.TestCase):
         self.assertRegex(restore_step, r"volume-zuordnung|volumes?.{0,80}zuord|datenträger.{0,80}zuord")
         self.assertRegex(restore_step, r"restore-test|restoretest|test-restore|testrestore")
         self.assertRegex(restore_step, r"separat|testdatenträger|offline|rescue")
+
+    def test_portable_setup_has_short_numbered_steps_in_the_new_location(self):
+        setup = re.search(r'<ol class="portable-setup-steps">(.*?)</ol>', self.markup, re.DOTALL)
+        self.assertIsNotNone(setup, "Portable setup should be a readable, numbered sequence")
+        steps = [plain_text(item) for item in re.findall(r"<li>(.*?)</li>", setup[1], re.DOTALL)]
+        self.assertEqual(len(steps), 4)
+        self.assertIn("portable sicherung", steps[0])
+        self.assertIn("vollbackup", steps[0])
+        self.assertIn("speichern", steps[0])
+        self.assertIn("sicherungsverfahren", steps[1])
+        self.assertIn("einrichtung für platzsparende sicherungsstände", steps[1])
+        self.assertIn("gespeicherten ziel", steps[1])
+        self.assertIn("wiederherstellungsdatei", steps[2])
+        self.assertIn("ausserhalb", steps[2])
+        self.assertIn("erst danach", steps[2])
+        self.assertIn("sicherungsart / zusatzexport", steps[3])
+        self.assertIn("ausdrücklich deaktivieren", steps[3])
+        self.assertRegex(steps[3], r"speichern.*nächstes backup prüfen")
+        self.assertTrue(all(len(step) < 400 for step in steps))
+
+    def test_portable_full_backup_does_not_require_repository_setup(self):
+        self.assertIn("für portable vollbackups ist diese einrichtung nicht erforderlich", self.text)
+        self.assertIn("ein portables vollarchiv selbst bleibt nicht inkrementell", self.text)
+        self.assertRegex(self.text, r"linux-zwischenspeicher.{0,80}gesamten stand plus reserve")
+
+    def test_maintenance_location_and_non_destructive_preview_are_explained(self):
+        step = self.step_with(r"aufbewahrung und regelmässige prüfung")
+        self.assertIn("optionen und freigaben", step)
+        self.assertIn("unter den zu stoppenden diensten", step)
+        self.assertIn("erweiterte aufbewahrung und integritätsprüfung", step)
+        self.assertIn("speichern", step)
+        self.assertIn("gespeicherten stand", step)
+        self.assertIn("löscht selbst nichts", step)
 
 
 if __name__ == "__main__":

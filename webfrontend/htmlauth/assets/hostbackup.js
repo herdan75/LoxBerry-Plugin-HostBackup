@@ -17,7 +17,7 @@
   function validateSettings(values, repository) {
     if (values.metadata_mode === 'portable-archive' && values.backup_mode === 'snapshot') {
       if (values.create_export_after_backup === '1') return 'Für portable Sicherungsstände den automatischen tar.gz-Export ausdrücklich deaktivieren. Repository-Stände teilen Datenblöcke und sind keine einzelnen Exportarchive.';
-      if (!repository || repository.target_matches !== true || repository.available !== true || repository.initialized !== true || repository.key_confirmed !== true) return 'Portable Sicherungsstände benötigen ein geprüftes Repository am gespeicherten Backup-Ziel und die bestätigte Aufbewahrung der Wiederherstellungsdatei. Ziel und Root-Freigabe zuerst mit Vollbackup speichern; unten „Portable Sicherungsstände einrichten“ abschliessen und den Status prüfen. Danach diese Sicherungsart erneut wählen.';
+      if (!repository || repository.target_matches !== true || repository.available !== true || repository.initialized !== true || repository.key_confirmed !== true) return 'Portable Sicherungsstände benötigen ein geprüftes Repository am gespeicherten Backup-Ziel und die bestätigte Aufbewahrung der Wiederherstellungsdatei. Ziel und Root-Freigabe zuerst mit Vollbackup speichern; unter Sicherungsverfahren die „Einrichtung für platzsparende Sicherungsstände“ abschliessen und den Status prüfen. Danach diese Sicherungsart erneut wählen.';
     }
     if (values.schedule_enabled === '1') {
       if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(values.schedule_time || '')) return 'Bitte eine gültige Startzeit wählen.';
@@ -101,7 +101,7 @@
   function el(tag, text, className) { var node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; }
   function actionOf(form) { return (form.querySelector('[name="action"]') || {}).value || ''; }
   function settingsForm(form) { return form && (form.id === 'settings-save-form' || form.id === 'maintenance-settings-form'); }
-  function tracked(item) { return item.name === 'source_selection_json' || !/^(hidden|submit|button|file)$/.test(item.type); }
+  function tracked(item) { return settingsForm(item.form) && (item.name === 'source_selection_json' || !/^(hidden|submit|button|file)$/.test(item.type)); }
   function controls(name) { return all('#settings-save-form [name], #maintenance-settings-form [name]').filter(function (item) { return item.name === name && tracked(item); }); }
   function names() { return Array.from(new Set(all('#settings-save-form [name], #maintenance-settings-form [name]').filter(tracked).map(function (item) { return item.name; }))); }
   function states() { var result = {}; names().forEach(function (name) { result[name] = controlState(controls(name)); }); return result; }
@@ -151,7 +151,12 @@
     if (panel && advancedMetadata(mode)) panel.open = true;
     if (summary) summary.textContent = advancedMetadata(mode) ? '· ' + metadataLabel(mode) + ' ausgewählt' : '';
     var repositoryPanel = byId('portable-repository-panel');
-    if (repositoryPanel && mode === 'portable-archive') repositoryPanel.open = true;
+    if (repositoryPanel) {
+      repositoryPanel.hidden = mode !== 'portable-archive';
+      // Readiness is needed even with the setup disclosure closed. This never
+      // initializes a repository or changes the user's saved configuration.
+      if (!repositoryPanel.hidden && !repositoryState) loadRepositoryStatus();
+    }
   }
   function renderRepositoryStatus(errorMessage) {
     var panel = byId('portable-repository-panel'), status = byId('repository-status'); if (!panel || !status) return;
@@ -160,7 +165,7 @@
     status.setAttribute('aria-busy', repositoryLoading || repositoryWriting ? 'true' : 'false');
     byId('repository-status-refresh').disabled = repositoryLoading || repositoryWriting;
     [['repository-init-form', usable && !data.initialized], ['repository-key-export-form', usable && data.initialized], ['repository-confirm-key-form', usable && data.initialized && data.key_exported && !data.key_confirmed]].forEach(function (item) {
-      all('button[type="submit"],input[type="checkbox"]', byId(item[0])).forEach(function (control) { control.disabled = repositoryLoading || repositoryWriting || !item[1]; });
+      Array.from(byId(item[0]).elements).filter(function (control) { return control.matches('button[type="submit"],input[type="checkbox"]'); }).forEach(function (control) { control.disabled = repositoryLoading || repositoryWriting || !item[1]; });
     });
   }
   async function loadRepositoryStatus() {
@@ -179,7 +184,7 @@
   async function submitRepositoryForm(form) {
     if (repositoryWriting || repositoryLoading || !requireSaved() || !form.reportValidity()) return;
     var action = actionOf(form);
-    var keySaved = action === 'repository-confirm-key' && form.querySelector('[name="recovery_key_saved"]').checked;
+    var keySaved = action === 'repository-confirm-key' && form.elements.namedItem('recovery_key_saved').checked;
     if (!repositoryState || repositoryState.available !== true) { feedback('Zuerst den Repository-Status erfolgreich prüfen.', 'warning'); return; }
     if (action === 'repository-init' && !root.confirm('Am gespeicherten Backup-Ziel einen verschlüsselten Speicher für portable Sicherungsstände einrichten? Bestehende Archive bleiben unverändert. Danach muss die Wiederherstellungsdatei ausserhalb dieses LoxBerry aufbewahrt werden.')) return;
     repositoryWriting = true; setBusy(form, true); renderRepositoryStatus();
@@ -205,7 +210,7 @@
       } else {
         var result = await request(action, {}, Object.assign({ timeout: 120000 }, options));
         repositoryState = result.data || null; feedback(result.message || 'Repository-Aktion abgeschlossen. Status prüfen.', 'ok');
-        if (action === 'repository-confirm-key') form.querySelector('[name="recovery_key_saved"]').checked = false;
+        if (action === 'repository-confirm-key') form.elements.namedItem('recovery_key_saved').checked = false;
       }
     } catch (error) { feedback(error.name === 'AbortError' ? 'Die Repository-Antwort dauert zu lange. Vor einem erneuten Versuch den Status prüfen.' : error.message, 'error'); }
     finally { repositoryWriting = false; setBusy(form, false); await loadRepositoryStatus(); }
@@ -528,7 +533,7 @@
         Object.keys(submitted).forEach(function (name) { if (controls(name).some(function (item) { return item.form === form; })) { initial[name] = submitted[name]; updateDirty(initial, changed, name, controlState(controls(name)), new Date()); } });
         if (action === 'save-config') { pendingDraft = false; pendingImport = false; }
         renderDirty(); clearPreflight(); fragment('target-notice', byId('target-notice')); overview();
-        if (action === 'save-config' && byId('portable-repository-panel')) { repositoryState = null; repositoryStatusTarget = null; renderRepositoryStatus(); if (byId('portable-repository-panel').open) loadRepositoryStatus(); }
+        if (action === 'save-config' && byId('portable-repository-panel')) { repositoryState = null; repositoryStatusTarget = null; renderRepositoryStatus(); if (!byId('portable-repository-panel').hidden) loadRepositoryStatus(); }
         feedback(dirty() ? 'Gespeichert. Währenddessen geänderte Eingaben sind noch ungespeichert.' : 'Einstellungen gespeichert. Backups verwenden jetzt diesen Stand.', 'ok');
       } else if (action === 'import-config') {
         // Only this explicitly requested replacement navigates; never task completion.

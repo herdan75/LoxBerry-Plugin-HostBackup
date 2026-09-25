@@ -86,8 +86,13 @@ Der aktuelle develop-Stand ergänzt **Portable Sicherung** um **Platzsparende
 Sicherungsstände** in einem verschlüsselten Repository. Das ist kein fünftes
 Profil und keine Änderung bestehender Vollarchive. Erst nach Einrichtung am
 gespeicherten Ziel und bestätigter externer Schlüsselaufbewahrung umstellen;
-automatischen tar.gz-Export bewusst deaktivieren. Dafür ist beim Offline-Restore
-zusätzlicher Linux-Zwischenspeicher nötig. Die
+automatischen tar.gz-Export unter **Sicherungsart / Zusatzexport** bewusst
+deaktivieren. Die zunächst zugeklappte **Einrichtung für platzsparende
+Sicherungsstände** steht direkt unter **Sicherungsverfahren** und ist nur bei
+gewählter **Portable Sicherung** sichtbar. Portable Vollbackups benötigen diese
+Einrichtung nicht. Aufklappen oder ein Profilwechsel ändern keine weiteren
+Einstellungen und richten kein Repository ein. Für Repository-Stände ist beim
+Offline-Restore zusätzlicher Linux-Zwischenspeicher nötig. Die
 [Repository-Anleitung](PORTABLE-REPOSITORY.md) beschreibt Voraussetzungen und
 Recovery. Ein bereits veröffentlichtes 1.1.0-beta-Paket enthält diese neue
 develop-Erweiterung nicht automatisch.

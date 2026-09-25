@@ -18,6 +18,14 @@ validiert werden.
   eigenständige TAR-Vollbackup bleibt unverändert verfügbar.
 - Zielgebundene Einrichtung mit separatem Wiederherstellungsschlüssel,
   verpflichtender externer Schlüsselbestätigung und echter Metadaten-Vorprüfung.
+- Einrichtung für portable Sicherungsstände direkt beim Sicherungsverfahren
+  eingeordnet, nur bei Portable Sicherung sichtbar und zunächst zugeklappt.
+  Zusatzexport zur Sicherungsart verschoben; Kurzanleitung um klare
+  Einrichtungsschritte und die getrennte Schlüsselbestätigung ergänzt.
+- Erweiterte Aufbewahrung und Integritätsprüfung unter Optionen und Freigaben
+  direkt nach den zu stoppenden Diensten eingeordnet; Schrift und Abstände
+  den übrigen Aufklappbereichen angeglichen. Speicher- und Vorschauaktionen
+  bleiben getrennt, vorhandene Einstellungen unverändert.
 - Authentifizierte Veröffentlichung erst nach erfolgreicher Kopier-/Quellprüfung;
   gemeinsame Repository-Daten werden nicht als einzelne Backup-Ordner gelöscht.
 - Offline-Wiederherstellung mit zusätzlichem Linux-Zwischenspeicher und expliziten

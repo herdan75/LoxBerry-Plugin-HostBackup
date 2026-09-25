@@ -83,6 +83,58 @@ class WebSecurityTests(unittest.TestCase):
             self.assertIn(action, dispatcher)
         self.assertIn('[ "$#" -eq 1 ] || fail "unexpected arguments for $action"', dispatcher)
 
+    def test_inline_repository_controls_keep_independent_external_forms(self) -> None:
+        method = re.search(r'<fieldset\b[^>]*id="backup-method-settings"[^>]*>(.*?)</fieldset>', CGI, re.DOTALL)
+        self.assertIsNotNone(method)
+        self.assertIn('id="portable-repository-panel"', method.group(1))
+        self.assertIn('Einrichtung für platzsparende Sicherungsstände', method.group(1))
+        self.assertNotRegex(method.group(1), r'<form\b')
+        for action in ("init", "key-export", "confirm-key"):
+            identifier = "repository-" + action + "-form"
+            self.assertRegex(method.group(1), r'<button\b[^>]*form="' + identifier + '"')
+            form = re.search(r'<form\b[^>]*id="' + identifier + r'"[^>]*>(.*?)</form>', CGI, re.DOTALL)
+            self.assertIsNotNone(form)
+            self.assertIn('$csrf_html', form.group(1))
+            self.assertNotRegex(form.group(1), r'<(?:button|label)\b')
+        self.assertRegex(method.group(1), r'<input\b(?=[^>]*name="recovery_key_saved")(?=[^>]*form="repository-confirm-key-form")[^>]*>')
+        kind = re.search(r'<fieldset\b[^>]*id="backup-type-settings"[^>]*>(.*?)</fieldset>', CGI, re.DOTALL)
+        self.assertIsNotNone(kind)
+        self.assertIn('id="backup-extra-export"', kind.group(1))
+        self.assertIn('name="create_export_after_backup"', kind.group(1))
+        self.assertNotIn('name="create_export_after_backup"', method.group(1))
+        self.assertIn('form.elements', JS, 'External controls must use their real form owner')
+
+    def test_inline_maintenance_preserves_independent_form_owners_and_csrf(self) -> None:
+        options = re.search(r'<fieldset\b[^>]*id="options-permissions-settings"[^>]*>(.*?)</fieldset>', CGI, re.DOTALL)
+        self.assertIsNotNone(options)
+        body = options.group(1)
+        self.assertRegex(body, r'(?s)<details class="stop-target-panel">.*?</details>\s*<details class="maintenance-card" id="maintenance-settings-panel">')
+        self.assertNotRegex(body, r'<form\b')
+        fields = (
+            "retention_mode", "keep_daily", "keep_weekly", "keep_monthly",
+            "log_retention_days", "quarantine_retention_days", "integrity_enabled",
+            "integrity_interval_days",
+        )
+        for name in fields:
+            self.assertRegex(body, r'<(?:input|select)\b(?=[^>]*name="' + name + r'")(?=[^>]*form="maintenance-settings-form")[^>]*>')
+        for identifier, action in (("maintenance-settings-form", "maintenance-config"), ("maintenance-preview-form", "maintenance-preview")):
+            self.assertRegex(body, r'<button\b(?=[^>]*type="submit")(?=[^>]*form="' + identifier + r'")[^>]*>')
+            form = re.search(r'<form\b[^>]*id="' + identifier + r'"[^>]*>(.*?)</form>', CGI, re.DOTALL)
+            self.assertIsNotNone(form)
+            self.assertIn('$csrf_html', form.group(1))
+            self.assertIn('name="action" value="' + action + '"', form.group(1))
+            self.assertNotRegex(form.group(1), r'<(?:button|label|select)\b')
+            for name in fields:
+                self.assertNotIn('name="' + name + '"', form.group(1))
+        self.assertIn('id="maintenance-preview-form" class="maintenance-preview-form"', CGI)
+        self.assertIn('Array.from(form.elements)', JS)
+        self.assertIn('return settingsForm(item.form)', JS)
+        self.assertIn('item.form === form', JS)
+        self.assertIn("if (action === 'maintenance-preview' && !requireSaved()) return false", JS)
+        self.assertIn("(action === 'backup' || action === 'maintenance-preview') && !requireSaved()", JS)
+        self.assertIn('#hostbackup-app .maintenance-card > summary', STYLE)
+        self.assertIn('#hostbackup-app .maintenance-actions', STYLE)
+
     def test_repository_secret_is_only_an_explicit_nostore_attachment(self) -> None:
         helper = re.search(r"sub repository_key_download \{(?P<body>.*?)\n\}", CGI, re.DOTALL)
         self.assertIsNotNone(helper)

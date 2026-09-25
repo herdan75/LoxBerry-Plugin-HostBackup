@@ -86,6 +86,16 @@ function renderFixture(metadataMode) {
   return execFileSync('perl',['-MHostBackupFixture','webfrontend/htmlauth/index.cgi'], {cwd:repo,env:{...process.env,HOSTBACKUP_FIXTURE_METADATA:metadataMode,PERL5LIB:perlLib,LBPDATADIR:temp,REQUEST_METHOD:'GET',REMOTE_USER:'fixture',HTTP_USER_AGENT:'fixture'},encoding:'utf8'});
 }
 let html=renderFixture('native-strict');
+const portableHtml=renderFixture('portable-archive');
+function assertNoNestedFormMarkup(markup) {
+  let depth=0;
+  for(const tag of markup.matchAll(/<\/?form\b[^>]*>/gi)) {
+    if(/^<\/form/i.test(tag[0])) { assert.equal(depth,1,'Form closing tag matches one open form');depth--; }
+    else { assert.equal(depth,0,'Actual CGI markup must never nest forms');depth++; }
+  }
+  assert.equal(depth,0,'All forms are closed');
+}
+assertNoNestedFormMarkup(html);assertNoNestedFormMarkup(portableHtml);
 for(const mode of ['network-compatible','fake-super']) {
   const legacyHtml=renderFixture(mode);
   assert.match(legacyHtml,/<details class="metadata-advanced" id="metadata-advanced" open>/,'Existing advanced selection remains visible without JavaScript: '+mode);
@@ -124,6 +134,9 @@ let failSave=true, taskFinished=false, tokenNumber=0, postCount=0, htmlCount=0, 
 let overviewIssues=false, reportRequests=0, taskPhase='copying';
 let lastSavedSources, failSources=false, failBackupMetadata=false;
 let targetNoticeMode='http-error',targetNoticeRequests=0;
+const maintenanceFields=['retention_mode','keep_daily','keep_weekly','keep_monthly','log_retention_days','quarantine_retention_days','integrity_enabled','integrity_interval_days'];
+const postActions=[],maintenancePolicies=[],maintenancePreviews=[];
+let failMaintenance=false,maintenanceDelay=0,savedMaintenance={};
 const repositoryState={initialized:false,key_confirmed:false,key_exported:false,available:true,engine_version:'fixture'};
 const repositoryPosts=[],recoveryFixture='{"test_only":true,"secret":"FIXTURE-NOT-A-REAL-RECOVERY-KEY"}\n';
 const probe={status:'error',mode:'network-compatible',message:'Der Test kann Eigentümer nicht erhalten.',checks:[{name:'Eigentümer und Rechte',status:'error',details:'CIFS erzwingt feste Rechte.',expected:'0:0 640',actual:'1000:1000 666',exit_code:23,stderr:'rsync: <img src=x onerror="window.unsafeProbe=true"> Operation not permitted'},{name:'xattrs',status:'skipped',details:'Bewusst ausgelassen.'}],advice:['Mount-Einstellungen prüfen oder Portable Archive mit Vollbackup und Offline-Restore verwenden.']};
@@ -152,6 +165,7 @@ const server=http.createServer(async(req,res)=>{
       let body='';for await(const chunk of req)body+=chunk;
       postCount++;assert.equal(req.headers['x-hostbackup-request'],'1');assert.equal(req.headers['x-csrf-token'],'fresh-'+tokenNumber);
       const params=new URLSearchParams(body);assert.equal(params.get('csrf_token'),'fresh-'+tokenNumber);
+      postActions.push(action);
       if(action&&action.startsWith('repository-')) {
         repositoryPosts.push(action);
         if(action==='repository-init') { assert.equal(repositoryState.initialized,false);repositoryState.initialized=true;return json(res,{ok:true,data:repositoryState,message:'Repository eingerichtet. Wiederherstellungsdatei herunterladen.'}); }
@@ -159,7 +173,19 @@ const server=http.createServer(async(req,res)=>{
         if(action==='repository-confirm-key') { assert.equal(repositoryState.key_exported,true);assert.equal(params.get('recovery_key_saved'),'1');repositoryState.key_confirmed=true;return json(res,{ok:true,data:repositoryState,message:'Sichere Aufbewahrung bestätigt.'}); }
         throw new Error('Unexpected repository action');
       }
-      if(action==='save-config') { lastSavedPath=params.get('backup_root');lastSavedSources=JSON.parse(params.get('source_selection_json')); await new Promise(resolve=>setTimeout(resolve,saveDelay)); return json(res,failSave?{ok:false,error:'Simulierter Speicherfehler'}:{ok:true,message:'Gespeichert'},failSave?400:200); }
+      if(action==='save-config') { assert.equal(params.has('recovery_key_saved'),false,'Repository acknowledgement must never be saved as a setting');for(const name of [...maintenanceFields,'policy_json'])assert.equal(params.has(name),false,'Main settings must not submit maintenance field '+name);lastSavedPath=params.get('backup_root');lastSavedSources=JSON.parse(params.get('source_selection_json')); await new Promise(resolve=>setTimeout(resolve,saveDelay)); return json(res,failSave?{ok:false,error:'Simulierter Speicherfehler'}:{ok:true,message:'Gespeichert'},failSave?400:200); }
+      if(action==='maintenance-config') {
+        assert.equal(params.has('backup_root'),false);assert.equal(params.has('source_selection_json'),false);
+        const policy=JSON.parse(params.get('policy_json'));assert.deepEqual(Object.keys(policy).sort(),maintenanceFields.slice().sort(),'External form serializes all eight maintenance settings only');
+        assert.equal(typeof policy.integrity_enabled,'boolean');for(const name of maintenanceFields.filter(name=>!['retention_mode','integrity_enabled'].includes(name)))assert.equal(typeof policy[name],'number');
+        maintenancePolicies.push(policy);await new Promise(resolve=>setTimeout(resolve,maintenanceDelay));
+        if(failMaintenance)return json(res,{ok:false,error:'Simulierter Wartungsfehler'},400);
+        savedMaintenance={...policy};return json(res,{ok:true,message:'Wartung gespeichert'});
+      }
+      if(action==='maintenance-preview') {
+        assert.deepEqual(Array.from(params.keys()).sort(),['action','csrf_token'],'Preview never submits draft settings');
+        maintenancePreviews.push({...savedMaintenance});return json(res,{ok:true,data:{applied:false,keep:[{backup_id:'saved-policy-'+savedMaintenance.keep_daily,reasons:['Gespeicherte Regel']}],delete:[]},message:'Vorschau ohne Löschung erstellt'});
+      }
       if(action==='backup'&&failBackupMetadata)return json(res,{ok:false,error:'Backup nicht gestartet: Metadatenprüfung fehlgeschlagen.',preflight:{status:'error',checks:[{name:'Metadaten-Modus',ok:false,value:'network-compatible'}],metadata_probe:probe},metadata_probe:probe},400);
       if(action==='record-restore-test') {
         assert.equal(params.get('backup_id'),'fixture-ok');assert.equal(params.get('result'),'passed');assert.match(params.get('tested_at'),/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
@@ -187,10 +213,98 @@ const server=http.createServer(async(req,res)=>{
     if(action==='verification-report')return json(res,verificationReport);
     if(url.pathname==='/system/images/icons/loxberryhostbackup/icon_64.png'){res.writeHead(200,{'Content-Type':'image/png'});res.end(fs.readFileSync(path.join(repo,'icons/icon_64.png')));return;}
     if(url.pathname.startsWith('/system/')){res.writeHead(204);res.end();return;}
-    htmlCount++;res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(html);
+    htmlCount++;res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(url.searchParams.get('fixture')==='portable'?portableHtml:html);
   }catch(error){errors.push(error.message);json(res,{error:error.message},500);}
 });
 async function visible(page,selector){await page.locator(selector).waitFor({state:'visible'});}
+async function openRepositoryByKeyboard(page) {
+  const panel=page.locator('#portable-repository-panel');await panel.waitFor({state:'visible'});
+  if(!await panel.evaluate(node=>node.open)) {await panel.locator(':scope > summary').focus();await page.keyboard.press('Enter');}
+  assert.equal(await panel.evaluate(node=>node.open),true,'Repository disclosure opens with keyboard');
+}
+async function configurationControls(page) {
+  return page.evaluate(()=>Array.from(document.getElementById('settings-save-form').elements).filter(node=>node.name&&node.name!=='csrf_token').map(node=>[node.name,node.value,node.checked||false]));
+}
+async function checkMaintenance(browser,base) {
+  const page=await browser.newPage({viewport:{width:1440,height:1100}});page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
+  await page.goto(base);await visible(page,'#settings-save-form');await page.locator('#stop-targets-list [name="stop_targets_loaded"]').waitFor({state:'attached'});
+  const panel=page.locator('#maintenance-settings-panel'),summary=panel.locator(':scope > summary');
+  assert.equal(await panel.evaluate(node=>node.open),false,'Maintenance starts collapsed');
+  assert.equal(await panel.evaluate(node=>node.parentElement.id),'options-permissions-settings');
+  assert.equal(await panel.evaluate(node=>node.previousElementSibling.classList.contains('stop-target-panel')),true,'Maintenance is the direct next section after stopped services');
+  assert.equal(await page.locator('form form').count(),0);
+  const owners=await panel.locator('[name]').evaluateAll(nodes=>nodes.map(node=>({name:node.name,owner:node.form.id})));
+  assert.deepEqual(owners.map(item=>item.name).sort(),maintenanceFields.slice().sort());
+  assert.ok(owners.every(item=>item.owner==='maintenance-settings-form'));
+  for(const id of ['maintenance-settings-form','maintenance-preview-form']) {
+    assert.equal(await page.locator('#'+id).evaluate(node=>node.closest('#settings-save-form')),null,'Independent action forms are outside the main form');
+    assert.equal(await panel.locator('button[form="'+id+'"]').evaluate(node=>node.form.id),id);
+  }
+  const mainBefore=await configurationControls(page),postsBefore=postCount;
+  savedMaintenance=await page.evaluate(()=>Object.fromEntries(Array.from(document.getElementById('maintenance-settings-form').elements).filter(node=>node.name&&!['action','csrf_token'].includes(node.name)).map(node=>[node.name,node.type==='checkbox'?node.checked:node.type==='number'?Number(node.value):node.value])));
+  for(const [view,width,height] of [['desktop',1440,1100],['mobile',390,844]]) {
+    await page.setViewportSize({width,height});await page.locator('#options-permissions-settings').screenshot({path:path.join(temp,'options-maintenance-'+view+'-closed.png')});
+    await summary.focus();await page.keyboard.press('Enter');assert.equal(await panel.evaluate(node=>node.open),true);
+    const geometry=await panel.evaluate(node=>({left:node.getBoundingClientRect().left,right:node.getBoundingClientRect().right,overflow:node.scrollWidth-node.clientWidth,gap:node.getBoundingClientRect().top-node.previousElementSibling.getBoundingClientRect().bottom,copy:Array.from(node.querySelectorAll(':scope > p,:scope > summary')).map(item=>({tag:item.tagName,size:parseFloat(getComputedStyle(item).fontSize),weight:parseInt(getComputedStyle(item).fontWeight,10),spacing:getComputedStyle(item).letterSpacing})),controls:Array.from(node.querySelectorAll('input,select,button')).filter(item=>item.getBoundingClientRect().width>0).map(item=>({right:item.getBoundingClientRect().right,size:parseFloat(getComputedStyle(item).fontSize)}))}));
+    assert.ok(geometry.left>=0&&geometry.right<=width+1&&geometry.overflow<=1,view+' maintenance stays inside viewport '+JSON.stringify(geometry));
+    assert.ok(geometry.gap>=0&&geometry.gap<=30,view+' related settings retain compact vertical spacing '+JSON.stringify(geometry));
+    assert.ok(geometry.copy.every(item=>item.size===13&&item.weight===(item.tag==='SUMMARY'?700:400)&&['normal','0px'].includes(item.spacing)),view+' actual LoxBerry wide styling cannot enlarge maintenance text '+JSON.stringify(geometry));
+    assert.ok(geometry.controls.every(item=>item.right<=width+1&&item.size<=16),view+' maintenance controls fit normally');
+    await page.locator('#options-permissions-settings').screenshot({path:path.join(temp,'options-maintenance-'+view+'-open.png')});
+    await summary.focus();await page.keyboard.press('Space');assert.equal(await panel.evaluate(node=>node.open),false);
+  }
+  assert.deepEqual(await configurationControls(page),mainBefore);assert.equal(postCount,postsBefore);
+  assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true','Opening/closing maintenance never creates a draft');
+  const noScript=await browser.newPage({javaScriptEnabled:false,viewport:{width:390,height:844}});await noScript.goto(base);
+  assert.equal(await noScript.locator('#maintenance-settings-panel').evaluate(node=>node.open),false);
+  await noScript.locator('#maintenance-settings-panel > summary').focus();await noScript.keyboard.press('Enter');
+  const serialized=await noScript.evaluate(()=>Object.fromEntries(['settings-save-form','maintenance-settings-form','maintenance-preview-form'].map(id=>[id,Array.from(new FormData(document.getElementById(id)).keys())])));
+  for(const name of maintenanceFields)assert.equal(serialized['settings-save-form'].includes(name),false,'No-JS main FormData excludes '+name);
+  assert.ok(maintenanceFields.filter(name=>name!=='integrity_enabled').every(name=>serialized['maintenance-settings-form'].includes(name)));
+  assert.deepEqual(serialized['maintenance-preview-form'].sort(),['action','csrf_token']);
+  for(const id of ['maintenance-settings-form','maintenance-preview-form'])assert.equal(await noScript.locator('button[form="'+id+'"]').evaluate(node=>node.form.id),id);
+  await noScript.close();receipts.push('Maintenance sits directly after services within options, compact 13px desktop/mobile with keyboard disclosure; separate form owners and no-JS FormData prevent nested forms or accidental settings writes');
+  await page.setViewportSize({width:1440,height:1100});await summary.focus();await page.keyboard.press('Enter');
+  const daily=page.locator('[name="keep_daily"]'),weekly=page.locator('[name="keep_weekly"]'),root=page.locator('#backup-root-input');
+  const save=panel.locator('button[form="maintenance-settings-form"]'),preview=panel.locator('button[form="maintenance-preview-form"]'),globalSave=page.locator('#settings-change-popup button[type="submit"]');
+  const clean=()=>page.waitForFunction(()=>document.querySelector('#settings-change-popup').getAttribute('aria-hidden')==='true');
+  async function submitAndWait(button,action) {
+    const response=page.waitForResponse(reply=>reply.request().method()==='POST'&&new URL(reply.url()).searchParams.get('action')===action);
+    await button.click();await response;await page.waitForFunction(id=>document.getElementById(id).getAttribute('aria-busy')==='false',action==='maintenance-config'?'maintenance-settings-form':action==='maintenance-preview'?'maintenance-preview-form':'settings-save-form');
+  }
+  await daily.fill('13');await page.locator('[name="integrity_enabled"]').check();
+  await preview.click();assert.equal(maintenancePreviews.length,0,'Unsaved maintenance cannot generate a misleading preview');
+  await submitAndWait(save,'maintenance-config');await clean();assert.equal(savedMaintenance.keep_daily,13);assert.equal(savedMaintenance.integrity_enabled,true);
+  assert.deepEqual(await configurationControls(page),mainBefore,'Direct maintenance save leaves main settings untouched');
+  await root.fill('/fixture/main-draft');await weekly.fill('5');await submitAndWait(save,'maintenance-config');
+  assert.equal(await root.inputValue(),'/fixture/main-draft');assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false','Direct maintenance save must not erase an independent main draft');
+  await preview.click();assert.equal(maintenancePreviews.length,0,'Main drafts also block preview');await root.fill('/fixture/backup');await clean();
+  failMaintenance=true;await daily.fill('14');await submitAndWait(save,'maintenance-config');assert.match(await page.locator('#action-feedback').textContent(),/Wartungsfehler.*nicht verworfen/);assert.equal(savedMaintenance.keep_daily,13);assert.equal(await daily.inputValue(),'14');
+  failMaintenance=false;maintenanceDelay=350;
+  const delayedRequest=page.waitForRequest(request=>request.method()==='POST'&&request.url().includes('action=maintenance-config'));
+  await save.click();await delayedRequest;await daily.fill('15');await page.waitForFunction(()=>document.getElementById('maintenance-settings-form').getAttribute('aria-busy')==='false');
+  assert.equal(savedMaintenance.keep_daily,14);assert.equal(await daily.inputValue(),'15');assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false','In-flight maintenance edits stay visibly unsaved');
+  maintenanceDelay=0;await submitAndWait(save,'maintenance-config');await clean();
+  receipts.push('Maintenance direct save serializes eight typed settings independently; failed and in-flight saves preserve drafts and never clear another form');
+  await root.fill('/fixture/global');await daily.fill('16');let actionsBefore=postActions.length;
+  await submitAndWait(globalSave,'maintenance-config');await clean();assert.deepEqual(postActions.slice(actionsBefore),['save-config','maintenance-config']);assert.equal(lastSavedPath,'/fixture/global');assert.equal(savedMaintenance.keep_daily,16);
+  await root.fill('/fixture/global-failed');await daily.fill('17');failSave=true;actionsBefore=postActions.length;
+  await submitAndWait(globalSave,'save-config');assert.deepEqual(postActions.slice(actionsBefore),['save-config'],'Main failure must not start maintenance save');assert.equal(await daily.inputValue(),'17');assert.equal(savedMaintenance.keep_daily,16);
+  failSave=false;failMaintenance=true;actionsBefore=postActions.length;
+  await submitAndWait(globalSave,'maintenance-config');assert.deepEqual(postActions.slice(actionsBefore),['save-config','maintenance-config']);assert.equal(lastSavedPath,'/fixture/global-failed');assert.equal(savedMaintenance.keep_daily,16);assert.equal(await daily.inputValue(),'17');
+  assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false','Maintenance failure after a successful main save remains dirty');
+  failMaintenance=false;await submitAndWait(save,'maintenance-config');await clean();
+  assert.equal(lastSavedPath,'/fixture/global-failed');assert.equal(savedMaintenance.keep_daily,17);
+  receipts.push('Global save submits main and maintenance as independent sequential actions; either failure preserves the remaining draft and direct retry cleans only its own form');
+  await submitAndWait(preview,'maintenance-preview');assert.deepEqual(maintenancePreviews.at(-1),savedMaintenance);assert.match(await page.locator('#operation-result').textContent(),/saved-policy-17/);
+  const previewCount=maintenancePreviews.length;tokenDelay=350;const pendingToken=page.waitForRequest(request=>request.url().includes('action=csrf-token'));
+  await preview.click();await pendingToken;await daily.fill('18');await page.waitForFunction(()=>document.getElementById('maintenance-preview-form').getAttribute('aria-busy')==='false');tokenDelay=0;
+  assert.equal(maintenancePreviews.length,previewCount,'A draft created during CSRF refresh also blocks saved-only preview');
+  await daily.fill('17');await clean();await submitAndWait(preview,'maintenance-preview');assert.deepEqual(maintenancePreviews.at(-1),savedMaintenance);
+  assert.equal(postActions.includes('maintenance-run'),false,'Layout and preview tests never invoke a deletion');
+  receipts.push('Maintenance preview submits only action/CSRF and uses persisted policy; drafts in either form or introduced during token refresh block it; no deletion invoked');
+  await page.close();
+}
 async function sourceTypographyFailures(page){
   return page.locator('#source-selection-panel').evaluate(node=>Array.from(node.querySelectorAll('p,summary')).map(item=>{const style=getComputedStyle(item);return {tag:item.tagName,text:item.textContent.slice(0,90),size:parseFloat(style.fontSize),weight:parseInt(style.fontWeight,10),spacing:style.letterSpacing};}).filter(item=>item.size>(item.tag==='SUMMARY'?15:14)||item.weight>(item.tag==='SUMMARY'?700:400)||!['normal','0px'].includes(item.spacing)));
 }
@@ -273,6 +387,19 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     await page.goto(base+'legacy-ui');
     assert.equal(assetRequests.filter(value=>value==='/assets/style.css').length,1,'The obsolete unversioned stylesheet really is cached');
     await page.goto(base);await visible(page,'#download-task-log');
+    assert.equal(await page.locator('#portable-repository-panel').isVisible(),false,'Native profile hides portable-only setup');
+    assert.equal(await page.locator('#portable-repository-panel').evaluate(node=>node.open),false,'Setup is initially collapsed');
+    assert.equal(await page.locator('#backup-method-settings #portable-repository-panel').count(),1,'Setup is adjacent to storage method selection');
+    assert.equal(await page.locator('#backup-type-settings #backup-extra-export [name="create_export_after_backup"]').count(),1,'Additional archive export belongs to backup type');
+    assert.equal(await page.locator('form form').count(),0);
+    for(const action of ['init','key-export','confirm-key']) {
+      const id='repository-'+action+'-form';
+      assert.equal(await page.locator('#settings-save-form form#'+id).count(),0,'Repository action form stays outside settings form');
+      assert.equal(await page.locator('button[form="'+id+'"]').evaluate(node=>node.form.id),id);
+      assert.equal(await page.locator('button[form="'+id+'"]').evaluate(node=>node.closest('fieldset').id),'backup-method-settings');
+    }
+    assert.equal(await page.locator('[name="recovery_key_saved"]').evaluate(node=>node.form.id),'repository-confirm-key-form');
+    assert.equal(await page.evaluate(()=>new FormData(document.getElementById('settings-save-form')).has('recovery_key_saved')),false);
     assert.equal(await page.locator('[name="metadata_mode"]').count(),4,'Renaming adds no fifth profile');
     assert.equal(await page.locator('#metadata-advanced').evaluate(node=>node.open),false);
     assert.equal(await page.locator('[name="metadata_mode"]:visible').count(),2,'Only two normal choices');
@@ -297,38 +424,86 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
       assert.ok(layout.headings.every(item=>item.size<=16&&['normal','0px'].includes(item.spacing)),view+' storage choices retain normal typography');
       assert.ok(layout.cardWidths.every(width=>width>=220),view+' profile cards must not inherit narrow calendar columns '+JSON.stringify(layout));
       await methodPanel.screenshot({path:path.join(temp,'storage-methods-'+view+'.png')});
+      const exportLayout=await page.locator('#backup-type-settings').evaluate(node=>({right:node.getBoundingClientRect().right,overflow:node.scrollWidth-node.clientWidth,labels:Array.from(node.querySelectorAll('label,p')).map(item=>({right:item.getBoundingClientRect().right,size:parseFloat(getComputedStyle(item).fontSize)}))}));
+      assert.ok(exportLayout.right<=width+1&&exportLayout.overflow<=1&&exportLayout.labels.every(item=>item.right<=width+1&&item.size<=16),view+' backup type and additional export fit the viewport '+JSON.stringify(exportLayout));
+      await page.locator('#backup-type-settings').screenshot({path:path.join(temp,'backup-type-export-'+view+'.png')});
     }
     await page.setViewportSize({width:1440,height:1100});
-    await page.locator('#portable-repository-panel > summary').click();
+    const nativeControls=await configurationControls(page),initialPosts=postCount;
+    await page.locator('[name="metadata_mode"][value="portable-archive"]').check();
+    await visible(page,'#portable-repository-panel');
+    assert.equal(await page.locator('#portable-repository-panel').evaluate(node=>node.open),false,'Choosing Portable does not expand setup automatically');
+    for(const mode of ['fake-super','network-compatible','native-strict']) {
+      await page.locator('[name="metadata_mode"][value="'+mode+'"]').check();
+      assert.equal(await page.locator('#portable-repository-panel').isVisible(),false,'Other profiles hide portable setup: '+mode);
+    }
+    assert.deepEqual(await configurationControls(page),nativeControls,'Profile roundtrip never changes backup type, export, target or other settings');
+    assert.equal(postCount,initialPosts,'Profile changes never initialize, save or back up');
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true');
+    const noScript=await browser.newPage({javaScriptEnabled:false,viewport:{width:390,height:844}});
+    await noScript.goto(base);assert.equal(await noScript.locator('#portable-repository-panel').isVisible(),false);
+    await noScript.goto(base+'?fixture=portable');assert.equal(await noScript.locator('#portable-repository-panel').isVisible(),true);
+    assert.equal(await noScript.locator('#portable-repository-panel').evaluate(node=>node.open),false);
+    await openRepositoryByKeyboard(noScript);
+    assert.equal(await noScript.locator('button[form="repository-init-form"]').evaluate(node=>node.form.id),'repository-init-form');
+    assert.equal(await noScript.locator('[name="recovery_key_saved"]').evaluate(node=>node.form.id),'repository-confirm-key-form');
+    await noScript.close();
+    receipts.push('Repository setup is inline under storage method, portable-only and initially collapsed; explicit form owners, backup-type export and no-JS visibility are correct');
+    await page.goto(base+'?fixture=portable');await visible(page,'#download-task-log');
     await page.waitForFunction(()=>document.querySelector('#repository-status').textContent.includes('noch kein Repository'));
+    assert.equal(await page.locator('#portable-repository-panel').evaluate(node=>node.open),false,'Saved Portable status loads while disclosure remains collapsed');
+    await openRepositoryByKeyboard(page);
     assert.equal(repositoryPosts.length,0,'Reading status never initializes storage');
-    assert.equal(await page.locator('#repository-key-export-form button').isEnabled(),false);
+    assert.equal(await page.locator('button[form="repository-key-export-form"]').isEnabled(),false);
     await page.locator('#backup-root-input').fill('/fixture/not-yet-saved');
-    await page.locator('#repository-init-form button').click();assert.equal(repositoryPosts.length,0,'Repository setup must not use a stale saved target while form is dirty');
+    await page.locator('button[form="repository-init-form"]').click();assert.equal(repositoryPosts.length,0,'Repository setup must not use a stale saved target while form is dirty');
     await page.locator('#backup-root-input').fill('/fixture/backup');
-    const repositoryConfigBefore=await page.evaluate(()=>Array.from(document.querySelectorAll('#settings-save-form [name]:not([name="csrf_token"])')).map(node=>[node.name,node.value,node.checked||false]));
-    await page.locator('#repository-init-form button').click();
-    await page.waitForFunction(()=>document.querySelector('#repository-key-export-form button').disabled===false);
+    const repositoryConfigBefore=await configurationControls(page);
+    await page.locator('button[form="repository-init-form"]').click();
+    await page.waitForFunction(()=>document.querySelector('button[form="repository-key-export-form"]').disabled===false);
     assert.deepEqual(repositoryPosts,['repository-init']);
-    assert.equal(await page.locator('#repository-confirm-key-form button').isEnabled(),false,'Confirmation requires a key export first');
-    const keyDownloadEvent=page.waitForEvent('download');await page.locator('#repository-key-export-form button').click();const keyDownload=await keyDownloadEvent;
+    assert.equal(await page.locator('button[form="repository-confirm-key-form"]').isEnabled(),false,'Confirmation requires a key export first');
+    const keyDownloadEvent=page.waitForEvent('download');await page.locator('button[form="repository-key-export-form"]').click();const keyDownload=await keyDownloadEvent;
     await keyDownload.saveAs(path.join(temp,'fixture-recovery-key.json'));
     assert.equal(fs.readFileSync(path.join(temp,'fixture-recovery-key.json'),'utf8'),recoveryFixture);
     assert.equal(keyDownload.suggestedFilename(),'loxberryhostbackup-recovery-key.json');
-    await page.waitForFunction(()=>document.querySelector('#repository-confirm-key-form button').disabled===false);
+    await page.waitForFunction(()=>document.querySelector('button[form="repository-confirm-key-form"]').disabled===false);
     assert.equal(await page.locator('[name="recovery_key_saved"]').isChecked(),false,'Download does not silently acknowledge safe off-host storage');
-    await page.locator('#repository-confirm-key-form button').click();assert.deepEqual(repositoryPosts,['repository-init','repository-key-export'],'Unchecked acknowledgement does not POST');
-    await page.locator('[name="recovery_key_saved"]').check();await page.locator('#repository-confirm-key-form button').click();
+    await page.locator('button[form="repository-confirm-key-form"]').click();assert.deepEqual(repositoryPosts,['repository-init','repository-key-export'],'Unchecked acknowledgement does not POST');
+    await page.locator('[name="recovery_key_saved"]').check();
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true','External acknowledgement never dirties settings');
+    assert.equal(await page.evaluate(()=>new FormData(document.getElementById('settings-save-form')).has('recovery_key_saved')),false);
+    assert.equal(await page.evaluate(()=>new FormData(document.getElementById('repository-confirm-key-form')).get('recovery_key_saved')),'1','Explicit form ownership includes the external checkbox only in the confirmation');
+    for(const [view,width,height] of [['desktop',1440,1100],['mobile',390,844]]) {
+      await page.setViewportSize({width,height});
+      const setupLayout=await page.locator('#portable-repository-panel').evaluate(node=>({right:node.getBoundingClientRect().right,left:node.getBoundingClientRect().left,overflow:node.scrollWidth-node.clientWidth,controls:Array.from(node.querySelectorAll('button,label,p')).map(item=>({right:item.getBoundingClientRect().right,font:parseFloat(getComputedStyle(item).fontSize)}))}));
+      assert.ok(setupLayout.left>=0&&setupLayout.right<=width+1&&setupLayout.overflow<=1&&setupLayout.controls.every(item=>item.right<=width+1&&item.font<=16),view+' inline setup remains compact and bounded '+JSON.stringify(setupLayout));
+      await page.locator('#backup-method-settings').screenshot({path:path.join(temp,'portable-inline-setup-'+view+'.png')});
+      await page.locator('#portable-repository-panel > summary').focus();await page.keyboard.press('Enter');
+      assert.equal(await page.locator('#portable-repository-panel').evaluate(node=>node.open),false);
+      await openRepositoryByKeyboard(page);
+      assert.equal(await page.locator('[name="recovery_key_saved"]').isChecked(),true,'Disclosure toggles retain explicit acknowledgement');
+    }
+    const setupPostsBeforeSwitch=postCount;
+    await page.locator('[name="metadata_mode"][value="native-strict"]').check();assert.equal(await page.locator('#portable-repository-panel').isVisible(),false);
+    await page.locator('[name="metadata_mode"][value="portable-archive"]').check();await openRepositoryByKeyboard(page);
+    assert.equal(await page.locator('[name="recovery_key_saved"]').isChecked(),true,'Profile visibility changes do not clear or submit acknowledgement');
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true');
+    assert.equal(postCount,setupPostsBeforeSwitch);
+    await page.locator('button[form="repository-confirm-key-form"]').focus();await page.keyboard.press('Enter');
     await page.waitForFunction(()=>document.querySelector('#repository-status').textContent.includes('Aufbewahrung der Wiederherstellungsdatei bestätigt'));
     assert.deepEqual(repositoryPosts,['repository-init','repository-key-export','repository-confirm-key']);
-    assert.equal(await page.locator('#repository-init-form button').isEnabled(),false,'Existing repository is not reinitialized');
-    assert.equal(await page.locator('#repository-key-export-form button').isEnabled(),true,'A recovery key can be downloaded again');
-    assert.equal(await page.locator('#repository-confirm-key-form button').isEnabled(),false);
+    assert.equal(await page.locator('button[form="repository-init-form"]').isEnabled(),false,'Existing repository is not reinitialized');
+    assert.equal(await page.locator('button[form="repository-key-export-form"]').isEnabled(),true,'A recovery key can be downloaded again');
+    assert.equal(await page.locator('button[form="repository-confirm-key-form"]').isEnabled(),false);
     assert.equal(await page.locator('body').textContent().then(text=>text.includes('FIXTURE-NOT-A-REAL-RECOVERY-KEY')),false,'Secret file contents never appear in DOM or status');
-    assert.deepEqual(await page.evaluate(()=>Array.from(document.querySelectorAll('#settings-save-form [name]:not([name="csrf_token"])')).map(node=>[node.name,node.value,node.checked||false])),repositoryConfigBefore,'Setup and download do not change profile, backup mode, target or configuration');
+    assert.deepEqual(await configurationControls(page),repositoryConfigBefore,'Setup and download do not change profile, backup mode, target or configuration');
     assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true');
     await page.locator('#portable-repository-panel > summary').click();
     receipts.push('Repository setup requires saved settings and explicit POST; secret download remains out of DOM; off-host acknowledgement stays separate and no backup/config change occurs');
+    receipts.push('Desktop/mobile inline repository disclosure supports keyboard; external form confirmation survives toggles without becoming a setting');
+    await page.setViewportSize({width:1440,height:1100});await page.goto(base);await visible(page,'#download-task-log');
+    await page.locator('#metadata-advanced > summary').click();
     await page.waitForFunction(()=>document.querySelector('#target-notice .inline-notice.warning'));
     const targetNotice=page.locator('#target-notice'),targetDraft='/fixture/unsaved-target',targetSourceBefore=await page.locator('#source-selection-json').inputValue(),targetPostsBefore=postCount;
     assert.equal(await targetNotice.getAttribute('role'),'status');assert.equal(await targetNotice.getAttribute('aria-live'),'polite');
@@ -555,6 +730,7 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     tokenDelay=0;saveDelay=0;await page.locator('#settings-change-popup button[type="submit"]').click();await page.waitForFunction(()=>document.querySelector('#action-feedback').textContent.includes('Einstellungen gespeichert'));
     repositoryState.key_confirmed=false;
     await page.locator('[name="metadata_mode"][value="portable-archive"]').check();
+    await openRepositoryByKeyboard(page);
     await page.locator('#repository-status-refresh').click();await page.waitForFunction(()=>document.querySelector('#repository-status').textContent.includes('Jetzt ausserhalb'));
     const portablePosts=postCount;await page.locator('#settings-change-popup button[type="submit"]').click();assert.equal(postCount,portablePosts);assert.match(await page.locator('#action-feedback').textContent(),/bestätigte Aufbewahrung/);
     assert.equal(await page.locator('[name="backup_mode"][value="snapshot"]').isChecked(),true,'Blocked portable choice is not silently switched to full');
@@ -564,8 +740,15 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     await page.locator('[name="create_export_after_backup"]').uncheck();
     await page.locator('#backup-root-input').fill('/fixture/unregistered-repository');await page.locator('#settings-change-popup button[type="submit"]').click();assert.equal(postCount,portablePosts);assert.match(await page.locator('#action-feedback').textContent(),/gespeicherten Backup-Ziel/);
     await page.locator('#backup-root-input').fill('/fixture/B');
+    await page.locator('#portable-repository-panel > summary').focus();await page.keyboard.press('Enter');assert.equal(await page.locator('#portable-repository-panel').evaluate(node=>node.open),false);
     await page.locator('#settings-change-popup button[type="submit"]').click();await page.waitForFunction(()=>document.querySelector('#action-feedback').textContent.includes('Einstellungen gespeichert'));assert.equal(postCount,portablePosts+1);
     assert.equal(await page.locator('[name="metadata_mode"][value="portable-archive"]').isChecked(),true);assert.equal(await page.locator('[name="backup_mode"][value="snapshot"]').isChecked(),true);
+    await page.waitForFunction(()=>document.querySelector('#repository-status').textContent.includes('Aufbewahrung der Wiederherstellungsdatei bestätigt'));
+    const previousKeep=await page.locator('[name="keep_backups"]').inputValue();await page.locator('[name="keep_backups"]').fill(String(Number(previousKeep)+1));
+    const repeatedSave=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().includes('action=save-config'));
+    await page.locator('#settings-change-popup button[type="submit"]').click();await repeatedSave;await page.waitForFunction(()=>document.querySelector('#settings-change-popup').getAttribute('aria-hidden')==='true');assert.equal(postCount,portablePosts+2,'Ready portable settings save repeatedly without opening setup');
+    assert.equal(await page.locator('#portable-repository-panel').evaluate(node=>node.open),false);
+    await page.locator('[name="keep_backups"]').fill(previousKeep);
     receipts.push('Portable snapshot requires saved-target repository and confirmed key; export and target mismatches block without auto-switch; ready configuration saves');
     await page.locator('[name="metadata_mode"][value="network-compatible"]').check();
     const incompatiblePosts=postCount;
@@ -628,6 +811,7 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     assert.ok(overflow.scroll<=overflow.width+2,JSON.stringify(overflow));
     await page.screenshot({path:path.join(temp,'mobile.png'),fullPage:true});receipts.push('Mobile labels, delegated tooltip inside viewport and no page overflow');
     await page.keyboard.press('Escape');assert.equal(await mobileActionButton.getAttribute('aria-expanded'),'false');
+    await checkMaintenance(browser,base);
     assert.deepEqual(errors,[]);
     const result={status:'passed',tests:receipts,artifacts:temp,renderer:'actual CGI with mocked backend; read-only mount discovery',browser:await browser.version()};
     fs.writeFileSync(path.join(temp,'receipt.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));

@@ -119,7 +119,7 @@ sub portable_settings_error {
   my ($metadata, $kind, $export, $target) = @_;
   return '' unless $metadata eq 'portable-archive' && $kind eq 'snapshot';
   return 'Fuer portable Sicherungsstaende den automatischen tar.gz-Export ausdruecklich deaktivieren. Repository-Staende sind keine einzelnen Exportarchive.' if $export eq 'true';
-  my $not_ready = 'Portable Sicherungsstaende benoetigen ein verfuegbares Repository am gespeicherten Ziel und die bestaetigte Aufbewahrung der Wiederherstellungsdatei. Ziel und Root-Freigabe zuerst mit Vollbackup speichern, Portable Sicherungsstaende einrichten und danach diese Sicherungsart erneut waehlen.';
+  my $not_ready = 'Portable Sicherungsstaende benoetigen ein verfuegbares Repository am gespeicherten Ziel und die bestaetigte Aufbewahrung der Wiederherstellungsdatei. Ziel und Root-Freigabe zuerst mit Vollbackup speichern, unter Sicherungsverfahren die Einrichtung fuer platzsparende Sicherungsstaende abschliessen und danach diese Sicherungsart erneut waehlen.';
   my ($config_status, $config_out) = run_shell(backend_cmd('config'));
   my $saved = eval { decode_json($config_out) };
   return $not_ready unless $config_status == 0 && ref($saved) eq 'HASH' && defined($saved->{backup_root}) && !ref($saved->{backup_root}) && $saved->{backup_root} eq $target;
@@ -1204,7 +1204,7 @@ my $network_compatible_checked = $cfg_metadata_mode eq 'network-compatible' ? ' 
 my $fake_super_checked = $cfg_metadata_mode eq 'fake-super' ? ' checked' : '';
 my $portable_archive_checked = $cfg_metadata_mode eq 'portable-archive' ? ' checked' : '';
 my $metadata_advanced_open = $cfg_metadata_mode =~ /^(?:network-compatible|fake-super)$/ ? ' open' : '';
-my $repository_setup_open = $cfg_metadata_mode eq 'portable-archive' ? ' open' : '';
+my $repository_setup_hidden = $cfg_metadata_mode eq 'portable-archive' ? '' : ' hidden';
 my @cfg_weekdays = ref($config->{schedule_weekdays}) eq 'ARRAY' ? @{$config->{schedule_weekdays}} : ($config->{schedule_weekday} || '0');
 my %cfg_weekdays = map { $_ => 1 } @cfg_weekdays;
 my @weekday_checked = map { checked_attr($cfg_weekdays{"$_"}) } 0..6;
@@ -1864,10 +1864,20 @@ print <<HTML;
 <li><strong>Datenquellen verstehen und auswählen:</strong> <code>/</code> enthält die normalen System- und Datenordner, etwa <code>/etc</code>, <code>/opt</code> und <code>/home</code>, soweit nicht ausgeschlossen. Standard bei Neuinstallation ist „Lokale Laufwerke; Netzfreigaben einzeln (empfohlen)“: eingebundene lokale Boot-/Datenlaufwerke sind enthalten, gewünschte Netzfreigaben musst du einzeln auswählen. Bestehende Einstellungen und Ausnahmen bleiben bei Updates erhalten. Die Zahl unter „System- und technische Einbindungen“ zählt nur Einbindungen, nicht sämtliche gesicherten Ordner. Der Infobutton neben Datenquellen erklärt die Auswahl.</li>
 <li><strong>Doppelte Backups vermeiden:</strong> Der Backup-Zielordner wird automatisch ausgeschlossen, nicht unbedingt der gesamte Backup-Datenträger. Weitere alte Backups, Images und Archivordner bewusst ausschliessen. Beispiel: <code>/media/usb/PI_Backup</code> ausschliessen, Nutzdaten auf <code>/media/usb/USB_Loxberry</code> eingeschlossen lassen. Nicht pauschal <code>/media</code> ausschliessen, wenn dort Nutzdaten liegen. Virtuelle Systembereiche wie <code>/proc</code>, <code>/sys</code>, <code>/dev</code>, <code>/run</code> und <code>/tmp</code> bleiben ausgeschlossen; ihre Häkchen sind für einen Restore nicht nötig.</li>
 <li><strong>Sicherungsverfahren passend zum Ziel wählen:</strong> <em>Linux-Dateisicherung</em> ist Standard für geeignete lokale Linux-Ziele. <em>Portable Sicherung</em> speichert Linux-Metadaten innerhalb des Backupformats und ist für NAS mit eingeschränkten Dateirechten vorgesehen; die eigene Zielprüfung bleibt erforderlich. Die beiden Spezialverfahren unter <em>Erweiterte Einstellungen</em> sind keine allgemeine NAS-Lösung. Ihre Infobuttons erklären die Voraussetzungen. Bei einem Fehler die einzelnen Prüfschritte lesen; kein Verfahren wird automatisch umgestellt. Der System-Restore einer portablen Sicherung erfolgt offline.</li>
-<li><strong>Sicherungsart und freien Platz beachten:</strong> <em>Vollbackup</em> speichert jeden Stand vollständig neu; bei Portable Sicherung entsteht ein eigenständiges Vollarchiv. <em>Platzsparende Sicherungsstände</em> verwenden vorhandene Daten wieder: bei der Dateisicherung über Hardlinks, bei Portable Sicherung über gemeinsam gespeicherte Datenblöcke in einem verschlüsselten Repository. Der erste Stand benötigt eine vollständige Basiskopie. Für portable Sicherungsstände zuerst Ziel und Root-Freigabe mit Vollbackup speichern, darunter das Repository einrichten, die geheime Wiederherstellungsdatei ausserhalb des LoxBerry aufbewahren und bestätigen. Danach bewusst auf platzsparende Sicherungsstände umstellen, den automatischen tar.gz-Export deaktivieren, speichern und erneut prüfen. Das Vollarchiv selbst bleibt nicht inkrementell. Für Repository-Restore zusätzlichen leeren Linux-Zwischenspeicher für den gesamten Stand plus Reserve vorsehen.</li>
+<li><strong>Sicherungsart und freien Platz beachten:</strong> <em>Vollbackup</em> speichert jeden Stand vollständig neu; bei Portable Sicherung entsteht ein eigenständiges Vollarchiv. <em>Platzsparende Sicherungsstände</em> verwenden vorhandene Daten wieder: bei der Dateisicherung über Hardlinks, bei Portable Sicherung über gemeinsame Datenblöcke in einem verschlüsselten Repository. Der erste Stand benötigt eine vollständige Basiskopie. Ein portables Vollarchiv selbst bleibt nicht inkrementell.</li>
+<li class="quick-guide-portable"><strong>Portable Sicherungsstände einrichten (nur bei Bedarf):</strong> Für portable Vollbackups ist diese Einrichtung nicht erforderlich.
+<ol class="portable-setup-steps">
+<li><em>Portable Sicherung</em> und zunächst <em>Vollbackup</em> wählen. Backup-Ziel und Root-Freigabe prüfen und speichern.</li>
+<li>Direkt unter <em>Sicherungsverfahren</em> die <em>Einrichtung für platzsparende Sicherungsstände</em> öffnen, den Status prüfen und das Repository am gespeicherten Ziel einrichten.</li>
+<li>Die geheime Wiederherstellungsdatei herunterladen, ausserhalb dieses LoxBerry sicher aufbewahren und erst danach die Aufbewahrung bestätigen. Ohne passenden Schlüssel ist nach einem Geräteverlust kein Restore möglich.</li>
+<li><em>Platzsparende Sicherungsstände</em> wählen. Unter <em>Sicherungsart / Zusatzexport</em> den automatischen tar.gz-Export ausdrücklich deaktivieren, speichern und <em>Nächstes Backup prüfen</em> ausführen.</li>
+</ol>
+<p>Der Repository-Restore erfolgt offline. Dafür zusätzlich einen leeren Linux-Zwischenspeicher für den gesamten Stand plus Reserve vorsehen.</p>
+</li>
 <li><strong>Dienste und Container bewusst auswählen:</strong> Bei Neuinstallation sind keine zu stoppenden Dienste oder Container vorausgewählt. Unter „Zu stoppende Dienste vor dem Backup“ die „Empfohlene Auswahl setzen“, kontrollieren und speichern. Diese Dienste werden während des Backups unterbrochen und danach wieder gestartet, sofern sie vorher liefen und vom Plugin gestoppt wurden. Für Datenbanken gegebenenfalls zusätzlich geeignete Dumps über ein Vorab-Skript erstellen. Entscheidend sind auch die tatsächlichen Docker-Volumes und Bind-Mount-Datenquellen; angehakte Overlay-Einbindungen allein garantieren keine konsistente Anwendungssicherung.</li>
 <li><strong>Alle Änderungen zuerst speichern, dann prüfen:</strong> Manuelle und zeitgesteuerte Backups verwenden die gespeicherten Einstellungen. Öffne danach „Nächstes Backup prüfen“ und kontrolliere eingeschlossene Nutzdaten, Ausschlüsse, Ziel und Metadaten-Prüfung. Fehler vor dem Start beheben; eine erfolgreiche Vorschau ist keine Garantie für den späteren Lauf.</li>
 <li><strong>Manuelles Testbackup kontrollieren:</strong> Prüfe nach dem Lauf Abschlussstatus, Live-Log, Dateizahl und Backup-Inhalt. Unter „Prüfen und schützen“ stehen Strukturprüfung und Dateiinhaltsprüfung bereit. Fehlt eine Prüfsummen-Vergleichsbasis, wird sie zuerst angelegt; das ist noch kein erfolgreicher Vergleich und kein Restore-Test.</li>
+<li><strong>Aufbewahrung und regelmässige Prüfung:</strong> Unter „Optionen und Freigaben“, direkt unter den zu stoppenden Diensten, findest du „Erweiterte Aufbewahrung und Integritätsprüfung“. Nur bei Bedarf anpassen und speichern. Die Löschvorschau zeigt den gespeicherten Stand und löscht selbst nichts.</li>
 <li><strong>Zeitplan nach dem Test aktivieren:</strong> Wähle täglich, wöchentlich oder monatlich sowie Startzeit und passende Tage. Erneut speichern. Zeitgesteuerte Backups nutzen dieselben gespeicherten Quellen, Ausschlüsse und Stop-Ziele.</li>
 <li><strong>Wiederherstellung vor dem Ernstfall testen:</strong> Das Plugin erstellt ein dateibasiertes Backup, kein bootfähiges Datenträger-Image. Partitionen und Bootloader werden nicht automatisch eingerichtet. Separate Boot- und Datenlaufwerke benötigen beim Restore eine ausdrückliche Volume-Zuordnung. Wiederherstellungsblatt herunterladen und getrennt aufbewahren; Restore-Vorschau prüfen und auf einem separaten Testdatenträger in einer Test-/Rescue-Umgebung testen. Ein erfolgreicher Backup- oder Prüflauf beweist noch keine Bootfähigkeit; ein Restore auf <code>/</code> kann das laufende System überschreiben und Dateien löschen.</li>
 </ol>
@@ -1989,7 +1999,7 @@ $backup_target_picker
 </details>
 </fieldset>
 
-<fieldset class="schedule-card wide">
+<fieldset class="schedule-card wide" id="backup-method-settings">
 <legend>Sicherungsverfahren $info_metadata_mode</legend>
 <div class="settings-subtitle">Passendes Sicherungsverfahren für das verwendete Backup-Ziel</div>
 <div class="metadata-default-note"><strong>Standardeinstellung:</strong> Linux-Dateisicherung. Für NAS mit eingeschränkten Linux-Dateirechten Portable Sicherung prüfen. Bestehende Einstellungen werden nicht automatisch geändert.</div>
@@ -1997,6 +2007,23 @@ $backup_target_picker
 <label><input data-role="none" type="radio" name="metadata_mode" value="native-strict"$native_strict_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Linux-Dateisicherung</strong><span class="metadata-default-badge">Standard</span>$info_metadata_native</span><span class="metadata-profile-summary">Geeignete Linux-Ziele wie ext4, xfs und btrfs; Dateirechte und Metadaten direkt speichern.</span></span></label>
 <label><input data-role="none" type="radio" name="metadata_mode" value="portable-archive"$portable_archive_checked><span class="metadata-profile-copy"><span class="metadata-profile-title"><strong>Portable Sicherung</strong>$info_metadata_portable</span><span class="metadata-profile-summary">Für NAS und andere Ziele mit eingeschränkten Linux-Dateirechten. Metadaten innerhalb des Backupformats; System-Restore offline.</span></span></label>
 </div>
+<details class="repository-setup" id="portable-repository-panel" data-config-loaded="$config_loaded"$repository_setup_hidden>
+<summary>Einrichtung für platzsparende Sicherungsstände</summary>
+<p><strong>Nur für Portable Sicherung mit platzsparenden Sicherungsständen.</strong> Für portable Vollbackups ist diese Einrichtung nicht erforderlich. Ziel und Root-Freigabe zuerst speichern. Vorhandene Vollarchive bleiben unverändert.</p>
+<p>Der Backup-Speicher wird verschlüsselt. Die Wiederherstellungsdatei enthält den geheimen Schlüssel: ausserhalb dieses LoxBerry sicher aufbewahren, nicht im Forum oder mit Diagnosepaketen teilen. Ohne passenden Schlüssel ist nach einem Geräteverlust kein Restore möglich. Die Datei ersetzt nicht die Sicherungsdaten auf dem NAS.</p>
+<div id="repository-status" role="status" aria-live="polite">Status noch nicht geladen. Es wird nichts automatisch eingerichtet.</div>
+<button data-role="none" type="button" id="repository-status-refresh">Status prüfen</button>
+<div class="repository-actions">
+<div class="repository-action"><button data-role="none" type="submit" form="repository-init-form"$config_action_disabled>1. Repository am gespeicherten Ziel einrichten</button></div>
+<div class="repository-action"><button data-role="none" type="submit" form="repository-key-export-form"$config_action_disabled>2. Geheime Wiederherstellungsdatei herunterladen</button></div>
+<div class="repository-action">
+<label class="checkline"><input data-role="none" type="checkbox" name="recovery_key_saved" value="1" form="repository-confirm-key-form" required><span>Ich habe die heruntergeladene Wiederherstellungsdatei ausserhalb dieses LoxBerry sicher aufbewahrt und kann sie dort wieder öffnen.</span></label>
+<button data-role="none" type="submit" form="repository-confirm-key-form"$config_action_disabled>3. Sichere Aufbewahrung bestätigen</button>
+</div>
+</div>
+<p class="muted">Diese Aktionen starten kein Backup und verändern die Sicherungsart nicht. Ein Download ersetzt weder die Vorprüfung noch einen Wiederherstellungstest.</p>
+<p>Danach <strong>Platzsparende Sicherungsstände</strong> wählen, unter <strong>Sicherungsart / Zusatzexport</strong> den automatischen tar.gz-Export ausschalten, speichern und <strong>Nächstes Backup prüfen</strong> ausführen. Für den Offline-Restore ist zusätzlicher Linux-Zwischenspeicher für den vollständigen Stand plus Reserve nötig. <a href="https://github.com/herdan75/LoxBerry-Plugin-HostBackup/blob/develop/docs/PORTABLE-REPOSITORY.md" target="_blank" rel="noopener noreferrer">Einrichtung und Wiederherstellung im Detail</a></p>
+</details>
 <details class="metadata-advanced" id="metadata-advanced"$metadata_advanced_open>
 <summary>Erweiterte Einstellungen <span id="metadata-advanced-selection"></span></summary>
 <p>Für besondere Ziele und bestehende Konfigurationen. Diese Verfahren sind nicht für jede Netzfreigabe geeignet; die Zielprüfung bleibt erforderlich.</p>
@@ -2007,12 +2034,20 @@ $backup_target_picker
 </details>
 </fieldset>
 
-<fieldset class="schedule-card wide">
+<fieldset class="schedule-card wide" id="backup-type-settings">
 <legend>Sicherungsart $info_backup_mode</legend>
 <div class="settings-subtitle">Vollständig neu speichern oder vorhandene Daten wiederverwenden</div>
 <div class="schedule-modes">
 <label><input data-role="none" type="radio" name="backup_mode" value="full"$full_mode_checked> Vollbackup</label>
 <label><input data-role="none" type="radio" name="backup_mode" value="snapshot"$snapshot_mode_checked> Platzsparende Sicherungsstände</label>
+</div>
+<div class="backup-extra-export" id="backup-extra-export">
+<div class="settings-subtitle">Zusatzexport</div>
+<label class="checkline">
+<input data-role="none" type="checkbox" name="create_export_after_backup" value="1"$cfg_create_export>
+<span>Nach jedem Backup ein tar.gz-Archiv erstellen $info_export</span>
+</label>
+<p>Optionaler zusätzlicher Export; benötigt mehr Speicher und Zeit. Bei portablen platzsparenden Sicherungsständen nicht verfügbar: die Option ausdrücklich deaktivieren. Sie wird nicht automatisch geändert.</p>
 </div>
 </fieldset>
 
@@ -2135,7 +2170,7 @@ $backup_target_picker
 
 </fieldset>
 
-<fieldset class="schedule-card wide settings-group">
+<fieldset class="schedule-card wide settings-group" id="options-permissions-settings">
 <legend>Optionen und Freigaben</legend>
 
 <label class="checkline root-confirm">
@@ -2179,41 +2214,50 @@ $backup_target_picker
 </div>
 </details>
 
-<label class="checkline">
-<input data-role="none" type="checkbox" name="create_export_after_backup" value="1"$cfg_create_export>
-<span>Nach jedem Backup ein tar.gz-Archiv erstellen $info_export</span>
-</label>
-
-</fieldset>
-
-</fieldset>
-
-</form>
-
-<details class="schedule-card repository-setup" id="portable-repository-panel" data-config-loaded="$config_loaded"$repository_setup_open>
-<summary>Portable Sicherungsstände einrichten</summary>
-<p>Nur für platzsparende portable Sicherungsstände. Ein portables Vollbackup bleibt ein eigenständiges Archiv und benötigt diese Einrichtung nicht. Ziel und Root-Freigabe zuerst speichern. Vorhandene Vollarchive werden nicht umgewandelt oder gelöscht.</p>
-<p>Der neue Backup-Speicher wird verschlüsselt. Die Wiederherstellungsdatei enthält den geheimen Schlüssel: ausserhalb dieses LoxBerry sicher aufbewahren, nicht im Forum, per Diagnosepaket oder zusammen mit öffentlichen Logs teilen. Ohne passenden Schlüssel ist nach einem Geräteverlust kein Restore möglich. Sie ersetzt nicht die Sicherungsdaten auf dem NAS.</p>
-<div id="repository-status" role="status" aria-live="polite">Status noch nicht geladen. Es wird nichts automatisch eingerichtet.</div>
-<button data-role="none" type="button" id="repository-status-refresh">Status prüfen</button>
-<div class="repository-actions">
-<form data-ajax="false" method="post" id="repository-init-form">$csrf_html
-<input data-role="none" type="hidden" name="action" value="repository-init">
-<button data-role="none" type="submit"$config_action_disabled>1. Repository am gespeicherten Ziel einrichten</button>
-</form>
-<form data-ajax="false" method="post" id="repository-key-export-form">$csrf_html
-<input data-role="none" type="hidden" name="action" value="repository-key-export">
-<button data-role="none" type="submit"$config_action_disabled>2. Geheime Wiederherstellungsdatei herunterladen</button>
-</form>
-<form data-ajax="false" method="post" id="repository-confirm-key-form">$csrf_html
-<input data-role="none" type="hidden" name="action" value="repository-confirm-key">
-<label class="checkline"><input data-role="none" type="checkbox" name="recovery_key_saved" value="1" required><span>Ich habe die heruntergeladene Wiederherstellungsdatei ausserhalb dieses LoxBerry sicher aufbewahrt und kann sie dort wieder öffnen.</span></label>
-<button data-role="none" type="submit"$config_action_disabled>3. Sichere Aufbewahrung bestätigen</button>
-</form>
+<details class="maintenance-card" id="maintenance-settings-panel">
+<summary>Erweiterte Aufbewahrung und Integritätsprüfung</summary>
+<p>Standard ist die Anzahl oben unter „Anzahl Backups behalten“. Optional können Tages-, Wochen- und Monatsstände aufbewahrt werden. Geschützte Backups und die letzte geeignete Sicherung bleiben erhalten.</p>
+<div class="settings-form nested-settings maintenance-settings">
+<label><span>Aufbewahrungsart $action_help{'retention-mode'}</span><select data-role="none" name="retention_mode" form="maintenance-settings-form"><option value="count"$retention_count_selected>Anzahl Backups (Standard)</option><option value="gfs"$retention_gfs_selected>Tages-, Wochen- und Monatsstände</option></select></label>
+<div class="retention-help-note">Tages-, Wochen- und Monatsstände: Bedeutung und Standardwerte $action_help{'retention-buckets'}</div>
+<label><span>Tagesstände behalten</span><input data-role="none" name="keep_daily" form="maintenance-settings-form" type="number" min="0" max="3650" required value="$maintenance_values{keep_daily}"></label>
+<label><span>Wochenstände behalten</span><input data-role="none" name="keep_weekly" form="maintenance-settings-form" type="number" min="0" max="520" required value="$maintenance_values{keep_weekly}"></label>
+<label><span>Monatsstände behalten</span><input data-role="none" name="keep_monthly" form="maintenance-settings-form" type="number" min="0" max="120" required value="$maintenance_values{keep_monthly}"></label>
+<label><span>Task-Logs aufbewahren (Tage) $action_help{'log-retention'}</span><input data-role="none" name="log_retention_days" form="maintenance-settings-form" type="number" min="1" max="3650" required value="$maintenance_values{log_retention_days}"></label>
+<label><span>Quarantäne aufbewahren (Tage) $action_help{'quarantine-retention'}</span><input data-role="none" name="quarantine_retention_days" form="maintenance-settings-form" type="number" min="1" max="3650" required value="$maintenance_values{quarantine_retention_days}"></label>
+<label class="checkline"><input data-role="none" name="integrity_enabled" form="maintenance-settings-form" type="checkbox" value="1"$integrity_checked><span>Regelmässige Prüfsummenprüfung aktivieren (Standard: aus) $action_help{'integrity-enabled'}</span></label>
+<label><span>Prüfintervall (Tage) $action_help{'integrity-interval'}</span><input data-role="none" name="integrity_interval_days" form="maintenance-settings-form" type="number" min="1" max="365" required value="$maintenance_values{integrity_interval_days}"></label>
 </div>
-<p class="muted">Ein Download beweist noch keinen erfolgreichen Restore. Die Vorprüfung und ein Wiederherstellungstest bleiben erforderlich. Diese Schritte starten kein Backup und verändern die gewählte Sicherungsart nicht.</p>
-<p>Nach erfolgreicher Einrichtung <strong>Portable Sicherung</strong> und <strong>Platzsparende Sicherungsstände</strong> auswählen, den automatischen tar.gz-Export ausdrücklich ausschalten, speichern und <strong>Nächstes Backup prüfen</strong> ausführen. Der erste Stand liest und sichert die vollständigen ausgewählten Daten; spätere Stände verwenden vorhandene Blöcke wieder. Für den Offline-Restore ist zusätzlicher Linux-Zwischenspeicher für den vollständigen Stand plus Reserve nötig. <a href="https://github.com/herdan75/LoxBerry-Plugin-HostBackup/blob/develop/docs/PORTABLE-REPOSITORY.md" target="_blank" rel="noopener noreferrer">Einrichtung und Wiederherstellung im Detail</a></p>
+<p class="muted">Prüfsummen erkennen Änderungen seit ihrer ersten Erfassung; sie beweisen keinen erfolgreichen Restore. Fehlt eine Vergleichsbasis, wird sie zuerst angelegt. Prüfungen verursachen zusätzliche Lesezugriffe.</p>
+<div class="maintenance-actions">
+<button data-role="none" type="submit" form="maintenance-settings-form"$config_action_disabled>Wartungseinstellungen speichern</button>
+<span class="maintenance-preview-action"><button data-role="none" type="submit" form="maintenance-preview-form"$config_action_disabled>Löschvorschau anzeigen</button>$action_help{'maintenance-preview'}</span>
+</div>
+<p class="muted">Die Vorschau löscht nichts. Erst die separate Bestätigung führt genau die geprüfte Auswahl aus; bei zwischenzeitlichen Änderungen muss neu geprüft werden.</p>
 </details>
+
+</fieldset>
+
+</fieldset>
+
+</form>
+
+<!-- Independent action forms avoid nesting forms inside the settings form. -->
+<form data-ajax="false" method="post" id="repository-init-form" hidden>$csrf_html
+<input data-role="none" type="hidden" name="action" value="repository-init">
+</form>
+<form data-ajax="false" method="post" id="repository-key-export-form" hidden>$csrf_html
+<input data-role="none" type="hidden" name="action" value="repository-key-export">
+</form>
+<form data-ajax="false" method="post" id="repository-confirm-key-form" hidden>$csrf_html
+<input data-role="none" type="hidden" name="action" value="repository-confirm-key">
+</form>
+<form data-ajax="false" method="post" id="maintenance-settings-form" hidden>$csrf_html
+<input data-role="none" type="hidden" name="action" value="maintenance-config">
+</form>
+<form data-ajax="false" method="post" id="maintenance-preview-form" class="maintenance-preview-form" hidden>$csrf_html
+<input data-role="none" type="hidden" name="action" value="maintenance-preview">
+</form>
 
 <aside class="settings-change-popup" id="settings-change-popup" role="region" aria-live="polite" aria-hidden="true" aria-labelledby="settings-change-title">
 <div class="settings-change-popup-header">
@@ -2226,36 +2270,6 @@ $backup_target_picker
 <ul id="settings-change-list" class="settings-change-list" hidden></ul>
 <button data-role="none" class="primary settings-change-save" type="submit" form="settings-save-form"$config_action_disabled>Änderungen speichern</button>
 </aside>
-
-<details class="schedule-card maintenance-card">
-<summary>Erweiterte Aufbewahrung und Integritätsprüfung</summary>
-<p>Standard ist die Anzahl oben unter „Anzahl Backups behalten“. Optional können Tages-, Wochen- und Monatsstände aufbewahrt werden. Geschützte Backups und die letzte geeignete Sicherung bleiben erhalten.</p>
-<form data-ajax="false" method="post" id="maintenance-settings-form" class="settings-form">
-$csrf_html
-<input data-role="none" type="hidden" name="action" value="maintenance-config">
-<fieldset class="settings-load-guard"$config_action_disabled>
-<div class="settings-form nested-settings">
-<label><span>Aufbewahrungsart $action_help{'retention-mode'}</span><select data-role="none" name="retention_mode"><option value="count"$retention_count_selected>Anzahl Backups (Standard)</option><option value="gfs"$retention_gfs_selected>Tages-, Wochen- und Monatsstände</option></select></label>
-<div class="retention-help-note">Tages-, Wochen- und Monatsstände: Bedeutung und Standardwerte $action_help{'retention-buckets'}</div>
-<label><span>Tagesstände behalten</span><input data-role="none" name="keep_daily" type="number" min="0" max="3650" required value="$maintenance_values{keep_daily}"></label>
-<label><span>Wochenstände behalten</span><input data-role="none" name="keep_weekly" type="number" min="0" max="520" required value="$maintenance_values{keep_weekly}"></label>
-<label><span>Monatsstände behalten</span><input data-role="none" name="keep_monthly" type="number" min="0" max="120" required value="$maintenance_values{keep_monthly}"></label>
-<label><span>Task-Logs aufbewahren (Tage) $action_help{'log-retention'}</span><input data-role="none" name="log_retention_days" type="number" min="1" max="3650" required value="$maintenance_values{log_retention_days}"></label>
-<label><span>Quarantäne aufbewahren (Tage) $action_help{'quarantine-retention'}</span><input data-role="none" name="quarantine_retention_days" type="number" min="1" max="3650" required value="$maintenance_values{quarantine_retention_days}"></label>
-<label class="checkline"><input data-role="none" name="integrity_enabled" type="checkbox" value="1"$integrity_checked><span>Regelmässige Prüfsummenprüfung aktivieren (Standard: aus) $action_help{'integrity-enabled'}</span></label>
-<label><span>Prüfintervall (Tage) $action_help{'integrity-interval'}</span><input data-role="none" name="integrity_interval_days" type="number" min="1" max="365" required value="$maintenance_values{integrity_interval_days}"></label>
-</div>
-<p class="muted">Prüfsummen erkennen Änderungen seit ihrer ersten Erfassung; sie beweisen keinen erfolgreichen Restore. Fehlt eine Vergleichsbasis, wird sie zuerst angelegt. Prüfungen verursachen zusätzliche Lesezugriffe.</p>
-<button data-role="none" type="submit">Wartungseinstellungen speichern</button>
-</fieldset>
-</form>
-<form data-ajax="false" method="post" class="maintenance-preview-form">
-$csrf_html
-<input data-role="none" type="hidden" name="action" value="maintenance-preview">
-<button data-role="none" type="submit"$config_action_disabled>Löschvorschau anzeigen</button>$action_help{'maintenance-preview'}
-</form>
-<p class="muted">Die Vorschau löscht nichts. Erst die separate Bestätigung führt genau die geprüfte Auswahl aus; bei zwischenzeitlichen Änderungen muss neu geprüft werden.</p>
-</details>
 
 <fieldset class="schedule-card wide settings-group config-card">
 <legend>Konfiguration verwalten</legend>

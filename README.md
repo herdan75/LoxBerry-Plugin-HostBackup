@@ -502,6 +502,12 @@ bestätigter externer Schlüsselaufbewahrung verfügbar. Einrichtung, Grenzen un
 Offline-Wiederherstellung stehen in [Portable Repository](docs/PORTABLE-REPOSITORY.md).
 Die folgenden Angaben zu Hardlink-Referenzen gelten für die Dateisicherungsverfahren.
 
+Unter **Sicherungsart / Zusatzexport** steht ausserdem **Nach jedem Backup ein
+tar.gz-Archiv erstellen**. Dieser optionale Zusatzexport benötigt Speicher und
+Zeit; er wird bei einem Wechsel des Sicherungsverfahrens nicht automatisch
+umgestellt. Für portable platzsparende Sicherungsstände muss er ausdrücklich
+deaktiviert bleiben.
+
 Beim ersten inkrementellen Snapshot existiert noch kein vorheriges vollständiges
 Backup. Das Plugin erstellt dann automatisch eine vollständige Basiskopie. Ab
 dem zweiten erfolgreichen Snapshot werden unveränderte Dateien per Hardlink auf
@@ -604,23 +610,36 @@ keine pauschale Behandlung von rsync-Code 23 als Erfolg.
 ### Portable Sicherungsstände sicher einrichten (develop)
 
 Die Einrichtung eines Repositorys ist eine ausdrückliche Zusatzaktion, kein
-automatischer Formatwechsel bestehender Vollarchive. Der Bereich **Portable
-Sicherungsstände einrichten** führt durch drei getrennte Schritte:
+automatischer Formatwechsel bestehender Vollarchive. Unter **Sicherungsverfahren**
+erscheint direkt bei gewählter **Portable Sicherung** die zugeklappte
+**Einrichtung für platzsparende Sicherungsstände**. Bei anderen Verfahren bleibt
+dieser Zusatzbereich ausgeblendet. Portable Vollbackups benötigen kein Repository.
+Die Kurzanleitung fasst den Ablauf in vier Schritten zusammen:
 
-1. Backup-Ziel und Root-Freigabe zunächst mit `Vollbackup` speichern; danach das Repository am gespeicherten
-   Ziel einrichten. Ungespeicherte Änderungen blockieren die Aktion in der Oberfläche.
-2. Die **geheime Wiederherstellungsdatei** herunterladen und ausserhalb des
+1. **Portable Sicherung** und zunächst **Vollbackup** wählen. Backup-Ziel und
+   Root-Freigabe prüfen und speichern.
+2. Unter **Sicherungsverfahren** die **Einrichtung für platzsparende
+   Sicherungsstände** öffnen, den Status prüfen und das Repository am gespeicherten
+   Ziel ausdrücklich einrichten. Ungespeicherte Änderungen blockieren die Aktion
+   in der Oberfläche.
+3. Die **geheime Wiederherstellungsdatei** herunterladen und ausserhalb des
    LoxBerry sicher aufbewahren. Diese Datei enthält den Schlüssel; sie gehört
-   nicht in öffentliche Logs, Forenbeiträge oder Diagnosepakete.
-3. Erst nach der tatsächlichen Aufbewahrung die separate Checkbox bestätigen.
-   Ein Download bestätigt diesen Schritt nicht automatisch.
+   nicht in öffentliche Logs, Forenbeiträge oder Diagnosepakete. Erst nach der
+   tatsächlichen Aufbewahrung die separate Checkbox setzen und **Sichere
+   Aufbewahrung bestätigen** ausführen. Ein Download bestätigt dies nicht automatisch.
+4. **Platzsparende Sicherungsstände** wählen. Unter **Sicherungsart / Zusatzexport**
+   den automatischen tar.gz-Export bewusst deaktivieren, speichern und **Nächstes
+   Backup prüfen** ausführen.
 
-Danach **Portable Sicherung** und **Platzsparende Sicherungsstände** wählen,
-den automatischen tar.gz-Export bewusst deaktivieren, speichern und **Nächstes
-Backup prüfen** ausführen. Der erste Stand benötigt eine vollständige Basiskopie;
+Der erste Stand benötigt eine vollständige Basiskopie;
 spätere Stände verwenden gespeicherte Datenblöcke wieder. Vollarchive werden weder
 umgewandelt noch als Repository-Basiskopie verwendet. Bei einem neuen Backup-Ziel
 die Einrichtung dort wiederholen; eine Bestätigung des alten Ziels reicht nicht.
+
+Auf- und Zuklappen oder ein Profilwechsel initialisieren kein Repository und
+ändern weder Sicherungsart noch Exportoption automatisch. Die Bestätigung der
+extern aufbewahrten Wiederherstellungsdatei gehört ausschliesslich zur separaten
+Repository-Aktion; normales Speichern der Einstellungen bestätigt sie nicht.
 
 Die Statusabfrage ist rein lesend. Einrichtung, Download und Bestätigung sind
 CSRF-geschützte POST-Aktionen und erfordern die gespeicherte Root-Freigabe. Der
@@ -1013,6 +1032,19 @@ Das je Backup herunterladbare Recovery-Blatt enthält die dazu passenden
 Offline-Schritte; Bootpartition, Bootloader und Systemtest bleiben eigene Schritte.
 
 ## Inhaltsprüfung, Wartung und Diagnose
+
+Im aktuellen develop-Stand liegt **Erweiterte Aufbewahrung und Integritätsprüfung**
+unter **Optionen und Freigaben**, direkt unter **Zu stoppende Dienste vor dem
+Backup**. Der Bereich ist zunächst zugeklappt und verwendet dieselbe kompakte
+Schriftgrösse wie die übrigen Einstellungsbereiche. Die neue Anordnung und das
+Aufklappen ändern keine gespeicherten Werte und aktivieren keine Prüfung.
+
+**Wartungseinstellungen speichern** übernimmt die dortigen Werte weiterhin als
+eigene Aktion. **Löschvorschau anzeigen** bleibt davon getrennt: zuerst geänderte
+Einstellungen speichern, dann die Vorschau des gespeicherten Stands prüfen.
+Die Vorschau speichert keine Einstellungen und löscht nichts; eine Löschung
+erfordert weiterhin eine separate Bestätigung. Auch ohne JavaScript bleiben die
+eigenen Speicher- und Vorschaubuttons nutzbar.
 
 Die optionale Inhaltsprüfung ist standardmässig ausgeschaltet. Bei Aktivierung
 wird nach einem erfolgreichen neuen Backup eine Prüfbasis aufgezeichnet. Ein

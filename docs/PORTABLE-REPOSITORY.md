@@ -48,6 +48,12 @@ bestehende Vollarchive erhalten durch diese Repository-Regel keine neue Auslassu
 
 Wichtige bestehende Sicherungen zunächst aufbewahren. Ein Repository wird nicht
 aus einem alten Vollarchiv erzeugt, und die Einrichtung startet kein Backup.
+Für portable Vollbackups ist diese Einrichtung nicht nötig. Die Kurzanleitung
+in der Oberfläche beschreibt vier Phasen: Ziel mit Vollbackup speichern,
+Repository einrichten, Wiederherstellungsdatei extern sichern und bestätigen,
+danach auf platzsparende Sicherungsstände ohne Zusatzexport umstellen und prüfen.
+Die folgenden Schritte erläutern diesen Ablauf im Detail.
+
 Die vollständige Metadatenprüfung benötigt unter Linux `rsync`, GNU `tar`,
 `findmnt`, Python 3 sowie `getfacl/setfacl`, `getfattr/setfattr` und `getcap/setcap`.
 Auf Debian/LoxBerry stammen diese Werkzeuge aus `rsync`, `tar`, `util-linux`,
@@ -59,7 +65,10 @@ ARM64 wird dagegen checksum-geprüft mit dem Pluginpaket geliefert.
    Datenquellen prüfen. Das Ziel selbst darf nicht als Quelle kopiert werden.
 2. Zunächst **Portable Sicherung** und **Vollbackup** wählen, Ziel und
    Root-Freigabe speichern. Eine Fehlermeldung der Zielprüfung zuerst klären.
-3. **Portable Sicherungsstände einrichten** öffnen und den Status prüfen.
+3. Im Bereich **Sicherungsverfahren** direkt bei der gewählten **Portable
+   Sicherung** die **Einrichtung für platzsparende Sicherungsstände** aufklappen
+   und den Status prüfen. Dieser Zusatzbereich ist nur bei Portable Sicherung
+   sichtbar und zunächst zugeklappt.
    **Repository am gespeicherten Ziel einrichten** ausdrücklich ausführen.
 4. **Geheime Wiederherstellungsdatei herunterladen** wählen. Die Datei enthält
    den Repository-Schlüssel: ausserhalb dieses LoxBerry sicher aufbewahren,
@@ -68,14 +77,26 @@ ARM64 wird dagegen checksum-geprüft mit dem Pluginpaket geliefert.
 5. Prüfen, dass die heruntergeladene Datei dort vorhanden und zugänglich ist.
    Erst dann die Checkbox zur externen Aufbewahrung setzen und bestätigen.
    Der Download allein bestätigt die Aufbewahrung nicht automatisch.
-6. Jetzt **Platzsparende Sicherungsstände** wählen. **Nach jedem Backup ein
-   tar.gz-Archiv erstellen** ausdrücklich deaktivieren; diese Exportart ist
-   für Repository-Stände nicht verfügbar. Es erfolgt keine stille Korrektur.
+6. Unter **Sicherungsart** jetzt **Platzsparende Sicherungsstände** wählen. Die
+   dort unter **Zusatzexport** angeordnete Option **Nach jedem Backup ein tar.gz-Archiv erstellen**
+   ausdrücklich deaktivieren; diese Exportart ist für Repository-Stände nicht
+   verfügbar. Es erfolgt keine stille Korrektur.
 7. Einstellungen speichern, **Nächstes Backup prüfen** ausführen und den
    gewünschten Sicherungsumfang sowie alle Prüfergebnisse kontrollieren.
 8. Ein manuelles Testbackup vollständig abschliessen lassen. Struktur- und
    Inhaltsprüfung sowie einen Restore-Test durchführen, bevor alte bewährte
    Sicherungen aufgegeben werden. Erst dann den gewünschten Zeitplan verwenden.
+
+Aufklappen, Zuklappen und Profilwechsel starten keine Einrichtung und stellen
+Sicherungsart oder Exportoption nicht automatisch um. Die externe
+Schlüsselaufbewahrung wird nur durch die eigene Bestätigungsaktion bestätigt,
+nicht durch normales Speichern der Einstellungen.
+Mit JavaScript wird der Status bei gewählter Portable Sicherung auch im
+zugeklappten Bereich rein lesend geladen; für späteres Speichern muss die
+Einrichtung nicht erneut aufgeklappt werden. Ohne JavaScript richtet sich die
+Sichtbarkeit nach dem serverseitig angezeigten Verfahren. Nach einem Wechsel
+zuerst speichern und die neu geladene Seite verwenden; die eigenen
+Einrichtungs-, Download- und Bestätigungsbuttons bleiben nutzbar.
 
 Die Freigabe gilt für das gespeicherte Ziel und dessen Repository. Bei einem
 Zielwechsel reicht der bestätigte Schlüssel eines anderen Repositorys nicht.

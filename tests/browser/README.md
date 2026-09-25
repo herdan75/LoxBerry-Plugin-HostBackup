@@ -34,7 +34,7 @@ The compact overview keeps four primary values visible and puts full IDs, target
 paths and report actions in a native disclosure. Tests exercise Enter/Space,
 initially closed state, preserved state during polling, no report request on
 expansion, and visible failure/recovery notices and loaded reports while closed.
-The suite currently emits 25 browser-check receipts, including the readable
+The suite emits browser-check receipts, including the readable
 retention phase while the task is still running, source selection, and detailed
 metadata failures with explicit, unsaved-only profile assistance. Dedicated
 `overview-desktop.png`, `overview-expanded.png`, `overview-mobile.png` and
@@ -43,6 +43,30 @@ The actual CGI quick guide is opened and closed by keyboard, checked for normal
 typography and no overflow at desktop/mobile widths, and captured in
 `quick-guide-desktop.png` and `quick-guide-mobile.png`. Reading it must not
 submit forms, change source selection or create unsaved settings.
+Its four-step portable setup sequence keeps saving the target, initializing the
+repository, storing/confirming the recovery key, and selecting snapshots without
+the additional export separate.
+
+Portable repository setup is inside **Sicherungsverfahren**, visible only for
+**Portable Sicherung**, and initially collapsed. Tests check profile round trips
+without settings changes or POST requests, read-only readiness loading while
+collapsed, repeated saves without opening setup, keyboard interaction,
+desktop/mobile bounds, and server-rendered visibility without JavaScript.
+Repository buttons and the required recovery-key acknowledgement belong to
+independent external forms: they must not become settings, dirty settings, or
+block ordinary settings validation. The CGI markup is checked for nested forms.
+The additional `create_export_after_backup` option belongs to **Sicherungsart /
+Zusatzexport** and is never changed implicitly by a profile switch.
+`portable-inline-setup-desktop.png` and `portable-inline-setup-mobile.png` capture
+the expanded setup.
+
+The maintenance disclosure belongs to **Optionen und Freigaben**, immediately
+after **Zu stoppende Dienste vor dem Backup**. Its visible controls remain owned
+by the independent `maintenance-settings-form`; saving and previewing retain
+separate forms/actions. Regression coverage checks compact desktop/mobile
+typography, native disclosure interaction, settings/maintenance FormData
+separation, dirty tracking and explicit saves without silently changing values.
+
 The target-notice regression returns HTTP 500 with hostile error HTML, then leaves
 one real request pending until its production 20-second AbortController timeout.
 Both failures retain the compact warning box under the desktop/mobile LoxBerry

@@ -276,6 +276,9 @@ body.is-loading .loading-overlay {
   margin: 6px 0;
 }
 
+#hostbackup-app .wizard-panel .portable-setup-steps { margin: 8px 0 8px 20px; }
+#hostbackup-app .wizard-panel .quick-guide-portable > p { margin: 8px 0 0; font-size: inherit; letter-spacing: normal; }
+
 .notice.ok {
   border-color: #95c7a2;
   background: #edf8f0;
@@ -999,7 +1002,8 @@ td .muted {
 #hostbackup-app .metadata-advanced > p { margin: 9px 0; }
 #hostbackup-app .metadata-advanced .metadata-modes { margin: 0; }
 
-#hostbackup-app .repository-setup { margin: 14px 0; padding: 14px 18px; }
+#hostbackup-app .repository-setup { margin: 12px 18px 0; padding: 12px 0 0; border-top: 1px solid #dce5ec; }
+#hostbackup-app .repository-setup[hidden] { display: none !important; }
 #hostbackup-app .repository-setup > summary,
 #hostbackup-app .repository-setup > p,
 #hostbackup-app .repository-setup #repository-status,
@@ -1016,8 +1020,17 @@ td .muted {
 #hostbackup-app .repository-setup > p { margin: 10px 0; }
 #hostbackup-app .repository-setup #repository-status { background: #f3f6f8; padding: 9px; margin-bottom: 9px; }
 #hostbackup-app .repository-actions { display: grid; gap: 12px; margin-top: 12px; }
-#hostbackup-app .repository-actions form { margin: 0; }
+#hostbackup-app .repository-action { margin: 0; min-width: 0; }
 #hostbackup-app .repository-actions button { white-space: normal; max-width: 100%; }
+#hostbackup-app .repository-actions .checkline { margin: 0 0 8px; }
+#hostbackup-app .backup-extra-export { margin: 12px 18px 0; padding: 12px 0 0; border-top: 1px solid #dce5ec; }
+#hostbackup-app .backup-extra-export .settings-subtitle { margin: 0 0 8px; }
+#hostbackup-app .backup-extra-export > p {
+  margin: 8px 0 0;
+  font: 400 13px/1.5 "Helvetica Neue", Arial, Helvetica, sans-serif !important;
+  letter-spacing: normal !important;
+  color: #526678;
+}
 #hostbackup-app .repository-restore-note { max-width: 420px; font-size: 13px; line-height: 1.45; }
 #hostbackup-app .repository-restore-note a { display: inline-block; }
 
@@ -1848,9 +1861,30 @@ a.button-link:hover {
 #hostbackup-app .restore-test-form { display: grid; gap: 8px; width: 100%; }
 #hostbackup-app .restore-test-form label { display: flex; flex-direction: column; gap: 4px; }
 #hostbackup-app .restore-test-form input, #hostbackup-app .restore-test-form select, #hostbackup-app .restore-test-form textarea { width: 100%; min-width: 0; }
-#hostbackup-app .maintenance-card { margin-top: 20px; padding: 16px; }
-#hostbackup-app .maintenance-card > summary { cursor: pointer; font-weight: 600; }
-#hostbackup-app .maintenance-card fieldset { width: 100%; box-sizing: border-box; }
+#hostbackup-app .maintenance-card {
+  margin: 6px 18px 12px;
+  padding: 0;
+  min-width: 0;
+  font: 400 13px/1.5 "Helvetica Neue", Arial, Helvetica, sans-serif;
+  letter-spacing: normal;
+}
+#hostbackup-app .maintenance-card > summary {
+  cursor: pointer;
+  color: #1f2a33;
+  font: 700 13px/1.25 "Helvetica Neue", Arial, Helvetica, sans-serif !important;
+  letter-spacing: normal !important;
+  margin-bottom: 6px;
+}
+#hostbackup-app .maintenance-card[open] > summary { margin-bottom: 8px; }
+#hostbackup-app .maintenance-card > p {
+  margin: 10px 0;
+  font: 400 13px/1.5 "Helvetica Neue", Arial, Helvetica, sans-serif !important;
+  letter-spacing: normal !important;
+}
+#hostbackup-app .maintenance-settings { margin: 12px 0; }
+#hostbackup-app .maintenance-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+#hostbackup-app .maintenance-actions button { white-space: normal; max-width: 100%; }
+#hostbackup-app .maintenance-preview-action { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
 #hostbackup-app .settings-change-popup { max-height: min(55vh, 430px); overflow: auto; }
 #hostbackup-app .settings-change-list { max-height: 220px; overflow: auto; }
 #hostbackup-app .settings-change-popup-header { align-items: center; gap: 12px; }
