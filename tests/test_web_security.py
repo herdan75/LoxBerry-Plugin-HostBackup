@@ -255,6 +255,10 @@ class WebSecurityTests(unittest.TestCase):
         self.assertIn('Erweiterte Aufbewahrung und Integritätsprüfung', summary.group(1))
         self.assertIn("$action_help{'maintenance-settings'}", summary.group(1))
         self.assertNotRegex(summary.group(1), r'<(?:form|input|select)\b')
+        entry = re.search(r"'maintenance-settings'\s*=>\s*\[(.*?)\],\n", CGI, re.DOTALL)
+        self.assertIsNotNone(entry)
+        for topic in (r"Aufbewahrung", r"Prüfsummen-Vergleichsbasis.*?zuerst angelegt", r"noch kein erfolgreicher Vergleich", r"ersetzt keinen Restore-Test", r"Änderungen zuerst speichern", r"Löschvorschau.*?gespeicherten Stand.*?löscht selbst nichts"):
+            self.assertRegex(entry.group(1), topic)
 
     def test_action_help_has_shared_catalog_for_checks_protection_and_restore(self) -> None:
         helper = re.search(r"sub action_info \{(?P<body>.*?)\n\}", CGI, re.DOTALL)
