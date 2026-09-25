@@ -1,5 +1,5 @@
 Ergänzung zum bestehenden stabilen Pluginseiten-Eintrag (kein neuer Stable-Stand)
-Nach Veröffentlichung und Prüfung des 1.2.0-beta-Downloads übernehmen.
+Geprüfte Vorlage zur Übernahme nach Veröffentlichung am 25.09.2026.
 
 Autor: Daniel Hermann
 Logo: :plugins:host-backup:icon_256.png

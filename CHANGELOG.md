@@ -36,7 +36,7 @@ validiert werden.
 - Linux-/SMB-Tests für eingeschränkte Zielrechte, inkrementelle Wiederverwendung,
   Schlüsselverlust-Szenario, Metadaten und sichere Aufbewahrung ergänzt.
 - Programm- und Paketversion `1.2.0`, GitHub-Tag `v1.2.0-beta`. Der Vorabkanal
-  wird erst nach Prüfung des öffentlichen ZIPs umgestellt; Stable 1.0.0 bleibt
+  wurde nach Prüfung des öffentlichen ZIPs auf 1.2.0 umgestellt; Stable 1.0.0 bleibt
   unverändert. Freigabestatus und Grenzen stehen in den
   [Release Notes](docs/RELEASE-1.2.0-beta.md). Automatisierte Tests sind keine
   pauschale NAS- oder bootfähige Hardware-Restore-Abnahme.

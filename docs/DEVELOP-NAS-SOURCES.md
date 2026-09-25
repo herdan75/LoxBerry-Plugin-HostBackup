@@ -32,8 +32,8 @@ Konfigurationswerte werden durch die Umbenennung nicht verändert.
 Dieses ZIP **ohne Entpacken** in der LoxBerry-Plugin-Verwaltung installieren.
 Der öffentliche Release-Download erfordert keine Anmeldung bei GitHub.
 Programm- und Paketversion sind 1.2.0; der Release-Tag lautet v1.2.0-beta.
-Das Paket wird nach erfolgreichem Tag-Prüflauf veröffentlicht. Der Vorabkanal
-wird erst nach erfolgreicher Prüfung des öffentlichen Downloads darauf gesetzt.
+Das Paket wurde nach erfolgreichem Tag-Prüflauf veröffentlicht. Der Vorabkanal
+wurde nach erfolgreicher Prüfung des öffentlichen Downloads auf 1.2.0 aktiviert.
 
 ### Alternativ: neuere GitHub-Actions-Testpakete
 

@@ -7,7 +7,7 @@ Plugin- und Paketversion: **1.2.0**. Das reguläre Release **1.0.0** bleibt unve
 
 [**LoxBerryHostBackup_1.2.0.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0-beta/LoxBerryHostBackup_1.2.0.zip)
 
-Das öffentliche Release-ZIP wird nach erfolgreichem Tag-Prüflauf bereitgestellt.
+Das öffentliche Release-ZIP wurde nach erfolgreichem Tag-Prüflauf veröffentlicht.
 Es benötigt keine GitHub-Anmeldung und wird **unverändert, ohne Entpacken** in
 LoxBerry installiert. **Bei einem Update nicht vorher deinstallieren.** Nur bei
 einem GitHub-Actions-Artefakt muss der äussere ZIP-Umschlag entpackt werden.
@@ -80,7 +80,7 @@ Für portable Vollarchive ist diese Einrichtung nicht erforderlich.
    den automatischen tar.gz-Export ausdrücklich deaktivieren.
 5. Speichern, prüfen und ein manuelles Testbackup durchführen.
 
-Die [vollständige Repository-Anleitung](PORTABLE-REPOSITORY.md) erklärt Einrichtung,
+Die [vollständige Repository-Anleitung](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/blob/v1.2.0-beta/docs/PORTABLE-REPOSITORY.md) erklärt Einrichtung,
 Wiederanbindung mit externem Schlüssel und Offline-Recovery. Bei verlorenem
 lokalem Zustand ein bestehendes Repository anbinden, nicht neu initialisieren.
 
@@ -110,10 +110,10 @@ lokalem Zustand ein bestehendes Repository anbinden, nicht neu initialisieren.
 ## Update-Kanäle und Pluginseite
 
 `main/release.cfg`, Stable 1.0.0 und dessen ZIP bleiben unverändert. Der entfernte
-Vorabkanal wird erst nach Prüfung des öffentlichen 1.2.0-ZIP-Downloads auf 1.2.0
-umgestellt. Bis dahin bleibt das bestehende 1.1.0-beta-Angebot erreichbar.
+Vorabkanal wurde nach Prüfung des öffentlichen 1.2.0-ZIP-Downloads auf 1.2.0
+aktiviert. Das bisherige 1.1.0-beta-Paket bleibt unverändert in der Release-Historie.
 
-Die mit dem neuen ZIP archivierte `prerelease.cfg` kann deshalb noch 1.1.0 nennen.
+Die mit dem neuen ZIP archivierte `prerelease.cfg` enthält deshalb noch 1.1.0.
 Für die Update-Erkennung zählt die in `plugin.cfg` hinterlegte entfernte Adresse,
 nicht diese archivierte Kopie. Vorabkanal bewusst wählen; vollautomatische
 Installation hängt zusätzlich von den persönlichen LoxBerry-Updateeinstellungen ab.
@@ -124,7 +124,7 @@ Wiki und Forum werden durch einen GitHub-Push nicht automatisch bearbeitet.
 
 ## Prüfstand
 
-Freigabe erfolgt über die vollständige Tag-Pipeline: Linux-Hauptsuite mit echten
+Die Freigabe erfolgte über die vollständige Tag-Pipeline: Linux-Hauptsuite mit echten
 Root-/Plattformbenutzerrechten, unprivilegierte Downloads, native und echte
 SMB/CIFS-Repository-/Recovery-Tests, Browserbedienung, ShellCheck, sudoers-/PHP-
 Prüfung sowie ZIP-Bau und Prüfung der eingebetteten Engines.
@@ -137,7 +137,24 @@ separaten verpflichtenden Integrationsschritte waren erfolgreich. Lokal bestande
 35 Browser-Szenarien. Dies ist der Nachweis für die Entwicklungsbasis, nicht für
 einen späteren Versionscommit.
 
-Der endgültige Tag-Prüflauf und die Prüfsumme des öffentlichen Pakets werden
-nach erfolgreicher Veröffentlichung in den GitHub-Release-Notizen dokumentiert.
+### Geprüfte Veröffentlichung am 25.09.2026
+
+- Unveränderter Tag-Commit: `f53379c69d62e30114aa9585c41f977a1a5aa586`.
+- [Tag-Prüflauf 36158993787](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/36158993787)
+  erfolgreich: 370 Tests in der Hauptsuite (drei vorgesehene Skips),
+  15 unprivilegierte Downloadtests, je 29 Repository- und 18 Portable-Tests
+  unter Linux und echtem SMB/CIFS sowie Browser-, ShellCheck-, sudoers-, PHP-
+  und ZIP-Prüfungen. Die separaten verpflichtenden Integrationsschritte bestanden.
+- Öffentliches Paket ohne Anmeldung mit HTTP 200 heruntergeladen:
+  `LoxBerryHostBackup_1.2.0.zip`, **29 431 432 Bytes**.
+- SHA-256: `9fcf3d3d8dfb83fbd8404d0bf0d23ce4da125fd6e928479f2b12f11b5de902d4`.
+  Stimmt mit dem von GitHub gemeldeten Asset-Digest überein.
+- Das heruntergeladene Paket bestand zusätzlich alle acht Engine-Audittests;
+  Paket-/Runtime-Version 1.2.0, ZIP-Struktur, Unix-Ausführungsrechte und der
+  Ausschluss von Python-Caches wurden geprüft.
+- Der Vorabkanal wurde erst danach separat aktiviert. Tag und veröffentlichtes
+  Paket wurden dabei nicht ersetzt. Die finale Dokumentation ergänzt den im
+  Paket enthaltenen Freigabeablauf um diesen nachträglichen Nachweis.
+
 Eine breite NAS-/Hardwareabnahme und ein vollständiger LoxBerry-Boot-Restore
 werden durch diese automatisierten Tests nicht behauptet.

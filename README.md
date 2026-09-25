@@ -3,9 +3,9 @@
 > [!NOTE]
 > **Vorabversion 1.2.0-beta:** Die neu benannten Sicherungsverfahren und portablen,
 > platzsparenden NAS-Sicherungsstände gehören zu dieser neuen Vorabversion,
-> nicht zum unveränderten Download von `1.1.0-beta`. Der Vorabkanal wird erst
-> nach erfolgreicher Prüfung des öffentlichen 1.2.0-ZIPs umgestellt; bis dahin
-> bleibt dort 1.1.0 aktiv. Das stabile Release 1.0.0 bleibt unverändert.
+> nicht zum unveränderten Download von `1.1.0-beta`. Der Vorabkanal wurde nach
+> erfolgreicher Prüfung des öffentlichen ZIPs auf 1.2.0 aktiviert.
+> Das stabile Release 1.0.0 bleibt unverändert.
 > Einrichtung und Schlüssel-Recovery erklärt die
 > [Anleitung für portable Sicherungsstände](docs/PORTABLE-REPOSITORY.md).
 
@@ -47,8 +47,8 @@ ausdrückliche Zuordnung separater Boot-/Datenlaufwerke beim Restore.
 
 > [!IMPORTANT]
 > **Update auf 1.2.0-beta:** Bewusster Wechsel auf eine Vorabversion, kein neues
-> stabiles Release. Der Vorabkanal wird erst nach Prüfung des öffentlichen
-> Downloads auf 1.2.0 aktiviert; der stabile Kanal bleibt auf 1.0.0.
+> stabiles Release. Der Vorabkanal bietet das geprüfte öffentliche Paket
+> 1.2.0 an; der stabile Kanal bleibt auf 1.0.0.
 > Vor einem Update Einstellungen exportieren, aktive Vorgänge beenden lassen
 > und nicht vorher deinstallieren.
 
@@ -325,15 +325,14 @@ Aktuelles reguläres Release-Paket:
 
 [**LoxBerryHostBackup_1.0.0.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip)
 
-Neue Vorabversion mit portablen, platzsparenden NAS-Sicherungsständen
-(der folgende Download ist erst nach erfolgreicher Freigabe verfügbar):
+Veröffentlichte Vorabversion mit portablen, platzsparenden NAS-Sicherungsständen:
 
 [**LoxBerryHostBackup_1.2.0.zip herunterladen (Pre-Release)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0-beta/LoxBerryHostBackup_1.2.0.zip)
 
-Bis der neue öffentliche Download geprüft und der Vorabkanal umgestellt ist,
-verweist dieser weiterhin auf das bisherige
-[**LoxBerryHostBackup_1.1.0.zip**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.1.0-beta/LoxBerryHostBackup_1.1.0.zip).
-Dieses ältere Paket enthält noch keine portablen Repository-Stände.
+Der Vorabkanal wurde nach erfolgreicher Prüfung dieses öffentlichen Downloads
+auf 1.2.0 aktiviert. Das historische
+[LoxBerryHostBackup_1.1.0.zip](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.1.0-beta/LoxBerryHostBackup_1.1.0.zip)
+bleibt unverändert erhalten, enthält aber noch keine portablen Repository-Stände.
 
 Dieses öffentliche Release-ZIP direkt installieren, **nicht entpacken**.
 Ein GitHub-Konto ist für den Release-Download nicht nötig. Nur Downloads aus
@@ -345,7 +344,7 @@ zuerst entpackt werden muss. Alte Downloads bleiben in der
 
 In der LoxBerry-Plugin-Verwaltung nach Updates suchen oder das ZIP manuell
 installieren. Für Update-Angebote dieser Vorabversion muss in LoxBerry der
-Vorabkanal gewählt und nach der öffentlichen ZIP-Prüfung auf 1.2.0 umgestellt sein.
+Vorabkanal gewählt sein. Dieser bietet jetzt die geprüfte Version 1.2.0 an.
 Die automatische Installation hängt von der persönlichen Update-Einstellung ab.
 Programmversion, Release-Tag und Paket lauten `1.2.0`, `v1.2.0-beta` und
 `LoxBerryHostBackup_1.2.0.zip`.
@@ -1274,8 +1273,8 @@ Branches:
 Update-Dateien:
 
 - `main/release.cfg`: Stable 1.0.0 mit dem geprüften Release-ZIP
-- `develop/prerelease.cfg`: bis zur Prüfung des öffentlichen 1.2.0-ZIPs weiterhin
-  das geprüfte Paket 1.1.0-beta; die gezielte Umstellung auf 1.2.0 betrifft
+- `develop/prerelease.cfg`: geprüftes öffentliches Paket 1.2.0-beta;
+  die gezielte Umstellung auf 1.2.0 betrifft
   ausschliesslich Nutzer des bewusst gewählten Vorabkanals
 
 Die in `plugin.cfg` hinterlegten Kanaladressen bleiben unverändert, damit

@@ -2,8 +2,8 @@
 
 Diese Anleitung beschreibt die Repository-Erweiterung von **1.2.0-beta vom
 25.09.2026**, nicht nachträglich den Funktionsumfang der unveränderten
-1.1.0-beta-Pakete. Das reguläre Release bleibt 1.0.0. Der Vorabkanal wird erst
-nach Prüfung des öffentlichen 1.2.0-ZIPs umgestellt; den Freigabestatus und die
+1.1.0-beta-Pakete. Das reguläre Release bleibt 1.0.0. Der Vorabkanal wurde nach
+Prüfung des öffentlichen ZIPs auf 1.2.0 aktiviert; den Freigabenachweis und die
 Prüfgrenzen nennen die [Release Notes](RELEASE-1.2.0-beta.md).
 
 ## Was sich ändert

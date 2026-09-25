@@ -23,11 +23,11 @@ Prüfläufe darunter behalten ihre damaligen Versions- und Commitangaben.
 - Repository-Einrichtung, Zusatzexport und erweiterte Aufbewahrung passend in
   die Oberfläche eingeordnet; Kurzanleitung, kontextbezogene Hilfen und Browser-
   Regressionen ergänzt. Keine automatische Hardware-/Architekturmigration.
-- Paketversion 1.2.0 und Tag v1.2.0-beta. Der Vorabkanal wird erst nach Prüfung
-  des öffentlichen neuen ZIPs umgestellt; Stable 1.0.0 bleibt unverändert.
+- Paketversion 1.2.0 und Tag v1.2.0-beta auf `f53379c`. Der Vorabkanal wurde nach
+  Prüfung des öffentlichen neuen ZIPs auf 1.2.0 aktiviert; Stable 1.0.0 bleibt unverändert.
 - Prüfstand, sicherer Updateweg und Grenzen stehen in
-  [RELEASE-1.2.0-beta.md](RELEASE-1.2.0-beta.md). Endgültiger Tag-Prüflauf und
-  öffentliche Paketprüfsumme werden bei der Veröffentlichung dokumentiert.
+  [RELEASE-1.2.0-beta.md](RELEASE-1.2.0-beta.md), einschliesslich erfolgreichem
+  Tag-Prüflauf `36158993787` und geprüfter öffentlicher Paketprüfsumme.
 
 ## Historie: Vorabversion 1.1.0-beta am 20.09.2026
 
