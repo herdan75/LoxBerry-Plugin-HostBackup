@@ -229,6 +229,8 @@ async function checkMaintenance(browser,base) {
   const page=await browser.newPage({viewport:{width:1440,height:1100}});page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
   await page.goto(base);await visible(page,'#settings-save-form');await page.locator('#stop-targets-list [name="stop_targets_loaded"]').waitFor({state:'attached'});
   const panel=page.locator('#maintenance-settings-panel'),summary=panel.locator(':scope > summary');
+  assert.equal(await summary.locator('.info-button[aria-describedby="help-maintenance-settings"]').count(),1,'Maintenance overview help is directly accessible in its summary');
+  const maintenanceHelpTopics=[/Aufbewahr/,/Prüfsummen/,/Vergleichsbasis/,/zuerst|erste|angelegt/,/Restore/,/speichern/i,/Löschvorschau/];
   assert.equal(await panel.evaluate(node=>node.open),false,'Maintenance starts collapsed');
   assert.equal(await panel.evaluate(node=>node.parentElement.id),'options-permissions-settings');
   assert.equal(await panel.evaluate(node=>node.previousElementSibling.classList.contains('stop-target-panel')),true,'Maintenance is the direct next section after stopped services');
@@ -244,7 +246,9 @@ async function checkMaintenance(browser,base) {
   savedMaintenance=await page.evaluate(()=>Object.fromEntries(Array.from(document.getElementById('maintenance-settings-form').elements).filter(node=>node.name&&!['action','csrf_token'].includes(node.name)).map(node=>[node.name,node.type==='checkbox'?node.checked:node.type==='number'?Number(node.value):node.value])));
   for(const [view,width,height] of [['desktop',1440,1100],['mobile',390,844]]) {
     await page.setViewportSize({width,height});await page.locator('#options-permissions-settings').screenshot({path:path.join(temp,'options-maintenance-'+view+'-closed.png')});
+    await checkActionHelp(page,'maintenance-settings',view+'-closed',maintenanceHelpTopics,true);
     await summary.focus();await page.keyboard.press('Enter');assert.equal(await panel.evaluate(node=>node.open),true);
+    await checkActionHelp(page,'maintenance-settings',view+'-open',maintenanceHelpTopics,true);
     const geometry=await panel.evaluate(node=>({left:node.getBoundingClientRect().left,right:node.getBoundingClientRect().right,overflow:node.scrollWidth-node.clientWidth,gap:node.getBoundingClientRect().top-node.previousElementSibling.getBoundingClientRect().bottom,copy:Array.from(node.querySelectorAll(':scope > p,:scope > summary')).map(item=>({tag:item.tagName,size:parseFloat(getComputedStyle(item).fontSize),weight:parseInt(getComputedStyle(item).fontWeight,10),spacing:getComputedStyle(item).letterSpacing})),controls:Array.from(node.querySelectorAll('input,select,button')).filter(item=>item.getBoundingClientRect().width>0).map(item=>({right:item.getBoundingClientRect().right,size:parseFloat(getComputedStyle(item).fontSize)}))}));
     assert.ok(geometry.left>=0&&geometry.right<=width+1&&geometry.overflow<=1,view+' maintenance stays inside viewport '+JSON.stringify(geometry));
     assert.ok(geometry.gap>=0&&geometry.gap<=30,view+' related settings retain compact vertical spacing '+JSON.stringify(geometry));
@@ -264,6 +268,7 @@ async function checkMaintenance(browser,base) {
   assert.deepEqual(serialized['maintenance-preview-form'].sort(),['action','csrf_token']);
   for(const id of ['maintenance-settings-form','maintenance-preview-form'])assert.equal(await noScript.locator('button[form="'+id+'"]').evaluate(node=>node.form.id),id);
   await noScript.close();receipts.push('Maintenance sits directly after services within options, compact 13px desktop/mobile with keyboard disclosure; separate form owners and no-JS FormData prevent nested forms or accidental settings writes');
+  receipts.push('Maintenance summary help explains retention, checksum baseline, restore limits and saved-only preview on desktop/mobile; closed/open disclosure, inputs, dirty state and requests remain unchanged');
   await page.setViewportSize({width:1440,height:1100});await summary.focus();await page.keyboard.press('Enter');
   const daily=page.locator('[name="keep_daily"]'),weekly=page.locator('[name="keep_weekly"]'),root=page.locator('#backup-root-input');
   const save=panel.locator('button[form="maintenance-settings-form"]'),preview=panel.locator('button[form="maintenance-preview-form"]'),globalSave=page.locator('#settings-change-popup button[type="submit"]');

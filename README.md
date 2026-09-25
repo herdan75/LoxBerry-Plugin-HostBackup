@@ -1038,6 +1038,9 @@ unter **Optionen und Freigaben**, direkt unter **Zu stoppende Dienste vor dem
 Backup**. Der Bereich ist zunächst zugeklappt und verwendet dieselbe kompakte
 Schriftgrösse wie die übrigen Einstellungsbereiche. Die neue Anordnung und das
 Aufklappen ändern keine gespeicherten Werte und aktivieren keine Prüfung.
+Der Infobutton direkt am Aufklapptitel erklärt Aufbewahrung, optionale
+Integritätsprüfung, deren Grenzen sowie Speichern und Löschvorschau. Das Lesen
+der Hilfe klappt den Bereich nicht auf und startet keine Aktion.
 
 **Wartungseinstellungen speichern** übernimmt die dortigen Werte weiterhin als
 eigene Aktion. **Löschvorschau anzeigen** bleibt davon getrennt: zuerst geänderte

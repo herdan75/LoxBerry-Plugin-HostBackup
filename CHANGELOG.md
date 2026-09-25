@@ -26,6 +26,9 @@ validiert werden.
   direkt nach den zu stoppenden Diensten eingeordnet; Schrift und Abstände
   den übrigen Aufklappbereichen angeglichen. Speicher- und Vorschauaktionen
   bleiben getrennt, vorhandene Einstellungen unverändert.
+- Infobutton am Titel der erweiterten Aufbewahrung ergänzt: erklärt Fristen,
+  optionale Integritätsprüfung und ihre Grenzen sowie Speichern und Löschvorschau,
+  ohne beim Lesen den Bereich aufzuklappen oder eine Aktion auszulösen.
 - Authentifizierte Veröffentlichung erst nach erfolgreicher Kopier-/Quellprüfung;
   gemeinsame Repository-Daten werden nicht als einzelne Backup-Ordner gelöscht.
 - Offline-Wiederherstellung mit zusätzlichem Linux-Zwischenspeicher und expliziten

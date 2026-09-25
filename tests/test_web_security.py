@@ -249,6 +249,13 @@ class WebSecurityTests(unittest.TestCase):
             self.assertIn(attribute, body)
         self.assertNotRegex(body, r"\bon(?:click|submit|change)\s*=")
 
+    def test_maintenance_summary_uses_shared_context_help(self) -> None:
+        summary = re.search(r'<details\b[^>]*id="maintenance-settings-panel"[^>]*>\s*<summary>(.*?)</summary>', CGI, re.DOTALL)
+        self.assertIsNotNone(summary)
+        self.assertIn('Erweiterte Aufbewahrung und Integritätsprüfung', summary.group(1))
+        self.assertIn("$action_help{'maintenance-settings'}", summary.group(1))
+        self.assertNotRegex(summary.group(1), r'<(?:form|input|select)\b')
+
     def test_action_help_has_shared_catalog_for_checks_protection_and_restore(self) -> None:
         helper = re.search(r"sub action_info \{(?P<body>.*?)\n\}", CGI, re.DOTALL)
         self.assertIsNotNone(helper)
@@ -257,7 +264,7 @@ class WebSecurityTests(unittest.TestCase):
             "inspect-backup", "verify-backup", "verification-report", "recovery-sheet",
             "protect-backup", "record-restore-test", "backup-preview", "storage-info",
             "runtime-cleanup-preview", "diagnostics", "recover-services", "stop-backup",
-            "retention-mode", "integrity-enabled", "maintenance-preview", "restore-files",
+            "retention-mode", "integrity-enabled", "maintenance-settings", "maintenance-preview", "restore-files",
             "restore-destination", "restore-volumes", "restore-preview", "restore-start",
         ):
             self.assertRegex(body, r"['\"]" + re.escape(action) + r"['\"]\s*=>\s*\[")

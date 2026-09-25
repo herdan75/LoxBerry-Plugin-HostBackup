@@ -66,6 +66,9 @@ by the independent `maintenance-settings-form`; saving and previewing retain
 separate forms/actions. Regression coverage checks compact desktop/mobile
 typography, native disclosure interaction, settings/maintenance FormData
 separation, dirty tracking and explicit saves without silently changing values.
+The shared help button on the maintenance summary is tested with the disclosure
+open and closed on desktop/mobile. Opening or reading help must not toggle the
+disclosure, change settings, save, delete or request a report.
 
 The target-notice regression returns HTTP 500 with hostile error HTML, then leaves
 one real request pending until its production 20-second AbortController timeout.
