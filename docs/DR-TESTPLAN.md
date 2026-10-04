@@ -5,7 +5,35 @@ bei Änderungen an rsync-/tar-Optionen, Mount-Prüfung, Import, Restore oder
 Retention auszuführen. Produktive Daten werden durch synthetische Marker und
 Testdienste ersetzt.
 
-## Ergänzende Abnahme für 1.2.0-beta
+## Ergänzende Freigabeabnahme für 1.2.0
+
+Diese Ergänzung gilt für das reguläre Release vom 04.10.2026. Sie ist ein
+Prüfplan, kein Nachweis bereits bestandener Paket- oder Hardwaretests. Die
+Programmlogik wird aus der Beta-Basis `af2d55d` unverändert übernommen;
+vorhandene Beta-Belege und die erneute stabile Paket-/Downloadprüfung in den
+[Release Notes für 1.2.0](RELEASE-1.2.0.md) getrennt festhalten.
+
+1. Update von Stable 1.0.0 und älteren Vorabpaketen auf das stabile Paket 1.2.0
+   ohne vorherige Deinstallation prüfen. Gespeicherte Einstellungen, Backups,
+   Repository-Zuordnung und Schlüssel bleiben erhalten; keine automatische
+   Änderung von Sicherungsverfahren oder Datenquellen.
+2. Den Übergang von 1.2.0-beta auf das stabile ZIP prüfen. Beide verwenden die
+   interne Version `1.2.0`: keinen höheren Versionshinweis erwarten oder
+   erzwingen. Die bei Bedarf manuelle Installation derselben Version muss ohne
+   Deinstallation möglich bleiben. Repository und externe Wiederherstellungsdatei
+   weiterverwenden, nicht für den Versionswechsel neu initialisieren.
+3. Paketversion `1.2.0`, Tag `v1.2.0`, Paketinhalt und Engine-Prüfsummen prüfen;
+   ausführbare Programmdateien gegen `af2d55d` vergleichen. Kein Beta-Opt-in für
+   das reguläre Update verlangen. Erst nach Prüfung des öffentlichen stabilen
+   ZIPs `main` und `develop` nachführen und beide Update-Kanäle auf dieses ZIP
+   umstellen. Historische Tags und Release-Dateien dürfen nicht ersetzt werden.
+4. Die nachfolgenden Funktions-, NAS- und Restore-Szenarien gelten weiterhin.
+   Die stabile Kennzeichnung ersetzt weder echte NAS-/Hardwaretests noch einen
+   kontrollierten Starttest des wiederhergestellten Systems. Offene Prüfungen
+   als offen dokumentieren; keine neue Hardware-Abnahme aus der unveränderten
+   Codeübernahme ableiten.
+
+## Historische ergänzende Abnahme für 1.2.0-beta
 
 Diese Szenarien gelten für den Vorabstand vom 25.09.2026. Sie sind ein Prüfplan,
 kein Nachweis eines bereits bestandenen bootfähigen Hardware-Restores. Ergebnisse

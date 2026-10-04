@@ -1,26 +1,26 @@
 # LoxBerry Host Backup
 
 > [!NOTE]
-> **Vorabversion 1.2.0-beta:** Die neu benannten Sicherungsverfahren und portablen,
-> platzsparenden NAS-Sicherungsstände gehören zu dieser neuen Vorabversion,
-> nicht zum unveränderten Download von `1.1.0-beta`. Der Vorabkanal wurde nach
-> erfolgreicher Prüfung des öffentlichen ZIPs auf 1.2.0 aktiviert.
-> Das stabile Release 1.0.0 bleibt unverändert.
+> **Reguläres Release 1.2.0:** Übernimmt den Programmstand der geprüften
+> 1.2.0-beta unverändert als stabiles Release, einschliesslich verständlicher
+> Sicherungsverfahren und portabler, platzsparender NAS-Sicherungsstände.
+> Ein Wechsel auf den Vorabkanal ist dafür nicht nötig. Die Update-Kanäle werden
+> erst nach Prüfung des öffentlichen stabilen ZIPs auf dieses Paket umgestellt.
 > Einrichtung und Schlüssel-Recovery erklärt die
 > [Anleitung für portable Sicherungsstände](docs/PORTABLE-REPOSITORY.md).
 
-**Version 1.2.0-beta · Vorabversion auf develop · 25.09.2026.**
-Das reguläre Release bleibt **1.0.0**. Programm- und Paketversion des neuen
-Vorabstands lauten `1.2.0`; der zugehörige GitHub-Tag ist `v1.2.0-beta`.
+**Version 1.2.0 · Reguläres Release · 04.10.2026.**
+Programm- und Paketversion lauten `1.2.0`; der zugehörige GitHub-Tag ist `v1.2.0`.
+Gegenüber der übernommenen Beta-Basis `af2d55d` gibt es keine Programmänderungen.
 Freigabestatus und Prüfgrenzen stehen in den
-[Release Notes für 1.2.0-beta](docs/RELEASE-1.2.0-beta.md).
+[Release Notes für 1.2.0](docs/RELEASE-1.2.0.md).
 
-**Neu in 1.2.0-beta:** Weiterhin vier, verständlicher benannte Sicherungsverfahren;
+**Neu im regulären Release gegenüber 1.0.0:** Weiterhin vier, verständlicher benannte Sicherungsverfahren;
 portable, verschlüsselte und platzsparende NAS-Sicherungsstände mit gemeinsamer
 Datenbasis sowie zielgebundener Einrichtung und extern aufzubewahrendem Schlüssel.
 Das eigenständige portable TAR-Vollbackup bleibt erhalten. Bestehende Einstellungen
 werden nicht automatisch umgestellt. Ein NAS muss die eigene Zielprüfung bestehen;
-die Vorabversion ist keine pauschale Kompatibilitätszusage für jedes NAS.
+die Veröffentlichung ist keine pauschale Kompatibilitätszusage für jedes NAS.
 
 **Aus 1.1.0-beta übernommen:** Eine explizite Auswahl von Laufwerken und Netzfreigaben,
 schrittweise Metadaten-Diagnosen und Korrekturen für die Neuinstallation nach
@@ -46,9 +46,12 @@ Backups: keine automatische Einrichtung von Partitionen oder Bootloader und
 ausdrückliche Zuordnung separater Boot-/Datenlaufwerke beim Restore.
 
 > [!IMPORTANT]
-> **Update auf 1.2.0-beta:** Bewusster Wechsel auf eine Vorabversion, kein neues
-> stabiles Release. Der Vorabkanal bietet das geprüfte öffentliche Paket
-> 1.2.0 an; der stabile Kanal bleibt auf 1.0.0.
+> **Update auf 1.2.0:** Das reguläre Release wird über den stabilen Kanal angeboten;
+> nach der Freigabe verweist auch der Vorabkanal auf dasselbe stabile Paket.
+> Die Beta hatte bereits die interne Version 1.2.0. Für Beta-Nutzer entsteht
+> daher kein Versionssprung und kein neues automatisches Update-Angebot allein
+> durch die Freigabe. Bei Bedarf das stabile ZIP ohne vorherige Deinstallation
+> über die bestehende Installation installieren.
 > Vor einem Update Einstellungen exportieren, aktive Vorgänge beenden lassen
 > und nicht vorher deinstallieren.
 
@@ -72,7 +75,7 @@ Systemrechte werden nicht geändert.
 > Installationsversuch parallel starten und nicht deinstallieren. Ein neues
 > ZIP beendet bereits laufende fehlerhafte Altprozesse nicht automatisch.
 > Erst nach Wiederherstellung einer bedienbaren Plugin-Verwaltung aktualisieren.
-> Frühere Versionspakete und insbesondere der stabile 1.0.0-Download bleiben unverändert.
+> Frühere Versionspakete, einschliesslich 1.0.0 und 1.2.0-beta, bleiben unverändert.
 
 Bei Updates bleiben die geschützten Programmstände unter `/usr/libexec/loxberryhostbackup`
 erhalten. Tests bilden den Dateiaustausch als unprivilegierter Plattformbenutzer
@@ -236,7 +239,7 @@ Siehe [Offline-Wiederherstellung](docs/PORTABLE-REPOSITORY.md#offline-wiederhers
 ## Aktueller Validierungsstand
 
 Bisherige veröffentlichte Stände wurden wie folgt geprüft. Diese historischen
-Praxistests sind **kein** Hardware-Nachweis für 1.2.0-beta:
+Praxistests sind **kein** vollständiger Hardware-Nachweis für 1.2.0:
 
 - Bash-Syntax für Backend, Postinstall, Restore-Helper und Uninstall
 - Perl/CGI-Syntax mit lokalem `CGI.pm`-Stub
@@ -283,8 +286,11 @@ Portable-Tests unter Linux sowie auf einem echten, gezielt eingeschränkten
 SMB-/CIFS-Mount ausgeführt. Der
 [Prüflauf zu 667dca2](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/36098171134)
 bezieht sich auf diese Entwicklungsbasis, nicht auf das anschliessend versionierte
-Release-Paket. Die [Release Notes](docs/RELEASE-1.2.0-beta.md) trennen diese Belege
-von der abschliessenden Paket- und Downloadprüfung. Reale QNAP-/Synology-Geräte,
+Release-Paket. Die [Beta-Release-Notes](docs/RELEASE-1.2.0-beta.md) dokumentieren
+die damalige Freigabe. Die [Release Notes für 1.2.0](docs/RELEASE-1.2.0.md)
+trennen diese vorhandenen Belege von der Prüfung des stabilen Pakets und Downloads.
+Die unveränderte Übernahme als reguläres Release ist kein neuer Hardware-Nachweis.
+Reale QNAP-/Synology-Geräte,
 Stromausfälle und ein bootfähiger vollständiger Hardware-Restore sind damit
 nicht nachgewiesen.
 
@@ -306,9 +312,9 @@ nicht nachgewiesen.
 
 ## Installation
 
-1. Bewusst zwischen stabilem Release 1.0.0 und Vorabversion 1.2.0-beta wählen.
-   Das entsprechende ZIP unten herunterladen oder das angebotene Update des
-   gewählten Kanals in der LoxBerry-Plugin-Verwaltung verwenden.
+1. Das reguläre Release 1.2.0 unten herunterladen oder das angebotene Update in
+   der LoxBerry-Plugin-Verwaltung verwenden. Der stabile Kanal genügt;
+   ein Beta-/Vorabkanal muss dafür nicht aktiviert werden.
 2. In LoxBerry unter **Plugins > Plugin installieren** hochladen.
 3. Nach der Installation die Plugin-Oberfläche öffnen.
 4. Root-Freigabe in den Einstellungen bewusst bestätigen.
@@ -323,16 +329,18 @@ zur LoxBerry-Administration gewechselt werden kann.
 
 Aktuelles reguläres Release-Paket:
 
-[**LoxBerryHostBackup_1.0.0.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip)
+[**LoxBerryHostBackup_1.2.0.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0/LoxBerryHostBackup_1.2.0.zip)
 
-Veröffentlichte Vorabversion mit portablen, platzsparenden NAS-Sicherungsständen:
+Der stabile Download wird nach erfolgreicher Release-Prüfung bereitgestellt.
+Erst nach Prüfung dieses öffentlichen ZIPs werden die live abgefragten
+Update-Kanäle umgestellt. Den jeweiligen Freigabestatus nennen die
+[Release Notes](docs/RELEASE-1.2.0.md).
 
-[**LoxBerryHostBackup_1.2.0.zip herunterladen (Pre-Release)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0-beta/LoxBerryHostBackup_1.2.0.zip)
-
-Der Vorabkanal wurde nach erfolgreicher Prüfung dieses öffentlichen Downloads
-auf 1.2.0 aktiviert. Das historische
+Historische Pakete bleiben unverändert erhalten:
+[1.0.0](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip),
+[1.2.0-beta](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0-beta/LoxBerryHostBackup_1.2.0.zip) und
 [LoxBerryHostBackup_1.1.0.zip](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.1.0-beta/LoxBerryHostBackup_1.1.0.zip)
-bleibt unverändert erhalten, enthält aber noch keine portablen Repository-Stände.
+(1.1.0-beta enthält noch keine portablen Repository-Stände).
 
 Dieses öffentliche Release-ZIP direkt installieren, **nicht entpacken**.
 Ein GitHub-Konto ist für den Release-Download nicht nötig. Nur Downloads aus
@@ -340,14 +348,21 @@ GitHub Actions sind äussere Artefakt-ZIPs, aus denen das innere Plugin-ZIP
 zuerst entpackt werden muss. Alte Downloads bleiben in der
 [Release-Historie](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases) erhalten.
 
-### Update auf 1.2.0-beta
+### Update auf 1.2.0
 
 In der LoxBerry-Plugin-Verwaltung nach Updates suchen oder das ZIP manuell
-installieren. Für Update-Angebote dieser Vorabversion muss in LoxBerry der
-Vorabkanal gewählt sein. Dieser bietet jetzt die geprüfte Version 1.2.0 an.
+installieren. Das reguläre Release benötigt kein Beta-Opt-in. Nach der Freigabe
+zeigen der stabile Kanal und der bisherige Vorabkanal auf dasselbe stabile Paket.
 Die automatische Installation hängt von der persönlichen Update-Einstellung ab.
-Programmversion, Release-Tag und Paket lauten `1.2.0`, `v1.2.0-beta` und
+Programmversion, Release-Tag und Paket lauten `1.2.0`, `v1.2.0` und
 `LoxBerryHostBackup_1.2.0.zip`.
+
+**Bereits 1.2.0-beta installiert?** Die interne Pluginversion war schon `1.2.0`.
+Es gibt deshalb keinen Versionssprung und allein durch die stabile Freigabe kein
+neues automatisches Update-Angebot. Der Programmstand bleibt unverändert.
+Bei Bedarf das stabile ZIP manuell darüber installieren, **nicht vorher deinstallieren**.
+Weder vorhandene Backups noch ein eingerichtetes Repository müssen für diesen
+Wechsel neu erstellt werden; die externe Wiederherstellungsdatei weiter sicher aufbewahren.
 
 **Bereits 1.0.0, 1.1.0-beta oder ein manuelles 1.1.0-develop-Paket installiert?**
 1.2.0 ist eine höhere, eindeutig unterscheidbare Paketversion. Das neue ZIP als
@@ -651,7 +666,7 @@ File Capabilities können für einzelne Systemprogramme sicherheitsrelevant sein
 deshalb ist das Weglassen von xattrs eine bewusste, sichtbare Entscheidung und
 keine pauschale Behandlung von rsync-Code 23 als Erfolg.
 
-### Portable Sicherungsstände sicher einrichten (ab 1.2.0-beta)
+### Portable Sicherungsstände sicher einrichten (ab 1.2.0)
 
 Die Einrichtung eines Repositorys ist eine ausdrückliche Zusatzaktion, kein
 automatischer Formatwechsel bestehender Vollarchive. Unter **Sicherungsverfahren**
@@ -1077,7 +1092,7 @@ Offline-Schritte; Bootpartition, Bootloader und Systemtest bleiben eigene Schrit
 
 ## Inhaltsprüfung, Wartung und Diagnose
 
-Ab 1.2.0-beta liegt **Erweiterte Aufbewahrung und Integritätsprüfung**
+In 1.2.0 liegt **Erweiterte Aufbewahrung und Integritätsprüfung**
 unter **Optionen und Freigaben**, direkt unter **Zu stoppende Dienste vor dem
 Backup**. Der Bereich ist zunächst zugeklappt und verwendet dieselbe kompakte
 Schriftgrösse wie die übrigen Einstellungsbereiche. Die neue Anordnung und das
@@ -1264,18 +1279,21 @@ Repository:
 https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 ```
 
-Branches:
+Branch-Zielstand nach erfolgreicher Freigabe:
 
-- `main`: veröffentlichter Hauptstand 1.0.0
-- `develop`: Vorabstand 1.2.0-beta mit portablen, platzsparenden NAS-Sicherungsständen
+- `main`: regulärer Hauptstand 1.2.0
+- `develop`: auf dieselbe veröffentlichte 1.2.0-Basis nachgeführt
 - `pre-develop`: älterer Referenzstand; unverändert
 
-Update-Dateien:
+Update-Dateien nach Prüfung des öffentlichen stabilen ZIPs:
 
-- `main/release.cfg`: Stable 1.0.0 mit dem geprüften Release-ZIP
-- `develop/prerelease.cfg`: geprüftes öffentliches Paket 1.2.0-beta;
-  die gezielte Umstellung auf 1.2.0 betrifft
-  ausschliesslich Nutzer des bewusst gewählten Vorabkanals
+- `main/release.cfg`: reguläres Paket 1.2.0 unter Tag `v1.2.0`
+- `develop/prerelease.cfg`: dasselbe reguläre Paket 1.2.0 unter Tag `v1.2.0`
+
+Bis zur öffentlichen Downloadprüfung bleiben die live abgefragten Branches und
+Kanaldateien auf dem bisherigen Stand. Die vorbereiteten Release-Dateien allein
+aktivieren kein Update. Beide Branches werden danach auf die freigegebene Basis
+nachgeführt; bestehende ältere Tags und ZIPs werden nicht ersetzt.
 
 Die in `plugin.cfg` hinterlegten Kanaladressen bleiben unverändert, damit
 bestehende Installationen die neuen Metadaten finden. Sobald eine neuere

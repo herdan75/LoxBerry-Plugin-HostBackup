@@ -1,7 +1,9 @@
 # Sicherheitsmodell
 
-Stand: Vorabversion 1.2.0-beta vom 25.09.2026 auf `develop`; Stable 1.0.0 bleibt
-auf `main`. Freigabestatus und Prüfgrenzen: [Release Notes](RELEASE-1.2.0-beta.md).
+Stand: reguläres Release 1.2.0 vom 04.10.2026. Das Sicherheitsmodell der
+übernommenen Beta-Basis `af2d55d` bleibt unverändert; die stabile Freigabe
+erweitert weder Berechtigungen noch Restore-Zusagen. Freigabestatus und
+Prüfgrenzen: [Release Notes](RELEASE-1.2.0.md).
 Enthalten sind der unprivilegierte Dateiaustausch auch bei Neuinstallation mit
 Restdateien und die unveränderte Launcher-/Backend-Trennung.
 Die kompakte Übersicht verändert keine Berechtigungen, Locks oder

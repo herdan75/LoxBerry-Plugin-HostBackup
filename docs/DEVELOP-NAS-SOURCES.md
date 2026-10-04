@@ -1,11 +1,11 @@
 # NAS- und Datenquellenauswahl ab 1.1.0-beta
 
 Die Datenquellenauswahl und detaillierte NAS-Diagnose wurden mit 1.1.0-beta
-eingeführt. Die aktuelle Vorabversion **1.2.0-beta** ergänzt portable,
-platzsparende NAS-Sicherungsstände. Das stabile Release 1.0.0 bleibt unverändert.
-Updatehinweise und Grenzen stehen in den [Release Notes](RELEASE-1.2.0-beta.md).
+eingeführt. Das reguläre Release **1.2.0 vom 04.10.2026** übernimmt diesen Stand
+und die portablen, platzsparenden NAS-Sicherungsstände aus 1.2.0-beta.
+Updatehinweise und Grenzen stehen in den [Release Notes](RELEASE-1.2.0.md).
 
-Die folgenden verständlicheren Bezeichnungen gehören zu 1.2.0-beta.
+Die folgenden verständlicheren Bezeichnungen gelten ab 1.2.0-beta und in 1.2.0.
 Ältere Pakete können noch die alten Namen anzeigen. Die Zuordnung
 steht unter [Sicherungsverfahren](../README.md#sicherungsverfahren); vorhandene
 Konfigurationswerte werden durch die Umbenennung nicht verändert.
@@ -23,17 +23,20 @@ Konfigurationswerte werden durch die Umbenennung nicht verändert.
    Portable Sicherung mit Vollbackup ist der vorgesehene Weg für ein solches Ziel,
    sofern dessen eigener Roundtrip gelingt. Kein stiller Profilwechsel.
 
-## Sichere Anwendung des Testpakets
+## Sichere Anwendung des regulären Pakets
 
-### Öffentliches Pre-Release herunterladen
+### Öffentliches Release herunterladen
 
-[**LoxBerryHostBackup_1.2.0.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0-beta/LoxBerryHostBackup_1.2.0.zip)
+[**LoxBerryHostBackup_1.2.0.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0/LoxBerryHostBackup_1.2.0.zip)
 
 Dieses ZIP **ohne Entpacken** in der LoxBerry-Plugin-Verwaltung installieren.
 Der öffentliche Release-Download erfordert keine Anmeldung bei GitHub.
-Programm- und Paketversion sind 1.2.0; der Release-Tag lautet v1.2.0-beta.
-Das Paket wurde nach erfolgreichem Tag-Prüflauf veröffentlicht. Der Vorabkanal
-wurde nach erfolgreicher Prüfung des öffentlichen Downloads auf 1.2.0 aktiviert.
+Programm- und Paketversion sind 1.2.0; der Release-Tag lautet v1.2.0.
+Nach erfolgreicher Tag-Pipeline und Prüfung des öffentlichen ZIPs werden beide
+Live-Updatekanäle auf dieses reguläre Paket gesetzt. Kein Vorabkanal nötig.
+Bereits installierte 1.2.0-beta-Pakete melden intern ebenfalls 1.2.0 und erhalten
+deshalb keinen höheren Versionshinweis. Das stabile ZIP bei Bedarf als Update
+darüber installieren, nicht vorher deinstallieren.
 
 ### Alternativ: neuere GitHub-Actions-Testpakete
 
@@ -51,12 +54,14 @@ GitHub-Artefakte sind zeitlich befristet. Spätere develop-Commits werden nicht
 allein durch einen Push zum veröffentlichten Release; ein einzelner Run-Link
 bleibt auf seinem Commit. Für das veröffentlichte Paket den direkten Link oben
 verwenden. Frühere develop-Testpakete trugen noch die Versionsnummer 1.1.0;
-1.2.0-beta ist durch die höhere interne Version 1.2.0 davon unterscheidbar.
+1.2.0 ist durch die höhere interne Version davon unterscheidbar. Zwischen
+1.2.0-beta und 1.2.0 gibt es hingegen keinen numerischen Versionssprung.
 
 ### Installation und erster Test
 
-Einstellungen exportieren und laufende Aufgaben beenden lassen. Testpaket
-manuell über die Plugin-Verwaltung installieren, nicht vorher deinstallieren.
+Einstellungen exportieren und laufende Aufgaben beenden lassen. Das Update
+über den regulären Plugin-Kanal oder das öffentliche ZIP installieren,
+nicht vorher deinstallieren.
 Unter Laufwerke und Netzfreigaben lokale Grundregel auswählen, gewünschte
 eingebundene Freigaben aktivieren und speichern. Vorherige Ausschlüsse behalten
 ihre Wirkung. Der Sicherungsdatenträger darf nicht als Quelldaten mitgesichert
@@ -84,8 +89,8 @@ Eigentümer/Rechte erzwingt, Portable Sicherung **und** Vollbackup auswählen un
 speichern; erneut prüfen. Archive sind nicht inkrementell und erfordern für
 den System-Restore eine Offline-/Rescue-Umgebung.
 
-Version 1.2.0-beta ergänzt **Portable Sicherung** um **Platzsparende
-Sicherungsstände** in einem verschlüsselten Repository. Das ist kein fünftes
+Version 1.2.0 übernimmt aus der Beta **Portable Sicherung** mit **platzsparenden
+Sicherungsständen** in einem verschlüsselten Repository. Das ist kein fünftes
 Profil und keine Änderung bestehender Vollarchive. Erst nach Einrichtung am
 gespeicherten Ziel und bestätigter externer Schlüsselaufbewahrung umstellen;
 automatischen tar.gz-Export unter **Sicherungsart / Zusatzexport** bewusst

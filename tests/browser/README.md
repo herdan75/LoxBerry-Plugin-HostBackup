@@ -78,7 +78,7 @@ theme; a keyboard retry recovers without saving or losing edited settings.
 layout. No production timeout is shortened by this fixture.
 Storage calculation and runtime-check backend behavior are not validated by
 these UI fixtures; their known limitations are documented in the
-[1.0.0 release notes](../../docs/RELEASE-1.0.0.md). A successful main-branch build
+[1.2.0 release notes](../../docs/RELEASE-1.2.0.md). A successful main-branch build
 creates a test artifact, not a published release or a plugin-page update.
 The header fixture also reproduces the desktop/mobile global `.wide` rules from
 [LoxBerry 4.0.0.15 main.css](https://github.com/mschlenstedt/Loxberry/blob/50cfa335c1c8f2282dc8ed503a5af3587547030d/webfrontend/html/system/css/main.css#L244).

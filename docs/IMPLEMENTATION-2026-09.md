@@ -1,8 +1,8 @@
 # Umsetzung der Analyse vom 13.09.2026
 
 Entwicklungsbasis: develop, da9aa80. Reihenfolge: Sicherheit, Betrieb, Bedienung,
-Erweiterungen. Stabiler Hauptstand: **1.0.0 auf main**. Aktueller Vorabstand:
-**1.2.0-beta auf develop**, interne Plugin-Version **1.2.0**.
+Erweiterungen. Neuer stabiler Hauptstand: **1.2.0 auf main** vom 04.10.2026,
+übernommen aus **1.2.0-beta / develop af2d55d**, interne Plugin-Version **1.2.0**.
 Die bisher zurückgestellte AP-14 zur Mail-/Benachrichtigungssemantik ist ausgenommen.
 Am 19.09.2026 wird der vollständige develop-Stand `4da7cf6` auf `main` übernommen.
 Nur Version, Tests der Versions-/Kanaltrennung und aktuelle Dokumentation ändern
@@ -13,7 +13,20 @@ Prüfung des öffentlichen Downloads diesen Stand. Die
 Die ursprüngliche Analyse wurde mit 0.7.0-beta veröffentlicht; historische
 Prüfläufe darunter behalten ihre damaligen Versions- und Commitangaben.
 
-## Vorabversion 1.2.0-beta am 25.09.2026
+## Reguläres Release 1.2.0 am 04.10.2026
+
+- Vollständigen geprüften develop-Stand `af2d55d` auf main übernehmen; keine
+  Backup-/Restore-/Aufbewahrungsänderungen gegenüber diesem Stand.
+- Beide Updatekanäle für das reguläre ZIP unter Tag `v1.2.0` vorbereiten.
+  Live-Aktivierung erst nach erfolgreicher CI und Prüfung des öffentlichen ZIPs.
+- Bestehende 1.2.0-beta-Installationen haben dieselbe numerische Paketversion;
+  kein automatisches höheres Update-Angebot. Bei Bedarf stabiles ZIP darüber
+  installieren, keine Deinstallation oder automatische Konfigurationsumstellung.
+- [RELEASE-1.2.0.md](RELEASE-1.2.0.md) dokumentiert Funktionen, Updateweg,
+  Freigabeschritte und weiterhin bestehende Hardware-/Restore-Grenzen.
+- Historische Tags und Downloads einschliesslich 1.2.0-beta bleiben unverändert.
+
+## Historie: Vorabversion 1.2.0-beta am 25.09.2026
 
 - Portable Sicherung um verschlüsselte, platzsparende Repository-Stände ergänzt;
   eigenständige Vollarchive und vorhandene Einstellungen bleiben unverändert.

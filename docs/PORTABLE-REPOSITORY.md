@@ -1,10 +1,13 @@
 # Portable Sicherungsstände auf NAS
 
-Diese Anleitung beschreibt die Repository-Erweiterung von **1.2.0-beta vom
-25.09.2026**, nicht nachträglich den Funktionsumfang der unveränderten
-1.1.0-beta-Pakete. Das reguläre Release bleibt 1.0.0. Der Vorabkanal wurde nach
-Prüfung des öffentlichen ZIPs auf 1.2.0 aktiviert; den Freigabenachweis und die
-Prüfgrenzen nennen die [Release Notes](RELEASE-1.2.0-beta.md).
+Diese Anleitung gilt für das **reguläre Release 1.2.0 vom 04.10.2026**. Die in
+1.2.0-beta eingeführte Repository-Erweiterung wird unverändert übernommen;
+ältere 1.0.0- und 1.1.0-beta-Pakete erhalten dadurch keine neuen Funktionen.
+Das reguläre Release benötigt keinen Vorabkanal. Da die Beta intern bereits
+`1.2.0` verwendete, ist der Wechsel zu Stable kein Versionssprung. Bei Bedarf
+das stabile ZIP ohne Deinstallation darüber installieren; ein vorhandenes
+Repository nicht neu initialisieren und seinen externen Schlüssel behalten.
+Freigabestatus und Prüfgrenzen nennen die [Release Notes](RELEASE-1.2.0.md).
 
 ## Was sich ändert
 
