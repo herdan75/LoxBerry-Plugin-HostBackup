@@ -1,5 +1,13 @@
 # LoxBerry Host Backup
 
+**Version 1.2.1 · develop-Teststand · Noch nicht veröffentlicht.**
+Korrigiert die fälschlich blockierende Inode-Prüfung bei NAS-/Dateisystemen,
+die keine auswertbare Gesamtzahl melden, beispielsweise `df -i` mit `0/0/0`.
+Tatsächlich erschöpfte Inodes und andere Pflichtfehler bleiben blockierend.
+Programm- und Testpaketversion sind `1.2.1`; das öffentliche Release und beide
+Plugin-Updatekanäle bleiben auf `1.2.0`. Keine Deinstallation erforderlich.
+Testumfang und Grenzen stehen in der [Release-Vorbereitung 1.2.1](docs/RELEASE-1.2.1.md).
+
 > [!NOTE]
 > **Reguläres Release 1.2.0:** Übernimmt den Programmstand der geprüften
 > 1.2.0-beta unverändert als stabiles Release, einschliesslich verständlicher
@@ -1279,21 +1287,21 @@ Repository:
 https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 ```
 
-Branch-Zielstand nach erfolgreicher Freigabe:
+Aktueller Entwicklungs- und Veröffentlichungsstand:
 
 - `main`: regulärer Hauptstand 1.2.0
-- `develop`: auf dieselbe veröffentlichte 1.2.0-Basis nachgeführt
+- `develop`: Fehlerkorrektur-Teststand 1.2.1 auf Basis von 1.2.0; noch kein Release
 - `pre-develop`: älterer Referenzstand; unverändert
 
-Update-Dateien nach Prüfung des öffentlichen stabilen ZIPs:
+Öffentliche Update-Dateien bleiben bis zu einer gesonderten Freigabe unverändert:
 
 - `main/release.cfg`: reguläres Paket 1.2.0 unter Tag `v1.2.0`
 - `develop/prerelease.cfg`: dasselbe reguläre Paket 1.2.0 unter Tag `v1.2.0`
 
-Bis zur öffentlichen Downloadprüfung bleiben die live abgefragten Branches und
-Kanaldateien auf dem bisherigen Stand. Die vorbereiteten Release-Dateien allein
-aktivieren kein Update. Beide Branches werden danach auf die freigegebene Basis
-nachgeführt; bestehende ältere Tags und ZIPs werden nicht ersetzt.
+Der develop-Push für 1.2.1 aktiviert kein Plugin-Update. Nur das geprüfte
+GitHub-Actions-Artefakt enthält `LoxBerryHostBackup_1.2.1.zip` zur manuellen
+Installation. `main`, bestehende Tags, öffentliche ZIPs und die Wiki-Seite
+werden dadurch nicht geändert.
 
 Die in `plugin.cfg` hinterlegten Kanaladressen bleiben unverändert, damit
 bestehende Installationen die neuen Metadaten finden. Sobald eine neuere

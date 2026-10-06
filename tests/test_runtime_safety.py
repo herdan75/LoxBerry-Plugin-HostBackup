@@ -116,7 +116,7 @@ json_get_string() {
     schedule_monthday) date '+%-d' ;;
   esac
 }
-json_get_bool() { echo true; }
+json_get_bool() { [ "$1" != create_export_after_backup ] && echo true || echo false; }
 json_get_array_lines() {
   case "$1" in
     schedule_weekdays) echo 0 ;;
@@ -125,14 +125,25 @@ json_get_array_lines() {
   esac
 }
 df() {
-  echo 'Filesystem Total Used Available Percent Mount'
-  if [ "$1" = -Pi ]; then
-    printf 'mock 999999 1 %s 1 /fixture\n' "${FREE_INODES:-999998}"
+  if [ "$1" = --output=itotal,iavail ]; then
+    [ "$LC_ALL" = C ] || return 99
+    echo 'Inodes IFree'
+    printf '%s %s\n' "${TOTAL_INODES:-999999}" "${FREE_INODES:-999998}"
+    return "${INODE_DF_STATUS:-0}"
   else
+    echo 'Filesystem Total Used Available Percent Mount'
     printf 'mock 999999 1 %s 1 /fixture\n' "${FREE_MB:-4000}"
   fi
 }
-metadata_mode() { echo native-strict; }
+metadata_mode() { echo "${TEST_METADATA_MODE:-native-strict}"; }
+portable_snapshot() { [ "$(metadata_mode)" = portable-archive ] && [ "$(json_get_string backup_mode)" = snapshot ]; }
+portable_helper() {
+  case "$1" in
+    status) printf '{"initialized":%s,"key_confirmed":true,"available":true}\n' "${REPOSITORY_READY:-true}" ;;
+    parent) printf '%s\n' '{"backup_id":""}' ;;
+    *) return 99 ;;
+  esac
+}
 metadata_capability_probe() { :; }
 source_info() { printf '%s\n' '{"status":"ok","selection":{"policy":"legacy","overrides":{}},"volumes":[],"notices":[],"errors":[]}'; }
 current_mount_value() { echo ext4; }
@@ -143,7 +154,13 @@ rsync() { echo forbidden-copy >> "$TEST_ROOT/copy-called"; return 99; }
 selected_docker_stop_count() { echo 0; }
 mkdir -p "$TEST_ROOT/historical"
 printf '{"size_bytes":10737418240}\n' > "$TEST_ROOT/historical/manifest.json"
+mkdir -p "$LBP_BINDIR"
+printf '#!/bin/sh\nexit 99\n' > "$LBP_BINDIR/restic"
+chmod +x "$LBP_BINDIR/restic"
 '''
+
+PREFLIGHT_FUNCTIONS = ("backup_inode_status", "baseline_space_requirement_mb", "preflight_backup")
+METADATA_PROFILES = ("native-strict", "network-compatible", "fake-super", "portable-archive")
 
 LOCK_MOCKS = r'''
 OPERATION_LOCK_FILE="$LOCK_DIR/operation.lock"
@@ -183,29 +200,160 @@ class RuntimeSafetyTests(unittest.TestCase):
     def test_baseline_comparison_rejects_insufficient_space(self):
         for mode in ("snapshot", "full"):
             with self.subTest(mode=mode):
-                result = self.run_shell(PREFLIGHT_MOCKS + '\npreflight_backup\n', ("baseline_space_requirement_mb", "preflight_backup"), {"TEST_BACKUP_MODE": mode})
+                result = self.run_shell(PREFLIGHT_MOCKS + '\npreflight_backup\n', PREFLIGHT_FUNCTIONS, {"TEST_BACKUP_MODE": mode})
                 data = json.loads(result.stdout)
                 self.assertEqual(data["status"], "error")
                 self.assertEqual(data["baseline_estimate_mb"], 10240)
                 self.assertEqual(data["baseline_required_mb"], 12288)
 
     def test_preflight_without_history_explains_estimate_limit(self):
-        result = self.run_shell(PREFLIGHT_MOCKS + '\npreflight_backup\n', ("baseline_space_requirement_mb", "preflight_backup"), {"NO_ESTIMATE": "true"})
+        result = self.run_shell(PREFLIGHT_MOCKS + '\npreflight_backup\n', PREFLIGHT_FUNCTIONS, {"NO_ESTIMATE": "true"})
         data = json.loads(result.stdout)
         self.assertEqual(data["status"], "ok")
         self.assertTrue(any("keine verlaessliche Groessenschaetzung" in item for item in data["notices"]))
         self.assertTrue(any("Quoten" in item for item in data["notices"]))
 
     def test_zero_inodes_is_a_real_error(self):
-        result = self.run_shell(PREFLIGHT_MOCKS + '\npreflight_backup\n', ("baseline_space_requirement_mb", "preflight_backup"), {"FREE_MB": "20000", "FREE_INODES": "0"})
+        result = self.run_shell(PREFLIGHT_MOCKS + '\npreflight_backup\n', PREFLIGHT_FUNCTIONS, {"FREE_MB": "20000", "FREE_INODES": "0"})
         self.assertEqual(json.loads(result.stdout)["status"], "error")
+
+    def test_inode_status_normalizes_unknown_and_untrusted_counters(self):
+        cases = (
+            ("100 40", 0, "100 40 known"),
+            ("100 0", 0, "100 0 known"),
+            ("000100 000040", 0, "100 40 known"),
+            ("000100 000000", 0, "100 0 known"),
+            ("0 0", 0, "-1 -1 unreported"),
+            ("0 17", 0, "-1 -1 unreported"),
+            ("- -", 0, "-1 -1 unreported"),
+            ("100 -", 0, "-1 -1 invalid"),
+            ("- 0", 0, "-1 -1 invalid"),
+            ("100 -1", 0, "-1 -1 invalid"),
+            ("invalid 0", 0, "-1 -1 invalid"),
+            ("100 1.0", 0, "-1 -1 invalid"),
+            ("100 101", 0, "-1 -1 invalid"),
+            ("18446744073709551615 0", 0, "-1 -1 invalid"),
+            ("100 18446744073709551615", 0, "-1 -1 invalid"),
+            ("9223372036854775808 0", 0, "-1 -1 invalid"),
+            ("9223372036854775807 0", 0, "9223372036854775807 0 known"),
+            ("9" * 5000 + " 0", 0, "-1 -1 invalid"),
+            ("100 0 extra", 0, "-1 -1 invalid"),
+            ("", 0, "-1 -1 invalid"),
+            (None, 0, "-1 -1 invalid"),
+            (None, 1, "-1 -1 df-error"),
+            ("100 0", 1, "-1 -1 df-error"),
+        )
+        for row, code, expected in cases:
+            with self.subTest(row=(row[:50] if row else row), code=code):
+                result = self.run_shell(r'''
+df() {
+  [ "$LC_ALL" = C ] || return 98
+  [ "$#" -eq 3 ] && [ "$1" = --output=itotal,iavail ] && [ "$2" = -- ] && [ "$3" = '/fixture path/with spaces' ] || return 99
+  printf '%s' "$TEST_DF_OUTPUT"
+  return "$TEST_DF_EXIT"
+}
+backup_inode_status '/fixture path/with spaces'
+''', ("backup_inode_status",), {
+                    "TEST_DF_OUTPUT": "" if row is None else "Inodes IFree\n" + row + "\n",
+                    "TEST_DF_EXIT": str(code), "LC_ALL": "C.UTF-8",
+                })
+                self.assertEqual(result.stdout.strip(), expected)
+                self.assertEqual(result.stderr, "")
+
+    def test_inode_preflight_matrix_all_profiles_and_backup_modes(self):
+        cases = (
+            ("0", "0", "0", "ok", True),
+            ("999999", "0", "0", "error", False),
+            ("999999", "999998", "0", "ok", False),
+            ("999999", "0", "1", "ok", True),
+        )
+        for profile in METADATA_PROFILES:
+            for mode in ("full", "snapshot"):
+                for total, available, df_status, status, unknown in cases:
+                    with self.subTest(profile=profile, mode=mode, total=total, available=available, df_status=df_status):
+                        result = self.run_shell(PREFLIGHT_MOCKS + '\npreflight_backup\n', PREFLIGHT_FUNCTIONS, {
+                            "TEST_METADATA_MODE": profile, "TEST_BACKUP_MODE": mode,
+                            "TOTAL_INODES": total, "FREE_INODES": available,
+                            "INODE_DF_STATUS": df_status, "FREE_MB": "20000",
+                        })
+                        data = json.loads(result.stdout)
+                        inode_check = next(check for check in data["checks"] if check["name"] == "Freie Inodes")
+                        self.assertEqual(data["status"], status)
+                        self.assertEqual(inode_check["ok"], status == "ok")
+                        self.assertEqual(inode_check["informational"], unknown)
+                        self.assertEqual("unbekannt" in inode_check["value"], unknown)
+                        self.assertEqual(any("Freie Inodes sind unbekannt" in notice for notice in data["notices"]), unknown)
+                        if status == "error":
+                            self.assertIn("keine freien Inodes", data["warnings"][0])
+                        else:
+                            self.assertEqual(data["warnings"], [])
+                        if df_status != "0":
+                            self.assertIn("df-Inode-Abfrage fehlgeschlagen", inode_check["value"])
+                        self.assertFalse((self.root / "copy-called").exists())
+                        self.assertFalse((self.root / "service-calls").exists())
+
+    def test_unknown_inodes_do_not_override_other_preflight_errors(self):
+        cases = (
+            ("target", 'verify_backup_target() { echo "Target identity mismatch"; return 14; }', {}, "Target identity mismatch"),
+            ("metadata", 'metadata_capability_probe() { METADATA_PROBE_MESSAGE="Metadata mismatch"; return 1; }', {}, "Metadata mismatch"),
+            ("source", '''source_info() { printf '%s\\n' '{"status":"error","errors":["Source unavailable"]}'; }''', {}, "Source unavailable"),
+            ("capacity", "", {"FREE_MB": "4000"}, "Vollstaendige Basiskopie"),
+            ("repository", "", {"TEST_BACKUP_MODE": "snapshot", "REPOSITORY_READY": "false"}, "Repository einrichten"),
+            ("copy-tool", '''command() { if [ "$1" = -v ] && [ "$2" = tar ]; then return 1; fi; builtin command "$@"; }''', {}, "Pflichtcheck fehlgeschlagen"),
+        )
+        for label, override, environment, message in cases:
+            with self.subTest(check=label):
+                result = self.run_shell(PREFLIGHT_MOCKS + '\n' + override + '\npreflight_backup\n', PREFLIGHT_FUNCTIONS, {
+                    "TEST_METADATA_MODE": "portable-archive", "TEST_BACKUP_MODE": "full",
+                    "TOTAL_INODES": "0", "FREE_INODES": "0", "FREE_MB": "20000", **environment,
+                })
+                data = json.loads(result.stdout)
+                self.assertEqual(data["status"], "error")
+                self.assertIn(message, data["warnings"][0])
+                inode_check = next(check for check in data["checks"] if check["name"] == "Freie Inodes")
+                self.assertTrue(inode_check["ok"])
+                self.assertTrue(inode_check["informational"])
+
+    def test_known_inode_exhaustion_blocks_start_and_worker(self):
+        for entrypoint in ("start_backup", "create_backup"):
+            for mode in ("full", "snapshot"):
+                with self.subTest(entrypoint=entrypoint, mode=mode):
+                    backup_id = f"inode-{entrypoint}-{mode}"
+                    self.run_shell(PREFLIGHT_MOCKS + r'''
+launch_background() { echo forbidden-launch > "$TEST_ROOT/launch-called"; return 99; }
+stop_backup_targets() { echo forbidden-stop > "$TEST_ROOT/stop-called"; return 99; }
+''' + f'\n{entrypoint} {backup_id}\n', (*PREFLIGHT_FUNCTIONS, entrypoint), {
+                        "TEST_METADATA_MODE": "portable-archive", "TEST_BACKUP_MODE": mode,
+                        "TOTAL_INODES": "100", "FREE_INODES": "0", "FREE_MB": "20000",
+                    }, expected=17)
+                    task = json.loads((self.root / f"state/tasks/backup-{backup_id}.log.json").read_text())
+                    self.assertEqual(task["phase"], "preflight_error")
+                    self.assertFalse((self.root / "launch-called").exists())
+                    self.assertFalse((self.root / "stop-called").exists())
+                    self.assertFalse((self.root / "copy-called").exists())
+                    self.assertFalse((self.root / f"target/{backup_id}").exists())
+
+    def test_unknown_inodes_allow_start_without_warning_override(self):
+        for mode in ("full", "snapshot"):
+            with self.subTest(mode=mode):
+                backup_id = f"unknown-inodes-{mode}"
+                self.run_shell(PREFLIGHT_MOCKS + r'''
+launch_background() { echo mocked-launch > "$TEST_ROOT/launch-called"; echo 4242; }
+''' + f'\nstart_backup {backup_id}\n', (*PREFLIGHT_FUNCTIONS, "start_backup"), {
+                    "TEST_METADATA_MODE": "portable-archive", "TEST_BACKUP_MODE": mode,
+                    "TOTAL_INODES": "0", "FREE_INODES": "0", "FREE_MB": "20000",
+                })
+                self.assertEqual((self.root / "launch-called").read_text().strip(), "mocked-launch")
+                self.assertFalse((self.root / "copy-called").exists())
+                self.assertFalse((self.root / "service-calls").exists())
+                self.assertFalse((self.root / f"target/{backup_id}").exists())
 
     def test_missing_saved_target_never_uses_local_default(self):
         result = self.run_shell(PREFLIGHT_MOCKS + r'''
 json_get_string() { [ "$1" != backup_mode ] || echo snapshot; }
 metadata_capability_probe() { echo forbidden > "$TEST_ROOT/probe-called"; }
 preflight_backup
-''', ("baseline_space_requirement_mb", "preflight_backup"))
+''', PREFLIGHT_FUNCTIONS)
         data = json.loads(result.stdout)
         self.assertEqual(data["status"], "error")
         self.assertIn("Kein Backup-Ziel gespeichert", data["warnings"][0])
@@ -215,7 +363,7 @@ preflight_backup
         result = self.run_shell(PREFLIGHT_MOCKS + r'''
 source_info() { printf '%s\n' '{"status":"error","errors":["Ausgewaehlte Quelle ist nicht eingebunden: /mnt/nas"]}'; }
 preflight_backup
-''', ("baseline_space_requirement_mb", "preflight_backup"))
+''', PREFLIGHT_FUNCTIONS)
         data = json.loads(result.stdout)
         self.assertEqual(data["status"], "error")
         self.assertIn("nicht eingebunden", data["warnings"][0])
@@ -228,7 +376,7 @@ metadata_capability_probe() {
   return 1
 }
 preflight_backup
-''', ("baseline_space_requirement_mb", "preflight_backup"))
+''', PREFLIGHT_FUNCTIONS)
         data = json.loads(result.stdout)
         self.assertEqual(data["status"], "error")
         self.assertEqual(data["metadata_probe"]["checks"][0]["actual"], "0666")
@@ -249,7 +397,7 @@ validate_completed_backup "$TEST_ROOT/target" full '' 200000000 200 0
         result = self.run_shell(PREFLIGHT_MOCKS + r'''
 stop_backup_targets() { echo forbidden-stop > "$TEST_ROOT/stop-called"; return 99; }
 create_backup test
-''', ("baseline_space_requirement_mb", "preflight_backup", "create_backup"), expected=17)
+''', (*PREFLIGHT_FUNCTIONS, "create_backup"), expected=17)
         self.assertFalse((self.root / "stop-called").exists())
         self.assertFalse((self.root / "copy-called").exists())
         self.assertFalse((self.root / "target/test").exists())
@@ -262,7 +410,7 @@ write_backup_marker() { :; }
 write_manifest() { printf '{"status":"%s","size_bytes":0,"files_count":0,"started_at":"fixture"}\n' "$3" > "$1/manifest.json"; }
 stop_backup_targets() { restart_journal_update "$1" intended systemd demo.service; return 33; }
 create_backup test
-''', (*JOURNAL_FUNCTIONS, "baseline_space_requirement_mb", "preflight_backup", "manifest_started_at", "create_backup"), expected=33)
+''', (*JOURNAL_FUNCTIONS, *PREFLIGHT_FUNCTIONS, "manifest_started_at", "create_backup"), expected=33)
         self.assertTrue((self.root / "active-demo.service").exists())
         self.assertFalse((self.root / "state/restart-journals/backup-test.log").exists())
         state = json.loads((self.root / "state/tasks/backup-test.log.json").read_text())

@@ -5,6 +5,16 @@ eingeführt. Das reguläre Release **1.2.0 vom 04.10.2026** übernimmt diesen St
 und die portablen, platzsparenden NAS-Sicherungsstände aus 1.2.0-beta.
 Updatehinweise und Grenzen stehen in den [Release Notes](RELEASE-1.2.0.md).
 
+**develop 1.2.1, noch nicht veröffentlicht:** Die gemeinsame Vorprüfung
+unterscheidet unbekannte Inode-Kapazität von tatsächlich erschöpften Inodes.
+Bei `df -i` mit Gesamtzahl und freien Inodes `0/0` darf kein Abbruch allein
+wegen dieser nicht auswertbaren Statistik erfolgen. Die Anzeige erklärt den
+unbekannten Zustand. Eine bekannte positive Gesamtzahl mit null freien Inodes
+bleibt ein Fehler. Zielzugriff, freier Speicher und Metadatenprüfung gelten
+weiterhin; unbekannt bedeutet weder unbegrenzt noch garantiert ausreichend.
+Ein ext4-Image auf dem NAS ist für diese Korrektur nicht erforderlich.
+Details und Prüfnachweise: [Release-Vorbereitung 1.2.1](RELEASE-1.2.1.md).
+
 Die folgenden verständlicheren Bezeichnungen gelten ab 1.2.0-beta und in 1.2.0.
 Ältere Pakete können noch die alten Namen anzeigen. Die Zuordnung
 steht unter [Sicherungsverfahren](../README.md#sicherungsverfahren); vorhandene
@@ -47,7 +57,8 @@ darüber installieren, nicht vorher deinstallieren.
    alten Stand; er wechselt nach einem Push nicht automatisch zum neuesten ZIP.
 2. Unten unter **Artifacts** auf **LoxBerryHostBackup** klicken.
 3. Das heruntergeladene Artefakt-ZIP **einmal entpacken**. Es enthält das eigentliche
-   Installationspaket **LoxBerryHostBackup_1.2.0.zip**. Dieses innere ZIP unverändert
+   Installationspaket **LoxBerryHostBackup_1.2.1.zip** beim aktuellen develop-Stand.
+   Dieses innere ZIP unverändert
    in der LoxBerry-Plugin-Verwaltung hochladen, nicht das äussere Artefakt-ZIP.
 
 GitHub-Artefakte sind zeitlich befristet. Spätere develop-Commits werden nicht

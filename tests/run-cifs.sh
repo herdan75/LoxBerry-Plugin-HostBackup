@@ -161,6 +161,12 @@ test "$probe_status" -eq 1
 python3 "$repo_dir/bin/hostbackup-metadata.py" --root "$mount_dir" \
   --state-dir "$fixture_dir/state" --mode portable-archive > "$fixture_dir/archive.json"
 
+# Exercise the actual shared preflight, not just its metadata helpers. df reads
+# the real CIFS mount's 0/0 inode statistics; only the genuine-exhaustion negative
+# control substitutes a known inode capacity. Tests never start a host backup.
+HOSTBACKUP_PREFLIGHT_CIFS_TARGET="$mount_dir" HOSTBACKUP_REQUIRE_CIFS_PREFLIGHT=1 \
+  python3 "$repo_dir/tests/test_preflight_cifs.py"
+
 if [ -n "${HOSTBACKUP_PORTABLE_RUNTIME:-}" ]; then
   # A real SMB repository with forced UID/GID/modes, followed by restore onto
   # local Linux storage. Only a trusted test runtime supplies the binary.

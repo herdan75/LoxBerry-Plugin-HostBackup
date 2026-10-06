@@ -2284,9 +2284,44 @@ baseline_space_requirement_mb() {
   ' "$1"
 }
 
+backup_inode_status() {
+  local root="$1" inode_output
+  # Some NAS and dynamically allocated filesystems report 0/0 rather than an
+  # inode capacity. Never confuse unsupported counters with real exhaustion.
+  # Request only counters: SOURCE and mountpoint may themselves contain spaces.
+  if ! inode_output="$(LC_ALL=C df --output=itotal,iavail -- "$root" 2>/dev/null)"; then
+    printf '%s\n' '-1 -1 df-error'
+    return 0
+  fi
+  printf '%s\n' "$inode_output" | python3 -c '
+import re, sys
+lines = sys.stdin.read().splitlines()
+fields = lines[1].split() if len(lines) > 1 else []
+if len(fields) != 2:
+    print("-1 -1 invalid")
+    sys.exit(0)
+values = tuple(fields)
+if not all(re.fullmatch(r"[0-9]+", value) for value in values):
+    print("-1 -1 unreported" if all(value == "-" for value in values) else "-1 -1 invalid")
+    sys.exit(0)
+values = tuple(value.lstrip("0") or "0" for value in values)
+if any(len(value) > 19 or int(value) > 9223372036854775807 for value in values):
+    print("-1 -1 invalid")
+    sys.exit(0)
+total, available = map(int, values)
+if total == 0:
+    print("-1 -1 unreported")
+elif available > total:
+    print("-1 -1 invalid")
+else:
+    print(total, available, "known")
+'
+}
+
 preflight_backup() {
   local root available_mb docker_available docker_running excludes_count status warnings_json notices_json checks_json rsync_available target_writable backup_mode fs_type mode probe_ok target_ok target_message copy_tool_name
   local full_baseline_required baseline_estimate_mb baseline_required_mb baseline_space_ok baseline_reference estimate_backup estimate_bytes baseline_check_value available_inodes
+  local total_inodes inode_result inode_status inode_check_value inode_space_ok=true inode_informational=false
   local -a notices=()
   local source_json source_ok=true source_message="" repository_ok=true repository_message="" repository_status repository_lineage
   METADATA_PROBE_JSON='{}'
@@ -2322,8 +2357,21 @@ preflight_backup() {
     while IFS= read -r notice; do notices+=("$notice"); done < <(printf '%s' "$source_json" | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin).get("notices",[])))')
   fi
   available_mb="$(df -Pm "$root" 2>/dev/null | awk 'NR==2 {print $4}')"
-  available_inodes="$(df -Pi "$root" 2>/dev/null | awk 'NR==2 {print $4}')"
-  case "$available_inodes" in ''|*[!0-9]*) available_inodes=-1 ;; esac
+  inode_result="$(backup_inode_status "$root")" || inode_result='-1 -1 invalid'
+  read -r total_inodes available_inodes inode_status <<< "$inode_result"
+  case "$inode_status" in
+    known)
+      inode_check_value="$available_inodes frei von $total_inodes"
+      [ "$available_inodes" -ne 0 ] || inode_space_ok=false
+      ;;
+    df-error) inode_check_value="unbekannt (df-Inode-Abfrage fehlgeschlagen)" ;;
+    unreported) inode_check_value="unbekannt (Dateisystem meldet keine Inode-Gesamtzahl)" ;;
+    *) inode_check_value="unbekannt (Inode-Angaben nicht verlaesslich auswertbar)" ;;
+  esac
+  if [ "$inode_status" != known ]; then
+    inode_informational=true
+    notices+=("Hinweis: Freie Inodes sind $inode_check_value. Die Inode-Verfuegbarkeit kann nicht vorab geprueft werden; die anderen Ziel- und Speicherpruefungen bleiben aktiv.")
+  fi
   fs_type="$(current_mount_value "$root" FSTYPE)"
   case "$available_mb" in
     ''|*[!0-9]*) available_mb=0 ;;
@@ -2405,7 +2453,7 @@ preflight_backup() {
   elif [ "$rsync_available" != "true" ] || [ "$target_writable" != "true" ] || [ "$probe_ok" != "true" ]; then
     status="error"
     warnings_json="$(perl -MJSON::PP -e 'print encode_json([$ARGV[0]])' "${target_message:-${METADATA_PROBE_MESSAGE:-Pflichtcheck fehlgeschlagen: rsync, Zielidentitaet, Schreibzugriff oder Metadatenprobe.}}")"
-  elif [ "$available_inodes" -eq 0 ]; then
+  elif [ "$inode_space_ok" != true ]; then
     status="error"
     warnings_json='["Auf dem Backup-Ziel sind keine freien Inodes mehr verfuegbar. Neue Dateien koennen nicht angelegt werden."]'
   elif [ "$baseline_space_ok" != "true" ]; then
@@ -2433,7 +2481,7 @@ preflight_backup() {
   {"name":"Dateisystem","ok":true,"value":"$fs_type"},
   {"name":"Freier Speicher MB","ok":$([ "$available_mb" -ge 1024 ] && echo true || echo false),"value":"$available_mb"},
   {"name":"Speicher fuer Snapshot-Basiskopie","ok":$baseline_space_ok,"value":$(json_escape "$baseline_check_value")},
-  {"name":"Freie Inodes","ok":$([ "$available_inodes" -ne 0 ] && echo true || echo false),"value":"$available_inodes (-1: unbekannt)"},
+  {"name":"Freie Inodes","ok":$inode_space_ok,"value":$(json_escape "$inode_check_value"),"informational":$inode_informational},
   {"name":"Docker verfuegbar","ok":$docker_available,"value":"running=$docker_running"},
   {"name":"Exclude-Regeln","ok":true,"value":"$excludes_count"}
 ]
