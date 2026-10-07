@@ -1,19 +1,23 @@
 # LoxBerry Host Backup
 
-**Version 1.2.1 · develop-Teststand · Noch nicht veröffentlicht.**
+**Version 1.2.1-beta · Vorabversion · 07.10.2026.**
 Korrigiert die fälschlich blockierende Inode-Prüfung bei NAS-/Dateisystemen,
 die keine auswertbare Gesamtzahl melden, beispielsweise `df -i` mit `0/0/0`.
 Tatsächlich erschöpfte Inodes und andere Pflichtfehler bleiben blockierend.
-Programm- und Testpaketversion sind `1.2.1`; das öffentliche Release und beide
-Plugin-Updatekanäle bleiben auf `1.2.0`. Keine Deinstallation erforderlich.
-Testumfang und Grenzen stehen in der [Release-Vorbereitung 1.2.1](docs/RELEASE-1.2.1.md).
+Programm- und Paketversion sind `1.2.1`; der GitHub-Tag lautet `v1.2.1-beta`.
+Das reguläre Release und der stabile Plugin-Updatekanal bleiben auf `1.2.0`.
+Der Vorabkanal wird erst nach Prüfung des öffentlichen Beta-ZIPs auf `1.2.1`
+umgestellt. Keine Deinstallation erforderlich. Testumfang, Freigabestatus und
+Grenzen stehen in den [Release Notes für 1.2.1-beta](docs/RELEASE-1.2.1.md).
+
+[**LoxBerryHostBackup_1.2.1.zip herunterladen (Vorabversion)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.1-beta/LoxBerryHostBackup_1.2.1.zip)
 
 > [!NOTE]
 > **Reguläres Release 1.2.0:** Übernimmt den Programmstand der geprüften
 > 1.2.0-beta unverändert als stabiles Release, einschliesslich verständlicher
 > Sicherungsverfahren und portabler, platzsparender NAS-Sicherungsstände.
-> Ein Wechsel auf den Vorabkanal ist dafür nicht nötig. Die Update-Kanäle werden
-> erst nach Prüfung des öffentlichen stabilen ZIPs auf dieses Paket umgestellt.
+> Ein Wechsel auf den Vorabkanal ist für 1.2.0 nicht nötig. Der stabile
+> Updatekanal bleibt auch bei der Freigabe von 1.2.1-beta auf diesem Paket.
 > Einrichtung und Schlüssel-Recovery erklärt die
 > [Anleitung für portable Sicherungsstände](docs/PORTABLE-REPOSITORY.md).
 
@@ -54,12 +58,12 @@ Backups: keine automatische Einrichtung von Partitionen oder Bootloader und
 ausdrückliche Zuordnung separater Boot-/Datenlaufwerke beim Restore.
 
 > [!IMPORTANT]
-> **Update auf 1.2.0:** Das reguläre Release wird über den stabilen Kanal angeboten;
-> nach der Freigabe verweist auch der Vorabkanal auf dasselbe stabile Paket.
-> Die Beta hatte bereits die interne Version 1.2.0. Für Beta-Nutzer entsteht
-> daher kein Versionssprung und kein neues automatisches Update-Angebot allein
-> durch die Freigabe. Bei Bedarf das stabile ZIP ohne vorherige Deinstallation
-> über die bestehende Installation installieren.
+> **Update auf 1.2.1-beta:** Für das Angebot in der Plugin-Verwaltung den
+> Vorabkanal aktivieren und nach dessen Freischaltung erneut nach Updates suchen.
+> Für installierte 1.2.0-Pakete ist die interne Version 1.2.1 höher. Bereits
+> installierte develop-Testpakete mit Version 1.2.1 erhalten keinen neuen
+> numerischen Versionshinweis; das öffentliche Beta-ZIP bei Bedarf manuell über
+> die bestehende Installation installieren.
 > Vor einem Update Einstellungen exportieren, aktive Vorgänge beenden lassen
 > und nicht vorher deinstallieren.
 
@@ -247,7 +251,7 @@ Siehe [Offline-Wiederherstellung](docs/PORTABLE-REPOSITORY.md#offline-wiederhers
 ## Aktueller Validierungsstand
 
 Bisherige veröffentlichte Stände wurden wie folgt geprüft. Diese historischen
-Praxistests sind **kein** vollständiger Hardware-Nachweis für 1.2.0:
+Praxistests sind **kein** vollständiger Hardware-Nachweis für 1.2.0 oder 1.2.1-beta:
 
 - Bash-Syntax für Backend, Postinstall, Restore-Helper und Uninstall
 - Perl/CGI-Syntax mit lokalem `CGI.pm`-Stub
@@ -302,6 +306,15 @@ Reale QNAP-/Synology-Geräte,
 Stromausfälle und ein bootfähiger vollständiger Hardware-Restore sind damit
 nicht nachgewiesen.
 
+Für 1.2.1-beta kommen gezielte Inode-Parser-, Vorprüfungs- und Startschutztests
+sowie ein echter CIFS-Test mit unbekannter Inode-Gesamtzahl hinzu. Unbekannte
+Kapazität darf allein nicht blockieren; bekannte erschöpfte Inodes und andere
+Pflichtfehler müssen weiterhin blockieren. Die
+[Release Notes für 1.2.1-beta](docs/RELEASE-1.2.1.md) trennen die geprüfte
+Entwicklungsbasis von Tag-Pipeline, öffentlichem Paket und Kanalaktivierung.
+Ein konkretes Synology-/QNAP-Gerät, NFS 4.1 oder ein bootfähiger vollständiger
+Hardware-Restore ist damit weiterhin nicht nachgewiesen.
+
 ### Weiterhin bekannte Grenzen
 
 - **Speicherbelegung berechnen:** durchsucht alle erkannten Backup-Dateien und
@@ -322,7 +335,9 @@ nicht nachgewiesen.
 
 1. Das reguläre Release 1.2.0 unten herunterladen oder das angebotene Update in
    der LoxBerry-Plugin-Verwaltung verwenden. Der stabile Kanal genügt;
-   ein Beta-/Vorabkanal muss dafür nicht aktiviert werden.
+   ein Beta-/Vorabkanal muss dafür nicht aktiviert werden. Für die
+   Inode-Korrektur in 1.2.1-beta das unten verlinkte Vorabpaket verwenden oder
+   nach dessen Freischaltung den Vorabkanal aktivieren.
 2. In LoxBerry unter **Plugins > Plugin installieren** hochladen.
 3. Nach der Installation die Plugin-Oberfläche öffnen.
 4. Root-Freigabe in den Einstellungen bewusst bestätigen.
@@ -339,10 +354,17 @@ Aktuelles reguläres Release-Paket:
 
 [**LoxBerryHostBackup_1.2.0.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0/LoxBerryHostBackup_1.2.0.zip)
 
-Der stabile Download wird nach erfolgreicher Release-Prüfung bereitgestellt.
-Erst nach Prüfung dieses öffentlichen ZIPs werden die live abgefragten
-Update-Kanäle umgestellt. Den jeweiligen Freigabestatus nennen die
-[Release Notes](docs/RELEASE-1.2.0.md).
+Der stabile Download und der reguläre Kanal bleiben unverändert. Den
+Freigabestatus dieses Pakets nennen die [Release Notes für 1.2.0](docs/RELEASE-1.2.0.md).
+
+Neue Vorabversion mit korrigierter NAS-Inode-Prüfung:
+
+[**LoxBerryHostBackup_1.2.1.zip herunterladen (1.2.1-beta)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.1-beta/LoxBerryHostBackup_1.2.1.zip)
+
+Der öffentliche Beta-Download wird von der geprüften Tag-Pipeline bereitgestellt.
+Erst nach Prüfung dieses ZIPs wird der live abgefragte Vorabkanal aktiviert.
+Den aktuellen Freigabestatus nennen die
+[Release Notes für 1.2.1-beta](docs/RELEASE-1.2.1.md).
 
 Historische Pakete bleiben unverändert erhalten:
 [1.0.0](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip),
@@ -356,11 +378,31 @@ GitHub Actions sind äussere Artefakt-ZIPs, aus denen das innere Plugin-ZIP
 zuerst entpackt werden muss. Alte Downloads bleiben in der
 [Release-Historie](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases) erhalten.
 
-### Update auf 1.2.0
+### Update auf 1.2.1-beta
+
+Einstellungen exportieren und laufende Aufgaben beenden lassen. In der
+LoxBerry-Plugin-Verwaltung den Vorabkanal aktivieren und nach dessen Freischaltung
+nach Updates suchen, oder das öffentliche Beta-ZIP direkt installieren.
+**Nicht vorher deinstallieren.** Programmversion, Release-Tag und Paket lauten
+`1.2.1`, `v1.2.1-beta` und `LoxBerryHostBackup_1.2.1.zip`.
+
+Für 1.2.0 und 1.2.0-beta wird dadurch eine höhere Pluginversion angeboten.
+Die automatische Installation hängt weiterhin von der persönlichen
+Update-Einstellung ab. Wer bereits ein develop-Testpaket mit interner Version
+1.2.1 installiert hat, bekommt keinen neuen numerischen Versionshinweis und
+kann das öffentliche Beta-ZIP bei Bedarf manuell darüber installieren.
+
+Bestehende Einstellungen, Sicherungsverfahren und Backupformate bleiben
+unverändert. Nach dem Update Einstellungen und Quellenauswahl prüfen,
+**Nächstes Backup prüfen** öffnen und ein manuelles Testbackup vollständig
+abschliessen lassen. Bei unbekannten Inode-Angaben erscheint ein Hinweis;
+andere Pflichtfehler müssen weiterhin zuerst geklärt werden.
+
+### Reguläres Release 1.2.0
 
 In der LoxBerry-Plugin-Verwaltung nach Updates suchen oder das ZIP manuell
-installieren. Das reguläre Release benötigt kein Beta-Opt-in. Nach der Freigabe
-zeigen der stabile Kanal und der bisherige Vorabkanal auf dasselbe stabile Paket.
+installieren. Das reguläre Release benötigt kein Beta-Opt-in. Der stabile Kanal
+bleibt auf diesem Paket; der Vorabkanal wird separat für 1.2.1-beta freigeschaltet.
 Die automatische Installation hängt von der persönlichen Update-Einstellung ab.
 Programmversion, Release-Tag und Paket lauten `1.2.0`, `v1.2.0` und
 `LoxBerryHostBackup_1.2.0.zip`.
@@ -1290,18 +1332,20 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 Aktueller Entwicklungs- und Veröffentlichungsstand:
 
 - `main`: regulärer Hauptstand 1.2.0
-- `develop`: Fehlerkorrektur-Teststand 1.2.1 auf Basis von 1.2.0; noch kein Release
+- `develop`: Vorabversion 1.2.1-beta auf Basis von 1.2.0
 - `pre-develop`: älterer Referenzstand; unverändert
 
-Öffentliche Update-Dateien bleiben bis zu einer gesonderten Freigabe unverändert:
+Öffentliche Update-Dateien und Freigabereihenfolge:
 
 - `main/release.cfg`: reguläres Paket 1.2.0 unter Tag `v1.2.0`
-- `develop/prerelease.cfg`: dasselbe reguläre Paket 1.2.0 unter Tag `v1.2.0`
+- `develop/prerelease.cfg`: wird nach Prüfung des öffentlichen Beta-ZIPs auf
+  Paket 1.2.1 unter Tag `v1.2.1-beta` umgestellt; bis dahin bleibt 1.2.0 aktiv
 
-Der develop-Push für 1.2.1 aktiviert kein Plugin-Update. Nur das geprüfte
-GitHub-Actions-Artefakt enthält `LoxBerryHostBackup_1.2.1.zip` zur manuellen
-Installation. `main`, bestehende Tags, öffentliche ZIPs und die Wiki-Seite
-werden dadurch nicht geändert.
+Ein develop-Push allein aktiviert kein Plugin-Update. Die geprüfte Tag-Pipeline
+veröffentlicht `LoxBerryHostBackup_1.2.1.zip` unter `v1.2.1-beta`; erst nach
+Prüfung dieses öffentlichen Pakets wird die Vorab-Kanaldatei aktiviert.
+`main`, bestehende Tags, ältere öffentliche ZIPs und die Wiki-Seite werden
+dabei nicht geändert.
 
 Die in `plugin.cfg` hinterlegten Kanaladressen bleiben unverändert, damit
 bestehende Installationen die neuen Metadaten finden. Sobald eine neuere

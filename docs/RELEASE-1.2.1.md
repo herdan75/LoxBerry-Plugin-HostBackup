@@ -1,10 +1,22 @@
-# LoxBerry Host Backup 1.2.1
+# LoxBerry Host Backup 1.2.1-beta
 
-**Noch nicht veröffentlicht.** Fehlerkorrektur auf `develop`, vorbereitet am
-06.10.2026. Programm- und Paketversion: `1.2.1`.
-Installationspaket: `LoxBerryHostBackup_1.2.1.zip` aus dem erfolgreichen
-GitHub-Actions-Lauf des gewünschten develop-Commits.
-`main`, Release-Tags und beide öffentlichen Plugin-Updatekanäle bleiben bei 1.2.0.
+**Vorabversion vom 07.10.2026.** Programm- und Paketversion: `1.2.1`.
+GitHub-Tag: `v1.2.1-beta`. Der stabile Kanal und `main` bleiben bei 1.2.0.
+
+[**LoxBerryHostBackup_1.2.1.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.1-beta/LoxBerryHostBackup_1.2.1.zip)
+
+Das öffentliche ZIP ohne GitHub-Anmeldung herunterladen und direkt in der
+LoxBerry-Pluginverwaltung installieren. Nicht entpacken und nicht vorher
+deinstallieren. Für die automatische Updateerkennung Vorabversionen zulassen.
+Der Vorabkanal wird erst nach erfolgreicher Tag-Pipeline und Prüfung des
+öffentlichen Downloads auf diese Version umgestellt. Eine Wiki-Änderung allein
+aktiviert kein Update; die normalen Einstellungen für automatische Installation
+gelten weiterhin.
+
+LoxBerry zeigt die numerische Version **1.2.1** an. Von 1.2.0 ist dies ein
+Versionssprung. Bereits installierte develop-Testpakete mit interner Version
+1.2.1 erhalten durch den Beta-Tag kein höheres automatisches Update-Angebot;
+bei Bedarf das öffentliche Beta-ZIP manuell darüber installieren.
 
 ## Anlass und Korrektur
 
@@ -51,13 +63,43 @@ pauschal für einen Branch. Folgende Prüfungen sind Bestandteil des Testumfangs
   Export/Import und Wiederherstellung in isolierte Testverzeichnisse.
 - Browser-/CGI-Regressionen, Shell-/Python-/Perl-/PHP-Prüfungen und Audit des
   gepackten ZIPs mit den checksum-geprüften portablen Laufzeitdateien.
-- Versionsprüfung: internes Testpaket 1.2.1; beide veröffentlichten Updatefeeds
-  weiterhin 1.2.0. Ein develop-Push darf kein Release erzeugen.
+- Versionsprüfung: Paket 1.2.1, Vorabfeed für v1.2.1-beta, stabiler Feed weiter
+  1.2.0 und unveränderte Kanaladressen. Ein develop-Push darf kein Release erzeugen.
 
-Der erfolgreiche Workflow liefert das installierbare ZIP als Artefakt.
+Die Tag-Pipeline muss vollständig bestehen, bevor ihr Release-Schritt das
+installierbare ZIP veröffentlicht. Danach werden der öffentliche Download und
+seine Zuordnung zum getaggten Commit separat geprüft. Erst anschliessend wird
+`develop` auf den geprüften Stand nachgeführt und damit der Vorabfeed aktiviert.
 Ein erfolgreicher Windows-Teiltest ersetzt keine Linux-/CIFS-Integration.
 Es werden keine Tests gegen Franks laufendes System und keine Dienste seines
 Systems ausgeführt.
+
+### Bereits geprüfte Entwicklungsbasis
+
+Der erfolgreiche [CI-Lauf 37524709004](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/37524709004)
+belegt exakt Commit `faac7055451d80cc33924b0b42332abc2d52a2e2` vom 06.10.2026:
+
+- 381 Tests der Linux-Hauptsuite ohne Fehler; sieben bedingt ausgelassene Tests
+  wurden in den anschliessenden Pflicht-Spezialschritten tatsächlich ausgeführt.
+- 15 zusätzliche Downloadtests als unprivilegierter Benutzer.
+- Je 29 Repository- und 18 Portable-Recovery-Tests lokal und erneut auf CIFS.
+- Sechs zusätzliche CIFS-Vorprüfungstests, darunter vier echte Integrationsfälle.
+- 35 Browserprüfungen, ShellCheck, visudo, PHP sowie ZIP-Bau und acht Paketaudits.
+- 68 gezielte Inode-Regressionsfälle innerhalb von sechs Testmethoden; diese
+  Unterfälle sind nicht als weitere unabhängige Gesamtsuite zu addieren.
+
+Der echte Netzwerk-Test verwendet einen kurzlebigen Samba-/CIFS-Mount mit
+SMB 3.0, forceuid/forcegid und festen Rechten. Portable Vollsicherung und
+Repository-Stände bestehen dort mit realer 0/0-Statistik die Vorprüfung;
+unpassende reduzierte Metadaten und bekannte Inode-Erschöpfung blockieren weiter.
+Dienst-Ablauftests verwenden kontrollierte Stellvertreter, keine produktiven Dienste.
+
+Die Veröffentlichungsvorbereitung ändert gegenüber `faac705` keine
+Backup-/Restore-Programmlogik. Der neue Tag-Lauf und die Prüfung des öffentlichen
+ZIPs sind dennoch eigene Nachweise. Deren konkrete Laufadresse, Paketgrösse und
+SHA-256 werden nach Abschluss in den
+[öffentlichen Release Notes](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.1-beta)
+ergänzt. Die Prüfsumme des älteren develop-Artefakts gilt nicht für dieses Release-ZIP.
 
 ## Grenzen und Praxisabnahme
 
@@ -69,7 +111,7 @@ NAS-Pfad noch einen vollständigen bootfähigen System-Restore.
 
 Empfohlene Praxisabnahme, ohne bestehende Sicherungen zu löschen:
 
-1. Einstellungen exportieren, laufende Aufgaben beenden lassen und das Test-ZIP
+1. Einstellungen exportieren, laufende Aufgaben beenden lassen und das Beta-ZIP
    ohne vorherige Deinstallation installieren. Angezeigte Version 1.2.1 prüfen.
 2. Das direkt eingebundene NAS-Ziel und die gewünschte Quellenauswahl speichern.
    Das ext4-Loop-Image für diesen direkten NAS-Test nicht als Ziel verwenden.

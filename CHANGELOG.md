@@ -3,14 +3,14 @@
 Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
-Version 1.2.1 wird auf `develop` vorbereitet und ist noch nicht veröffentlicht.
+Version 1.2.1-beta ist die neue Vorabversion mit interner Paketversion 1.2.1.
 Version 1.2.0 bleibt das reguläre Release. Frühere Vorabversionen bleiben als
 historische Einträge erhalten.
 Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
-## [1.2.1] - Noch nicht veröffentlicht
+## [1.2.1-beta] - 2026-10-07
 
 - Inode-Vorprüfung korrigiert: Gesamtzahl und freie Inodes werden gemeinsam
   ausgewertet. NAS-/Dateisystemmeldungen mit `0/0/0`, unbekannten oder nicht
@@ -22,9 +22,15 @@ validiert werden.
 - Regressionstests um die Inode-Zustände und die gemeinsame Vorprüfung auf einem
   echten, eingeschränkten CIFS-Testziel ergänzt. Bestehende Tests für portable
   Vollbackups, inkrementelle Repository-Stände und Metadaten-Restore bleiben erhalten.
-- Paketversion `1.2.1` nur für den develop-Teststand. Beide öffentlichen
-  Update-Kanäle bleiben auf dem veröffentlichten 1.2.0-Paket; kein Release-Tag.
-  Prüfplan und Grenzen: [Release-Vorbereitung 1.2.1](docs/RELEASE-1.2.1.md).
+- Vorabversion `v1.2.1-beta` mit numerischer Plugin- und Paketversion `1.2.1`.
+  Der stabile Kanal und `main` bleiben auf 1.2.0. Der Vorabkanal wird erst nach
+  erfolgreicher Tag-Pipeline und Prüfung des öffentlichen Beta-ZIPs aktiviert.
+  Bestehende develop-Testpakete mit interner Version 1.2.1 erzeugen dadurch kein
+  höheres Update-Angebot; bei Bedarf das Beta-ZIP ohne Deinstallation installieren.
+- Release-Dokumentation, öffentliche Downloadlinks und Kanaltests aktualisiert;
+  keine weiteren Änderungen der Programmlogik gegenüber der geprüften
+  Entwicklungsbasis `faac705`. Nachweise und Grenzen:
+  [Release Notes 1.2.1-beta](docs/RELEASE-1.2.1.md).
 
 ## [1.2.0] - 2026-10-04
 
@@ -902,7 +908,7 @@ nicht überarbeitet worden.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
 [Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.0...develop
-[1.2.1]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.0...develop
+[1.2.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.0...v1.2.1-beta
 [1.2.0]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.0
 [1.2.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.0-beta
 [1.1.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.1.0-beta

@@ -5,7 +5,32 @@ bei Änderungen an rsync-/tar-Optionen, Mount-Prüfung, Import, Restore oder
 Retention auszuführen. Produktive Daten werden durch synthetische Marker und
 Testdienste ersetzt.
 
-## Ergänzende Freigabeabnahme für 1.2.0
+## Ergänzende Freigabeabnahme für 1.2.1-beta
+
+Diese Szenarien gelten für die Vorabversion vom 07.10.2026. Prüfplan und
+tatsächlich abgeschlossene Nachweise getrennt behandeln; siehe
+[Release Notes 1.2.1-beta](RELEASE-1.2.1.md).
+
+1. Unbekannte oder nicht auswertbare Inode-Statistik (insbesondere Gesamt=0,
+   Frei=0) darf allein keinen Startabbruch auslösen. Eine bekannte positive
+   Gesamtzahl und Frei=0 muss vor dem Stoppen von Diensten blockieren.
+2. Alle vier Metadatenverfahren und beide Sicherungsarten durchlaufen die
+   gemeinsame Vorprüfung. Ziel-, Schreib-, Metadaten-, Speicher- und
+   Repository-Fehler müssen unabhängig von unbekannten Inodes blockieren.
+3. Portable Vollbackup- und Repository-Vorprüfung auf einem echten eingeschränkten
+   CIFS-Mount mit realer 0/0-Statistik prüfen. Reduzierte Dateisicherung muss bei
+   nicht erhaltenen Eigentümern, Rechten oder Links weiter scheitern.
+4. Gesamte Linux-, Repository-/Recovery-, Browser-, Installer-, Sicherheits- und
+   Paketprüfungen für den exakten Tag-Commit ausführen. Öffentliches Beta-ZIP
+   ohne Anmeldung herunterladen; Version, Dateiinhalte, Unix-Rechte, Engines
+   und SHA-256 prüfen. Erst danach `develop` und Vorabfeed freischalten.
+5. `main`, stabilen Feed und bisherige Release-Dateien unverändert lassen.
+   Vorabfeed muss 1.2.1 und das ZIP unter v1.2.1-beta anbieten. Bei schon
+   installiertem numerischem Teststand 1.2.1 kein höheres Angebot erwarten.
+6. Direkte NAS-/NFS-Praxisabnahme und bootfähigen Restore auf eigener Hardware
+   weiterhin separat durchführen. Die CI ist kein Test von Franks Produktivsystem.
+
+## Historische ergänzende Freigabeabnahme für 1.2.0
 
 Diese Ergänzung gilt für das reguläre Release vom 04.10.2026. Sie ist ein
 Prüfplan, kein Nachweis bereits bestandener Paket- oder Hardwaretests. Die

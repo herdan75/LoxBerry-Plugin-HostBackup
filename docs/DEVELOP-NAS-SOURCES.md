@@ -5,7 +5,7 @@ eingeführt. Das reguläre Release **1.2.0 vom 04.10.2026** übernimmt diesen St
 und die portablen, platzsparenden NAS-Sicherungsstände aus 1.2.0-beta.
 Updatehinweise und Grenzen stehen in den [Release Notes](RELEASE-1.2.0.md).
 
-**develop 1.2.1, noch nicht veröffentlicht:** Die gemeinsame Vorprüfung
+**Vorabversion 1.2.1-beta vom 07.10.2026:** Die gemeinsame Vorprüfung
 unterscheidet unbekannte Inode-Kapazität von tatsächlich erschöpften Inodes.
 Bei `df -i` mit Gesamtzahl und freien Inodes `0/0` darf kein Abbruch allein
 wegen dieser nicht auswertbaren Statistik erfolgen. Die Anzeige erklärt den
@@ -13,9 +13,11 @@ unbekannten Zustand. Eine bekannte positive Gesamtzahl mit null freien Inodes
 bleibt ein Fehler. Zielzugriff, freier Speicher und Metadatenprüfung gelten
 weiterhin; unbekannt bedeutet weder unbegrenzt noch garantiert ausreichend.
 Ein ext4-Image auf dem NAS ist für diese Korrektur nicht erforderlich.
-Details und Prüfnachweise: [Release-Vorbereitung 1.2.1](RELEASE-1.2.1.md).
+Details, Freigabestatus und Prüfnachweise:
+[Release Notes für 1.2.1-beta](RELEASE-1.2.1.md).
 
-Die folgenden verständlicheren Bezeichnungen gelten ab 1.2.0-beta und in 1.2.0.
+Die folgenden verständlicheren Bezeichnungen gelten ab 1.2.0-beta, in 1.2.0
+und unverändert in 1.2.1-beta.
 Ältere Pakete können noch die alten Namen anzeigen. Die Zuordnung
 steht unter [Sicherungsverfahren](../README.md#sicherungsverfahren); vorhandene
 Konfigurationswerte werden durch die Umbenennung nicht verändert.
@@ -33,7 +35,26 @@ Konfigurationswerte werden durch die Umbenennung nicht verändert.
    Portable Sicherung mit Vollbackup ist der vorgesehene Weg für ein solches Ziel,
    sofern dessen eigener Roundtrip gelingt. Kein stiller Profilwechsel.
 
-## Sichere Anwendung des regulären Pakets
+## Sichere Anwendung der Pakete
+
+### Vorabversion 1.2.1-beta mit NAS-Inode-Korrektur
+
+[**LoxBerryHostBackup_1.2.1.zip herunterladen (Vorabversion)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.1-beta/LoxBerryHostBackup_1.2.1.zip)
+
+Dieses öffentliche ZIP **ohne Entpacken** in der LoxBerry-Plugin-Verwaltung
+installieren. Eine GitHub-Anmeldung ist nicht erforderlich. Programm- und
+Paketversion sind `1.2.1`, der Release-Tag lautet `v1.2.1-beta`. Nach erfolgreicher
+Tag-Pipeline und Prüfung des öffentlichen ZIPs wird der Vorabkanal auf 1.2.1
+umgestellt. Wer dieses Update über die Plugin-Verwaltung beziehen möchte,
+aktiviert den Vorabkanal und sucht nach dessen Freischaltung erneut nach Updates.
+Der stabile Kanal bleibt unverändert auf 1.2.0.
+
+Von 1.2.0 oder 1.2.0-beta aus gibt es einen numerischen Versionssprung.
+Bereits installierte develop-Testpakete mit Version 1.2.1 erhalten keinen
+höheren Versionshinweis; das öffentliche Beta-ZIP bei Bedarf manuell darüber
+installieren. **Nicht vorher deinstallieren.** Einstellungen und Backupformate
+werden nicht automatisch umgestellt. Nach dem Update die gespeicherte
+Konfiguration prüfen und einen vollständigen manuellen Testlauf durchführen.
 
 ### Öffentliches Release herunterladen
 
@@ -42,8 +63,8 @@ Konfigurationswerte werden durch die Umbenennung nicht verändert.
 Dieses ZIP **ohne Entpacken** in der LoxBerry-Plugin-Verwaltung installieren.
 Der öffentliche Release-Download erfordert keine Anmeldung bei GitHub.
 Programm- und Paketversion sind 1.2.0; der Release-Tag lautet v1.2.0.
-Nach erfolgreicher Tag-Pipeline und Prüfung des öffentlichen ZIPs werden beide
-Live-Updatekanäle auf dieses reguläre Paket gesetzt. Kein Vorabkanal nötig.
+Der stabile Updatekanal bietet dieses reguläre Paket an. Kein Vorabkanal nötig.
+Die Inode-Korrektur aus 1.2.1-beta ist darin noch nicht enthalten.
 Bereits installierte 1.2.0-beta-Pakete melden intern ebenfalls 1.2.0 und erhalten
 deshalb keinen höheren Versionshinweis. Das stabile ZIP bei Bedarf als Update
 darüber installieren, nicht vorher deinstallieren.
@@ -63,15 +84,14 @@ darüber installieren, nicht vorher deinstallieren.
 
 GitHub-Artefakte sind zeitlich befristet. Spätere develop-Commits werden nicht
 allein durch einen Push zum veröffentlichten Release; ein einzelner Run-Link
-bleibt auf seinem Commit. Für das veröffentlichte Paket den direkten Link oben
-verwenden. Frühere develop-Testpakete trugen noch die Versionsnummer 1.1.0;
-1.2.0 ist durch die höhere interne Version davon unterscheidbar. Zwischen
-1.2.0-beta und 1.2.0 gibt es hingegen keinen numerischen Versionssprung.
+bleibt auf seinem Commit. Für ein veröffentlichtes Paket den passenden direkten
+Release-Link oben verwenden. Die öffentliche 1.2.1-beta ist intern höher als
+1.2.0, aber nicht höher als ein develop-Testpaket mit derselben Version 1.2.1.
 
 ### Installation und erster Test
 
 Einstellungen exportieren und laufende Aufgaben beenden lassen. Das Update
-über den regulären Plugin-Kanal oder das öffentliche ZIP installieren,
+über den gewählten Plugin-Kanal oder das passende öffentliche ZIP installieren,
 nicht vorher deinstallieren.
 Unter Laufwerke und Netzfreigaben lokale Grundregel auswählen, gewünschte
 eingebundene Freigaben aktivieren und speichern. Vorherige Ausschlüsse behalten

@@ -199,32 +199,32 @@ class InstallHookTests(unittest.TestCase):
                 self.assertIn(f"## [{tag[1:]}]", CHANGELOG)
         self.assertIn("prerelease: ${{ contains(github.ref_name, '-') }}", WORKFLOW)
 
-    def test_develop_package_version_is_numeric_and_documented(self) -> None:
+    def test_beta_package_version_is_numeric_and_documented(self) -> None:
         plugin = configparser.ConfigParser()
         plugin.read_string(PLUGIN_CFG)
         version = plugin["PLUGIN"]["VERSION"]
         self.assertEqual(version, "1.2.1")
         notes = (ROOT / "docs" / f"RELEASE-{version}.md").read_text(encoding="utf-8")
-        self.assertTrue(notes.startswith(f"# LoxBerry Host Backup {version}\n"))
+        self.assertTrue(notes.startswith(f"# LoxBerry Host Backup {version}-beta\n"))
         self.assertIn(f"**Version {version}", README)
-        self.assertIn(f"## [{version}]", CHANGELOG)
+        self.assertIn(f"## [{version}-beta]", CHANGELOG)
         self.assertNotIn(f"VERSION={version}-beta", PLUGIN_CFG)
         self.assertIn(f"LoxBerryHostBackup_{version}.zip", notes)
-        self.assertIn("Noch nicht veröffentlicht", notes)
-        for source in (RELEASE_CFG, PRERELEASE_CFG):
+        self.assertIn(f"v{version}-beta", notes)
+        self.assertNotIn("Noch nicht veröffentlicht", notes)
+        for source, expected in ((RELEASE_CFG, "1.2.0"), (PRERELEASE_CFG, version)):
             channel = configparser.ConfigParser()
             channel.read_string(source)
-            self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.0")
-            self.assertNotIn("1.2.1", channel["AUTOUPDATE"]["ARCHIVEURL"])
+            self.assertEqual(channel["AUTOUPDATE"]["VERSION"], expected)
 
-    def test_prerelease_channel_follows_stable_1_2_0_package(self) -> None:
+    def test_prerelease_channel_targets_1_2_1_beta_package(self) -> None:
         channel = configparser.ConfigParser()
         channel.read_string(PRERELEASE_CFG)
-        self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.0")
+        self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.1")
         base = "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases"
         self.assertEqual(channel["AUTOUPDATE"]["ARCHIVEURL"],
-                         f"{base}/download/v1.2.0/LoxBerryHostBackup_1.2.0.zip")
-        self.assertEqual(channel["AUTOUPDATE"]["INFOURL"], f"{base}/tag/v1.2.0")
+                         f"{base}/download/v1.2.1-beta/LoxBerryHostBackup_1.2.1.zip")
+        self.assertEqual(channel["AUTOUPDATE"]["INFOURL"], f"{base}/tag/v1.2.1-beta")
 
     def test_stable_1_2_0_channel_keeps_existing_update_addresses(self) -> None:
         expected_archive = "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0/LoxBerryHostBackup_1.2.0.zip"

@@ -1,5 +1,12 @@
 # Sicherheitsmodell
 
+Ergänzung für **1.2.1-beta vom 07.10.2026**: Eine unbekannte Inode-Kapazität
+ist kein Beleg für Erschöpfung. Die gemeinsame Vorprüfung wertet Gesamtzahl
+und freie Inodes zusammen aus; bekannte Erschöpfung bleibt fatal. Zielidentität,
+Schreibzugriff, Metadaten, Quellenauswahl, Speicherplatz und Repository-Freigaben
+werden nicht abgeschwächt. Keine zusätzlichen Rechte oder Sicherungsmodi.
+Prüfumfang und Grenzen: [Release Notes 1.2.1-beta](RELEASE-1.2.1.md).
+
 Stand: reguläres Release 1.2.0 vom 04.10.2026. Das Sicherheitsmodell der
 übernommenen Beta-Basis `af2d55d` bleibt unverändert; die stabile Freigabe
 erweitert weder Berechtigungen noch Restore-Zusagen. Freigabestatus und

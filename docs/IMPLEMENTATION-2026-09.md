@@ -13,6 +13,16 @@ Prüfung des öffentlichen Downloads diesen Stand. Die
 Die ursprüngliche Analyse wurde mit 0.7.0-beta veröffentlicht; historische
 Prüfläufe darunter behalten ihre damaligen Versions- und Commitangaben.
 
+## Vorabversion 1.2.1-beta am 07.10.2026
+
+- Inode-Korrektur aus der geprüften Entwicklungsbasis `faac705` veröffentlichen:
+  unbekannte Kapazität informativ, bekannte Erschöpfung weiterhin blockierend.
+- Keine zusätzlichen Programmänderungen durch die Release-Vorbereitung.
+  Dokumentation und Versions-/Kanaltests auf Paket 1.2.1 und Tag v1.2.1-beta ziehen.
+- Öffentlichen Download und vollständige Tag-Pipeline prüfen, erst danach
+  `develop` nachführen und den Vorabkanal aktivieren. Stable/main bleiben 1.2.0.
+- Nachweise und Grenzen stehen in [RELEASE-1.2.1.md](RELEASE-1.2.1.md).
+
 ## Reguläres Release 1.2.0 am 04.10.2026
 
 - Vollständigen geprüften develop-Stand `af2d55d` auf main übernehmen; keine
