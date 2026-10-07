@@ -223,6 +223,9 @@ async function openRepositoryByKeyboard(page) {
   assert.equal(await panel.evaluate(node=>node.open),true,'Repository disclosure opens with keyboard');
 }
 async function configurationControls(page) {
+  // The fixture loads saved stop targets independently after navigation.
+  // Snapshot only the fully populated form; retain the strict all-control diff.
+  await page.locator('#stop-targets-list [name="stop_targets_loaded"]').waitFor({state:'attached'});
   return page.evaluate(()=>Array.from(document.getElementById('settings-save-form').elements).filter(node=>node.name&&node.name!=='csrf_token').map(node=>[node.name,node.value,node.checked||false]));
 }
 async function checkMaintenance(browser,base) {

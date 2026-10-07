@@ -24,7 +24,10 @@ Each run prints a JSON receipt and saves desktop/mobile screenshots under a new
 directories are not part of plugin packages. Tests cover actual browser startup,
 late-loaded controls, dirty state, failed saves, CSRF refresh and save races,
 configuration validation, task discovery/completion, both log scroll axes,
-responsive layout and keyboard/dynamic tooltips. The browser-specific LoxBerry
+responsive layout and keyboard/dynamic tooltips. Form snapshots wait for the
+independently loaded saved stop-target fields before comparing all controls.
+This prevents a timing-dependent false positive in the repository setup test
+without omitting fields or weakening equality checks. The browser-specific LoxBerry
 header fixture emits the CGI's actual head additions instead of injecting its
 own asset URLs. Tests prime an obsolete unversioned stylesheet in the browser
 cache, then verify that content-fingerprinted CSS/JavaScript are loaded. Overview
