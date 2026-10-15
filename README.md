@@ -1,5 +1,13 @@
 # LoxBerry Host Backup
 
+> [!NOTE]
+> **Zusätzlich auf develop, noch nicht veröffentlicht (15.10.2026):** Die
+> Dienst-/Container-Auswahl lädt auch bei langsameren Antworten zuverlässig
+> innerhalb eigener, begrenzter Zeitlimits. Gebündelte systemd-Abfragen,
+> erneutes Laden und Schutz bestehender Auswahlen beheben den gemeldeten
+> Ladefehler. Dieser Fix ist nicht im unten verlinkten bisherigen Beta-ZIP
+> enthalten; Versionsnummer und Plugin-Updatekanäle bleiben unverändert.
+
 **Version 1.2.1-beta · Vorabversion · 07.10.2026.**
 Korrigiert die fälschlich blockierende Inode-Prüfung bei NAS-/Dateisystemen,
 die keine auswertbare Gesamtzahl melden, beispielsweise `df -i` mit `0/0/0`.
@@ -915,6 +923,19 @@ Mit `Empfohlene Auswahl setzen` markiert das Plugin automatisch laufende
 Container und typische datenintensive Dienste, z. B. Datenbanken, MQTT/Zigbee,
 Node-RED, Stats4Lox, Grafana oder InfluxDB. Die Empfehlung kann danach manuell
 angepasst werden.
+
+**Neuer develop-Teststand:** Die Dienstermittlung ist insgesamt auf 45 Sekunden
+plus höchstens 2 Sekunden zum Beenden begrenzt; die Oberfläche wartet dafür bis
+zu 60 Sekunden einschliesslich
+Übertragung. Bei einem Fehler `Erneut laden` verwenden. Eine bereits geladene
+Liste und ungespeicherte Auswahlen bleiben erhalten; eine unvollständige Antwort
+wird nicht übernommen. Bei einer gültigen Liste bleiben nicht mehr gefundene
+ausgewählte Ziele sichtbar und angehakt; nicht mehr benötigte Ziele bewusst
+abwählen. Nach erfolgreichem Laden die gewünschten Ziele auswählen,
+**Änderungen speichern** und anschliessend **Nächstes Backup prüfen** öffnen.
+Die Freigabe eines Backups trotz laufender Container ersetzt deren Stoppen nicht
+und garantiert keine konsistenten Datenbanken. Der Fix wird erst mit einer
+späteren Veröffentlichung über den Plugin-Updatekanal angeboten.
 
 Das verbessert die Konsistenz von Container-, Datenbank- und Dienst-Daten, kann
 aber diese Dienste während des Backups unterbrechen. Das Plugin startet nur

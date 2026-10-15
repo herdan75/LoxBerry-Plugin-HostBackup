@@ -10,6 +10,32 @@ Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
+## [Unveröffentlicht / develop] - 2026-10-15
+
+- Langsame Dienst-/Container-Ermittlung korrigiert: systemd-Eigenschaften werden
+  gebündelt statt mit wiederholten Einzelaufrufen abgefragt. Ein gemeinsames
+  Zeitlimit von 45 Sekunden plus höchstens 2 Sekunden zum Beenden begrenzt
+  die Ermittlung; unvollständige oder
+  fehlgeschlagene Abfragen werden nicht als erfolgreiche leere Liste übernommen.
+- Die Diensteliste erhält ein eigenes Browser-Zeitlimit von 60 Sekunden,
+  verständliche Fehlerhinweise und eine Schaltfläche zum erneuten Laden.
+  Gespeicherte sowie noch nicht gespeicherte Auswahlen bleiben bei Fehlern
+  erhalten; Änderungen während des Ladens werden berücksichtigt. Andere
+  Abfragen erhalten keine längeren Zeitlimits.
+- Nicht mehr gefundene ausgewählte Ziele bleiben sichtbar und angehakt,
+  können aber bewusst abgewählt werden. Gelöschte Container oder inzwischen
+  inaktive Dienste blockieren dadurch nicht das Bearbeiten der Auswahl.
+- Dienstgruppen, Auswahlschaltflächen und lange Zielnamen passen sich schmalen
+  Bildschirmen an, ohne rechts abgeschnitten zu werden.
+- Empfehlungen unterscheiden aktive von inaktiven Diensten. Geschützte
+  Systemdienste bleiben ausgeschlossen; Stoppen, Wiederanlauf und die
+  Sicherheitsprüfung vor dem Backup werden nicht abgeschwächt.
+- Verhaltens-, CGI- und echte Browser-Regressionstests für langsame Antworten,
+  gemeinsame Zeitlimits, fehlerhafte Antworten, Wiederholung und Auswahl-Schutz
+  ergänzt. Tests stoppen keine Dienste auf dem Entwicklungsrechner.
+- Nur develop-Teststand: keine neue Veröffentlichung, keine Änderung von
+  Versionsnummer, bestehendem Beta-ZIP oder LoxBerry-Updatekanälen.
+
 ## [1.2.1-beta] - 2026-10-07
 
 - Inode-Vorprüfung korrigiert: Gesamtzahl und freie Inodes werden gemeinsam

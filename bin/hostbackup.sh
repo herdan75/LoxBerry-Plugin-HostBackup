@@ -1508,78 +1508,54 @@ protected_systemd_service() {
   return 1
 }
 
-systemd_service_group() {
-  local unit="$1"
-  local description="${2:-}"
-  local metadata
-  metadata="$(systemctl show "$unit" -p ExecStart -p FragmentPath -p Description --no-pager 2>/dev/null || true)"
-  if printf '%s\n%s\n%s\n' "$unit" "$description" "$metadata" | grep -Eiq '(/plugins/|/opt/loxberry/(bin|data|config)/plugins|stats4lox|loxone|loxhue|netatmo|zigbee|mqtt|miniserver)'; then
-    printf '%s\n' "LoxBerry-/Plugin-Dienste"
-  else
-    printf '%s\n' "Weitere Systemdienste"
-  fi
-}
-
-friendly_systemd_label() {
-  local unit="$1"
-  local description="${2:-}"
-  local label="${description:-$unit}"
-
-  case "$unit $description" in
-    *stats4lox*|*Stats4Lox*) label="Stats4Lox" ;;
-    *netatmo*|*Netatmo*) label="Netatmo" ;;
-    *zigbee*|*Zigbee*|*ZigBee*) label="Zigbee / MQTT" ;;
-    *mqtt*|*MQTT*) label="MQTT / ZigbeeMQTT" ;;
-    *miniserver*|*Miniserver*) label="Miniserver Backup" ;;
-    *loxhue*|*LoxHue*|*hue*) label="LoxHue / Hue Bridge" ;;
-  esac
-
-  printf '%s\n' "$label"
-}
-
 discover_stop_targets() {
-  local tmp unit active sub description group name image status
-  tmp="$(mktemp)"
+  local docker_bin systemctl_bin result result_json
+  docker_bin="$(command -v docker || true)"
+  systemctl_bin="$(command -v systemctl || true)"
+  command -v timeout >/dev/null 2>&1 || { echo "Service discovery requires timeout." >&2; return 1; }
 
-  if command -v docker >/dev/null 2>&1; then
-    docker ps -a --format '{{.Names}}\t{{.Image}}\t{{.Status}}' 2>/dev/null |
-      while IFS="$(printf '\t')" read -r name image status; do
-        [ -n "$name" ] || continue
-        printf 'docker\t%s\t%s\tDocker-Container\t%s\t%s\n' "$name" "$name" "$status" "$image" >> "$tmp"
-      done || true
-  fi
-
-  if command -v systemctl >/dev/null 2>&1; then
-    systemctl list-units --type=service --state=running --all --no-legend --no-pager 2>/dev/null |
-      while read -r unit _load active sub description; do
-        [ -n "$unit" ] || continue
-        protected_systemd_service "$unit" && continue
-        group="$(systemd_service_group "$unit" "$description")"
-        label="$(friendly_systemd_label "$unit" "$description")"
-        printf 'systemd\t%s\t%s\t%s\t%s\t%s\n' "$unit" "$label" "$group" "${active}/${sub}" "$unit" >> "$tmp"
-      done || true
-
-    systemctl list-unit-files --type=service --no-legend --no-pager 2>/dev/null |
-      while read -r unit _state _rest; do
-        [ -n "$unit" ] || continue
-        protected_systemd_service "$unit" && continue
-        grep -F "$(printf 'systemd\t%s\t' "$unit")" "$tmp" >/dev/null 2>&1 && continue
-        group="$(systemd_service_group "$unit" "")"
-        [ "$group" = "LoxBerry-/Plugin-Dienste" ] || continue
-        description="$(systemctl show "$unit" -p Description --value --no-pager 2>/dev/null || true)"
-        active="$(systemctl is-active "$unit" 2>/dev/null || true)"
-        label="$(friendly_systemd_label "$unit" "$description")"
-        printf 'systemd\t%s\t%s\t%s\t%s\t%s\n' "$unit" "$label" "$group" "${active:-inactive}" "$unit" >> "$tmp"
-      done || true
-  fi
-
-  perl -MJSON::PP -e '
-    my ($cfg_file, $targets_file) = @ARGV;
+  # One shared deadline covers Docker, all systemd batches and JSON generation.
+  # No output is published until every query succeeds; a failed/partial inventory
+  # must never look like an empty selection that could overwrite saved choices.
+  if result_json="$(LC_ALL=C timeout -k 2s 45s perl -MJSON::PP -MEncode=decode,FB_CROAK -e '
+    use strict;
+    use warnings;
+    my ($cfg_file, $docker_bin, $systemctl_bin) = @ARGV;
+    sub query {
+      my @args = @_;
+      open my $fh, "-|", @args or die "Cannot start service discovery query: $!\n";
+      local $/;
+      my $output = <$fh> // "";
+      close $fh or die "Service discovery query failed (status $?).\n";
+      return decode("UTF-8", $output, FB_CROAK);
+    }
+    sub supported_name { return $_[0] =~ /\A[A-Za-z0-9_.\@:\-]+\z/; }
+    sub protected_unit {
+      # Keep in sync with protected_systemd_service; regression tests compare
+      # both predicates. Stop operations continue to use the shell safety check.
+      my ($unit) = @_;
+      return $unit =~ /\A(?:loxberry|LoxBerryHostBackup|loxberryhostbackup|ssh|sshd|dropbear|cron|crond|anacron|dbus|polkit|udev|networking|NetworkManager|docker|containerd|apache2|lighttpd|nginx)\.service\z/
+        || $unit =~ /\A(?:systemd-.*|(?:getty|serial-getty|user)@.*|php.*-fpm)\.service\z/
+        || $unit =~ /\.(?:mount|socket|timer)\z/;
+    }
+    sub friendly_label {
+      my ($unit, $description) = @_;
+      my $text = "$unit $description";
+      return "Stats4Lox" if $text =~ /stats4lox|Stats4Lox/;
+      return "Netatmo" if $text =~ /netatmo|Netatmo/;
+      return "Zigbee / MQTT" if $text =~ /zigbee|Zigbee|ZigBee/;
+      return "MQTT / ZigbeeMQTT" if $text =~ /mqtt|MQTT/;
+      return "Miniserver Backup" if $text =~ /miniserver|Miniserver/;
+      return "LoxHue / Hue Bridge" if $text =~ /loxhue|LoxHue|hue/;
+      return length($description) ? $description : $unit;
+    }
     my %selected;
     my $recommend_re = qr/(mariadb|mysql|postgres|postgresql|influx|grafana|telegraf|mosquitto|mqtt|zigbee|node-?red|nodered|stats4lox|netatmo|miniserver|loxhue|huebridge|redis|mongodb|prometheus|homeassistant|home-assistant|portainer|database|db|broker)/i;
-    if (open my $fh, "<", $cfg_file) {
+    {
+      open my $fh, "<", $cfg_file or die "Cannot read service selection configuration.\n";
       local $/;
-      my $cfg = eval { decode_json(<$fh>) } || {};
+      my $cfg = eval { decode_json(<$fh>) };
+      die "Invalid service selection configuration.\n" if $@ || ref($cfg) ne "HASH";
       if (ref($cfg->{stop_targets}) eq "ARRAY") {
         for my $target (@{$cfg->{stop_targets}}) {
           next unless ref($target) eq "HASH";
@@ -1590,36 +1566,92 @@ discover_stop_targets() {
       }
     }
     my @items;
-    if (open my $fh, "<", $targets_file) {
-      while (my $line = <$fh>) {
-        chomp $line;
-        my ($type, $name, $label, $group, $status, $details) = split /\t/, $line, 6;
-        next unless $type && $name;
-        my $joined = join(" ", grep { defined && length } ($type, $name, $label, $group, $status, $details));
-        my $active = ($type eq "docker" && ($status // "") =~ /^Up\b/i)
-          || ($type eq "systemd" && ($status // "") =~ /active|running/i);
-        my $recommended = 0;
-        if ($active && $type eq "docker") {
-          $recommended = 1;
-        } elsif ($active && $type eq "systemd" && (($group // "") eq "LoxBerry-/Plugin-Dienste" || $joined =~ $recommend_re)) {
-          $recommended = 1;
-        }
+    if (length $docker_bin) {
+      my $output = query($docker_bin, "ps", "-a", "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}");
+      for my $line (split /\n/, $output) {
+        next unless length $line;
+        my ($name, $image, $status) = split /\t/, $line, 3;
+        die "Incomplete Docker service discovery response.\n" unless defined $status && length($name // "");
+        next unless supported_name($name);
         push @items, {
-          type => $type,
-          name => $name,
-          label => length($label // "") ? $label : $name,
-          group => length($group // "") ? $group : "Weitere Dienste",
-          status => $status // "",
-          details => $details // "",
-          recommended => ($recommended ? JSON::PP::true : JSON::PP::false),
-          selected => ($selected{"$type:$name"} ? JSON::PP::true : JSON::PP::false),
+          type => "docker", name => $name, label => $name,
+          group => "Docker-Container", status => $status, details => $image,
+          recommended => ($status =~ /^Up\b/i ? JSON::PP::true : JSON::PP::false),
+          selected => ($selected{"docker:$name"} ? JSON::PP::true : JSON::PP::false),
         };
+      }
+    }
+    if (length $systemctl_bin) {
+      my %units;
+      for my $args (
+        ["list-units", "--type=service", "--state=running", "--all", "--plain", "--no-legend", "--no-pager"],
+        ["list-unit-files", "--type=service", "--no-legend", "--no-pager"]
+      ) {
+        for my $line (split /\n/, query($systemctl_bin, @$args)) {
+          next unless $line =~ /\S/;
+          my ($unit) = $line =~ /^\s*(\S+)\s+\S+/;
+          die "Incomplete systemd service discovery response.\n" unless defined $unit;
+          next unless supported_name($unit) && $unit =~ /\.service\z/;
+          # A template is not a runnable instance and cannot be queried/stopped
+          # like a concrete service. Instantiated plugin services remain listed.
+          next if protected_unit($unit) || $unit =~ /\@\.service\z/;
+          $units{$unit} = 1;
+        }
+      }
+      my @pending = sort keys %units;
+      while (@pending) {
+        my @batch = splice @pending, 0, 128;
+        my $output = query($systemctl_bin, "show", "--all", "--no-pager",
+          "-p", "Id", "-p", "Names", "-p", "LoadState", "-p", "ActiveState", "-p", "SubState",
+          "-p", "Description", "-p", "ExecStart", "-p", "FragmentPath", "--", @batch);
+        my %records;
+        for my $record (split /\n\s*\n/, $output) {
+          my %properties = map { /^([A-Za-z]+)=(.*)$/ ? ($1 => $2) : () } split /\n/, $record;
+          for my $key (qw(Id Names LoadState ActiveState SubState Description ExecStart FragmentPath)) {
+            die "Incomplete systemd service properties.\n" unless exists $properties{$key};
+          }
+          die "Service disappeared during discovery; please retry.\n"
+            unless length($properties{Id}) && length($properties{ActiveState})
+              && length($properties{SubState}) && $properties{LoadState} ne "not-found";
+          for my $name ($properties{Id}, split /\s+/, $properties{Names}) {
+            $records{$name} = \%properties;
+          }
+        }
+        for my $unit (@batch) {
+          my $properties = $records{$unit} or die "Missing systemd service properties; please retry.\n";
+          # Installed aliases must not expose a protected canonical service.
+          next if protected_unit($properties->{Id})
+            || grep { protected_unit($_) } split /\s+/, $properties->{Names};
+          my $description = $properties->{Description};
+          my $metadata = join " ", $unit, @{$properties}{qw(Description ExecStart FragmentPath)};
+          my $plugin = $metadata =~ m{(/plugins/|/opt/loxberry/(bin|data|config)/plugins|stats4lox|loxone|loxhue|netatmo|zigbee|mqtt|miniserver)}i;
+          my $active = $properties->{ActiveState} eq "active";
+          next unless $plugin || ($active && $properties->{SubState} eq "running");
+          my $label = friendly_label($unit, $description);
+          my $group = $plugin ? "LoxBerry-/Plugin-Dienste" : "Weitere Systemdienste";
+          my $recommended = $active && ($plugin || "$unit $label" =~ $recommend_re);
+          push @items, {
+            type => "systemd", name => $unit, label => $label, group => $group,
+            status => "$properties->{ActiveState}/$properties->{SubState}", details => $unit,
+            recommended => ($recommended ? JSON::PP::true : JSON::PP::false),
+            selected => ($selected{"systemd:$unit"} ? JSON::PP::true : JSON::PP::false),
+          };
+        }
       }
     }
     @items = sort { ($a->{group} cmp $b->{group}) || ($a->{label} cmp $b->{label}) } @items;
     print JSON::PP->new->ascii->canonical->pretty->encode(\@items);
-  ' "$CONFIG_FILE" "$tmp"
-  rm -f "$tmp"
+  ' "$CONFIG_FILE" "$docker_bin" "$systemctl_bin")"; then
+    printf '%s\n' "$result_json"
+    return 0
+  else
+    result=$?
+    if [ "$result" -eq 124 ] || [ "$result" -eq 137 ]; then
+      echo "Service discovery timed out after 45 seconds; please retry." >&2
+      return 124
+    fi
+    return "$result"
+  fi
 }
 
 restart_journal_path_is_safe() {

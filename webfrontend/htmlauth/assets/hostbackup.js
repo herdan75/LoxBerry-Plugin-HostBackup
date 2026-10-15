@@ -84,6 +84,7 @@
   var csrfRefresh = null, busyForms = new WeakSet(), busyCount = 0, pendingImport = false, intentionalNavigation = false;
   var reportDownloadUrl = null;
   var sourceVolumes = [], sourceLoading = false;
+  var stopTargetsLoading = false;
   var repositoryState = null, repositoryLoading = false, repositoryWriting = false, repositoryStatusTarget = null;
   var labels = {
     backup_root: 'Backup-Verzeichnis', keep_backups: 'Anzahl Backups behalten', metadata_mode: 'Sicherungsverfahren', backup_mode: 'Sicherungsart',
@@ -327,26 +328,111 @@
   }
   async function fragment(action, target) {
     if (!target) return;
+    if (action === 'stop-targets') return loadStopTargets();
     if (action === 'target-notice') { target.setAttribute('role', 'status'); target.setAttribute('aria-live', 'polite'); target.setAttribute('aria-atomic', 'true'); target.setAttribute('aria-busy', 'true'); }
     var controller = new AbortController(), timer = root.setTimeout(function () { controller.abort(); }, 20000);
     try {
       var response = await root.fetch(url(action, currentTask ? { active_task: currentTask } : {}), { cache: 'no-store', credentials: 'same-origin', signal: controller.signal });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       target.innerHTML = await response.text(); enhanceTables(target);
-      if (action === 'stop-targets') {
-        if (pendingDraft) { var values = JSON.parse(app.dataset.draftStops || '[]'); all('[name="stop_targets"]', target).forEach(function (input) { input.checked = values.indexOf(input.value) !== -1; }); }
-        initial.stop_targets = controlState(controls('stop_targets'));
-      }
     } catch (error) {
       // Never replace existing settings or a usable old fragment after a refresh error.
       if (action === 'backup-list' && !target.querySelector('form')) target.innerHTML = '<tr><td colspan="8">Backup-Liste konnte nicht geladen werden. Bitte später erneut versuchen.</td></tr>';
-      else if (action === 'stop-targets' && !target.querySelector('input')) target.textContent = 'Dienste konnten nicht geladen werden; ihre gespeicherte Auswahl wird beim Speichern beibehalten.';
       else if (action === 'target-notice') {
         var notice = el('section', 'Dateisystem-Prüfung momentan nicht erreichbar. Gespeicherte Einstellungen bleiben erhalten.', 'inline-notice warning');
         var retry = el('button', 'Erneut prüfen', 'target-notice-retry'); retry.type = 'button'; retry.dataset.role = 'none'; retry.dataset.targetNoticeRetry = '1';
         notice.append(retry); target.replaceChildren(notice);
       }
     } finally { root.clearTimeout(timer); if (action === 'target-notice') target.setAttribute('aria-busy', 'false'); }
+  }
+  function stopTargetsStatus(message, failed, loading) {
+    var status = byId('stop-targets-status');
+    if (!status) return;
+    status.classList.toggle('warning', !!failed);
+    status.replaceChildren(el('span', message));
+    var retry = el('button', failed ? 'Erneut laden' : 'Liste aktualisieren');
+    retry.type = 'button'; retry.dataset.role = 'none'; retry.dataset.stopTargetRetry = '1'; retry.disabled = !!loading;
+    status.append(retry);
+  }
+  function checkedStopFragment(text) {
+    // Reject login/error pages and malformed responses before touching any form.
+    var fragment = document.createElement('template'); fragment.innerHTML = text;
+    var content = fragment.content, markers = content.querySelectorAll('[name="stop_targets_loaded"]');
+    if (markers.length !== 1 || markers[0].tagName !== 'INPUT' || markers[0].type !== 'hidden' || markers[0].value !== '1' ||
+        content.querySelector('form,script,iframe,object,embed,style,link,meta,base,svg,math,textarea,select,[form]')) throw new Error('invalid-stop-targets');
+    var names = new Set();
+    Array.from(content.querySelectorAll('*')).forEach(function (node) {
+      if (!/^(INPUT|LABEL|STRONG|SMALL|DIV|DETAILS|SUMMARY|BUTTON|SPAN|P)$/.test(node.tagName)) throw new Error('invalid-stop-targets');
+      if (Array.from(node.attributes).some(function (attribute) { return /^on/i.test(attribute.name); })) throw new Error('invalid-stop-targets');
+      if (node.tagName === 'BUTTON' && node.type !== 'button') throw new Error('invalid-stop-targets');
+      if (node.hasAttribute('name') && node !== markers[0]) {
+        if (node.tagName !== 'INPUT' || node.type !== 'checkbox' || node.name !== 'stop_targets' ||
+            !/^(docker|systemd):[A-Za-z0-9_.@:\-]+$/.test(node.value) || names.has(node.value)) throw new Error('invalid-stop-targets');
+        names.add(node.value);
+      }
+    });
+    return content;
+  }
+  async function loadStopTargets() {
+    var target = byId('stop-targets-list');
+    if (!target || stopTargetsLoading) return;
+    stopTargetsLoading = true;
+    target.setAttribute('aria-busy', 'true');
+    stopTargetsStatus('Dienste und Container werden geladen. Die aktuelle Auswahl bleibt erhalten.', false, true);
+    // Discovery has its own 45-second backend budget; allow transport/rendering
+    // headroom without extending the unrelated overview and filesystem requests.
+    var controller = new AbortController(), timer = root.setTimeout(function () { controller.abort(); }, 60000);
+    try {
+      var response = await root.fetch(url('stop-targets'), { cache: 'no-store', credentials: 'same-origin', signal: controller.signal });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      if (!/^text\/html(?:;|$)/i.test(response.headers.get('Content-Type') || '')) throw new Error('invalid-stop-targets');
+      var content = checkedStopFragment(await response.text());
+      if (controller.signal.aborted) throw new Error('stop-targets-timeout');
+      var hadList = !!target.querySelector('[name="stop_targets_loaded"]');
+      // Read the controls at response time, not request time: the user may have
+      // changed a checkbox while a refresh was in flight.
+      var required = hadList ? all('[name="stop_targets"]', target).filter(function (item) { return item.checked; }).map(function (item) { return item.value; }) : JSON.parse(app.dataset.draftStops || '[]');
+      var previous = hadList || pendingDraft ? required : null;
+      var incoming = Array.from(content.querySelectorAll('[name="stop_targets"]'));
+      if (!Array.isArray(required) || required.some(function (value) { return typeof value !== 'string' || !/^(docker|systemd):[A-Za-z0-9_.@:\-]+$/.test(value); })) throw new Error('invalid-stop-targets');
+      var missing = Array.from(new Set(required)).filter(function (value) { return !incoming.some(function (item) { return item.value === value; }); });
+      if (missing.length) {
+        // A valid inventory can change (removed container, inactive service).
+        // Retain explicit selections without trapping the user in a failed
+        // initial load: unavailable targets can be deliberately deselected.
+        var group = el('details', undefined, 'stop-target-group'); group.open = true;
+        group.dataset.stopTargetUnavailable = '1';
+        group.append(el('summary', 'Ausgewählte Ziele aktuell nicht gefunden'));
+        group.append(el('p', 'Diese Ziele bleiben ausgewählt. Ein Container kann entfernt oder ein Dienst inaktiv sein. Auswahl prüfen und nicht mehr benötigte Ziele bewusst abwählen; danach speichern.', 'stop-target-hint'));
+        var grid = el('div', undefined, 'stop-target-grid');
+        missing.forEach(function (value) {
+          var label = el('label', undefined, 'stop-target-item'), input = el('input'), copy = el('span');
+          input.type = 'checkbox'; input.name = 'stop_targets'; input.value = value; input.checked = true; input.dataset.role = 'none';
+          copy.append(el('strong', value), el('small', 'Aktuell nicht gefunden; bisherige Auswahl beibehalten.'));
+          label.append(input, copy); grid.append(label); incoming.push(input);
+        });
+        Array.from(content.querySelectorAll('p.empty')).forEach(function (node) { node.remove(); });
+        group.append(grid); content.append(group);
+      }
+      var savedState = controlState(incoming);
+      if (previous) incoming.forEach(function (item) { item.checked = previous.indexOf(item.value) !== -1; });
+      var openGroups = all('details', target).map(function (item) { return item.open; });
+      Array.from(content.querySelectorAll('details')).forEach(function (item, index) { if (!item.dataset.stopTargetUnavailable && index < openGroups.length) item.open = openGroups[index]; });
+      target.replaceChildren(content); target.classList.remove('loading');
+      if (!hadList) initial.stop_targets = savedState;
+      updateDirty(initial, changed, 'stop_targets', controlState(controls('stop_targets')), new Date()); renderDirty();
+      stopTargetsStatus(missing.length ? 'Diensteliste geladen. ' + missing.length + ' ausgewählte Ziele wurden aktuell nicht gefunden und bleiben zur Prüfung sichtbar.' : 'Diensteliste geladen. Auswahl prüfen und Änderungen zuerst speichern.', missing.length > 0, false);
+    } catch (error) {
+      var message = controller.signal.aborted ? 'Zeitlimit beim Laden der Dienste nach 60 Sekunden erreicht.' :
+        error.message === 'HTTP 504' ? 'Die Dienstermittlung auf dem LoxBerry hat ihr Zeitlimit erreicht (HTTP 504).' :
+        /^HTTP \d+$/.test(error.message) ? 'Diensteliste konnte nicht geladen werden (' + error.message + ').' :
+        error.message === 'invalid-stop-targets' ? 'Der Server hat keine gültige Diensteliste geliefert. Bitte Anmeldung prüfen und erneut laden.' :
+        'Die Verbindung zum Laden der Dienste ist fehlgeschlagen.';
+      if (!target.querySelector('[name="stop_targets_loaded"]')) { target.replaceChildren(); target.classList.remove('loading'); }
+      stopTargetsStatus(message + ' Gespeicherte und noch nicht gespeicherte Auswahlen werden nicht verworfen.', true, false);
+    } finally {
+      root.clearTimeout(timer); stopTargetsLoading = false; target.setAttribute('aria-busy', 'false');
+    }
   }
   function updateSchedule() {
     var mode = controlState(controls('schedule_mode'));
@@ -583,6 +669,8 @@
     var picker = event.target.closest('[data-backup-root]');
     if (picker) { event.preventDefault(); setBackupRoot(picker.dataset.backupRoot); return; }
     var preset = event.target.closest('[data-stop-target-preset]');
+    var stopRetry = event.target.closest('[data-stop-target-retry]');
+    if (stopRetry) { event.preventDefault(); await loadStopTargets(); return; }
     if (preset) { event.preventDefault(); all('[name="stop_targets"]').forEach(function (box) { box.checked = preset.dataset.stopTargetPreset === 'recommended' && box.dataset.recommended === '1'; }); updateDirty(initial, changed, 'stop_targets', controlState(controls('stop_targets')), new Date()); renderDirty(); return; }
     var load = event.target.closest('[data-load-action]');
     if (load) { event.preventDefault(); if (load.dataset.loadAction === 'backup-preview' && !requireSaved()) return; load.disabled = true; feedback('Ergebnis wird berechnet...'); try { renderReport(load.dataset.loadAction, await request(load.dataset.loadAction, {}, { timeout: 3600000 })); byId('action-feedback').hidden = true; } catch (error) { feedback(error.message, 'error'); renderRequestError(error); } finally { load.disabled = false; } return; }

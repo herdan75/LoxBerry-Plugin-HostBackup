@@ -5,6 +5,10 @@ then serves the real JavaScript/CSS over an isolated loopback HTTP server. All
 application API requests are fixture responses: no real backups, restores,
 configuration changes, deletions or privileged backend actions run. The CGI may
 perform its normal read-only mount discovery while rendering the target picker.
+The browser-specific fixture supplies normal HTML escaping only when it detects
+the minimal generic Perl stub's identity implementation; a real CGI module is
+left untouched. Quoted JSON in `data-*` attributes is therefore parsed by the
+browser as intended rather than being truncated at its first quote.
 
 Run from this directory:
 
@@ -79,6 +83,40 @@ Both failures retain the compact warning box under the desktop/mobile LoxBerry
 theme; a keyboard retry recovers without saving or losing edited settings.
 `target-notice-error-desktop.png` and `target-notice-error-mobile.png` capture the
 layout. No production timeout is shortened by this fixture.
+
+Stop-target discovery has its own regression group. It accepts a real 22-second
+response (slower than the former shared 20-second deadline), then exercises
+HTTP 500, backend HTTP 504, an aborted network request, empty and malformed HTTP 200 bodies,
+an incorrect content type, and a selected target disappearing from a refresh.
+The richer successful fragments come from the actual CGI `stop-targets`
+renderer, with a saved systemd service and an initially unselected Docker
+container. Users may change both checkboxes while a refresh is pending: the
+result must retain those edits without promoting them to the saved baseline.
+Every failure preserves all form controls, the existing list and dirty state.
+Hostile response markup must never execute or replace the existing list.
+An empty but valid inventory succeeds. If discovery omits a selected target,
+that target remains checked in an explicit unavailable group, both on initial
+loading and refresh. The user can deselect it; it must not disappear implicitly
+or trap the user in a permanently failed list. Refreshing after that explicit
+deselection removes the unavailable row but keeps the configuration dirty until
+the user saves. Rediscovered targets retain their current unsaved selection.
+The network failure uses Playwright's request abort, avoiding Chromium's
+automatic TCP retries being mistaken for extra application discovery requests.
+
+The group also waits for one actual production **60-second** stop-target
+AbortController timeout, without shortening or mocking browser timers. An
+Enter-key retry then succeeds; a late aborted response cannot overwrite that
+result. Disabled retry buttons and repeated synthetic clicks cannot launch
+concurrent discovery. All these actions remain GET-only: no configuration is
+saved and no backup is started. Returning controls to their original saved
+values must clear dirty state even after failed retries and successful refreshes.
+This adds approximately 85 seconds to the suite. Compact status/error typography,
+whole-panel bounds (including the real service toolbar, open groups and labels)
+and keyboard retry are checked on desktop/mobile, with focused
+`stop-targets-error-desktop.png` and `stop-targets-error-mobile.png` screenshots.
+These timings are deterministic local browser fixtures, not a measurement of
+an actual LoxBerry's Docker/systemd discovery performance.
+
 Storage calculation and runtime-check backend behavior are not validated by
 these UI fixtures; their known limitations are documented in the
 [1.2.0 release notes](../../docs/RELEASE-1.2.0.md). A successful main-branch build

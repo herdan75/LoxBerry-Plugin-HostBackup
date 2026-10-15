@@ -1672,6 +1672,24 @@ $active_task_hidden
   return $html;
 }
 
+sub validated_stop_targets {
+  my ($json) = @_;
+  my $targets = decode_json($json);
+  die "Invalid stop-target list\n" unless ref($targets) eq 'ARRAY';
+  my %seen;
+  for my $target (@$targets) {
+    die "Invalid stop-target record\n" unless ref($target) eq 'HASH';
+    for my $key (qw(type name label group status details)) {
+      die "Invalid stop-target field\n" unless defined($target->{$key}) && !ref($target->{$key});
+    }
+    die "Invalid stop-target identity\n" unless $target->{type} =~ /\A(?:docker|systemd)\z/
+      && $target->{name} =~ /\A[A-Za-z0-9_.\@:\-]+\z/
+      && !$seen{$target->{type} . ':' . $target->{name}}++;
+    die "Invalid stop-target state\n" unless JSON::PP::is_bool($target->{selected}) && JSON::PP::is_bool($target->{recommended});
+  }
+  return $targets;
+}
+
 sub render_stop_targets {
   my ($targets) = @_;
   my $hidden = '<input data-role="none" type="hidden" name="stop_targets_loaded" value="1">';
@@ -1772,11 +1790,13 @@ if ($action eq 'backup-list') {
 
 if ($action eq 'stop-targets') {
   my ($target_status, $target_json) = run_shell(backend_cmd('stop-targets'));
-  my $targets = [];
+  my $targets;
   if ($target_status == 0) {
-    $targets = eval { decode_json($target_json) } || [];
+    $targets = eval { validated_stop_targets($target_json) };
+    $target_status = 1 if $@;
   }
-  print header(-type => 'text/html', -charset => 'utf-8', -status => ($target_status == 0 ? '200 OK' : '500 Internal Server Error'));
+  my $http_status = $target_status == 0 ? '200 OK' : $target_status == 124 ? '504 Gateway Timeout' : '500 Internal Server Error';
+  print header(-type => 'text/html', -charset => 'utf-8', -status => $http_status);
   print $target_status == 0 ? render_stop_targets($targets) : '<p class="empty">Dienste und Container konnten nicht geladen werden.</p>';
   exit;
 }
@@ -2213,6 +2233,7 @@ $backup_target_picker
 <span class="mini-spinner" aria-hidden="true"></span>
 <span>Dienste und Container werden geladen...</span>
 </div>
+<div id="stop-targets-status" class="stop-target-status" role="status" aria-live="polite" aria-atomic="true"></div>
 </details>
 
 <details class="maintenance-card" id="maintenance-settings-panel">

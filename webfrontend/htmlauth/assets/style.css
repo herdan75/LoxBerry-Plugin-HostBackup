@@ -1071,6 +1071,26 @@ td .muted {
   grid-template-columns: repeat(8, minmax(74px, 1fr));
 }
 
+.stop-target-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: normal;
+  background: #f3f6f8;
+  border-left: 3px solid #8ba5bf;
+}
+
+.stop-target-status:empty { display: none; }
+.stop-target-status.warning { background: #fff7e6; border-left-color: #d49b24; }
+.stop-target-status > span { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+.stop-target-status > button { flex: 0 0 auto; font-size: 13px; }
+
 .stop-targets-list {
   background: #ffffff;
   border: 1px solid #dddddd;
@@ -1260,6 +1280,46 @@ td .muted {
 
 .settings-form .stop-target-item.is-disabled input {
   opacity: 0.45;
+}
+
+.settings-form .stop-target-item > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  #hostbackup-app .stop-target-toolbar {
+    flex-wrap: wrap;
+    flex-basis: 100%;
+    max-width: 100%;
+    white-space: normal;
+    margin-right: 0;
+  }
+  #hostbackup-app .stop-target-toolbar button {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  #hostbackup-app .stop-target-group {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    margin-left: 0;
+  }
+  #hostbackup-app .stop-target-group summary {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  #hostbackup-app .stop-target-group summary > span {
+    min-width: 0;
+  }
+  #hostbackup-app .stop-target-grid {
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+  }
 }
 
 .day-grid {

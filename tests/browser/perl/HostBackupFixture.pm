@@ -4,6 +4,21 @@ use warnings;
 use JSON::PP;
 # Renderer only: intercept every process request, never invoke real sudo/backend.
 BEGIN {
+  # Repair only the generic identity stub, never replace a real CGI module in
+  # Linux CI. A browser needs correct escaping, especially JSON in data-*.
+  require CGI;
+  no warnings 'redefine';
+  if (CGI::escapeHTML('"') eq '"') {
+    *CGI::escapeHTML = sub {
+      my $value = defined $_[0] ? $_[0] : '';
+      $value =~ s/&/&amp;/g;
+      $value =~ s/</&lt;/g;
+      $value =~ s/>/&gt;/g;
+      $value =~ s/"/&quot;/g;
+      $value =~ s/'/&#39;/g;
+      return $value;
+    };
+  }
   *CORE::GLOBAL::readpipe = sub {
     my ($command) = @_;
     $? = 0;

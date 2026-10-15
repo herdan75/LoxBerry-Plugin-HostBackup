@@ -113,6 +113,14 @@ let backupRows;
 if(process.platform==='win32')backupRows=execFileSync('C:/Program Files/Git/bin/bash.exe',['-s'],{cwd:repo,input:`PERL5LIB=${quote(perlLib)} LBPDATADIR=${quote(posix(temp))} REQUEST_METHOD=GET REMOTE_USER=fixture HTTP_USER_AGENT=fixture perl -e ${quote(backupRowsProgram)}\n`,encoding:'utf8'});
 else backupRows=execFileSync('perl',['-e',backupRowsProgram],{cwd:repo,env:{...process.env,PERL5LIB:perlLib,LBPDATADIR:temp,REQUEST_METHOD:'GET',REMOTE_USER:'fixture',HTTP_USER_AGENT:'fixture'},encoding:'utf8'});
 assert.match(backupRows,/<details class="backup-extra-actions">/);assert.match(backupRows,/value="fixture-ok"/);
+const stopFixtureTargets=[{type:'systemd',name:'test.service',label:'Testdienst',group:'LoxBerry-/Plugin-Dienste',status:'active',details:'Fixture systemd service',selected:true,recommended:true},{type:'docker',name:'fixture-container',label:'Fixture-Container',group:'Docker-Container',status:'running',details:'Fixture container',selected:false,recommended:true}];
+function renderStopRows(targets) {
+  const program=`BEGIN { require HostBackupFixture; require CGI; my $original=\\&CORE::GLOBAL::readpipe; no warnings 'redefine'; *CORE::GLOBAL::readpipe=sub { my ($command)=@_; if ($command =~ /'stop-targets'\\s+2>&1$/) { $?=0; return ${quote(JSON.stringify(targets))}; } return $original->(@_); }; *CGI::param=sub { return ($_[1] || '') eq 'action' ? 'stop-targets' : ''; }; } do './webfrontend/htmlauth/index.cgi'; die $@ if $@;`;
+  if(process.platform==='win32')return execFileSync('C:/Program Files/Git/bin/bash.exe',['-s'],{cwd:repo,input:`PERL5LIB=${quote(perlLib)} LBPDATADIR=${quote(posix(temp))} REQUEST_METHOD=GET REMOTE_USER=fixture HTTP_USER_AGENT=fixture perl -e ${quote(program)}\n`,encoding:'utf8'});
+  return execFileSync('perl',['-e',program],{cwd:repo,env:{...process.env,PERL5LIB:perlLib,LBPDATADIR:temp,REQUEST_METHOD:'GET',REMOTE_USER:'fixture',HTTP_USER_AGENT:'fixture'},encoding:'utf8'});
+}
+const richStopRows=renderStopRows(stopFixtureTargets),missingStopRows=renderStopRows(stopFixtureTargets.slice(0,1)),emptyStopRows=renderStopRows([]);
+assert.match(richStopRows,/<details class="stop-target-group">/);assert.match(richStopRows,/name="stop_targets_loaded" value="1"/);
 assert.match(html,/value="\/fixture\/backup"/);
 assert.doesNotMatch(html,/Speichern und Backup-Start bleiben gesperrt/);
 assert.match(html, /<!doctype html><html><head>/);
@@ -134,6 +142,8 @@ let failSave=true, taskFinished=false, tokenNumber=0, postCount=0, htmlCount=0, 
 let overviewIssues=false, reportRequests=0, taskPhase='copying';
 let lastSavedSources, failSources=false, failBackupMetadata=false;
 let targetNoticeMode='http-error',targetNoticeRequests=0;
+let stopTargetsMode='ok',stopTargetsRich=false,stopTargetsRequests=0;
+const heldStopResponses=[];
 const maintenanceFields=['retention_mode','keep_daily','keep_weekly','keep_monthly','log_retention_days','quarantine_retention_days','integrity_enabled','integrity_interval_days'];
 const postActions=[],maintenancePolicies=[],maintenancePreviews=[];
 let failMaintenance=false,maintenanceDelay=0,savedMaintenance={};
@@ -208,12 +218,25 @@ const server=http.createServer(async(req,res)=>{
       res.end('<section class="inline-notice">Fixture-Ziel verfügbar</section>');return;
     }
     if(action==='backup-list'){res.end(backupRows);return;}
-    if(action==='stop-targets'){await new Promise(resolve=>setTimeout(resolve,100));res.end('<input type="hidden" name="stop_targets_loaded" value="1"><label><input type="checkbox" name="stop_targets" value="systemd:test.service" checked>Testdienst</label><button type="button" data-stop-target-preset="none">Keine Dienste</button>');return;}
+    if(action==='stop-targets'){
+      stopTargetsRequests++;const mode=stopTargetsMode;
+      const fragment=stopTargetsRich?richStopRows:'<input type="hidden" name="stop_targets_loaded" value="1"><label><input type="checkbox" name="stop_targets" value="systemd:test.service" checked>Testdienst</label><button type="button" data-stop-target-preset="none">Keine Dienste</button>';
+      if(mode==='network-error'){res.destroy();return;}
+      if(mode==='pending'){heldStopResponses.push({res,fragment});return;}
+      if(mode==='http-error'){res.writeHead(500,{'Content-Type':'text/html; charset=utf-8'});res.end('<img src=x onerror="window.unsafeStopError=true">Service discovery failed');return;}
+      if(mode==='backend-timeout'){res.writeHead(504,{'Content-Type':'text/html; charset=utf-8'});res.end('<p>Service discovery exceeded its backend deadline.</p>');return;}
+      res.writeHead(200,{'Content-Type':mode==='wrong-content-type'?'application/json':'text/html; charset=utf-8','Cache-Control':'no-store'});
+      if(mode==='empty'){res.end('');return;}
+      if(mode==='malformed'){res.end('<form action="?action=backup"><input name="stop_targets_loaded" value="1"><img src=x onerror="window.unsafeStopError=true"></form>');return;}
+      if(mode==='missing-selected'){res.end(missingStopRows);return;}
+      if(mode==='no-targets'){res.end(emptyStopRows);return;}
+      await new Promise(resolve=>setTimeout(resolve,mode==='slow'?22000:100));res.end(fragment);return;
+    }
     if(action==='backup-preview')return json(res,{saved_config:true,backup_mode:'snapshot',metadata_mode:'network-compatible',full_baseline_required:true,excludes:['/fixture/backup/***'],source_volumes:[{path:'/',included:true,reason:'System'}],available_mb:20000,baseline_estimate_mb:3000,metadata_probe:probe});
     if(action==='verification-report')return json(res,verificationReport);
     if(url.pathname==='/system/images/icons/loxberryhostbackup/icon_64.png'){res.writeHead(200,{'Content-Type':'image/png'});res.end(fs.readFileSync(path.join(repo,'icons/icon_64.png')));return;}
     if(url.pathname.startsWith('/system/')){res.writeHead(204);res.end();return;}
-    htmlCount++;res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(url.searchParams.get('fixture')==='portable'?portableHtml:html);
+    htmlCount++;res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(url.searchParams.get('fixture')==='portable'?portableHtml:url.searchParams.get('fixture')==='no-stops'?html.replace(/(data-draft-stops=")[^"]*(")/,'$1[]$2'):html);
   }catch(error){errors.push(error.message);json(res,{error:error.message},500);}
 });
 async function visible(page,selector){await page.locator(selector).waitFor({state:'visible'});}
@@ -225,8 +248,129 @@ async function openRepositoryByKeyboard(page) {
 async function configurationControls(page) {
   // The fixture loads saved stop targets independently after navigation.
   // Snapshot only the fully populated form; retain the strict all-control diff.
-  await page.locator('#stop-targets-list [name="stop_targets_loaded"]').waitFor({state:'attached'});
+  try { await page.locator('#stop-targets-list [name="stop_targets_loaded"]').waitFor({state:'attached'}); }
+  catch (error) { throw new Error(error.message+'; stop-target state: '+JSON.stringify(await page.evaluate(()=>({status:document.querySelector('#stop-targets-status')?.textContent,list:document.querySelector('#stop-targets-list')?.innerHTML,saved:document.querySelector('#hostbackup-app')?.dataset.draftStops})))); }
   return page.evaluate(()=>Array.from(document.getElementById('settings-save-form').elements).filter(node=>node.name&&node.name!=='csrf_token').map(node=>[node.name,node.value,node.checked||false]));
+}
+async function checkStopTargets(browser,base) {
+  const page=await browser.newPage({viewport:{width:1440,height:1100}});page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
+  // Abort one browser request deterministically; closing a TCP socket can make
+  // Chromium transparently retry transport connections without another fetch.
+  await page.route('**/*',async route=>{
+    if(new URL(route.request().url()).searchParams.get('action')==='stop-targets'&&stopTargetsMode==='network-error') {stopTargetsRequests++;await route.abort('failed');}
+    else await route.continue();
+  });
+  const postsBefore=postCount;
+  stopTargetsRich=true;stopTargetsMode='slow';
+  try {
+    const started=Date.now();await page.goto(base);await visible(page,'#settings-save-form');
+    const list=page.locator('#stop-targets-list'),status=page.locator('#stop-targets-status'),panel=page.locator('.stop-target-panel');
+    const retry=()=>status.locator('[data-stop-target-retry]');
+    const selected=()=>list.locator('[name="stop_targets"]:checked').evaluateAll(nodes=>nodes.map(node=>node.value).sort());
+    const settled=()=>page.waitForFunction(()=>document.querySelector('#stop-targets-list').getAttribute('aria-busy')==='false',null,{timeout:65000});
+    const openGroups=()=>list.locator('.stop-target-group').evaluateAll(nodes=>nodes.forEach(node=>node.open=true));
+    const service=()=>list.locator('[name="stop_targets"][value="systemd:test.service"]');
+    const container=()=>list.locator('[name="stop_targets"][value="docker:fixture-container"]');
+    await panel.evaluate(node=>node.open=true);
+    assert.equal(await list.getAttribute('aria-busy'),'true');assert.equal(await status.getAttribute('role'),'status');assert.equal(await status.getAttribute('aria-live'),'polite');
+    await page.locator('#backup-root-input').fill('/fixture/draft-while-services-load');
+    await list.locator('[name="stop_targets_loaded"]').waitFor({state:'attached',timeout:30000});await settled();
+    assert.ok(Date.now()-started>=21000,'A real 22-second service response is accepted beyond the former 20-second deadline');
+    assert.deepEqual(await selected(),['systemd:test.service']);assert.equal(await page.locator('#backup-root-input').inputValue(),'/fixture/draft-while-services-load');
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false','Initial asynchronous service loading must retain unrelated unsaved edits');
+    await page.locator('#backup-root-input').fill('/fixture/backup');
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true','Saved service selection must not create an unsaved change');
+    receipts.push('Real 22-second stop-target response succeeds beyond the former timeout; saved selection and unrelated in-flight edits retain the correct dirty baseline');
+
+    stopTargetsMode='pending';let before=stopTargetsRequests;
+    await retry().focus();await page.keyboard.press('Enter');
+    await page.waitForFunction(()=>document.querySelector('#stop-targets-list').getAttribute('aria-busy')==='true');
+    assert.equal(await retry().isEnabled(),false);await openGroups();
+    await service().uncheck();await container().check();
+    await retry().evaluate(node=>{node.dispatchEvent(new MouseEvent('click',{bubbles:true}));node.dispatchEvent(new MouseEvent('click',{bubbles:true}));});
+    assert.equal(stopTargetsRequests,before+1,'Repeated retry clicks while loading must not start overlapping discoveries');
+    const held=heldStopResponses.shift();assert.ok(held,'One response is held while the visible controls remain editable');
+    held.res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});held.res.end(held.fragment);await settled();
+    assert.deepEqual(await selected(),['docker:fixture-container'],'Refreshing must preserve checkbox changes made after the request began');
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false');
+    await openGroups();await service().check();await container().uncheck();
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true','A refresh must not promote unsaved checkbox edits to the saved baseline');
+    await service().uncheck();await container().check();
+    await page.locator('#backup-root-input').fill('/fixture/unsaved-after-service-refresh');
+    const draftBefore=await configurationControls(page),errorTexts={};
+    for(const mode of ['http-error','backend-timeout','network-error','empty','malformed','wrong-content-type']) {
+      stopTargetsMode=mode;before=stopTargetsRequests;await retry().click();await settled();
+      assert.equal(stopTargetsRequests,before+1);assert.equal(await retry().isEnabled(),true);assert.match(await retry().textContent(),/Erneut laden/);
+      errorTexts[mode]=await status.textContent();assert.match(errorTexts[mode],/Dienste|Diensteliste|Container/);
+      assert.deepEqual(await configurationControls(page),draftBefore,mode+' must retain every existing settings field and checkbox');
+      assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false');
+      assert.equal(await status.locator('img,form,script').count(),0);assert.equal(await page.evaluate(()=>window.unsafeStopError),undefined,'Failure response markup must never execute');
+    }
+    assert.match(errorTexts['http-error'],/500/);assert.notEqual(errorTexts['network-error'],errorTexts['http-error'],'Network errors and HTTP failures must be distinguishable');
+    assert.match(errorTexts['backend-timeout'],/504/);assert.match(errorTexts['backend-timeout'],/Zeitlimit/);
+    assert.notEqual(errorTexts.empty,errorTexts['http-error'],'Invalid successful responses are distinct from HTTP failures');
+    for(const [view,width,height] of [['desktop',1440,1100],['mobile',390,844]]) {
+      await page.setViewportSize({width,height});await status.scrollIntoViewIfNeeded();
+      const bounds=await status.evaluate(node=>({left:node.getBoundingClientRect().left,right:node.getBoundingClientRect().right,overflow:node.scrollWidth-node.clientWidth,copy:Array.from(node.querySelectorAll('p,span,button')).map(item=>({font:parseFloat(getComputedStyle(item).fontSize),spacing:getComputedStyle(item).letterSpacing,right:item.getBoundingClientRect().right}))}));
+      assert.ok(bounds.left>=0&&bounds.right<=width+1&&bounds.overflow<=1,view+' service status stays within its panel '+JSON.stringify(bounds));
+      assert.ok(bounds.copy.length&&bounds.copy.every(item=>item.font<=16&&['normal','0px'].includes(item.spacing)&&item.right<=width+1),view+' service failure/retry uses normal compact typography '+JSON.stringify(bounds));
+      const panelBounds=await panel.evaluate(node=>{const rect=node.getBoundingClientRect();return {left:rect.left,right:rect.right,overflow:node.scrollWidth-node.clientWidth,children:Array.from(node.querySelectorAll('.stop-targets-list,.stop-target-row,.stop-target-toolbar,.stop-target-group,.stop-target-grid,.stop-target-item,button,strong,small')).filter(item=>item.getBoundingClientRect().width>0).map(item=>({tag:item.tagName,cls:item.className,left:item.getBoundingClientRect().left,right:item.getBoundingClientRect().right,overflow:item.scrollWidth-item.clientWidth}))};});
+      assert.ok(panelBounds.left>=0&&panelBounds.right<=width+1&&panelBounds.overflow<=1&&panelBounds.children.every(item=>item.left>=panelBounds.left-1&&item.right<=panelBounds.right+1&&item.overflow<=1),view+' actual service groups, toolbar and labels fit inside the entire panel '+JSON.stringify(panelBounds));
+      await panel.screenshot({path:path.join(temp,'stop-targets-error-'+view+'.png')});
+    }
+    receipts.push('Stop-target HTTP 500, network failure and empty/malformed/wrong-type responses retain every draft; unsafe markup is not inserted; desktop/mobile retry remains compact');
+
+    stopTargetsMode='missing-selected';await retry().click();await settled();
+    const unavailable=()=>list.locator('[data-stop-target-unavailable]');
+    assert.equal(await unavailable().count(),1);assert.deepEqual(await selected(),['docker:fixture-container']);
+    assert.equal(await unavailable().locator('[name="stop_targets"]').inputValue(),'docker:fixture-container');
+    assert.equal(await unavailable().locator('[name="stop_targets"]').isChecked(),true,'A missing selected target must remain visible and checked, not disappear');
+    assert.equal(await page.locator('#backup-root-input').inputValue(),'/fixture/unsaved-after-service-refresh');
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false');
+    await unavailable().evaluate(node=>node.open=true);await unavailable().locator('[name="stop_targets"]').uncheck();
+    assert.deepEqual(await selected(),[],'The user can explicitly deselect an unavailable target without a deadlocked list');
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false');
+    await unavailable().locator('[name="stop_targets"]').check();
+    stopTargetsMode='ok';await retry().click();await settled();
+    assert.equal(await unavailable().count(),0);assert.deepEqual(await configurationControls(page),draftBefore,'Reappearing target recovers its unsaved selection without changing any other controls');
+    receipts.push('A disappeared selected target remains checked in an editable unavailable group; explicit deselection is possible and rediscovery preserves drafts without saving');
+
+    stopTargetsMode='pending';before=stopTargetsRequests;await retry().focus();await page.keyboard.press('Enter');
+    await page.waitForFunction(()=>document.querySelector('#stop-targets-list').getAttribute('aria-busy')==='true');
+    assert.equal(await retry().isEnabled(),false);
+    const timeoutStarted=Date.now();await settled();
+    assert.ok(Date.now()-timeoutStarted>=58000,'Exercise the actual production 60-second timeout, without replacing or shortening timers');
+    assert.equal(stopTargetsRequests,before+1);assert.match(await status.textContent(),/60|Zeitlimit|Zeitüberschreitung|zu lange/i);
+    assert.notEqual(await status.textContent(),errorTexts['http-error']);assert.notEqual(await status.textContent(),errorTexts['network-error']);
+    assert.deepEqual(await configurationControls(page),draftBefore);assert.equal(await retry().isEnabled(),true);
+    const timedOut=heldStopResponses.shift();assert.ok(timedOut);
+    stopTargetsMode='ok';await retry().focus();await page.keyboard.press('Enter');await settled();
+    timedOut.res.end(timedOut.fragment);await new Promise(resolve=>setTimeout(resolve,100));
+    assert.deepEqual(await selected(),['docker:fixture-container'],'A timed-out response arriving after recovery cannot overwrite the latest selection');
+    assert.deepEqual(await configurationControls(page),draftBefore);assert.equal(await list.locator('[name="stop_targets_loaded"]').count(),1);
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false');
+    await openGroups();await service().check();await container().uncheck();await page.locator('#backup-root-input').fill('/fixture/backup');
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true','Recovery preserves the original saved baseline, not a draft snapshot');
+    assert.equal(postCount,postsBefore,'Discovery, errors, keyboard retries and timeout must not save settings or start a backup');
+    receipts.push('Actual 60-second discovery timeout aborts safely; keyboard retry succeeds, no concurrent/stale overwrite or POST occurs, and checkbox draft plus saved baseline survive every failure');
+    stopTargetsMode='no-targets';await page.goto(base+'?fixture=no-stops');
+    await list.locator('[name="stop_targets_loaded"]').waitFor({state:'attached'});await settled();
+    assert.equal(await list.locator('[name="stop_targets"]').count(),0);assert.match(await list.textContent(),/Keine auswählbaren Dienste/);
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true','A genuinely empty inventory with no saved selection is not a settings change');
+    await page.goto(base);await settled();
+    assert.equal(await list.locator('[name="stop_targets_loaded"]').count(),1);assert.deepEqual(await selected(),['systemd:test.service']);
+    assert.equal(await unavailable().count(),1);assert.match(await retry().textContent(),/Erneut laden/);
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true','Preserving an initial unavailable saved selection must not create a draft');
+    await panel.evaluate(node=>node.open=true);await unavailable().evaluate(node=>node.open=true);await service().uncheck();
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false');
+    await retry().click();await settled();assert.equal(await unavailable().count(),0);assert.equal(await list.locator('[name="stop_targets"]').count(),0);
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false','Explicit deselection remains an unsaved change after refresh');assert.equal(postCount,postsBefore);
+    receipts.push('Legitimate empty discovery succeeds; initial unavailable saved targets remain checked and editable, and removing one requires explicit deselection with dirty state, never an implicit save');
+  } finally {
+    stopTargetsMode='ok';stopTargetsRich=false;
+    for(const held of heldStopResponses.splice(0))held.res.destroy();
+    await page.close();
+  }
 }
 async function checkMaintenance(browser,base) {
   const page=await browser.newPage({viewport:{width:1440,height:1100}});page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
@@ -819,6 +963,7 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     assert.ok(overflow.scroll<=overflow.width+2,JSON.stringify(overflow));
     await page.screenshot({path:path.join(temp,'mobile.png'),fullPage:true});receipts.push('Mobile labels, delegated tooltip inside viewport and no page overflow');
     await page.keyboard.press('Escape');assert.equal(await mobileActionButton.getAttribute('aria-expanded'),'false');
+    await checkStopTargets(browser,base);
     await checkMaintenance(browser,base);
     assert.deepEqual(errors,[]);
     const result={status:'passed',tests:receipts,artifacts:temp,renderer:'actual CGI with mocked backend; read-only mount discovery',browser:await browser.version()};
