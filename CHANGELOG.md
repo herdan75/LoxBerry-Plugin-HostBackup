@@ -3,14 +3,14 @@
 Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
-Version 1.2.1-beta ist die neue Vorabversion mit interner Paketversion 1.2.1.
+Version 1.2.2-beta ist die neue Vorabversion mit interner Paketversion 1.2.2.
 Version 1.2.0 bleibt das reguläre Release. Frühere Vorabversionen bleiben als
 historische Einträge erhalten.
 Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
-## [Unveröffentlicht / develop] - 2026-10-15
+## [1.2.2-beta] - 2026-10-15
 
 - Hinweise der gespeicherten Backup-Abschlussprüfung direkt beim betroffenen
   Backup lesbar gemacht; ursprüngliche Abschlussprüfung und optionaler
@@ -58,8 +58,14 @@ validiert werden.
 - Verhaltens-, CGI- und echte Browser-Regressionstests für langsame Antworten,
   gemeinsame Zeitlimits, fehlerhafte Antworten, Wiederholung und Auswahl-Schutz
   ergänzt. Tests stoppen keine Dienste auf dem Entwicklungsrechner.
-- Nur develop-Teststand: keine neue Veröffentlichung, keine Änderung von
-  Versionsnummer, bestehendem Beta-ZIP oder LoxBerry-Updatekanälen.
+- Vorabversion `v1.2.2-beta` mit numerischer Plugin- und Paketversion `1.2.2`.
+  Der stabile Kanal und `main` bleiben auf 1.2.0; ältere Pakete bleiben unverändert.
+  Der Vorabkanal wird erst nach erfolgreicher Tag-Pipeline und Prüfung des
+  öffentlichen Beta-ZIPs aktiviert. Keine weiteren Änderungen der Programmlogik
+  gegenüber der geprüften Entwicklungsbasis `3242c6a`.
+  Nachweise und Grenzen: [Release Notes 1.2.2-beta](docs/RELEASE-1.2.2.md).
+  Die Tests ersetzen keine Prüfung auf dem betroffenen Anwendergerät und keinen
+  vollständigen Hardware-Restore.
 
 ## [1.2.1-beta] - 2026-10-07
 
@@ -958,7 +964,8 @@ nicht überarbeitet worden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.0...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.2-beta...develop
+[1.2.2-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.1-beta...v1.2.2-beta
 [1.2.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.0...v1.2.1-beta
 [1.2.0]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.0
 [1.2.0-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.0-beta

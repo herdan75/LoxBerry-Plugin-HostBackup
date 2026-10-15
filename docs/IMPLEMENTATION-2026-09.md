@@ -13,6 +13,16 @@ Prüfung des öffentlichen Downloads diesen Stand. Die
 Die ursprüngliche Analyse wurde mit 0.7.0-beta veröffentlicht; historische
 Prüfläufe darunter behalten ihre damaligen Versions- und Commitangaben.
 
+## Vorabversion 1.2.2-beta am 15.10.2026
+
+- Geprüften Entwicklungsstand `3242c6a` ohne weitere Programmlogikänderungen
+  als Paket 1.2.2 unter Tag `v1.2.2-beta` bereitstellen: robustere Diensteliste,
+  schliessbare Ansichten, Prüfberichtdiagnose und gezielte Parallelitätssperren.
+- Vorabkanal erst nach erfolgreicher Tag-Pipeline und Prüfung des öffentlichen
+  ZIPs auf `develop` aktivieren; Stable/main bleiben 1.2.0.
+- Entwicklungstests, Paketnachweise und offene Hardware-/Restore-Abnahme
+  getrennt dokumentieren: [RELEASE-1.2.2.md](RELEASE-1.2.2.md).
+
 ## Vorabversion 1.2.1-beta am 07.10.2026
 
 - Inode-Korrektur aus der geprüften Entwicklungsbasis `faac705` veröffentlichen:

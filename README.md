@@ -1,37 +1,35 @@
 # LoxBerry Host Backup
 
 > [!NOTE]
-> **Zusätzlich auf develop, noch nicht veröffentlicht (15.10.2026):** Die
-> Dienst-/Container-Auswahl lädt auch bei langsameren Antworten zuverlässig
-> innerhalb eigener, begrenzter Zeitlimits. Gebündelte systemd-Abfragen,
-> erneutes Laden und Schutz bestehender Auswahlen beheben den gemeldeten
-> Ladefehler. Zusätzlich sind Ergebnisse und Live-Status schliessbar und erneut
+> **Neu in 1.2.2-beta (15.10.2026):** Die Dienst-/Container-Auswahl verwendet
+> gebündelte systemd-Abfragen und eigene, begrenzte Zeitlimits. Erneutes Laden
+> und Schutz bestehender Auswahlen machen verzögerte oder fehlgeschlagene
+> Antworten handhabbar; die konkrete Installation bleibt separat zu prüfen.
+> Zusätzlich sind Ergebnisse und Live-Status schliessbar und erneut
 > aufrufbar; Hinweise der ursprünglichen Backup-Abschlussprüfung lassen sich
 > direkt beim Backup ansehen. Zusätzliche aufwendige Vorprüfungen werden während
-> eines laufenden Vorgangs frühzeitig abgewiesen; reine Ansichten bleiben
-> verfügbar. Der Inhaltsprüfbericht unterscheidet fehlende, nicht lesbare und
-> nicht mehr zum aktuellen Backup passende Nachweise. Diese Korrekturen sind nicht im unten verlinkten
-> bisherigen Beta-ZIP enthalten; Versionsnummer und Plugin-Updatekanäle bleiben
-> unverändert.
+> eines laufenden Vorgangs frühzeitig abgewiesen; gespeicherte Hinweise und
+> Dateien älterer Backups bleiben lesbar. Der Inhaltsprüfbericht unterscheidet
+> fehlende, nicht lesbare und nicht mehr zum aktuellen Backup passende Nachweise.
 
-**Version 1.2.1-beta · Vorabversion · 07.10.2026.**
-Korrigiert die fälschlich blockierende Inode-Prüfung bei NAS-/Dateisystemen,
+**Version 1.2.2-beta · Vorabversion · 15.10.2026.**
+Enthält weiterhin die korrigierte Inode-Prüfung für NAS-/Dateisysteme,
 die keine auswertbare Gesamtzahl melden, beispielsweise `df -i` mit `0/0/0`.
 Tatsächlich erschöpfte Inodes und andere Pflichtfehler bleiben blockierend.
-Programm- und Paketversion sind `1.2.1`; der GitHub-Tag lautet `v1.2.1-beta`.
+Programm- und Paketversion sind `1.2.2`; der GitHub-Tag lautet `v1.2.2-beta`.
 Das reguläre Release und der stabile Plugin-Updatekanal bleiben auf `1.2.0`.
-Der Vorabkanal wird erst nach Prüfung des öffentlichen Beta-ZIPs auf `1.2.1`
+Der Vorabkanal wird erst nach Prüfung des öffentlichen Beta-ZIPs auf `1.2.2`
 umgestellt. Keine Deinstallation erforderlich. Testumfang, Freigabestatus und
-Grenzen stehen in den [Release Notes für 1.2.1-beta](docs/RELEASE-1.2.1.md).
+Grenzen stehen in den [Release Notes für 1.2.2-beta](docs/RELEASE-1.2.2.md).
 
-[**LoxBerryHostBackup_1.2.1.zip herunterladen (Vorabversion)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.1-beta/LoxBerryHostBackup_1.2.1.zip)
+[**LoxBerryHostBackup_1.2.2.zip herunterladen (Vorabversion)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.2-beta/LoxBerryHostBackup_1.2.2.zip)
 
 > [!NOTE]
 > **Reguläres Release 1.2.0:** Übernimmt den Programmstand der geprüften
 > 1.2.0-beta unverändert als stabiles Release, einschliesslich verständlicher
 > Sicherungsverfahren und portabler, platzsparender NAS-Sicherungsstände.
 > Ein Wechsel auf den Vorabkanal ist für 1.2.0 nicht nötig. Der stabile
-> Updatekanal bleibt auch bei der Freigabe von 1.2.1-beta auf diesem Paket.
+> Updatekanal bleibt auch bei der Freigabe von 1.2.2-beta auf diesem Paket.
 > Einrichtung und Schlüssel-Recovery erklärt die
 > [Anleitung für portable Sicherungsstände](docs/PORTABLE-REPOSITORY.md).
 
@@ -72,12 +70,12 @@ Backups: keine automatische Einrichtung von Partitionen oder Bootloader und
 ausdrückliche Zuordnung separater Boot-/Datenlaufwerke beim Restore.
 
 > [!IMPORTANT]
-> **Update auf 1.2.1-beta:** Für das Angebot in der Plugin-Verwaltung den
+> **Update auf 1.2.2-beta:** Für das Angebot in der Plugin-Verwaltung den
 > Vorabkanal aktivieren und nach dessen Freischaltung erneut nach Updates suchen.
-> Für installierte 1.2.0-Pakete ist die interne Version 1.2.1 höher. Bereits
-> installierte develop-Testpakete mit Version 1.2.1 erhalten keinen neuen
-> numerischen Versionshinweis; das öffentliche Beta-ZIP bei Bedarf manuell über
-> die bestehende Installation installieren.
+> Die interne Version 1.2.2 ist höher als 1.2.0 und 1.2.1, auch gegenüber den
+> bisherigen develop-Testpaketen mit Version 1.2.1. Wer bereits ein manuelles
+> Paket mit interner Version 1.2.2 installiert hat, erhält keinen zusätzlichen
+> numerischen Versionssprung und kann das öffentliche Beta-ZIP darüber installieren.
 > Vor einem Update Einstellungen exportieren, aktive Vorgänge beenden lassen
 > und nicht vorher deinstallieren.
 
@@ -265,7 +263,8 @@ Siehe [Offline-Wiederherstellung](docs/PORTABLE-REPOSITORY.md#offline-wiederhers
 ## Aktueller Validierungsstand
 
 Bisherige veröffentlichte Stände wurden wie folgt geprüft. Diese historischen
-Praxistests sind **kein** vollständiger Hardware-Nachweis für 1.2.0 oder 1.2.1-beta:
+Praxistests sind **kein** vollständiger Hardware-Nachweis für 1.2.0, 1.2.1-beta
+oder 1.2.2-beta:
 
 - Bash-Syntax für Backend, Postinstall, Restore-Helper und Uninstall
 - Perl/CGI-Syntax mit lokalem `CGI.pm`-Stub
@@ -329,6 +328,16 @@ Entwicklungsbasis von Tag-Pipeline, öffentlichem Paket und Kanalaktivierung.
 Ein konkretes Synology-/QNAP-Gerät, NFS 4.1 oder ein bootfähiger vollständiger
 Hardware-Restore ist damit weiterhin nicht nachgewiesen.
 
+1.2.2-beta übernimmt den geprüften Entwicklungsstand `3242c6a` ohne weitere
+Änderungen der Programmlogik. Zusätzliche Tests decken Dienstelisten-Zeitlimits,
+CGI-Fehlerantworten, schliessbare Ansichten, Aktionsrouting, Prüfberichte und
+konkurrierende Vorgangssperren ab. Browseraktionen verwenden kontrollierte
+Backend-Fixtures; sie sind kein Nachweis für das NAS, die produktiven Dienste
+oder den laufenden Backup-Prozess eines Anwenders. Paket-/Tag-Prüfung und
+Kanalaktivierung bleiben von der Entwicklungsabnahme getrennt; siehe
+[Release Notes für 1.2.2-beta](docs/RELEASE-1.2.2.md) und
+[Aktionsmatrix im Testplan](docs/DR-TESTPLAN.md#aktionsmatrix-jeder-sichtbare-button-hat-einen-prüfauftrag).
+
 ### Weiterhin bekannte Grenzen
 
 - **Speicherbelegung berechnen:** durchsucht alle erkannten Backup-Dateien und
@@ -337,12 +346,12 @@ Hardware-Restore ist damit weiterhin nicht nachgewiesen.
   beträgt eine Stunde; ein Abbruch im Browser beendet den Backend-Aufruf nicht
   zwingend. Ob der gemeldete konkrete Lauf hing oder noch rechnete, ist nicht
   durch eine Live-Diagnose bestätigt.
-- **Laufzeitdateien prüfen:** kann während einer Speicherberechnung oder anderen
-  gesperrten Operation abgewiesen werden. Die Oberfläche zeigt dann derzeit
-  „Unerwartete Serverantwort (HTTP 500)“ statt der eigentlichen Belegtmeldung.
-  Dieser Ablauf wurde isoliert reproduziert, nicht auf dem betroffenen Gerät.
-  Prüfungen vorerst nacheinander ausführen; bei unklarem Status nicht wiederholt
-  starten. Die kompakte Übersicht behebt diese Funktionsprobleme noch nicht.
+- **Konkurrierende Prüfaktionen:** Aufwendige Prüf-/Speicheraktionen können
+  während einer belegten Vorgangssperre abgewiesen werden. 1.2.2-beta zeigt für
+  diesen Sperrkonflikt einen verständlichen Hinweis mit HTTP 409; andere Fehler
+  bleiben als Fehler sichtbar. Prüfungen nacheinander ausführen und bei unklarem
+  Status nicht wiederholt starten. Das belegt nicht die Ursache eines konkreten
+  Stillstands auf dem Anwendergerät.
 - Die zurückgestellte AP-14 zur Mail-/Benachrichtigungssemantik bleibt ausgenommen.
 
 ## Installation
@@ -350,7 +359,7 @@ Hardware-Restore ist damit weiterhin nicht nachgewiesen.
 1. Das reguläre Release 1.2.0 unten herunterladen oder das angebotene Update in
    der LoxBerry-Plugin-Verwaltung verwenden. Der stabile Kanal genügt;
    ein Beta-/Vorabkanal muss dafür nicht aktiviert werden. Für die
-   Inode-Korrektur in 1.2.1-beta das unten verlinkte Vorabpaket verwenden oder
+   aktuellen Korrekturen in 1.2.2-beta das unten verlinkte Vorabpaket verwenden oder
    nach dessen Freischaltung den Vorabkanal aktivieren.
 2. In LoxBerry unter **Plugins > Plugin installieren** hochladen.
 3. Nach der Installation die Plugin-Oberfläche öffnen.
@@ -371,16 +380,18 @@ Aktuelles reguläres Release-Paket:
 Der stabile Download und der reguläre Kanal bleiben unverändert. Den
 Freigabestatus dieses Pakets nennen die [Release Notes für 1.2.0](docs/RELEASE-1.2.0.md).
 
-Neue Vorabversion mit korrigierter NAS-Inode-Prüfung:
+Neue Vorabversion mit robusterer Diensteliste, Bedienungs- und Berichtskorrekturen
+sowie der bereits enthaltenen NAS-Inode-Korrektur:
 
-[**LoxBerryHostBackup_1.2.1.zip herunterladen (1.2.1-beta)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.1-beta/LoxBerryHostBackup_1.2.1.zip)
+[**LoxBerryHostBackup_1.2.2.zip herunterladen (1.2.2-beta)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.2-beta/LoxBerryHostBackup_1.2.2.zip)
 
 Der öffentliche Beta-Download wird von der geprüften Tag-Pipeline bereitgestellt.
 Erst nach Prüfung dieses ZIPs wird der live abgefragte Vorabkanal aktiviert.
 Den aktuellen Freigabestatus nennen die
-[Release Notes für 1.2.1-beta](docs/RELEASE-1.2.1.md).
+[Release Notes für 1.2.2-beta](docs/RELEASE-1.2.2.md).
 
 Historische Pakete bleiben unverändert erhalten:
+[1.2.1-beta](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.1-beta/LoxBerryHostBackup_1.2.1.zip),
 [1.0.0](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip),
 [1.2.0-beta](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0-beta/LoxBerryHostBackup_1.2.0.zip) und
 [LoxBerryHostBackup_1.1.0.zip](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.1.0-beta/LoxBerryHostBackup_1.1.0.zip)
@@ -392,18 +403,19 @@ GitHub Actions sind äussere Artefakt-ZIPs, aus denen das innere Plugin-ZIP
 zuerst entpackt werden muss. Alte Downloads bleiben in der
 [Release-Historie](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases) erhalten.
 
-### Update auf 1.2.1-beta
+### Update auf 1.2.2-beta
 
 Einstellungen exportieren und laufende Aufgaben beenden lassen. In der
 LoxBerry-Plugin-Verwaltung den Vorabkanal aktivieren und nach dessen Freischaltung
 nach Updates suchen, oder das öffentliche Beta-ZIP direkt installieren.
 **Nicht vorher deinstallieren.** Programmversion, Release-Tag und Paket lauten
-`1.2.1`, `v1.2.1-beta` und `LoxBerryHostBackup_1.2.1.zip`.
+`1.2.2`, `v1.2.2-beta` und `LoxBerryHostBackup_1.2.2.zip`.
 
-Für 1.2.0 und 1.2.0-beta wird dadurch eine höhere Pluginversion angeboten.
+Für 1.2.0, 1.2.0-beta und 1.2.1-beta sowie die bisherigen develop-Testpakete
+mit interner Version 1.2.1 wird dadurch eine höhere Pluginversion angeboten.
 Die automatische Installation hängt weiterhin von der persönlichen
 Update-Einstellung ab. Wer bereits ein develop-Testpaket mit interner Version
-1.2.1 installiert hat, bekommt keinen neuen numerischen Versionshinweis und
+1.2.2 installiert hat, bekommt keinen neuen numerischen Versionshinweis und
 kann das öffentliche Beta-ZIP bei Bedarf manuell darüber installieren.
 
 Bestehende Einstellungen, Sicherungsverfahren und Backupformate bleiben
@@ -411,12 +423,14 @@ unverändert. Nach dem Update Einstellungen und Quellenauswahl prüfen,
 **Nächstes Backup prüfen** öffnen und ein manuelles Testbackup vollständig
 abschliessen lassen. Bei unbekannten Inode-Angaben erscheint ein Hinweis;
 andere Pflichtfehler müssen weiterhin zuerst geklärt werden.
+Die Diensteliste erneut laden, gewünschte Stop-Ziele prüfen und speichern;
+eine Freigabe trotz laufender Container ersetzt deren kontrolliertes Stoppen nicht.
 
 ### Reguläres Release 1.2.0
 
 In der LoxBerry-Plugin-Verwaltung nach Updates suchen oder das ZIP manuell
 installieren. Das reguläre Release benötigt kein Beta-Opt-in. Der stabile Kanal
-bleibt auf diesem Paket; der Vorabkanal wird separat für 1.2.1-beta freigeschaltet.
+bleibt auf diesem Paket; der Vorabkanal wird separat für 1.2.2-beta freigeschaltet.
 Die automatische Installation hängt von der persönlichen Update-Einstellung ab.
 Programmversion, Release-Tag und Paket lauten `1.2.0`, `v1.2.0` und
 `LoxBerryHostBackup_1.2.0.zip`.
@@ -930,7 +944,7 @@ Container und typische datenintensive Dienste, z. B. Datenbanken, MQTT/Zigbee,
 Node-RED, Stats4Lox, Grafana oder InfluxDB. Die Empfehlung kann danach manuell
 angepasst werden.
 
-**Neuer develop-Teststand:** Die Dienstermittlung ist insgesamt auf 45 Sekunden
+**Ab 1.2.2-beta:** Die Dienstermittlung ist insgesamt auf 45 Sekunden
 plus höchstens 2 Sekunden zum Beenden begrenzt; die Oberfläche wartet dafür bis
 zu 60 Sekunden einschliesslich
 Übertragung. Bei einem Fehler `Erneut laden` verwenden. Eine bereits geladene
@@ -940,8 +954,8 @@ ausgewählte Ziele sichtbar und angehakt; nicht mehr benötigte Ziele bewusst
 abwählen. Nach erfolgreichem Laden die gewünschten Ziele auswählen,
 **Änderungen speichern** und anschliessend **Nächstes Backup prüfen** öffnen.
 Die Freigabe eines Backups trotz laufender Container ersetzt deren Stoppen nicht
-und garantiert keine konsistenten Datenbanken. Der Fix wird erst mit einer
-späteren Veröffentlichung über den Plugin-Updatekanal angeboten.
+und garantiert keine konsistenten Datenbanken. Die Korrektur gehört zum
+1.2.2-beta-Paket; der Vorabkanal wird nach Prüfung des öffentlichen ZIPs aktiviert.
 
 Das verbessert die Konsistenz von Container-, Datenbank- und Dienst-Daten, kann
 aber diese Dienste während des Backups unterbrechen. Das Plugin startet nur
@@ -1041,7 +1055,7 @@ seinen Zustand nicht. Das Aufklappen startet keine Prüfung. Der letzte
 protokollierte Fehler und offene Dienst-Wiederanläufe bleiben auch bei
 geschlossenem Detailbereich sichtbar.
 
-**Zusätzlich auf develop:** Geladene Prüfergebnisse, Aktionsmeldungen,
+**Ab 1.2.2-beta:** Geladene Prüfergebnisse, Aktionsmeldungen,
 Restore-Vorschauen und der Live-Status lassen sich vollständig schliessen und
 bei Bedarf wieder anzeigen. Automatische Aktualisierungen öffnen bewusst
 geschlossene Ansichten nicht wieder. Das Schliessen betrifft nur die Anzeige:
@@ -1058,15 +1072,15 @@ Export und Aufbewahrung.
 Nach einem erfolgreich selbst gestarteten Hintergrundvorgang wird die vorherige
 Prüfansicht geschlossen und der Live-Status einmalig sichtbar gemacht. Weitere
 Statusabfragen verschieben die Ansicht nicht; ein Startfehler lässt den
-Prüfbericht zur Fehlersuche erhalten. Diese Bedienkorrektur gilt zunächst nur
-für den unveröffentlichten develop-Stand und umfasst auch **Externes Backup
+Prüfbericht zur Fehlersuche erhalten. Diese Bedienkorrektur ist in 1.2.2-beta
+enthalten und umfasst auch **Externes Backup
 importieren**. Die Zielauswahl lässt sich dort auch mit Enter oder Leertaste
 bedienen; sie ändert nur den Entwurf, ohne zu speichern oder ein Backup zu starten.
 
 Während ein Backup läuft:
 
 - bleibt der Live-Status beim Navigieren im Plugin erhalten
-- kann seine Anzeige geschlossen und später erneut geöffnet werden (develop)
+- kann seine Anzeige geschlossen und später erneut geöffnet werden (ab 1.2.2-beta)
 - kann ein laufendes Backup über `Backup stoppen` abgebrochen werden
 - sind Datei-Explorer, Restore und Export für dieses laufende Backup gesperrt
 
@@ -1090,7 +1104,7 @@ Zeitplanaufträge und bietet die Auftragshistorie an.
 
 **Ansichten während eines Backups:** Die gespeicherten Prüfhinweise und Dateien
 älterer, abgeschlossener Backups können weiterhin angesehen werden. Aufwendige
-zusätzliche Vorprüfungen werden im develop-Stand bei belegter Vorgangssperre
+zusätzliche Vorprüfungen werden ab 1.2.2-beta bei belegter Vorgangssperre
 frühzeitig abgewiesen; sie warten nicht auf den Abschluss des Backups. Öffnen
 oder Schliessen einer Ansicht hält den Hintergrundvorgang nicht an.
 
@@ -1220,7 +1234,7 @@ bewiesene Originaltreue. Die automatische Prüfung kontrolliert stündlich, ob n
 dem gespeicherten Intervall (Standard: 7 Tage) eine Sicherung fällig ist, und prüft
 höchstens eine fällige Sicherung pro Aufruf. Ein Prüfbericht kann heruntergeladen werden.
 
-**Zusätzlich auf develop:** Bei **Prüfung mit Hinweis** lassen sich die einzelnen
+**Ab 1.2.2-beta:** Bei **Prüfung mit Hinweis** lassen sich die einzelnen
 Hinweise und Prüfpunkte der gespeicherten Backup-Abschlussprüfung direkt am
 betroffenen Backup öffnen. Das ist ein lesender Zugriff auf
 `backup-validation.json`, kein neuer Prüflauf. Die Abschlussprüfung und der
@@ -1228,7 +1242,7 @@ betroffenen Backup öffnen. Das ist ein lesender Zugriff auf
 Ein fehlender oder nicht lesbarer Abschlussbericht wird entsprechend angezeigt
 und nicht als erfolgreiche Prüfung ausgegeben.
 
-Der separate **Prüfbericht** der Inhaltsprüfung unterscheidet im develop-Stand
+Der separate **Prüfbericht** der Inhaltsprüfung unterscheidet ab 1.2.2-beta
 zwischen noch nicht vorhandenem Bericht, nicht lesbaren Berichtsdaten und einem
 Bericht, der nicht mehr zum aktuellen Backup passt. Keiner dieser Zustände gilt
 als erfolgreiche Inhaltsprüfung; für nicht verfügbare Berichtsdaten wird kein
@@ -1401,17 +1415,17 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 Aktueller Entwicklungs- und Veröffentlichungsstand:
 
 - `main`: regulärer Hauptstand 1.2.0
-- `develop`: Vorabversion 1.2.1-beta auf Basis von 1.2.0
+- `develop`: Vorabversion 1.2.2-beta auf Basis von 1.2.0 und 1.2.1-beta
 - `pre-develop`: älterer Referenzstand; unverändert
 
 Öffentliche Update-Dateien und Freigabereihenfolge:
 
 - `main/release.cfg`: reguläres Paket 1.2.0 unter Tag `v1.2.0`
 - `develop/prerelease.cfg`: wird nach Prüfung des öffentlichen Beta-ZIPs auf
-  Paket 1.2.1 unter Tag `v1.2.1-beta` umgestellt; bis dahin bleibt 1.2.0 aktiv
+  Paket 1.2.2 unter Tag `v1.2.2-beta` umgestellt; bis dahin bleibt 1.2.1-beta aktiv
 
 Ein develop-Push allein aktiviert kein Plugin-Update. Die geprüfte Tag-Pipeline
-veröffentlicht `LoxBerryHostBackup_1.2.1.zip` unter `v1.2.1-beta`; erst nach
+veröffentlicht `LoxBerryHostBackup_1.2.2.zip` unter `v1.2.2-beta`; erst nach
 Prüfung dieses öffentlichen Pakets wird die Vorab-Kanaldatei aktiviert.
 `main`, bestehende Tags, ältere öffentliche ZIPs und die Wiki-Seite werden
 dabei nicht geändert.

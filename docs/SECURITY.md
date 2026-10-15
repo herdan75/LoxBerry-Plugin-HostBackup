@@ -1,5 +1,39 @@
 # Sicherheitsmodell
 
+## Aktuelle Ergänzung: 1.2.2-beta vom 15.10.2026
+
+Die Dienst-/Container-Ermittlung verwendet gebündelte systemd-Abfragen mit
+begrenzter Laufzeit. Fehlgeschlagene oder unvollständige Antworten werden nicht
+als erfolgreiche leere Auswahl gespeichert. Gespeicherte und noch nicht
+gespeicherte Auswahlen bleiben erhalten; geschützte Systemdienste bleiben
+ausgeschlossen. Das längere Browser-Zeitlimit erweitert keine Berechtigungen.
+
+Gespeicherte Abschlussprüfungen werden als begrenzter, HTML-geschützter Text
+angezeigt und bleiben von Dateiinhaltsprüfung und Restore-Nachweisen getrennt.
+Das Schliessen einer Ansicht beendet keinen Hintergrundvorgang und löst weder
+einen Stop noch eine Schreibaktion aus. Verspätete Antworten dürfen bewusst
+geschlossene Ansichten nicht automatisch wieder öffnen.
+
+Öffentliche Backup-/Restore-Vorprüfungen und die Backup-Vorschau erwerben vor
+Ziel- und Repository-Arbeiten eine nicht wartende gemeinsame Vorgangssperre.
+Eine aktive exklusive Backup-/Restore-/Wartungssperre führt zum Belegt-Hinweis,
+nicht zu parallelen Metadatenproben. Interne Vorprüfungen unter der bereits
+gehaltenen exklusiven Worker-Sperre bleiben unverändert. Leichte Anzeigen
+werden nicht pauschal gesperrt; vorhandene Einzelbackup-Sperren bleiben wirksam.
+
+Fehlende Inhaltsberichte sind kein Prüfnachweis. Unlesbare, beschädigte,
+falsch zugeordnete oder widersprüchliche Berichte werden ohne Überschreiben der
+Datei oder Vergleichsbasis als Fehler dargestellt. Ein veralteter Bericht darf
+aktuelle Inhalte nicht als geprüft bestätigen. Ziel-, Manifest-, Root-State-
+und Historien-Sicherheitsfehler bleiben blockierend; verständliche JSON-Fehler
+und HTTP 409 bei Sperrkonflikten umgehen keine Backend-Prüfung.
+
+Freigabeumfang und tatsächliche Testnachweise:
+[Release Notes 1.2.2-beta](RELEASE-1.2.2.md). Reale NAS-/USB-Einbindungen,
+produktive Dienste und ein bootfähiger System-Restore bleiben eigene Abnahmen.
+
+## Historische Ergänzungen
+
 Ergänzung für **1.2.1-beta vom 07.10.2026**: Eine unbekannte Inode-Kapazität
 ist kein Beleg für Erschöpfung. Die gemeinsame Vorprüfung wertet Gesamtzahl
 und freie Inodes zusammen aus; bekannte Erschöpfung bleibt fatal. Zielidentität,
@@ -7,15 +41,15 @@ Schreibzugriff, Metadaten, Quellenauswahl, Speicherplatz und Repository-Freigabe
 werden nicht abgeschwächt. Keine zusätzlichen Rechte oder Sicherungsmodi.
 Prüfumfang und Grenzen: [Release Notes 1.2.1-beta](RELEASE-1.2.1.md).
 
-Stand: reguläres Release 1.2.0 vom 04.10.2026. Das Sicherheitsmodell der
+Historischer Stand: reguläres Release 1.2.0 vom 04.10.2026. Das Sicherheitsmodell der
 übernommenen Beta-Basis `af2d55d` bleibt unverändert; die stabile Freigabe
 erweitert weder Berechtigungen noch Restore-Zusagen. Freigabestatus und
 Prüfgrenzen: [Release Notes](RELEASE-1.2.0.md).
 Enthalten sind der unprivilegierte Dateiaustausch auch bei Neuinstallation mit
 Restdateien und die unveränderte Launcher-/Backend-Trennung.
-Die kompakte Übersicht verändert keine Berechtigungen, Locks oder
-Bestätigungsanforderungen. Die noch offene HTTP-500-Darstellung bei gesperrter
-Laufzeitprüfung ist kein Anlass, den Sperrschutz abzuschalten; siehe
+Die kompakte Übersicht veränderte keine Berechtigungen, Locks oder
+Bestätigungsanforderungen. Die damals noch offene HTTP-500-Darstellung bei
+gesperrter Laufzeitprüfung war kein Anlass, den Sperrschutz abzuschalten; siehe
 [bekannte Grenzen](RELEASE-1.0.0.md#bekannte-offene-punkte).
 
 Version 1.0.0 übernimmt die Korrektur aus dem letzten Vorabpaket und behandelt nur beim automatischen

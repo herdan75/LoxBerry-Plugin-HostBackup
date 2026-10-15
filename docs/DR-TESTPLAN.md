@@ -5,11 +5,14 @@ bei Änderungen an rsync-/tar-Optionen, Mount-Prüfung, Import, Restore oder
 Retention auszuführen. Produktive Daten werden durch synthetische Marker und
 Testdienste ersetzt.
 
-## Ergänzende Bedienungsabnahme für den unveröffentlichten develop-Stand
+## Ergänzende Freigabe- und Bedienungsabnahme für 1.2.2-beta
 
-Diese Szenarien prüfen die schliessbaren Ansichten und die lesbare
-Backup-Abschlussprüfung. Sie ändern weder Paketversion noch Updatekanäle und
-sind ein Prüfplan, kein Nachweis eines Hardware-Restores.
+Diese Szenarien gelten für die Vorabversion vom **15.10.2026**. Sie prüfen die
+robuste Dienst-/Container-Auswahl, schliessbare Ansichten, lesbare
+Backup-Abschluss- und Inhaltsberichte sowie gesperrte parallele Vorprüfungen.
+Sie sind ein Prüfplan, kein Nachweis eines Hardware-Restores. Tatsächliche
+Ergebnisse für den genauen Freigabe-Commit und verbleibende Grenzen getrennt in
+den [Release Notes 1.2.2-beta](RELEASE-1.2.2.md) festhalten.
 
 1. Backup mit `complete_with_warnings` anzeigen: ursprüngliche Hinweise und
    einzelne Prüfpunkte aus `backup-validation.json` am richtigen Backup öffnen.
@@ -49,6 +52,39 @@ sind ein Prüfplan, kein Nachweis eines Hardware-Restores.
    eine alte Logzeit nicht als gemessenen Stillstand ausgeben.
    Mit den echten Präfixen `backup-`, `restore-`, `export-`, `import-` und
    `verify-` wiederholen, insbesondere nach Seitenwechsel oder erneutem Laden.
+9. Dienst-/Container-Auswahl auf einem Testhost mit vielen systemd-Einträgen
+   laden. Gebündelte Abfragen, leere/wiederholte optionale Eigenschaften und
+   Zeitlimits prüfen: Backend 45 Sekunden plus 2 Sekunden Beendigungsreserve,
+   Browser 60 Sekunden. Fehlende oder verspätete Antworten dürfen weder eine
+   leere erfolgreiche Liste vortäuschen noch gespeicherte/ungespeicherte
+   Auswahlen entfernen. Fehlende ausgewählte Ziele bleiben bewusst abwählbar.
+10. Inhaltsbericht bei Warn-Backup ohne gespeicherten Bericht öffnen: ein
+    verständlicher Hinweis, kein HTTP-500 und kein erfolgreicher Prüfnachweis.
+    Beschädigte, unlesbare oder widersprüchliche Berichte als Fehler anzeigen;
+    keine Vergleichsbasis ersetzen. Bei belegter Sperre HTTP 409 mit Erklärung;
+    bei ungültigem Manifest/Sicherheitsfehler weiterhin abweisen. Gültige und
+    veraltete vorhandene Berichte unterscheiden, ohne Prüfzeitpunkte zu erfinden.
+
+### Veröffentlichung und Updatekanal
+
+1. Tag `v1.2.2-beta`, interne Paketversion `1.2.2` und ZIP
+   `LoxBerryHostBackup_1.2.2.zip` müssen zum geprüften Commit gehören. Die
+   vollständigen CI-, Browser-, Linux-/CIFS-/Repository-, Sicherheits- und
+   Paketprüfungen für diesen Commit ausführen; Überspringen nicht als Bestehen
+   ausweisen.
+2. Das öffentliche Beta-ZIP ohne Anmeldung herunterladen und Inhalt, Unix-Rechte,
+   Engine-Prüfsummen sowie SHA-256 prüfen. Erst danach `develop/prerelease.cfg`
+   für Version `1.2.2` und genau dieses ZIP aktivieren und den öffentlichen Feed
+   erneut lesen. `main`, stabilen Feed und bestehende Release-Dateien unverändert
+   lassen.
+3. Update über eine vorhandene Installation ohne vorherige Deinstallation prüfen.
+   Konfiguration, Backup-Ziele, Repository-Zuordnung und Schlüssel erhalten; keine
+   automatische Änderung von Sicherungsverfahren oder Quellen. Gegenüber 1.2.1
+   ist die numerische Version höher; ein gleichnummeriger 1.2.2-Teststand erhält
+   dagegen nicht allein durch die Beta-Kennzeichnung einen neueren Updatehinweis.
+4. Persönliche NAS-/USB-Abnahme, reale Dienstzustände und bootfähigen Restore
+   getrennt durchführen. Ein erfolgreicher CI-Lauf oder ein manuell installiertes
+   Test-ZIP belegt nicht automatisch die Installation über den öffentlichen Feed.
 
 ### Aktionsmatrix: jeder sichtbare Button hat einen Prüfauftrag
 
@@ -102,7 +138,7 @@ ein bootfähiger Komplett-Restore. Diese Grenzen bleiben auch bei grüner CI
 bestehen. Entwicklungspush, getestetes ZIP und veröffentlichter Updatekanal
 weiterhin getrennt ausweisen.
 
-## Ergänzende Freigabeabnahme für 1.2.1-beta
+## Historische ergänzende Freigabeabnahme für 1.2.1-beta
 
 Diese Szenarien gelten für die Vorabversion vom 07.10.2026. Prüfplan und
 tatsächlich abgeschlossene Nachweise getrennt behandeln; siehe
