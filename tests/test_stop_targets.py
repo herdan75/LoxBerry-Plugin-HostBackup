@@ -91,6 +91,11 @@ if ($tool eq "systemctl" && $ARGV[0] eq "show") {
     );
     for my $key (sort keys %properties) {
       next if ($fixture->{omit_property} // "") eq $key;
+      next if grep { $_ eq $key } @{$fixture->{omit_properties_by_unit}{$name} // []};
+      if ($key eq "ExecStart" && exists $fixture->{execution_commands_by_unit}{$name}) {
+        print "ExecStart=$_\n" for @{$fixture->{execution_commands_by_unit}{$name}};
+        next;
+      }
       print "$key=$properties{$key}\n";
     }
     print "\n";
@@ -289,6 +294,30 @@ timeout() {
                 response = self.run_discovery({"units": {"mqtt.service": {}}, **update}, expected=255)
                 self.assertEqual(response.stdout, "")
                 self.assertTrue("properties" in response.stderr or "disappeared" in response.stderr)
+
+    def test_empty_execution_array_is_optional_for_loaded_and_masked_units(self):
+        response = self.run_discovery({"units": {
+            "mqtt-masked.service": {"LoadState": "masked", "ActiveState": "inactive", "SubState": "dead"},
+            "mqtt-stop-only.service": {"LoadState": "loaded", "ActiveState": "active", "SubState": "exited"},
+        }, "omit_properties_by_unit": {
+            "mqtt-masked.service": ["ExecStart"], "mqtt-stop-only.service": ["ExecStart"],
+        }})
+        by_name = {item["name"]: item for item in json.loads(response.stdout)}
+        self.assertEqual(set(by_name), {"mqtt-masked.service", "mqtt-stop-only.service"})
+        self.assertFalse(by_name["mqtt-masked.service"]["recommended"])
+        self.assertTrue(by_name["mqtt-stop-only.service"]["recommended"])
+
+    def test_all_repeated_execution_commands_contribute_to_plugin_classification(self):
+        units = {"first.service": {"ActiveState": "active", "SubState": "exited"},
+                 "second.service": {"ActiveState": "inactive", "SubState": "dead"}}
+        commands = ["{ path=/opt/loxberry/bin/plugins/example/start ; }", "{ path=/usr/bin/true ; }"]
+        response = self.run_discovery({"units": units,
+            "execution_commands_by_unit": {name: commands for name in units}})
+        by_name = {item["name"]: item for item in json.loads(response.stdout)}
+        self.assertEqual(set(by_name), set(units))
+        self.assertTrue(all(item["group"] == "LoxBerry-/Plugin-Dienste" for item in by_name.values()))
+        self.assertTrue(by_name["first.service"]["recommended"])
+        self.assertFalse(by_name["second.service"]["recommended"])
 
     def test_invalid_configuration_fails_before_discovery_and_does_not_change_it(self):
         response = self.run_discovery(invalid_config=True, expected=255)

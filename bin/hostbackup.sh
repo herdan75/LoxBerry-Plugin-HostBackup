@@ -1606,13 +1606,31 @@ discover_stop_targets() {
           "-p", "Description", "-p", "ExecStart", "-p", "FragmentPath", "--", @batch);
         my %records;
         for my $record (split /\n\s*\n/, $output) {
-          my %properties = map { /^([A-Za-z]+)=(.*)$/ ? ($1 => $2) : () } split /\n/, $record;
-          for my $key (qw(Id Names LoadState ActiveState SubState Description ExecStart FragmentPath)) {
-            die "Incomplete systemd service properties.\n" unless exists $properties{$key};
+          my %properties;
+          for my $line (split /\n/, $record) {
+            next unless $line =~ /^([A-Za-z]+)=(.*)$/;
+            my ($key, $value) = ($1, $2);
+            # A oneshot service may have several ExecStart= command entries.
+            # Keep all of them for classification, never execute their contents.
+            if ($key eq "ExecStart" && exists $properties{$key}) {
+              $properties{$key} .= " $value";
+            } else {
+              $properties{$key} = $value;
+            }
+          }
+          my $diagnostic_id = supported_name($properties{Id} // "") ? $properties{Id} : "unknown";
+          my $diagnostic_state = ($properties{LoadState} // "") =~ /\A[a-z-]+\z/ ? $properties{LoadState} : "unknown";
+          for my $key (qw(Id Names LoadState ActiveState SubState Description FragmentPath)) {
+            die "Incomplete systemd service properties: missing $key (unit $diagnostic_id, load state $diagnostic_state).\n"
+              unless exists $properties{$key};
           }
           die "Service disappeared during discovery; please retry.\n"
             unless length($properties{Id}) && length($properties{ActiveState})
               && length($properties{SubState}) && $properties{LoadState} ne "not-found";
+          # systemctl omits an empty ExecStart array even with --all. This is
+          # valid for masked units and loaded stop-only/RemainAfterExit services;
+          # the required generic identity/state properties above remain strict.
+          $properties{ExecStart} //= "";
           for my $name ($properties{Id}, split /\s+/, $properties{Names}) {
             $records{$name} = \%properties;
           }

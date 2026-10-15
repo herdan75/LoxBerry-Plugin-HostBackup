@@ -17,6 +17,8 @@ validiert werden.
   Zeitlimit von 45 Sekunden plus höchstens 2 Sekunden zum Beenden begrenzt
   die Ermittlung; unvollständige oder
   fehlgeschlagene Abfragen werden nicht als erfolgreiche leere Liste übernommen.
+  Legitimerweise nicht ausgegebene leere `ExecStart`-Listen werden berücksichtigt;
+  Dienstidentität und Zustandsangaben bleiben Pflichtfelder.
 - Die Diensteliste erhält ein eigenes Browser-Zeitlimit von 60 Sekunden,
   verständliche Fehlerhinweise und eine Schaltfläche zum erneuten Laden.
   Gespeicherte sowie noch nicht gespeicherte Auswahlen bleiben bei Fehlern
