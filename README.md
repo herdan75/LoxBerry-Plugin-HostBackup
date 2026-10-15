@@ -5,8 +5,14 @@
 > Dienst-/Container-Auswahl lädt auch bei langsameren Antworten zuverlässig
 > innerhalb eigener, begrenzter Zeitlimits. Gebündelte systemd-Abfragen,
 > erneutes Laden und Schutz bestehender Auswahlen beheben den gemeldeten
-> Ladefehler. Dieser Fix ist nicht im unten verlinkten bisherigen Beta-ZIP
-> enthalten; Versionsnummer und Plugin-Updatekanäle bleiben unverändert.
+> Ladefehler. Zusätzlich sind Ergebnisse und Live-Status schliessbar und erneut
+> aufrufbar; Hinweise der ursprünglichen Backup-Abschlussprüfung lassen sich
+> direkt beim Backup ansehen. Zusätzliche aufwendige Vorprüfungen werden während
+> eines laufenden Vorgangs frühzeitig abgewiesen; reine Ansichten bleiben
+> verfügbar. Der Inhaltsprüfbericht unterscheidet fehlende, nicht lesbare und
+> nicht mehr zum aktuellen Backup passende Nachweise. Diese Korrekturen sind nicht im unten verlinkten
+> bisherigen Beta-ZIP enthalten; Versionsnummer und Plugin-Updatekanäle bleiben
+> unverändert.
 
 **Version 1.2.1-beta · Vorabversion · 07.10.2026.**
 Korrigiert die fälschlich blockierende Inode-Prüfung bei NAS-/Dateisystemen,
@@ -1032,8 +1038,15 @@ vier, zwei oder einer Spalte. **Details und Prüfaktionen** klappt die vollstän
 Backup-ID, den Zielpfad, die Vorgangsdatei und die Prüf-/Diagnoseschaltflächen auf.
 Der Bereich ist anfangs geschlossen; automatische Aktualisierungen verändern
 seinen Zustand nicht. Das Aufklappen startet keine Prüfung. Der letzte
-protokollierte Fehler, offene Dienst-Wiederanläufe und bereits geladene
-Prüfergebnisse bleiben auch bei geschlossenem Detailbereich sichtbar.
+protokollierte Fehler und offene Dienst-Wiederanläufe bleiben auch bei
+geschlossenem Detailbereich sichtbar.
+
+**Zusätzlich auf develop:** Geladene Prüfergebnisse, Aktionsmeldungen,
+Restore-Vorschauen und der Live-Status lassen sich vollständig schliessen und
+bei Bedarf wieder anzeigen. Automatische Aktualisierungen öffnen bewusst
+geschlossene Ansichten nicht wieder. Das Schliessen betrifft nur die Anzeige:
+Ein laufender Vorgang läuft weiter, ungespeicherte Eingaben bleiben erhalten.
+Zum Abbrechen eines Backups dient ausschliesslich **Backup stoppen**.
 
 CSS und JavaScript werden über ihren Inhaltsstand geladen, sodass auch
 Korrekturen ohne Versionssprung nach erneutem Öffnen der Plugin-Seite sichtbar
@@ -1042,10 +1055,18 @@ werden.
 Nach dem Start eines Backups erscheint ein Live-Status. Er zeigt fortlaufend,
 was das Backend gerade macht, z. B. Dienst-/Container-Stop, `rsync`-Fortschritt,
 Export und Aufbewahrung.
+Nach einem erfolgreich selbst gestarteten Hintergrundvorgang wird die vorherige
+Prüfansicht geschlossen und der Live-Status einmalig sichtbar gemacht. Weitere
+Statusabfragen verschieben die Ansicht nicht; ein Startfehler lässt den
+Prüfbericht zur Fehlersuche erhalten. Diese Bedienkorrektur gilt zunächst nur
+für den unveröffentlichten develop-Stand und umfasst auch **Externes Backup
+importieren**. Die Zielauswahl lässt sich dort auch mit Enter oder Leertaste
+bedienen; sie ändert nur den Entwurf, ohne zu speichern oder ein Backup zu starten.
 
 Während ein Backup läuft:
 
 - bleibt der Live-Status beim Navigieren im Plugin erhalten
+- kann seine Anzeige geschlossen und später erneut geöffnet werden (develop)
 - kann ein laufendes Backup über `Backup stoppen` abgebrochen werden
 - sind Datei-Explorer, Restore und Export für dieses laufende Backup gesperrt
 
@@ -1066,6 +1087,18 @@ Backup-Liste wird anschliessend aktualisiert.
 Ungespeicherte Einstellungen werden dabei nicht durch eine automatische
 Seitennavigation verworfen. Auch ohne Start-Link erkennt die Übersicht laufende
 Zeitplanaufträge und bietet die Auftragshistorie an.
+
+**Ansichten während eines Backups:** Die gespeicherten Prüfhinweise und Dateien
+älterer, abgeschlossener Backups können weiterhin angesehen werden. Aufwendige
+zusätzliche Vorprüfungen werden im develop-Stand bei belegter Vorgangssperre
+frühzeitig abgewiesen; sie warten nicht auf den Abschluss des Backups. Öffnen
+oder Schliessen einer Ansicht hält den Hintergrundvorgang nicht an.
+
+Die Angabe **Letzte Log-Aktualisierung** bezeichnet die letzte Ausgabe in der
+Logdatei, nicht den Zeitpunkt der letzten Statusabfrage. Ein stiller Kopierlauf
+kann daher längere Zeit keine neue Logzeile erzeugen. Beim Hochscrollen bleibt
+die Leseposition erhalten; **Zum Ende des Logs** zeigt wieder die neueste
+Ausgabe. Fehlende Logausgabe allein beweist weder Stillstand noch Fortschritt.
 
 ### Verhalten Nach Einem LoxBerry-Neustart
 
@@ -1186,6 +1219,21 @@ Sicherungen bedeutet der erste Lauf nur **Prüfbasis erstellt**, nicht nachträg
 bewiesene Originaltreue. Die automatische Prüfung kontrolliert stündlich, ob nach
 dem gespeicherten Intervall (Standard: 7 Tage) eine Sicherung fällig ist, und prüft
 höchstens eine fällige Sicherung pro Aufruf. Ein Prüfbericht kann heruntergeladen werden.
+
+**Zusätzlich auf develop:** Bei **Prüfung mit Hinweis** lassen sich die einzelnen
+Hinweise und Prüfpunkte der gespeicherten Backup-Abschlussprüfung direkt am
+betroffenen Backup öffnen. Das ist ein lesender Zugriff auf
+`backup-validation.json`, kein neuer Prüflauf. Die Abschlussprüfung und der
+**Prüfbericht** der optionalen Inhaltsprüfung sind unterschiedliche Nachweise.
+Ein fehlender oder nicht lesbarer Abschlussbericht wird entsprechend angezeigt
+und nicht als erfolgreiche Prüfung ausgegeben.
+
+Der separate **Prüfbericht** der Inhaltsprüfung unterscheidet im develop-Stand
+zwischen noch nicht vorhandenem Bericht, nicht lesbaren Berichtsdaten und einem
+Bericht, der nicht mehr zum aktuellen Backup passt. Keiner dieser Zustände gilt
+als erfolgreiche Inhaltsprüfung; für nicht verfügbare Berichtsdaten wird kein
+scheinbar gültiger Bericht-Download angeboten. Ein vorhandener veralteter Bericht
+bleibt als entsprechend gekennzeichnete Historie herunterladbar.
 
 `Kopie abgeschlossen`, `Struktur geprüft`, `Inhalt mit Prüfbasis verglichen` und
 `vollständiger Restore getestet` sind ausdrücklich unterschiedliche Nachweise.

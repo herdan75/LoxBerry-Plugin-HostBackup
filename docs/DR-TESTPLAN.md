@@ -5,6 +5,103 @@ bei Änderungen an rsync-/tar-Optionen, Mount-Prüfung, Import, Restore oder
 Retention auszuführen. Produktive Daten werden durch synthetische Marker und
 Testdienste ersetzt.
 
+## Ergänzende Bedienungsabnahme für den unveröffentlichten develop-Stand
+
+Diese Szenarien prüfen die schliessbaren Ansichten und die lesbare
+Backup-Abschlussprüfung. Sie ändern weder Paketversion noch Updatekanäle und
+sind ein Prüfplan, kein Nachweis eines Hardware-Restores.
+
+1. Backup mit `complete_with_warnings` anzeigen: ursprüngliche Hinweise und
+   einzelne Prüfpunkte aus `backup-validation.json` am richtigen Backup öffnen.
+   Nicht mit dem Bericht der optionalen Inhaltsprüfung verwechseln; es darf
+   kein neuer Prüflauf ausgelöst werden. Fehlenden, fehlerhaften und nicht
+   lesbaren Bericht verständlich als nicht verfügbar anzeigen.
+2. Berichtsdaten mit HTML-/Skriptzeichen als Text anzeigen. Zugriff auf fremde
+   Pfade, Pfadtraversierung und Symlink-Ausbruch müssen serverseitig abgewiesen
+   werden. Keine Schreib- oder Startaktion allein durch Öffnen oder Schliessen.
+3. Vorprüfung, Restore-Vorschau, Aktionsmeldung und Live-Status jeweils öffnen,
+   vollständig schliessen und erneut öffnen. Keine leeren Restflächen zwischen
+   Übersicht, Prüfergebnis und Fortschritt; bestehende Formularwerte und noch
+   nicht gespeicherte Eingaben müssen erhalten bleiben.
+4. Während eine Abfrage läuft den Ergebnisbereich schliessen; die verspätete
+   Antwort darf ihn nicht wieder öffnen. Ebenso laufenden Live-Status schliessen
+   und mehrere Statusabfragen abwarten: geschlossen lassen, Hintergrundvorgang
+   nicht abbrechen. Erneutes Öffnen zeigt den aktuellen Stand.
+5. Nach erfolgreichem explizitem Backup-, Export-, Import- oder Restorestart
+   den alten Prüfbereich schliessen und einmalig zum Live-Status führen. Kein
+   wiederholter Scrollsprung bei Folgeabfragen; bei fehlgeschlagenem Start den
+   Prüfbericht erhalten. Bei automatisch erkannten Zeitplanaufträgen keine
+   ungespeicherten Eingaben verlieren und die Ansicht nicht ungefragt verschieben.
+6. Desktop und schmale Mobilansicht sowie Tastaturbedienung prüfen: erreichbare
+   Schliessen-/Wiederöffnen-Schaltflächen, eindeutige Beschriftungen, kein Fokus
+   in versteckten Bereichen und keine horizontale Überbreite. **Ansicht
+   schliessen** klar von **Backup stoppen** unterscheiden.
+7. Mit einem separaten Testprozess die exklusive Vorgangssperre halten und
+   Backup-/Restore-Vorprüfung sowie aufwendige Prüf-/Speicheraktionen aufrufen.
+   Sie müssen unverzüglich mit verständlichem Belegt-Hinweis abbrechen, bevor
+   neue Metadatenproben oder vollständige Dateiscans beginnen. Gespeicherte
+   Prüfhinweise, Dateiansicht und Wiederherstellungsblatt eines älteren Backups
+   sowie Live-Log bleiben lesbar; kein Stoppsignal an den Testprozess.
+8. Während eines laufenden synthetischen Backups in ein älteres Backup wechseln
+   und die Ansicht wieder schliessen. Der aktive Vorgang muss erhalten bleiben.
+   Auch eine verspätete Listenantwort darf keine veraltete Vorgangs-ID in die
+   Navigation zurückbringen. Log-Leseposition und **Zum Ende des Logs** prüfen;
+   eine alte Logzeit nicht als gemessenen Stillstand ausgeben.
+   Mit den echten Präfixen `backup-`, `restore-`, `export-`, `import-` und
+   `verify-` wiederholen, insbesondere nach Seitenwechsel oder erneutem Laden.
+
+### Aktionsmatrix: jeder sichtbare Button hat einen Prüfauftrag
+
+Inventur aus `webfrontend/htmlauth/index.cgi` und `assets/hostbackup.js`,
+einschliesslich dynamischer Buttons. Die Tabelle ordnet vorhandene Teststellen
+und notwendige Abnahmefälle zu; sie ist **keine pauschale Erfolgsmeldung**.
+Bestanden zählt nur mit dem Ergebnis des jeweiligen Laufs für den genauen Commit.
+
+**B** bezeichnet `tests/browser/browser-regression.cjs`: echte CGI-Oberfläche,
+echtes JavaScript/CSS, aber simulierte Backend-Antworten. **U** sind die genannten
+Python-/Shell-Tests mit isolierten Daten oder kontrollierten Prozess-Fixtures.
+**L** sind nur unter den vorgesehenen Linux-/CIFS-/Repository-Voraussetzungen
+ausgeführte Integrationstests. Ein Skip ist kein bestandener Funktionstest.
+
+| Buttons/Aktionen | Pflichtfälle | Teststellen / Nachweisgrenze |
+| --- | --- | --- |
+| **Hinweise ansehen / Prüfdetails**, „Prüfung mit Hinweis“ | Originale Abschlussprüfung, Datum, alle Prüfpunkte, optionale Hinweise; UTF-8, HTML-Zeichen, fehlende/defekte Daten; Tastatur, Schliessen, kein neuer Prüflauf | B Ergebnisansichten; U `test_validation_display.py`. Kein Nachweis eines Restore-Tests. |
+| **Nächstes Backup prüfen** (`backup-preview`), Vorschlag **Portable Sicherung und Vollbackup auswählen** | Gespeicherter Stand, Dirty-Sperre, Metadatenfehler; Vorschlag ändert nur Entwurf; Belegt-Hinweis statt paralleler Probe | B Vorschau/Metadatenhilfe; U `test_runtime_safety.py`, `test_preflight_concurrency.py`; L `test_preflight_cifs.py`. NAS des Anwenders separat prüfen. |
+| **Speicherbelegung berechnen**, **Laufzeitdateien prüfen** | Lesende Ergebnisanzeige, geteilte Hardlinks, spätere Antwort nach Schliessen, Sperrkonflikt, keine Löschung | B Ergebnisansichten; U `test_maintenance.py`, `test_validation_display.py`. |
+| **Backup-Struktur prüfen**, **Dateiinhalte prüfen**, **Prüfbericht** und **Prüfbericht herunterladen** | Strukturprüfung, Prüfjob und gespeicherten Inhaltsbericht unterscheiden; fehlender/nicht lesbarer/veralteter Bericht, noch keine Prüfbasis, Fehler/Belegt, JSON-Vertrag bis zur CGI-Antwort; Download nur für verfügbare Nachweise | B Bericht/Download/Jobstart; U `test_verification_report.py`, `test_maintenance.py`, `test_maintenance_api.py`, `test_validation_display.py`. Ein simuliertes HTTP-200-JSON allein belegt den realen Backend-Endpunkt nicht. |
+| **Ergebnis/Meldung schliessen**, **Letztes Ergebnis/Letzte Meldung anzeigen** | Gesamten Bereich verbergen, unverändert wieder öffnen; kein leerer Ergebnisöffner; späte Antworten und Fehler respektieren Schliessen; Fokus und Entwürfe erhalten | B Ergebnisansichten auf Desktop/Mobil; U `test_validation_display.py`. |
+| **Live-Status ausblenden/anzeigen**, Vorgangsauswahl, **Zum Ende des Logs**, **Vollständiges Log herunterladen** | Polling bei geschlossener Ansicht, aktive Task-ID bei Navigation, beide Scrollachsen, Original-Logdownload; Schliessen sendet keinen Stop | B Live-Status/Navigation; U `test_overview.py`, `test_download_behavior.py`. Logzeit ist kein Fortschrittsmesser. |
+| **Backup starten**, **Backup stoppen**, **Offene Dienste wieder starten** | Start nach erfolgreicher gespeicherter Vorprüfung; Warnbestätigung, Abbruch der Bestätigungsfrage ohne POST; einmalige Live-Anzeige; Stop nur für richtigen Task, Wiederanlaufjournal erhalten | B Aktionsrouting; U `test_runtime_safety.py`, `test_portable_worker.py`, `test_preflight_concurrency.py`. Tatsächlichen Dienst-/Containerzustand nur auf Testhost beurteilen. |
+| Zielauswahl/Drag-and-drop, **Erneut prüfen** am Backup-Ziel | Klick und Tastatur übernehmen nur Zielentwurf; verlorene Verbindung/Timeout, erneute lesende Prüfung; kein automatisches Speichern | B Zielprüfung/Bedienelemente; U `test_web_security.py`. Eingebundene reale Datenträger sind zusätzliche Hardwareabnahme. |
+| Datenquellen **Liste aktualisieren**, **Grundregel verwenden** | Ausnahmen und ungespeicherte Auswahl bei Nachladen/Fehler erhalten; Grundregel bewusst zurücksetzen; kein POST | B Datenquellen; U `test_source_selection.py`, `test_settings_workflow.py`, `test_web_behavior.cjs`. |
+| Dienste **Liste aktualisieren/Erneut laden**, **Empfohlene Auswahl setzen**, **Auswahl leeren** | Verzögerung/Fehler/fehlendes Ziel, gemeinsame Zeitlimits; Änderungen nur im Entwurf; Wiederholen ohne doppelten Request | B Diensteliste; U `test_stop_targets.py`, `test_stop_targets_web.py`. Reale systemd-Abfrage nur bei passender Linux-Testumgebung. |
+| **Änderungen speichern**, **Plugineinstellungen speichern**, **Wartungseinstellungen speichern**, Änderungsdetails | Genaue Formularzuordnung, CSRF, Fehler und Änderungen während des Speicherns; Haupt-/Wartungsformular getrennt, Entwürfe nicht fälschlich als gespeichert markieren | B Speicher-/Wartungsabläufe; U `test_settings_workflow.py`, `test_web_security.py`. |
+| **Einstellungen exportieren/importieren** | Download und Dateiauswahl; Importbestätigung bei Entwürfen, Abbrechen ohne Request, ungültige Datei/Serverfehler; Navigation nur nach ausdrücklichem erfolgreichem Import | B Aktionsrouting ergänzend ausführen; U Upload-/CSRF-Prüfungen in `test_web_security.py`. Formular-/Stichtests sind kein vollständiger Import-Ende-zu-Ende-Nachweis. |
+| Repository **Status prüfen**, **einrichten**, **Wiederherstellungsdatei herunterladen**, **Aufbewahrung bestätigen** | Nur gespeichertes Ziel, getrennte Formulare, bewusste Bestätigung, Download bleibt aus DOM/Logs; Fehler ändern keine Konfiguration | B Repository-Einrichtung; U/L `test_repository.py`, U `test_web_security.py`. Externe Schlüsselaufbewahrung muss der Anwender selbst sicherstellen. |
+| **Dateien**, Ordner **Öffnen/Eine Ebene höher**, **Ansicht schliessen/wieder anzeigen**, **Getrennte Wiederherstellung starten** | Richtige Backup-ID/Pfade, aktueller Task bleibt erhalten; Zielentwurf beim Schliessen behalten; Wiederherstellung nur explizit in neues getrenntes Ziel | B Datei-/Restoreansicht und Aktionsrouting; U/L `test_recovery_workflow.py`, U `test_preflight_concurrency.py`. Keine produktiven Dateien im Browser-Test verändern. |
+| **Restore**, **Restore-Vorschau erstellen**, **Restore starten**, **Restore-Auswahl schliessen/wieder anzeigen** | Ziel/Volume-Zuordnung erhalten, Vorschau lesend, Sicherheitsbestätigung, Offline-/Metadaten-Grenzen, Fehler; Start einmalig zum Live-Status | B Restoreansicht/Aktionsrouting; U/L `test_restore_behavior.py`, `test_recovery_workflow.py`. Bootfähiger Hardware-Restore bleibt separate Abnahme. |
+| **Export erstellen/neu erstellen**, **Export-Archiv herunterladen/löschen** | Richtige ID, expliziter Start; Download mit Prüfsumme, Fehler vor Erfolgsheader; Löschbestätigung und Abbrechen; Repository-Stände bieten diese Aktionen nicht an | B Aktionsrouting; U `test_download_behavior.py`, `test_runtime_safety.py`, `test_archive_validator.py`. Dateirechte/Stream zusätzlich unter Linux prüfen. |
+| **Externes Backup importieren** (`import`) | Multipart mit echter Dateiauswahl, Uploadfehler; erfolgreicher Start zeigt einmalig Live-Status; Archive vor Verwendung prüfen, Fehler in Quarantäne | B Aktionsrouting; U `test_archive_validator.py`, `test_runtime_safety.py`, `test_web_security.py`. Browser-Fixture darf keinen echten Restore/Import durchführen. |
+| **Vor Löschung schützen / Schutz aufheben**, **Löschen / Unvollständiges Backup löschen** | Richtige ID/Schutzrichtung, Bestätigung/Abbrechen; Schutz und letzte geeignete Sicherung backendseitig respektieren; Fehler sichtbar lassen | B Aktionsrouting; U `test_maintenance.py`, `test_repository.py`. Reale Löschungen nur an synthetischen Testdaten. |
+| **Löschvorschau anzeigen**, **Genau diese Löschvorschau ausführen** (Backups oder Laufzeitdateien) | Nur gespeicherte Regeln; richtiger `preview_digest`, veraltete Vorschau abweisen; Abbrechen ohne POST; keine übergreifenden Löschungen | B Wartung/Aktionsrouting; U `test_maintenance.py`, `test_maintenance_api.py`. Vorschau ist ausdrücklich noch keine Löschung. |
+| **Persönlichen Testeintrag speichern**, **Wiederherstellungsblatt**, **Diagnosepaket herunterladen** | Datum/Notiz/Backup-ID, UTC, fehlende Berichte; korrekte Downloadheader, sensible Inhalte begrenzen; eigener Testeintrag bleibt persönliche Angabe | B Restore-Test/Downloads; U `test_maintenance.py`, `test_maintenance_api.py`, `test_download_behavior.py`. Kein automatischer Hardware-Restorenachweis. |
+| Alle **Infobuttons**, native Aufklappbereiche, Sicherungsverfahren/-art, Zeitplanauswahl | Enter/Leertaste, mobile Grenzen, keine ungewollten POSTs oder Formularänderungen durch Hilfe; Sichtbarkeit/Entwürfe bei Polling erhalten | B Hilfe/Formular- und Tastaturtests; U `test_web_security.py`, `test_quick_guide.py`, `test_web_behavior.cjs`. |
+
+**Pflicht für die Freigabe:** Die Browser-Aktionsmatrix muss gezielt Aktionen,
+IDs, Formulardaten und CSRF prüfen. Ein allgemeines „jeder POST ist erfolgreich“
+im Fixture reicht nicht. Fehlende, unerwartete und doppelte Requests müssen
+auffallen. Besonders neue Jobstarts, Multipart-Importe, Downloads und
+Abbruch-/Bestätigungswege sind zusätzlich zu blossen Sichtbarkeitstests zu
+prüfen. Ein gemeldeter HTTP-500-Fehler beim Prüfbericht benötigt einen Test des
+realen CGI-/Backend-Vertrags; der erfolgreiche Download eines Fixture-JSONs
+allein ist dafür kein Beleg.
+
+Nicht in dieser Matrix bewiesen sind der konkrete laufende Backup-Prozess eines
+Anwenders, dessen NAS-/USB-Einbindung, Zustände seiner produktiven Dienste und
+ein bootfähiger Komplett-Restore. Diese Grenzen bleiben auch bei grüner CI
+bestehen. Entwicklungspush, getestetes ZIP und veröffentlichter Updatekanal
+weiterhin getrennt ausweisen.
+
 ## Ergänzende Freigabeabnahme für 1.2.1-beta
 
 Diese Szenarien gelten für die Vorabversion vom 07.10.2026. Prüfplan und

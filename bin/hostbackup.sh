@@ -4483,8 +4483,11 @@ action="${1:-}"
 case "$action" in
   backup) shift; create_backup "${1:-}" ;;
   start) shift; start_backup "${1:-}" "${2:-}" ;;
-  preflight-backup) preflight_backup ;;
-  preflight-restore) shift; preflight_restore "${1:?BACKUP_ID required}" ;;
+  # Public preflights may create metadata probe files or inspect repositories.
+  # Lock before entering them (and before touching a mounted backup target).
+  # Worker-internal preflights retain their already-held exclusive lock.
+  preflight-backup) acquire_operation_lock shared || exit $?; preflight_backup ;;
+  preflight-restore) shift; acquire_operation_lock shared || exit $?; preflight_restore "${1:?BACKUP_ID required}" ;;
   config) show_config ;;
   target-info) backup_target_info ;;
   source-info) source_info ;;
@@ -4502,7 +4505,7 @@ case "$action" in
   recover-services) shift; recover_restart_journals "$@" ;;
   tasks) list_tasks ;;
   task-overview) task_overview ;;
-  backup-preview) backup_preview ;;
+  backup-preview) acquire_operation_lock shared || exit $?; backup_preview ;;
   storage-info) maintenance_action storage ;;
   inspect-backup) shift; maintenance_action inspect "${1:?BACKUP_ID required}" ;;
   protect-backup) shift; maintenance_action protect "${1:?BACKUP_ID required}" "${2:?true or false required}" ;;

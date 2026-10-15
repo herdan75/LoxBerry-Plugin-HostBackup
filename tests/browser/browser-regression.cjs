@@ -87,6 +87,17 @@ function renderFixture(metadataMode) {
 }
 let html=renderFixture('native-strict');
 const portableHtml=renderFixture('portable-archive');
+// Render the real optional panels with read-only backend fixtures. No restore,
+// filesystem mutation or real subprocess is possible in this test process.
+const selectionProgram=`BEGIN { $0='webfrontend/htmlauth/index.cgi'; require HostBackupFixture; require CGI; my $original=\\&CORE::GLOBAL::readpipe; no warnings 'redefine'; *CORE::GLOBAL::readpipe=sub { my ($command)=@_; if ($command =~ /'preflight-restore'/) { $?=0; return '{"status":"ok","checks":[],"warnings":[]}'; } if ($command =~ /'browse'/) { $?=0; return '{"items":[{"name":"hostname","path":"etc/hostname","type":"file","size":128}]}'; } return $original->(@_); }; *CGI::param=sub { return ($_[1] || '') =~ /^(?:restore_id|browse_id)$/ ? 'fixture-ok' : ''; }; } do './webfrontend/htmlauth/index.cgi'; die $@ if $@;`;
+let selectionHtml;
+if(process.platform==='win32')selectionHtml=execFileSync('C:/Program Files/Git/bin/bash.exe',['-s'],{cwd:repo,input:`PERL5LIB=${quote(perlLib)} LBPDATADIR=${quote(posix(temp))} REQUEST_METHOD=GET REMOTE_USER=fixture HTTP_USER_AGENT=fixture perl -e ${quote(selectionProgram)}\n`,encoding:'utf8'});
+else selectionHtml=execFileSync('perl',['-e',selectionProgram],{cwd:repo,env:{...process.env,PERL5LIB:perlLib,LBPDATADIR:temp,REQUEST_METHOD:'GET',REMOTE_USER:'fixture',HTTP_USER_AGENT:'fixture'},encoding:'utf8'});
+const verifySelectionProgram=selectionProgram.replace('*CGI::param=sub { return',"*CGI::param=sub { return 'verify-fixture.log' if ($_[1] || '') eq 'active_task'; return");
+let verifySelectionHtml;
+if(process.platform==='win32')verifySelectionHtml=execFileSync('C:/Program Files/Git/bin/bash.exe',['-s'],{cwd:repo,input:`PERL5LIB=${quote(perlLib)} LBPDATADIR=${quote(posix(temp))} REQUEST_METHOD=GET REMOTE_USER=fixture HTTP_USER_AGENT=fixture perl -e ${quote(verifySelectionProgram)}\n`,encoding:'utf8'});
+else verifySelectionHtml=execFileSync('perl',['-e',verifySelectionProgram],{cwd:repo,env:{...process.env,PERL5LIB:perlLib,LBPDATADIR:temp,REQUEST_METHOD:'GET',REMOTE_USER:'fixture',HTTP_USER_AGENT:'fixture'},encoding:'utf8'});
+assert.match(verifySelectionHtml,/data-active-task="verify-fixture.log"/,'Actual CGI must retain verification task IDs when navigating to file/restore views');
 function assertNoNestedFormMarkup(markup) {
   let depth=0;
   for(const tag of markup.matchAll(/<\/?form\b[^>]*>/gi)) {
@@ -95,7 +106,7 @@ function assertNoNestedFormMarkup(markup) {
   }
   assert.equal(depth,0,'All forms are closed');
 }
-assertNoNestedFormMarkup(html);assertNoNestedFormMarkup(portableHtml);
+assertNoNestedFormMarkup(html);assertNoNestedFormMarkup(portableHtml);assertNoNestedFormMarkup(selectionHtml);
 for(const mode of ['network-compatible','fake-super']) {
   const legacyHtml=renderFixture(mode);
   assert.match(legacyHtml,/<details class="metadata-advanced" id="metadata-advanced" open>/,'Existing advanced selection remains visible without JavaScript: '+mode);
@@ -105,7 +116,9 @@ assert.match(html,/<details class="metadata-advanced" id="metadata-advanced">/,'
 // Exercise the real lazy backup-row CGI renderer, not hand-maintained action
 // markup. Only its list response and GET action are overridden in this process.
 const backupFixture=[{backup_id:'fixture-ok',status:'complete',validation:{status:'ok'},host:{hostname:'fixture'},size_bytes:3221225472,files_count:100,finished_at:'2026-09-13T12:00:00Z',storage_format:'directory',export_status:'missing'}];
-backupFixture.push({...backupFixture[0],backup_id:'fixture-second',host:{hostname:'second-fixture'}});
+const validationWarningName='Abschlusswarnung <img src=x onerror="window.unsafeValidation=true">';
+const validationWarningValue='Nur Abschlussprüfung <script>window.unsafeValidation=true</script>';
+backupFixture.push({...backupFixture[0],backup_id:'fixture-second',status:'complete_with_warnings',protected:true,export_status:'available',export_file:'/fixture/export.tar.gz',host:{hostname:'second-fixture'},validation:{status:'warning',warnings:['Unveränderte ursprüngliche Abschlusswarnung'],checks:[{name:validationWarningName,ok:false,value:validationWarningValue},{name:'Dateien vorhanden',ok:true,value:'ja'}]}});
 backupFixture.push({...backupFixture[0],backup_id:'fixture-repository',backup:{storage_format:'portable-repository'},export_status:'available',export_file:'/fixture/not-a-standalone-export.tar'});
 const backupRow='#backup-list-body tr:has([name="backup_id"][value="fixture-ok"])';
 const backupRowsProgram=`BEGIN { require HostBackupFixture; require CGI; my $original=\\&CORE::GLOBAL::readpipe; no warnings 'redefine'; *CORE::GLOBAL::readpipe=sub { my ($command)=@_; if ($command =~ /'list'\\s+2>&1$/) { $?=0; return ${quote(JSON.stringify(backupFixture))}; } return $original->(@_); }; *CGI::param=sub { return ($_[1] || '') eq 'action' ? 'backup-list' : ''; }; } do './webfrontend/htmlauth/index.cgi'; die $@ if $@;`;
@@ -140,6 +153,10 @@ const overviewTarget='/media/usb/PI_Backup/loxberry-hostbackup/'+'backup-target-
 const verificationReport={backup_id:'fixture-ok',status:'verified',checked_files:3,checked_at:'2026-09-13T12:00:00Z',changes:[],content_verified:true,restore_tested:false};
 let failSave=true, taskFinished=false, tokenNumber=0, postCount=0, htmlCount=0, statusCount=0, tokenDelay=0, saveDelay=0, lastSavedPath='';
 let overviewIssues=false, reportRequests=0, taskPhase='copying';
+let panelFlowFixture=false,reportDelay=0,failPanelReport=false;
+let actionWiring=false,verificationMode='available',configImportSuccess=false;
+const wiredRequests=[];
+const startedTasks={backup:'backup-fixture.log','start-export':'export-fixture.log',import:'import-fixture.log','restore-backup':'restore-fixture.log','restore-files':'restore-files-fixture.log','verify-backup':'verify-fixture.log'};
 let lastSavedSources, failSources=false, failBackupMetadata=false;
 let targetNoticeMode='http-error',targetNoticeRequests=0;
 let stopTargetsMode='ok',stopTargetsRich=false,stopTargetsRequests=0;
@@ -174,8 +191,20 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='POST'){
       let body='';for await(const chunk of req)body+=chunk;
       postCount++;assert.equal(req.headers['x-hostbackup-request'],'1');assert.equal(req.headers['x-csrf-token'],'fresh-'+tokenNumber);
-      const params=new URLSearchParams(body);assert.equal(params.get('csrf_token'),'fresh-'+tokenNumber);
+      let params=new URLSearchParams(body);
+      const boundary=(req.headers['content-type']||'').match(/boundary=(?:"([^"]+)"|([^;]+))/);
+      if(boundary){params=new URLSearchParams();for(const part of body.split('--'+(boundary[1]||boundary[2]))){const name=part.match(/name="([^"]+)"/),split=part.indexOf('\r\n\r\n');if(name&&split>=0)params.append(name[1],part.slice(split+4).replace(/\r\n$/,''));}}
+      assert.equal(params.get('csrf_token'),'fresh-'+tokenNumber);
       postActions.push(action);
+      if(actionWiring){
+        assert.ok(['backup','start-export','import','restore-backup','restore-files','verify-backup','stop-backup','recover-services','protect-backup','delete-backup','delete-export','maintenance-preview','maintenance-run','runtime-cleanup-run','import-config'].includes(action),'Unexpected fixture write action '+action);
+        assert.equal(params.get('action'),action,'Posted hidden action and endpoint must match');wiredRequests.push({action,params:Object.fromEntries(params)});
+        if(Object.hasOwn(startedTasks,action))return json(res,{ok:true,redirect:'?active_task='+startedTasks[action]});
+        if(action==='maintenance-preview')return json(res,{ok:true,data:{applied:false,preview_digest:'fixture-saved-digest',keep:[],delete:[{backup_id:'fixture-expired',status:'complete'}]}});
+        if(['maintenance-run','runtime-cleanup-run'].includes(action))return json(res,{ok:true,data:{applied:true,keep:[],delete:[]},message:'Fixture-Wartung abgeschlossen'});
+        if(action==='import-config')return configImportSuccess?json(res,{ok:true,message:'Fixture-Konfiguration importiert'}):json(res,{ok:false,error:'Absichtlicher Import-Testfehler'},400);
+        return json(res,{ok:true,message:'Fixture-Aktion '+action+' abgeschlossen'});
+      }
       if(action&&action.startsWith('repository-')) {
         repositoryPosts.push(action);
         if(action==='repository-init') { assert.equal(repositoryState.initialized,false);repositoryState.initialized=true;return json(res,{ok:true,data:repositoryState,message:'Repository eingerichtet. Wiederherstellungsdatei herunterladen.'}); }
@@ -208,8 +237,8 @@ const server=http.createServer(async(req,res)=>{
     if(action==='csrf-token'){await new Promise(resolve=>setTimeout(resolve,tokenDelay));return json(res,{csrf_token:'fresh-'+(++tokenNumber),expires_at:Date.now()/1000+3600});}
     if(action==='repository-status')return json(res,repositoryState);
     if(action==='source-info')return json(res,failSources?{ok:false,error:'Mountliste momentan nicht erreichbar'}:{selection:savedSources,volumes:sourceVolumes,notices:['Netzfreigaben bewusst auswählen.']},failSources?500:200);
-    if(action==='task-overview')return json(res,{tasks:[{task,state:taskFinished?'finished':'running'}],active_task:taskFinished?null:task,last_success:{backup_id:overviewBackupId,finished_at:overviewFinishedAt},next_run:{local:'14.09.2026 02:00'},last_failure:overviewIssues?{task:'backup-old-failure.log',state:'failed'}:null,pending_service_recovery:overviewIssues?1:0,target:{configured:true,readable:true,path:overviewTarget,available_mb:20000}});
-    if(['backup-preview','storage-info','runtime-cleanup-preview','diagnostics','inspect-backup','verification-report','recovery-sheet'].includes(action))reportRequests++;
+    if(action==='task-overview')return json(res,{tasks:[{task,state:taskFinished?'finished':'running'},...(panelFlowFixture?[{task:'export-panel-fixture.log',state:'finished'}]:[])],active_task:taskFinished?null:task,last_success:{backup_id:overviewBackupId,finished_at:overviewFinishedAt},next_run:{local:'14.09.2026 02:00'},last_failure:overviewIssues?{task:'backup-old-failure.log',state:'failed'}:null,pending_service_recovery:overviewIssues?1:0,target:{configured:true,readable:true,path:overviewTarget,available_mb:20000}});
+    if(['backup-preview','storage-info','runtime-cleanup-preview','diagnostics','inspect-backup','verification-report','recovery-sheet'].includes(action)){reportRequests++;if(reportDelay)await new Promise(resolve=>setTimeout(resolve,reportDelay));}
     if(action==='task-status'){statusCount++;return json(res,{state:taskFinished?'finished':'running',phase:taskFinished?'complete':taskPhase,now:100,mtime:99,content_b64:Buffer.from(longLog()).toString('base64')});}
     if(action==='target-notice'){
       targetNoticeRequests++;
@@ -232,11 +261,29 @@ const server=http.createServer(async(req,res)=>{
       if(mode==='no-targets'){res.end(emptyStopRows);return;}
       await new Promise(resolve=>setTimeout(resolve,mode==='slow'?22000:100));res.end(fragment);return;
     }
-    if(action==='backup-preview')return json(res,{saved_config:true,backup_mode:'snapshot',metadata_mode:'network-compatible',full_baseline_required:true,excludes:['/fixture/backup/***'],source_volumes:[{path:'/',included:true,reason:'System'}],available_mb:20000,baseline_estimate_mb:3000,metadata_probe:probe});
-    if(action==='verification-report')return json(res,verificationReport);
+    if(action==='backup-preview')return json(res,{saved_config:true,backup_mode:'snapshot',metadata_mode:'network-compatible',full_baseline_required:true,excludes:['/fixture/backup/***'],source_volumes:panelFlowFixture?Array.from({length:90},(_,i)=>({path:'/fixture/long-source-'+i,included:true,reason:'Lange Vorprüfung – reine Browser-Testdaten'})):[{path:'/',included:true,reason:'System'}],available_mb:20000,baseline_estimate_mb:3000,metadata_probe:probe});
+    if(action==='verification-report'){
+      if(verificationMode==='missing')return json(res,{backup_id:'fixture-ok',status:'not_checked',content_verified:false,report_available:false,message:'Noch keine Dateiinhaltsprüfung vorhanden.'});
+      if(['invalid','unreadable'].includes(verificationMode))return json(res,{backup_id:'fixture-ok',status:'error',content_verified:false,report_available:false,message:'Prüfbericht kann nicht gelesen werden.',report_error:verificationMode==='invalid'?'Invalid JSON':'Permission denied'});
+      if(verificationMode==='stale')return json(res,{...verificationReport,status:'stale',content_verified:false,report_available:true,message:'Der vorhandene Prüfbericht ist nicht nachweislich dem aktuellen Manifeststand zugeordnet.'});
+      if(verificationMode==='repository')return json(res,{...verificationReport,status:'verified',content_verified:true,report_available:true,verification_scope:'entire-shared-repository-data'});
+      return json(res,verificationReport);
+    }
+    if(action==='storage-info'){
+      if(failPanelReport==='busy'){
+        if(req.headers['x-hostbackup-request']==='1')return json(res,{ok:false,error:'Während einer laufenden Sicherung ist diese Prüfung gesperrt.'},409);
+        res.writeHead(409,{'Content-Type':'text/plain'});res.end('Während einer laufenden Sicherung ist diese Prüfung gesperrt.');return;
+      }
+      return failPanelReport?json(res,{ok:false,error:'Verspäteter Testfehler'},500):json(res,{backups_unique_allocated_bytes:4096,exports_bytes:0,failed_bytes:0,backups:[]});
+    }
+    if(action==='runtime-cleanup-preview')return json(res,actionWiring?{applied:false,preview_digest:'fixture-runtime-digest',keep:[],delete:[],files:[{name:'old.log',directory:'logs',size_bytes:10}]}:{applied:false,keep:[],delete:[],files:[]});
+    if(action==='inspect-backup')return json(res,{status:'ok',checks:[{name:'Strukturfixture',ok:true}]});
+    if(action==='recovery-sheet'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8','Content-Disposition':'attachment; filename="fixture-ok-recovery.txt"'});res.end('Wiederherstellungsblatt ohne Restore');return;}
+    if(action==='restore-plan')return json(res,{text:'Reine Restore-Vorschau\n'+Array.from({length:80},(_,i)=>'Datei '+i+' <img src=x onerror="window.unsafeRestorePlan=true">').join('\n')});
+    if(['download-config','download-export','download-log','diagnostics'].includes(action)){res.writeHead(200,{'Content-Type':'application/octet-stream','Content-Disposition':'attachment; filename="fixture-'+action+'.txt"'});res.end('Isolated browser download fixture');return;}
     if(url.pathname==='/system/images/icons/loxberryhostbackup/icon_64.png'){res.writeHead(200,{'Content-Type':'image/png'});res.end(fs.readFileSync(path.join(repo,'icons/icon_64.png')));return;}
     if(url.pathname.startsWith('/system/')){res.writeHead(204);res.end();return;}
-    htmlCount++;res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(url.searchParams.get('fixture')==='portable'?portableHtml:url.searchParams.get('fixture')==='no-stops'?html.replace(/(data-draft-stops=")[^"]*(")/,'$1[]$2'):html);
+    htmlCount++;res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(url.searchParams.get('fixture')==='verify'?verifySelectionHtml:url.searchParams.get('fixture')==='selection'?selectionHtml:url.searchParams.get('fixture')==='portable'?portableHtml:url.searchParams.get('fixture')==='no-stops'?html.replace(/(data-draft-stops=")[^"]*(")/,'$1[]$2'):html);
   }catch(error){errors.push(error.message);json(res,{error:error.message},500);}
 });
 async function visible(page,selector){await page.locator(selector).waitFor({state:'visible'});}
@@ -251,6 +298,243 @@ async function configurationControls(page) {
   try { await page.locator('#stop-targets-list [name="stop_targets_loaded"]').waitFor({state:'attached'}); }
   catch (error) { throw new Error(error.message+'; stop-target state: '+JSON.stringify(await page.evaluate(()=>({status:document.querySelector('#stop-targets-status')?.textContent,list:document.querySelector('#stop-targets-list')?.innerHTML,saved:document.querySelector('#hostbackup-app')?.dataset.draftStops})))); }
   return page.evaluate(()=>Array.from(document.getElementById('settings-save-form').elements).filter(node=>node.name&&node.name!=='csrf_token').map(node=>[node.name,node.value,node.checked||false]));
+}
+async function checkResultPanels(browser,base) {
+  const previousTaskFinished=taskFinished,previousPhase=taskPhase;
+  panelFlowFixture=true;taskPhase='copying';
+  try {
+    for(const [view,width,height] of [['desktop',1440,1100],['mobile',390,844]]) {
+      taskFinished=false;
+      const page=await browser.newPage({viewport:{width,height}});page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
+      // Observe real scroll behaviour without replacing timers, network or UI code.
+      await page.addInitScript(()=>{window.panelScrollCalls=[];const original=Element.prototype.scrollIntoView;Element.prototype.scrollIntoView=function(...args){window.panelScrollCalls.push(this.id);return original.apply(this,args);};});
+      await page.goto(base);await page.locator('#stop-targets-list [name="stop_targets_loaded"]').waitFor({state:'attached'});await visible(page,'#download-task-log');
+      const initial=await configurationControls(page),postsBefore=postCount;
+      const result=page.locator('#operation-result'),overview=page.locator('#overview-details');
+      assert.equal(await page.locator('#operation-result-toggle').isVisible(),false,'No reopen button is offered before any report exists');
+      await overview.locator(':scope > summary').click();
+      for(const fail of [false,true]) {
+        failPanelReport=fail;reportDelay=500;
+        const late=page.waitForResponse(response=>new URL(response.url()).searchParams.get('action')==='storage-info');
+        await page.locator('[data-load-action="storage-info"]').click();await page.locator('[data-close-view="action-feedback"]').click();
+        await (await late).finished();await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+        assert.equal(await result.isVisible(),false,'Closing pending feedback suppresses its late '+(fail?'failure':'result'));
+        assert.equal(await page.locator('#action-feedback').isVisible(),false);assert.equal(await page.locator('#operation-result-toggle').isVisible(),false);
+      }
+      failPanelReport='busy';reportDelay=0;await page.locator('[data-load-action="storage-info"]').click();
+      await page.waitForFunction(()=>document.querySelector('#action-feedback').textContent.includes('Während einer laufenden Sicherung ist diese Prüfung gesperrt.'));
+      assert.doesNotMatch(await page.locator('#action-feedback').textContent(),/Unerwartete Serverantwort/,'Read-only request asks for JSON and shows the real 409 busy explanation');
+      await page.locator('[data-close-view="action-feedback"]').click();failPanelReport=false;await overview.locator(':scope > summary').click();
+      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      assert.equal(await page.locator('#operation-result-toggle').isVisible(),false,'Closing an empty overview must not create an empty result opener');
+      const navigationFields=()=>page.locator('#backup-list-body form:has([name="browse_id"]),#backup-list-body form:has([name="restore_id"])').evaluateAll(forms=>forms.map(form=>Array.from(form.querySelectorAll('[name="active_task"]')).map(input=>input.value)));
+      assert.deepEqual(await navigationFields(),[[task],[task],[task],[task]],'Task discovered without an URL is carried in every file/restore navigation form');
+      await page.locator('#task-history').selectOption('export-panel-fixture.log');assert.deepEqual(await navigationFields(),Array.from({length:4},()=>['export-panel-fixture.log']),'Explicit task selection updates all navigation fields without duplicates');
+      await page.locator('#task-history').selectOption(task);
+      const warning=page.locator('#backup-list-body tr:has([name="backup_id"][value="fixture-second"]) .backup-validation-details');
+      await warning.waitFor({state:'attached'});
+      assert.equal(await warning.evaluate(node=>node.open),false,'Original completion warnings start collapsed');
+      assert.match(await warning.locator(':scope > summary').textContent(),/Hinweise ansehen/);
+      const reportsBefore=reportRequests;await warning.locator(':scope > summary').focus();await page.keyboard.press('Enter');
+      assert.ok((await warning.innerText()).includes(validationWarningName));assert.ok((await warning.innerText()).includes(validationWarningValue),JSON.stringify(await warning.innerText()));
+      assert.equal(await warning.locator('img,script').count(),0);assert.equal(await page.evaluate(()=>window.unsafeValidation),undefined,'Backend warning fields must be escaped, not inserted as HTML');
+      const warningBounds=await warning.evaluate(node=>({right:node.getBoundingClientRect().right,overflow:node.scrollWidth-node.clientWidth}));assert.ok(warningBounds.right<=width+1&&warningBounds.overflow<=1,view+' original warning details stay within the viewport '+JSON.stringify(warningBounds));
+      await warning.screenshot({path:path.join(temp,'completion-warning-'+view+'.png')});
+      assert.equal(reportRequests,reportsBefore,'Opening original warnings does not request the unrelated verification report');assert.equal(postCount,postsBefore);
+      const fragmentRefresh=page.waitForResponse(response=>new URL(response.url()).searchParams.get('action')==='backup-list');taskFinished=true;await fragmentRefresh;
+      await page.waitForFunction(()=>document.querySelector('#task-state').textContent.includes('abgeschlossen'));
+      assert.equal(await warning.evaluate(node=>node.open),true,'Refreshing the same backup preserves its expanded completion warnings');
+      await warning.locator(':scope > summary').focus();await page.keyboard.press('Space');assert.equal(await warning.evaluate(node=>node.open),false);
+      receipts.push(view+': original completion warnings are directly readable, keyboard-collapsible and safely escaped; fragment refresh preserves the open state without fetching an integrity report');
+
+      await overview.locator(':scope > summary').click();await page.locator('[data-load-action="backup-preview"]').click();
+      await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('/fixture/long-source-89'));
+      assert.equal(await result.locator('[data-close-view="operation-result"]').count(),1,'Every rendered report has its own close control');
+      assert.equal(await page.evaluate(()=>document.activeElement.id),'operation-result','Explicit report moves keyboard focus to the result');
+      const longBounds=await result.boundingBox();assert.ok(longBounds.height>height,'Fixture reproduces a report taller than the viewport');assert.ok(longBounds.y>=-1&&longBounds.y<height-20,'New long report starts in the viewport');
+      const previewHtml=await result.innerHTML();
+      await result.locator('[data-close-view="operation-result"]').click();assert.equal(await result.isVisible(),false);await visible(page,'#operation-result-toggle');
+      await page.locator('#operation-result-toggle').focus();await page.keyboard.press('Enter');assert.equal(await result.isVisible(),true);assert.equal(await result.innerHTML(),previewHtml,'Reopening does not discard or rerun the original report');
+      assert.equal(await overview.evaluate(node=>node.open),true);await overview.locator(':scope > summary').click();await result.waitFor({state:'hidden'});assert.equal(await result.isVisible(),false,'Closing overview hides the complete report rather than leaving an orphan result');
+      await page.locator('#operation-result-toggle').click();assert.equal(await result.innerHTML(),previewHtml);
+      assert.deepEqual(await configurationControls(page),initial);assert.equal(postCount,postsBefore,'Reading and toggling preview must not change settings or start a job');
+      receipts.push(view+': long backup preview closes completely through its own button or overview disclosure, reopens unchanged and preserves every form control');
+
+      await page.locator('#backup-root-input').fill('/fixture/unsaved-panel-test');
+      const draft=await configurationControls(page);
+      for(const action of ['storage-info','runtime-cleanup-preview','inspect-backup','verification-report']) {
+        if(['storage-info','runtime-cleanup-preview'].includes(action)) {await overview.evaluate(node=>node.open=true);await page.locator('[data-load-action="'+action+'"]').click();}
+        else {await page.locator(backupRow+' .backup-extra-actions').evaluate(node=>node.open=true);await page.locator(backupRow+' form:has([name="action"][value="'+action+'"]) button[type="submit"]').click();}
+        try {await visible(page,'#operation-result');} catch(error) {throw new Error(view+' '+action+': '+error.message+'; state='+JSON.stringify(await page.evaluate(()=>({feedback:document.querySelector('#action-feedback').textContent,result:document.querySelector('#operation-result').textContent,overview:document.querySelector('#overview-details').open}))));}
+        await page.waitForFunction(()=>document.activeElement.id==='operation-result');
+        const contents=await result.innerHTML();await result.locator('[data-close-view="operation-result"]').click();assert.equal(await result.isVisible(),false,action+' is fully closable');
+        await page.locator('#operation-result-toggle').click();assert.equal(await result.innerHTML(),contents,action+' reopens exactly the existing result');
+        assert.deepEqual(await configurationControls(page),draft,action+' close/reopen preserves all unsaved settings');
+      }
+      const recoveryDownload=page.waitForEvent('download');await page.locator(backupRow+' form:has([name="action"][value="recovery-sheet"]) button[type="submit"]').click();
+      assert.equal((await recoveryDownload).suggestedFilename(),'fixture-ok-recovery.txt');assert.deepEqual(await configurationControls(page),draft,'Downloading the recovery sheet does not discard the open report or draft');
+      assert.equal(postCount,postsBefore,'All report views use read-only requests');
+      await page.locator('.topbar-actions button[type="submit"]').click();await visible(page,'#action-feedback');
+      assert.match(await page.locator('#action-feedback').textContent(),/Zuerst Änderungen speichern/);assert.equal(postCount,postsBefore,'Draft must still block backup after any panel interaction');
+      const feedbackHtml=await page.locator('#action-feedback').innerHTML();await page.locator('[data-close-view="action-feedback"]').click();assert.equal(await page.locator('#action-feedback').isVisible(),false);
+      await page.locator('#action-feedback-toggle').focus();await page.keyboard.press('Enter');assert.equal(await page.locator('#action-feedback').innerHTML(),feedbackHtml);assert.deepEqual(await configurationControls(page),draft);
+      await page.locator('#backup-root-input').fill('/fixture/backup');assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true');
+      receipts.push(view+': storage, cleanup, structure and integrity results plus action messages close/reopen without losing drafts, performing writes or bypassing the save guard; recovery-sheet download stays separate');
+
+      await overview.evaluate(node=>node.open=true);await page.locator('[data-load-action="backup-preview"]').click();
+      await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('/fixture/long-source-89'));
+      reportDelay=1000;
+      const closedLateReport=page.waitForResponse(response=>new URL(response.url()).searchParams.get('action')==='storage-info');
+      await page.locator('[data-load-action="storage-info"]').click();await result.locator('[data-close-view="operation-result"]').click();
+      await (await closedLateReport).finished();await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      assert.equal(await result.isVisible(),false,'A report response arriving after explicit close must not reopen its view');
+      await page.locator('#operation-result-toggle').click();
+      const startedLateReport=page.waitForResponse(response=>new URL(response.url()).searchParams.get('action')==='storage-info');
+      await page.locator('[data-load-action="storage-info"]').click();
+      taskFinished=false;
+      const monitorScrollBefore=await page.evaluate(()=>window.panelScrollCalls.filter(id=>id==='task-monitor').length);
+      const started=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).searchParams.get('action')==='backup');
+      await page.locator('.topbar-actions button[type="submit"]').click();await started;await visible(page,'#task-monitor-content');
+      await page.waitForFunction(()=>document.activeElement.id==='task-monitor');
+      await (await startedLateReport).finished();await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));reportDelay=0;
+      assert.equal(await result.isVisible(),false);assert.equal(await overview.evaluate(node=>node.open),false,'Successful explicit start closes the old check');
+      const monitorBounds=await page.locator('#task-monitor').boundingBox();assert.ok(monitorBounds.y>=-1&&monitorBounds.y<height-20,'Live status is immediately visible after start, without manual scrolling');
+      assert.equal(await page.evaluate(()=>window.panelScrollCalls.filter(id=>id==='task-monitor').length),monitorScrollBefore+1,'Explicit start scrolls to live status exactly once');
+      assert.equal(postCount,postsBefore+1,'One deliberate backup start is the only POST');
+      await page.locator('#task-monitor').screenshot({path:path.join(temp,'live-start-'+view+'.png')});
+      await page.locator('[data-close-view="task-monitor"]').click();assert.equal(await page.locator('#task-monitor-content').isVisible(),false);assert.equal(await page.locator('#task-state').isVisible(),true,'Compact current state remains visible while live details are closed');
+      if(await page.locator('#action-feedback').isVisible())await page.locator('[data-close-view="action-feedback"]').click();
+      await page.evaluate(()=>window.scrollTo(0,0));
+      const scrollSnapshot=await page.evaluate(()=>({count:window.panelScrollCalls.length,y:window.scrollY}));
+      for(let i=0;i<2;i++)await page.waitForResponse(response=>new URL(response.url()).searchParams.get('action')==='task-status',{timeout:15000});
+      assert.equal(await page.locator('#task-monitor-content').isVisible(),false);assert.equal(await result.isVisible(),false);assert.equal(await page.locator('#action-feedback').isVisible(),false);
+      assert.deepEqual(await page.evaluate(()=>({count:window.panelScrollCalls.length,y:window.scrollY})),scrollSnapshot,'Automatic polling neither reopens closed views nor steals page scroll');
+      await page.locator('#task-monitor-toggle').focus();await page.keyboard.press('Enter');assert.equal(await page.locator('#task-monitor-content').isVisible(),true);
+      await page.locator('#task-monitor-toggle').click();assert.equal(await page.locator('#task-monitor-content').isVisible(),false);
+      assert.equal(postCount,postsBefore+1,'Closing or reopening live details must never stop or start a job');assert.deepEqual(await configurationControls(page),initial);
+      receipts.push(view+': successful backup start collapses the old preview and focuses live status once; late reports cannot reopen closed results or steal live focus, real polling preserves visibility/scroll, and closing is not cancellation');
+      await page.close();
+
+      const selected=await browser.newPage({viewport:{width,height}});selected.on('pageerror',error=>errors.push(error.message));selected.on('dialog',dialog=>dialog.accept());
+      await selected.goto(base+'?fixture=selection');await selected.locator('#stop-targets-list [name="stop_targets_loaded"]').waitFor({state:'attached'});
+      const emptyStart=selected.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).searchParams.get('action')==='backup');
+      await selected.locator('.topbar-actions button[type="submit"]').click();await emptyStart;await selected.waitForFunction(()=>document.activeElement.id==='task-monitor');
+      assert.equal(await selected.locator('#operation-result-toggle').isVisible(),false,'Starting without a prior result must not reveal an empty report opener');
+      const selectedPosts=postCount,selectedHtml=htmlCount;
+      await selected.locator('#backup-root-input').fill('/fixture/unsaved-while-restoring');
+      await selected.locator('#restore-panel [name="restore_destination"]').fill('/fixture/rescue-root');
+      await selected.locator('#restore-panel [name="restore_challenge"]').fill('fixture-ok');
+      await selected.locator('#backup-browser details').evaluate(node=>node.open=true);
+      await selected.locator('#backup-browser [name="path"]').fill('etc/hostname');await selected.locator('#backup-browser [name="destination"]').fill('/fixture/restored-files');
+      const selectionInputs=()=>selected.locator('#restore-panel input,#restore-panel textarea,#backup-browser input').evaluateAll(nodes=>nodes.filter(node=>node.name!=='csrf_token').map(node=>[node.name,node.value,node.checked]));
+      const selectionDraft=await selectionInputs(),settingsDraft=await configurationControls(selected);
+      await selected.locator('[data-restore-preview]').click();await visible(selected,'#restore-plan-details');
+      await selected.waitForFunction(()=>document.querySelector('#restore-plan-output').textContent.includes('Datei 79'));
+      assert.equal(await selected.locator('#restore-plan-details').evaluate(node=>node.open),true);assert.equal(await selected.locator('#restore-plan-output img').count(),0);assert.equal(await selected.evaluate(()=>window.unsafeRestorePlan),undefined);
+      const plan=await selected.locator('#restore-plan-output').textContent();await selected.locator('#restore-plan-details > summary').focus();await selected.keyboard.press('Enter');assert.equal(await selected.locator('#restore-plan-output').isVisible(),false);
+      await selected.keyboard.press('Enter');assert.equal(await selected.locator('#restore-plan-output').textContent(),plan);
+      for(const id of ['backup-browser','restore-panel']) {
+        await selected.locator('[data-close-view="'+id+'"]').click();assert.equal(await selected.locator('#'+id).isVisible(),false);
+        await selected.locator('[data-show-view="'+id+'"]').focus();await selected.keyboard.press('Enter');assert.equal(await selected.locator('#'+id).isVisible(),true);
+        assert.deepEqual(await selectionInputs(),selectionDraft);assert.deepEqual(await configurationControls(selected),settingsDraft);
+      }
+      assert.equal(htmlCount,selectedHtml,'Closing and reopening file/restore views must not navigate');assert.equal(postCount,selectedPosts,'Restore preview and visibility controls never execute a restore');
+      receipts.push(view+': actual CGI file-browser and restore panels close/reopen in place with all drafts intact; restore preview is keyboard-collapsible, escaped and read-only');
+      await selected.close();
+    }
+  } finally {panelFlowFixture=false;reportDelay=0;failPanelReport=false;taskFinished=previousTaskFinished;taskPhase=previousPhase;}
+}
+async function checkActionWiring(browser,base) {
+  const page=await browser.newPage({viewport:{width:1440,height:1100}});page.on('pageerror',error=>errors.push(error.message));
+  let acceptDialog=true,dialogs=0;page.on('dialog',async dialog=>{dialogs++;if(acceptDialog)await dialog.accept();else await dialog.dismiss();});
+  const previousFinished=taskFinished;taskFinished=false;actionWiring=true;overviewIssues=true;stopTargetsRich=true;
+  const formFor=(action,id)=>page.locator((id?'#backup-list-body tr:has([name="backup_id"][value="'+id+'"]) ':'')+'form:has([name="action"][value="'+action+'"])').first();
+  async function openForm(action,id){const form=formFor(action,id);await form.evaluate(node=>{for(let parent=node.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;});return form;}
+  async function submit(action,id,cancel=false){
+    const form=await openForm(action,id),before=wiredRequests.length,beforeDialogs=dialogs;acceptDialog=!cancel;
+    const internal=form.locator('button[type="submit"]'),button=await internal.count()?internal.first():page.locator('button[form="'+await form.getAttribute('id')+'"]');
+    await button.evaluate(node=>{for(let parent=node.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;});
+    if(cancel){await button.click();assert.equal(dialogs,beforeDialogs+1,action+' requests a real confirmation');assert.equal(wiredRequests.length,before,action+' cancellation sends no POST');acceptDialog=true;return;}
+    const response=page.waitForResponse(reply=>reply.request().method()==='POST'&&new URL(reply.url()).searchParams.get('action')===action);
+    await Promise.all([response,button.click()]);await page.waitForFunction(()=>!Array.from(document.querySelectorAll('form')).some(node=>node.getAttribute('aria-busy')==='true'));
+    assert.equal(wiredRequests.length,before+1);assert.equal(wiredRequests.at(-1).action,action);return wiredRequests.at(-1).params;
+  }
+  try {
+    await page.goto(base+'?fixture=selection');await page.locator('#stop-targets-list [name="stop_targets_loaded"]').waitFor({state:'attached'});await visible(page,'#download-task-log');
+    const settingsBefore=await configurationControls(page),initialPosts=postCount;
+    for(const mode of ['missing','invalid','unreadable','stale','available','repository']){
+      verificationMode=mode;const form=await openForm('verification-report','fixture-ok'),response=page.waitForResponse(reply=>new URL(reply.url()).searchParams.get('action')==='verification-report');
+      await form.locator('button[type="submit"]').click();await response;await page.waitForFunction(()=>document.activeElement.id==='operation-result');
+      const text=await page.locator('#operation-result').innerText();
+      if(mode==='missing'){assert.match(text,/Noch keine Dateiinhaltsprüfung vorhanden/);assert.equal(await page.locator('#verification-download').count(),0);assert.doesNotMatch(text,/Geprüft am:/);}
+      if(['invalid','unreadable'].includes(mode)){assert.match(text,/Prüfbericht kann nicht gelesen werden/);assert.equal(await page.locator('#verification-download').count(),0);assert.doesNotMatch(text,/Dateien stimmen mit/);}
+      if(mode==='stale'){assert.match(text,/nicht nachweislich dem aktuellen Manifeststand zugeordnet/);assert.doesNotMatch(text,/Dateien stimmen mit/);}
+      if(mode==='available'){assert.match(text,/Dateien stimmen mit/);assert.equal(await page.locator('#verification-download').count(),1);}
+      if(mode==='repository'){assert.match(text,/Datenintegrität des gemeinsamen Repositorys/);assert.doesNotMatch(text,/Dateien stimmen mit der gespeicherten Prüfsummen/);assert.equal(await page.locator('#verification-download').count(),1);}
+      await page.locator('[data-close-view="operation-result"]').click();
+    }
+    assert.equal(postCount,initialPosts);assert.deepEqual(await configurationControls(page),settingsBefore);
+    receipts.push('Actual report button renders missing, invalid, unreadable, stale and present report contracts distinctly; unavailable reports have no invented date/download, stale results claim no successful verification');
+
+    for(const key of ['Enter','Space']){
+      await page.locator('#backup-root-input').fill('/fixture/keyboard-draft');
+      const picker=page.locator('[data-backup-root="/fixture/backup"]');await picker.evaluate(node=>{for(let parent=node.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;});
+      assert.equal(await picker.evaluate(node=>node.tagName),'BUTTON');await picker.focus();await page.keyboard.press(key);assert.equal(await page.locator('#backup-root-input').inputValue(),'/fixture/backup');
+    }
+    await page.locator('#backup-root-input').fill('/fixture/click-draft');await page.locator('[data-backup-root="/fixture/backup"]').click();assert.equal(await page.locator('#backup-root-input').inputValue(),'/fixture/backup');
+    assert.equal(await page.locator('[data-backup-root="/fixture/backup"]').evaluate(node=>{const transfer=new DataTransfer();node.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:transfer}));return transfer.getData('text/plain');}),'/fixture/backup');
+    await page.locator('#backup-root-input').evaluate(node=>{const transfer=new DataTransfer();transfer.setData('text/plain','/fixture/drag-target');node.dispatchEvent(new DragEvent('drop',{bubbles:true,dataTransfer:transfer}));});
+    assert.equal(await page.locator('#backup-root-input').inputValue(),'/fixture/drag-target');assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false');assert.equal(postCount,initialPosts);
+    await page.locator('#backup-root-input').fill('/fixture/backup');
+    await page.locator('.stop-target-panel').evaluate(node=>{node.open=true;node.querySelectorAll('details').forEach(item=>item.open=true);});
+    await page.locator('[data-stop-target-preset="clear"]').click();assert.equal(await page.locator('#stop-targets-list [name="stop_targets"]:checked').count(),0);
+    await page.locator('[data-stop-target-preset="recommended"]').click();assert.equal(await page.locator('#stop-targets-list [name="stop_targets"]:checked').count(),2);
+    await page.locator('#stop-targets-list [name="stop_targets"][value="docker:fixture-container"]').uncheck();assert.deepEqual(await configurationControls(page),settingsBefore);assert.equal(postCount,initialPosts);
+    receipts.push('Real target-picker buttons support Enter, Space and click; drop fills only the draft and marks it unsaved, without saving or starting a backup');
+    receipts.push('Service clear/recommended presets operate on actual CGI checkboxes, keep changes unsaved and can return exactly to the saved baseline without a POST');
+
+    await page.locator('#restore-panel [name="restore_destination"]').fill('/fixture/rescue-root');await page.locator('#restore-panel [name="restore_challenge"]').fill('fixture-ok');await page.locator('#restore-panel [name="confirm_restore"]').check();
+    await page.locator('#backup-browser details').evaluate(node=>node.open=true);await page.locator('#backup-browser [name="path"]').fill('etc/hostname');await page.locator('#backup-browser [name="destination"]').fill('/fixture/restored-files');
+    await page.locator('[name="backup_archive"]').setInputFiles({name:'fixture-backup.tar.gz',mimeType:'application/gzip',buffer:Buffer.from('Isolated upload fixture, never sent to a real backend')});
+    await submit('restore-backup',null,true);
+    for(const action of ['backup','start-export','import','restore-backup','restore-files','verify-backup']){
+      await page.locator('#overview-details').evaluate(node=>node.open=true);await page.locator('[data-load-action="storage-info"]').click();await page.waitForFunction(()=>document.activeElement.id==='operation-result');
+      const params=await submit(action,['start-export','verify-backup'].includes(action)?'fixture-ok':null);await page.waitForFunction(()=>document.activeElement.id==='task-monitor');
+      assert.equal(await page.locator('#operation-result').isVisible(),false,action+' hides old results');assert.equal(await page.locator('#task-monitor-content').isVisible(),true,action+' shows live status');
+      await page.waitForFunction(expected=>document.querySelector('#task-history').value===expected,startedTasks[action]);
+      assert.ok((await page.locator('#backup-list-body [name="active_task"]').evaluateAll(nodes=>nodes.map(node=>node.value))).every(value=>value===startedTasks[action]),action+' navigation carries its actual task prefix');
+      if(['start-export','verify-backup','restore-backup','restore-files'].includes(action))assert.equal(params.backup_id,'fixture-ok');
+      if(action==='restore-backup'){assert.equal(params.restore_destination,'/fixture/rescue-root');assert.equal(params.restore_challenge,'fixture-ok');assert.equal(params.confirm_restore,'1');}
+      if(action==='restore-files'){assert.equal(params.path,'etc/hostname');assert.equal(params.destination,'/fixture/restored-files');}
+      if(action==='import')assert.match(params.backup_archive,/Isolated upload fixture/);
+    }
+    await page.goto(base+'?fixture=verify&active_task=verify-fixture.log');await page.waitForFunction(()=>document.querySelector('#task-history').value==='verify-fixture.log');
+    assert.match(await page.locator('#task-state').textContent(),/Integritätsprüfung/,'Verification log remains selected after rendering/navigating the actual CGI');
+    await page.locator('#task-history').selectOption(task);await visible(page,'#stop-task-form');
+    receipts.push('Backup, export, multipart archive import, system restore, file restore and content verification submit the correct action/parameters with fresh CSRF and switch old results to live status; cancelled restore sends nothing');
+    for(const [action,id] of [['stop-backup',null],['recover-services',null],['delete-backup','fixture-ok'],['delete-export','fixture-second']]){
+      await submit(action,id,true);const params=await submit(action,id);if(id)assert.equal(params.backup_id,id);if(action==='stop-backup')assert.equal(params.task,task);
+    }
+    assert.equal((await submit('protect-backup','fixture-ok')).protected,'1');assert.equal((await submit('protect-backup','fixture-second')).protected,'','CGI uses an empty protected field to explicitly remove protection');
+    receipts.push('Stop, service recovery, backup/export deletion require confirmation and send no request when cancelled; protection and unprotection submit the correct backup ID and flag (isolated fixture only)');
+    await submit('maintenance-preview');await submit('maintenance-run',null,true);assert.equal((await submit('maintenance-run')).preview_digest,'fixture-saved-digest');
+    await page.locator('#overview-details').evaluate(node=>node.open=true);await page.locator('[data-load-action="runtime-cleanup-preview"]').click();await page.waitForFunction(()=>document.querySelector('#operation-result [name="action"][value="runtime-cleanup-run"]'));
+    await submit('runtime-cleanup-run',null,true);assert.equal((await submit('runtime-cleanup-run')).preview_digest,'fixture-runtime-digest');
+    receipts.push('Both maintenance execution buttons require confirmation and submit precisely the displayed preview digest; cancellation cannot execute cleanup');
+    for(const action of ['download-config','download-export','download-log','diagnostics']){
+      const download=page.waitForEvent('download');
+      if(['download-log','diagnostics'].includes(action))await page.locator(action==='download-log'?'#download-task-log':'a[href*="action=diagnostics"]').click();
+      else {const form=await openForm(action,action==='download-export'?'fixture-second':null);await form.locator('button[type="submit"]').click();}
+      assert.equal((await download).suggestedFilename(),'fixture-'+action+'.txt');
+    }
+    await page.locator('#task-log').evaluate(node=>{node.scrollTop=0;node.dispatchEvent(new Event('scroll'));});await page.locator('#log-follow').click();assert.equal(await page.locator('#task-log').evaluate(node=>node.scrollHeight-node.clientHeight-node.scrollTop<2),true);
+    receipts.push('Config/export/log/diagnostics download controls produce actual attachments without navigation; log-follow returns the log viewport to its end');
+    await page.locator('[name="settings_file"]').setInputFiles({name:'fixture-settings.json',mimeType:'application/json',buffer:Buffer.from('{}')});await page.locator('#backup-root-input').fill('/fixture/import-draft');
+    await submit('import-config',null,true);await submit('import-config');assert.match(await page.locator('#action-feedback').textContent(),/Absichtlicher Import-Testfehler/);assert.equal(await page.locator('#backup-root-input').inputValue(),'/fixture/import-draft');
+    await page.locator('#backup-root-input').fill('/fixture/backup');configImportSuccess=true;const navigated=page.waitForURL(base);await submit('import-config');await navigated;
+    await page.waitForLoadState('domcontentloaded');await page.locator('#stop-targets-list [name="stop_targets_loaded"]').waitFor({state:'attached'});
+    receipts.push('Configuration import respects cancellation with unsaved edits, preserves draft after failure and navigates only after explicit successful replacement');
+  } finally {actionWiring=false;verificationMode='available';configImportSuccess=false;overviewIssues=false;stopTargetsRich=false;taskFinished=previousFinished;await page.close();}
 }
 async function checkStopTargets(browser,base) {
   const page=await browser.newPage({viewport:{width:1440,height:1100}});page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
@@ -532,6 +816,11 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     const base='http://127.0.0.1:'+server.address().port+'/';
     const launch={headless:true};if(process.env.HOSTBACKUP_BROWSER_EXECUTABLE)launch.executablePath=process.env.HOSTBACKUP_BROWSER_EXECUTABLE;
     browser=await chromium.launch(launch);
+    if(['panels','actions'].includes(process.env.HOSTBACKUP_BROWSER_FOCUS)) {
+      if(process.env.HOSTBACKUP_BROWSER_FOCUS==='actions'){await checkActionWiring(browser,base);const afterImport=await browser.newPage();await afterImport.close();}else await checkResultPanels(browser,base);assert.deepEqual(errors,[]);
+      const result={status:'passed',tests:receipts,artifacts:temp,renderer:'actual CGI with mocked backend; focused result panels',browser:await browser.version()};
+      fs.writeFileSync(path.join(temp,'receipt.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));return;
+    }
     const page=await browser.newPage({viewport:{width:1440,height:1100}});page.on('pageerror',error=>errors.push(error.message));
     page.on('dialog',dialog=>dialog.accept());
     await page.goto(base+'legacy-ui');
@@ -931,7 +1220,8 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     await page.locator(backupRow+' form:has([name="action"][value="verification-report"]) button[type="submit"]').click();await visible(page,'#verification-download');assert.match(await page.locator('#operation-result').textContent(),/Persönlich dokumentierter Restore-Test: Erfolgreich/);receipts.push('External restore test recorded with UTC date and displayed only as manual evidence');
     await summary.click();await page.locator('[data-load-action="backup-preview"]').click();await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('vollständige Basiskopie'));
     assert.match(await page.locator('#operation-result .metadata-probe').textContent(),/CIFS erzwingt feste Rechte/);
-    await summary.click();assert.equal(await page.locator('#operation-result').isVisible(),true,'Loaded results remain visible when details close');
+    await summary.click();await page.locator('#operation-result').waitFor({state:'hidden'});assert.equal(await page.locator('#operation-result').isVisible(),false,'Closing details hides the complete loaded report');
+    assert.equal(await page.locator('#operation-result-toggle').isVisible(),true,'Closed report remains explicitly reopenable');
     await page.screenshot({path:path.join(temp,'desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});
     await checkSourceHelp(page,'mobile');
@@ -963,6 +1253,9 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     assert.ok(overflow.scroll<=overflow.width+2,JSON.stringify(overflow));
     await page.screenshot({path:path.join(temp,'mobile.png'),fullPage:true});receipts.push('Mobile labels, delegated tooltip inside viewport and no page overflow');
     await page.keyboard.press('Escape');assert.equal(await mobileActionButton.getAttribute('aria-expanded'),'false');
+    await page.close();
+    await checkResultPanels(browser,base);
+    await checkActionWiring(browser,base);
     await checkStopTargets(browser,base);
     await checkMaintenance(browser,base);
     assert.deepEqual(errors,[]);

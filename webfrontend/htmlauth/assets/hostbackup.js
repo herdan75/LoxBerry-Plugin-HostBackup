@@ -83,6 +83,7 @@
   var userSelectedTask = false, taskInFlight = false, overviewInFlight = false, followLog = true, finalTask = '';
   var csrfRefresh = null, busyForms = new WeakSet(), busyCount = 0, pendingImport = false, intentionalNavigation = false;
   var reportDownloadUrl = null;
+  var viewOpeners = Object.create(null), reportSequence = 0, backupListSequence = 0;
   var sourceVolumes = [], sourceLoading = false;
   var stopTargetsLoading = false;
   var repositoryState = null, repositoryLoading = false, repositoryWriting = false, repositoryStatusTarget = null;
@@ -216,7 +217,57 @@
     } catch (error) { feedback(error.name === 'AbortError' ? 'Die Repository-Antwort dauert zu lange. Vor einem erneuten Versuch den Status prüfen.' : error.message, 'error'); }
     finally { repositoryWriting = false; setBusy(form, false); await loadRepositoryStatus(); }
   }
-  function feedback(text, kind) { var node = byId('action-feedback'); node.textContent = text; node.className = 'notice ' + (kind || ''); node.hidden = false; }
+  function viewToggle(id) {
+    return byId(id + '-toggle') || app.querySelector('[data-show-view="' + id + '"]');
+  }
+  function focusView(node) {
+    if (!node) return;
+    if (!node.hasAttribute('tabindex')) node.tabIndex = -1;
+    node.focus({ preventScroll: true }); node.scrollIntoView({ block: 'start' });
+  }
+  function setView(id, visible, focus) {
+    var node = byId(id); if (!node) return;
+    var emptyResult = id === 'operation-result' && !node.childElementCount;
+    if (emptyResult) visible = false;
+    var content = id === 'task-monitor' ? byId('task-monitor-content') : node;
+    if (!content) return;
+    var hadFocus = content.contains(document.activeElement), toggle = viewToggle(id);
+    content.hidden = !visible;
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', visible ? 'true' : 'false');
+      if (id === 'task-monitor') toggle.textContent = visible ? 'Live-Status ausblenden' : 'Live-Status anzeigen';
+      else toggle.hidden = visible || emptyResult;
+    }
+    if (visible && focus) focusView(node);
+    else if (!visible && hadFocus && focus !== false) {
+      var opener = viewOpeners[id];
+      if (!opener || !opener.isConnected || !opener.getClientRects().length) opener = toggle;
+      if (opener) opener.focus({ preventScroll: true });
+    }
+  }
+  function closeViewButton(id, label) {
+    var button = el('button', label || 'Schliessen', 'view-close');
+    button.type = 'button'; button.dataset.role = 'none'; button.dataset.closeView = id;
+    button.setAttribute('aria-controls', id === 'task-monitor' ? 'task-monitor-content' : id);
+    return button;
+  }
+  function feedback(text, kind, sequence) {
+    var node = byId('action-feedback'), toggle = viewToggle('action-feedback');
+    if (!toggle) {
+      toggle = el('button', 'Letzte Meldung anzeigen', 'view-reopen'); toggle.type = 'button'; toggle.dataset.role = 'none';
+      toggle.id = 'action-feedback-toggle'; toggle.dataset.showView = 'action-feedback'; toggle.setAttribute('aria-controls', 'action-feedback'); node.before(toggle);
+    }
+    node.replaceChildren(el('span', text), closeViewButton('action-feedback', 'Meldung schliessen'));
+    if (sequence !== undefined) node.dataset.reportSequence = String(sequence); else delete node.dataset.reportSequence;
+    node.className = 'notice dismissible-notice ' + (kind || ''); setView('action-feedback', true, false);
+  }
+  function prepareReport(opener) {
+    if (reportDownloadUrl) { URL.revokeObjectURL(reportDownloadUrl); reportDownloadUrl = null; }
+    var target = byId('operation-result'); target.replaceChildren();
+    var toolbar = el('div', undefined, 'result-toolbar'); toolbar.append(closeViewButton('operation-result', 'Ergebnis schliessen')); target.append(toolbar);
+    if (opener) viewOpeners['operation-result'] = opener;
+    setView('operation-result', true, false); return target;
+  }
   function requireSaved() {
     if (!dirty()) return true;
     feedback('Zuerst Änderungen speichern: Backup, Vorschau und Wartung verwenden ausschliesslich den gespeicherten Stand. Deine Eingaben bleiben erhalten.', 'warning');
@@ -225,6 +276,8 @@
   function url(action, params) { var value = new URL(root.location.pathname, root.location.href); value.searchParams.set('action', action); Object.keys(params || {}).forEach(function (key) { value.searchParams.set(key, params[key]); }); value.searchParams.set('_', Date.now()); return value.href; }
   async function request(action, params, options) {
     options = Object.assign({ cache: 'no-store', credentials: 'same-origin' }, options || {});
+    // JSON errors must also be returned for GET actions (including lock refusal).
+    options.headers = Object.assign({ 'X-HostBackup-Request': '1' }, options.headers || {});
     var controller = new AbortController(), timeout = root.setTimeout(function () { controller.abort(); }, options.timeout || 20000);
     options.signal = controller.signal; delete options.timeout;
     try {
@@ -316,25 +369,67 @@
     }
     target.append(panel);
   }
-  function renderRequestError(error) {
+  function renderRequestError(error, opener) {
     if (!error.data || (!error.data.metadata_probe && !error.data.preflight)) return;
-    var target = byId('operation-result'); target.replaceChildren(); target.hidden = false;
+    var target = prepareReport(opener);
     target.append(el('h3', 'Backup nicht gestartet'));
     var preflight = error.data.preflight || {};
     (preflight.checks || []).filter(function (check) { return check.ok === false; }).forEach(function (check) { target.append(el('p', check.name + ': ' + (check.value || 'Prüfung fehlgeschlagen'))); });
     renderMetadataProbe(target, error.data.metadata_probe || preflight.metadata_probe);
     var details = el('details'); details.append(el('summary', 'Vollständige Vorprüfung'), el('pre', JSON.stringify(preflight, null, 2))); target.append(details);
-    target.scrollIntoView({ block: 'nearest' });
+    focusView(target);
+  }
+  function syncActiveTaskLinks(target) {
+    if (!currentTask) return;
+    all('form[data-return-anchor]', target).forEach(function (form) {
+      if ((form.method || 'get').toLowerCase() !== 'get' || form.querySelector('[name="active_task"]')) return;
+      var input = el('input'); input.type = 'hidden'; input.name = 'active_task'; input.dataset.role = 'none'; form.append(input);
+    });
+    all('[name="active_task"]', target).forEach(function (input) { input.value = currentTask; });
+    all('a[href]', target).forEach(function (link) {
+      var address = new URL(link.href, root.location.href);
+      if (address.origin === root.location.origin && address.pathname === root.location.pathname && (address.searchParams.has('active_task') || address.searchParams.has('browse_id') || address.searchParams.has('restore_id'))) {
+        address.searchParams.set('active_task', currentTask); link.href = address.href;
+      }
+    });
   }
   async function fragment(action, target) {
     if (!target) return;
     if (action === 'stop-targets') return loadStopTargets();
     if (action === 'target-notice') { target.setAttribute('role', 'status'); target.setAttribute('aria-live', 'polite'); target.setAttribute('aria-atomic', 'true'); target.setAttribute('aria-busy', 'true'); }
     var controller = new AbortController(), timer = root.setTimeout(function () { controller.abort(); }, 20000);
+    var listSequence = action === 'backup-list' ? ++backupListSequence : 0;
     try {
       var response = await root.fetch(url(action, currentTask ? { active_task: currentTask } : {}), { cache: 'no-store', credentials: 'same-origin', signal: controller.signal });
       if (!response.ok) throw new Error('HTTP ' + response.status);
-      target.innerHTML = await response.text(); enhanceTables(target);
+      var markup = await response.text();
+      if (listSequence && listSequence !== backupListSequence) return;
+      // Refresh data without throwing away open disclosures or an unfinished
+      // personal restore-test form. Read the state at response time, not start.
+      var rowStates = Object.create(null);
+      if (action === 'backup-list') all('tr', target).forEach(function (row) {
+        var identity = row.querySelector('[name="backup_id"]') || row.querySelector('[data-backup-id]');
+        var key = identity && (identity.value || identity.dataset.backupId); if (!key) return;
+        var counts = Object.create(null), detailsState = Object.create(null), active = document.activeElement;
+        all('details', row).forEach(function (details) { var type = details.className || 'details'; counts[type] = (counts[type] || 0) + 1; detailsState[type + ':' + counts[type]] = details.open; });
+        var focusKey = row.contains(active) ? { tag: active.tagName, name: active.name || '', form: active.form ? actionOf(active.form) : '', help: active.getAttribute('aria-describedby') || '', details: active.tagName === 'SUMMARY' ? active.parentElement.className : '', text: active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' ? '' : active.textContent, start: active.selectionStart, end: active.selectionEnd } : null;
+        rowStates[key] = { details: detailsState, focus: focusKey,
+          draft: all('.restore-test-form [name]', row).filter(function (input) { return !/^(hidden|submit)$/.test(input.type); }).map(function (input) { return [input.name, input.value]; }) };
+      });
+      target.innerHTML = markup; enhanceTables(target); syncActiveTaskLinks(target);
+      if (action === 'backup-list') all('tr', target).forEach(function (row) {
+        var identity = row.querySelector('[name="backup_id"]') || row.querySelector('[data-backup-id]');
+        var state = identity && rowStates[identity.value || identity.dataset.backupId]; if (!state) return;
+        var counts = Object.create(null);
+        all('details', row).forEach(function (details) { var type = details.className || 'details'; counts[type] = (counts[type] || 0) + 1; var key = type + ':' + counts[type]; if (Object.prototype.hasOwnProperty.call(state.details, key)) details.open = state.details[key]; });
+        state.draft.forEach(function (entry) { var input = all('.restore-test-form [name]', row).find(function (item) { return item.name === entry[0]; }); if (input) input.value = entry[1]; });
+        if (state.focus) {
+          var saved = state.focus, replacement = all('summary,button,a,input,select,textarea', row).find(function (item) {
+            return item.tagName === saved.tag && (item.name || '') === saved.name && (item.form ? actionOf(item.form) : '') === saved.form && (item.getAttribute('aria-describedby') || '') === saved.help && (item.tagName !== 'SUMMARY' || item.parentElement.className === saved.details) && (!saved.text || item.textContent === saved.text);
+          });
+          if (replacement && replacement.getClientRects().length) { replacement.focus({ preventScroll: true }); if (typeof saved.start === 'number' && replacement.setSelectionRange) { try { replacement.setSelectionRange(saved.start, saved.end); } catch (ignore) {} } }
+        }
+      });
     } catch (error) {
       // Never replace existing settings or a usable old fragment after a refresh error.
       if (action === 'backup-list' && !target.querySelector('form')) target.innerHTML = '<tr><td colspan="8">Backup-Liste konnte nicht geladen werden. Bitte später erneut versuchen.</td></tr>';
@@ -470,9 +565,8 @@
     headers.forEach(function (header) { tr.append(el('th', header)); }); head.append(tr);
     rows.forEach(function (row) { var line = el('tr'); row.forEach(function (value, index) { var td = el('td', String(value === undefined || value === null ? '' : value)); td.dataset.label = headers[index]; line.append(td); }); body.append(line); }); table.append(head, body); target.append(table);
   }
-  function renderReport(action, data) {
-    if (reportDownloadUrl) { URL.revokeObjectURL(reportDownloadUrl); reportDownloadUrl = null; }
-    var target = byId('operation-result'); target.replaceChildren(); target.hidden = false;
+  function renderReport(action, data, opener) {
+    var target = prepareReport(opener);
     if (action === 'backup-preview') {
       target.append(el('h3', 'Vorschau des nächsten Backups'), el('p', 'Gespeicherter Stand: ' + backupModeLabel(data.backup_mode) + ' / ' + metadataLabel(data.metadata_mode)));
       target.append(el('p', data.full_baseline_required ? 'Neue vollständige Basiskopie erforderlich. Der erste Lauf benötigt erneut Platz für alle ausgewählten Daten; erst danach können passende Snapshots Platz teilen.' : 'Inkrementelle Referenz: ' + (data.reference_id || 'keine')));
@@ -499,8 +593,9 @@
       if (data.files) reportRows(target, ['Laufzeitdatei', 'Bereich', 'Grösse'], data.files.map(function (item) { return [item.name, item.directory, byteLabel(item.size_bytes)]; }));
     } else if (action === 'verification-report' || action === 'inspect-backup' || action === 'record-restore-test') {
       target.append(el('h3', action === 'record-restore-test' ? 'Persönlicher Restore-Test' : action === 'verification-report' ? 'Integritätsbericht' : 'Strukturprüfung'));
-      var statusLabels = { baseline_created: 'Prüfsummen-Basis wurde neu erstellt. Das ist noch kein Vergleich mit einem früher bekannten Stand.', verified: 'Dateien stimmen mit der gespeicherten Prüfsummen-Basis überein.', changed: 'Änderungen zur Prüfsummen-Basis gefunden.', error: 'Prüfung konnte nicht vollständig durchgeführt werden.' };
+      var statusLabels = { not_checked: 'Noch kein Inhaltsprüfbericht vorhanden. Dieser Bericht ist von den Hinweisen der Backup-Abschlussprüfung getrennt.', stale: 'Der gespeicherte Bericht ist nicht nachweislich dem aktuellen Manifeststand zugeordnet und bestätigt den aktuellen Backup-Inhalt nicht.', structure_verified: 'Die Repository-Struktur wurde geprüft, jedoch nicht der vollständige Inhalt.', baseline_created: 'Prüfsummen-Basis wurde neu erstellt. Das ist noch kein Vergleich mit einem früher bekannten Stand.', baseline_exists: 'Eine Prüfsummen-Basis ist vorhanden. Es wurde kein neuer Inhaltsvergleich durchgeführt.', verified: data.verification_scope === 'entire-shared-repository-data' ? 'Die Datenintegrität des gemeinsamen Repositorys wurde geprüft.' : 'Dateien stimmen mit der gespeicherten Prüfsummen-Basis überein.', changed: 'Änderungen zur Prüfsummen-Basis gefunden.', error: 'Prüfung konnte nicht vollständig durchgeführt werden.' };
       if (action !== 'record-restore-test') target.append(el('p', statusLabels[data.status] || ('Status: ' + (data.status || 'siehe Prüfergebnis'))));
+      if (data.message) target.append(el('p', String(data.message), data.status === 'error' ? 'notice error' : 'muted'));
       if (data.restore_test) {
         var manual = data.restore_test;
         target.append(el('p', 'Persönlich dokumentierter Restore-Test: ' + (manual.result === 'passed' ? 'Erfolgreich' : 'Fehlgeschlagen') + ' am ' + manual.tested_at + '. Vom Plugin nicht überprüft.'));
@@ -508,9 +603,9 @@
       } else target.append(el('p', 'Restore-Test: nicht nachgewiesen. Noch kein persönlicher Testeintrag vorhanden.'));
       target.append(el('p', 'Eine Struktur- oder Prüfsummenprüfung ersetzt keinen erfolgreichen Restore-Test. Persönliche Testeinträge ändern keine Restore-Freigaben.'));
       if (data.restore_test_history && data.restore_test_history.length) reportRows(target, ['Testzeitpunkt (UTC)', 'Persönliches Ergebnis', 'Notiz', 'Aktueller Backup-Stand'], data.restore_test_history.map(function (entry) { return [entry.tested_at, entry.result === 'passed' ? 'Erfolgreich' : 'Fehlgeschlagen', entry.note || '', entry.applies_to_current_manifest ? 'Ja' : 'Nein']; }));
-      if (action === 'verification-report') target.append(el('p', 'Geprüft am: ' + (data.checked_at || 'unbekannt') + ' · Vergleichsbasis vom: ' + (data.baseline_at || 'unbekannt')));
+      if (action === 'verification-report' && data.report_available !== false && data.status !== 'not_checked') target.append(el('p', 'Geprüft am: ' + (data.checked_at || 'unbekannt') + ' · Vergleichsbasis vom: ' + (data.baseline_at || 'unbekannt')));
       if (data.changes) reportRows(target, ['Datei', 'Änderung'], data.changes.map(function (item) { return [item.path, item.change]; }));
-      if (action === 'verification-report') {
+      if (action === 'verification-report' && data.report_available !== false && data.status !== 'not_checked') {
         var reportText = JSON.stringify(data, null, 2);
         if (reportText.length <= 16777216) {
           reportDownloadUrl = URL.createObjectURL(new Blob([reportText], { type: 'application/json;charset=utf-8' }));
@@ -520,13 +615,15 @@
       }
     } else target.append(el('h3', 'Ergebnis'));
     var details = el('details'), raw = el('pre', JSON.stringify(data, null, 2)); details.append(el('summary', 'Technische Details'), raw); target.append(details);
+    focusView(target);
   }
   function taskName(task) { return ({ backup: 'Backup', restore: 'Restore', export: 'Export', import: 'Import', verify: 'Integritätsprüfung' })[(task || '').split('-')[0]] || 'Vorgang'; }
   function selectTask(task, explicit) {
     if (!task) return;
-    if (explicit) userSelectedTask = true;
+    if (explicit) { userSelectedTask = true; setView('task-monitor', true, true); }
     if (task === currentTask) return;
     currentTask = task; finalTask = ''; followLog = true; byId('task-log').textContent = 'Log wird geladen...';
+    syncActiveTaskLinks(app);
     var input = byId('stop-task-form').querySelector('[name="task"]'); input.value = task; pollTask();
   }
   async function overview() {
@@ -598,6 +695,7 @@
     if (action === 'recover-services') confirmations[action] = 'Die im offenen Wiederanlauf-Journal vermerkten Dienste jetzt erneut starten?';
     if (confirmations[action] && !root.confirm(confirmations[action])) return false;
     setBusy(form, true); var submitted, importDraft = action === 'import-config' ? states() : null;
+    var outputSequence = ++reportSequence, opener = document.activeElement, revealTask = false;
     try {
       var token = await refreshCSRF();
       if ((action === 'backup' || action === 'maintenance-preview') && !requireSaved()) return false;
@@ -626,21 +724,32 @@
         if (JSON.stringify(importDraft) !== JSON.stringify(states())) { pendingImport = true; feedback('Import gespeichert. Inzwischen wurden weitere Eingaben geändert; diese bleiben hier erhalten. Zum Anzeigen des importierten Stands die Seite nach dem Sichern deiner Eingaben neu laden.', 'warning'); }
         else { changed = {}; pendingDraft = false; intentionalNavigation = true; root.location.assign(root.location.pathname); }
       } else {
-        if (data.redirect) { var redirect = new URL(data.redirect, root.location.href), task = redirect.searchParams.get('active_task'); if (task) { selectTask(task, false); userSelectedTask = false; } }
-        if (data.data) renderReport(action, data.data);
+        if (data.redirect) { var redirect = new URL(data.redirect, root.location.href), task = redirect.searchParams.get('active_task'); if (task) {
+          selectTask(task, false); userSelectedTask = false;
+          // Only a successful explicit start changes the view. Polling never
+          // opens closed panels or repeatedly steals the user's scroll position.
+          if (/^(backup|restore-backup|restore-files|start-export|import|verify-backup)$/.test(action)) {
+            reportSequence += 1; clearPreflight(); setView('operation-result', false, false);
+            byId('overview-details').open = false; revealTask = true;
+          }
+        } }
+        if (data.data && outputSequence === reportSequence) renderReport(action, data.data, opener);
         feedback(data.message || 'Aktion abgeschlossen bzw. im Hintergrund gestartet.', 'ok');
+        if (revealTask) setView('task-monitor', true, true);
         fragment('backup-list', byId('backup-list-body')); overview(); pollTask();
       }
       return true;
-    } catch (error) { feedback(error.message + ' Deine Eingaben wurden nicht verworfen.', 'error'); renderRequestError(error); return false; }
+    } catch (error) { feedback(error.message + ' Deine Eingaben wurden nicht verworfen.', 'error'); if (outputSequence === reportSequence) renderRequestError(error, opener); return false; }
     finally { setBusy(form, false); }
   }
   document.addEventListener('submit', async function (event) {
     var form = event.target; if (!app.contains(form)) return;
     if ((form.method || 'get').toLowerCase() !== 'post') {
       if (!form.classList.contains('operation-form')) return;
-      event.preventDefault(); var params = Object.fromEntries(new FormData(form));
-      try { renderReport(params.action, await request(params.action, params)); } catch (error) { feedback(error.message, 'error'); } return;
+      event.preventDefault(); var params = Object.fromEntries(new FormData(form)), sequence = ++reportSequence, opener = document.activeElement;
+      feedback('Prüfergebnis wird geladen...', undefined, sequence);
+      try { var result = await request(params.action, params); if (sequence === reportSequence) { setView('action-feedback', false, false); renderReport(params.action, result, opener); } }
+      catch (error) { if (sequence === reportSequence) feedback(error.message, 'error'); } return;
     }
     event.preventDefault();
     if (/^repository-(?:init|key-export|confirm-key)$/.test(actionOf(form))) { await submitRepositoryForm(form); return; }
@@ -651,6 +760,16 @@
   document.addEventListener('input', onSettingChange);
   document.addEventListener('change', onSettingChange);
   document.addEventListener('click', async function (event) {
+    var close = event.target.closest('[data-close-view]');
+    if (close && app.contains(close)) {
+      event.preventDefault();
+      if (close.dataset.closeView === 'operation-result') reportSequence += 1;
+      if (close.dataset.closeView === 'action-feedback' && byId('action-feedback').dataset.reportSequence === String(reportSequence)) reportSequence += 1;
+      setView(close.dataset.closeView, false); return;
+    }
+    var show = event.target.closest('[data-show-view], #operation-result-toggle');
+    if (show && app.contains(show)) { event.preventDefault(); setView(show.dataset.showView || 'operation-result', true, true); return; }
+    if (event.target.closest('#task-monitor-toggle')) { event.preventDefault(); setView('task-monitor', byId('task-monitor-content').hidden, false); return; }
     var helpText = event.target.closest('.info-bubble');
     if (helpText) { event.preventDefault(); helpText.focus({ preventScroll: true }); return; }
     if (event.target.closest('[data-archive-profile-draft]')) {
@@ -673,9 +792,26 @@
     if (stopRetry) { event.preventDefault(); await loadStopTargets(); return; }
     if (preset) { event.preventDefault(); all('[name="stop_targets"]').forEach(function (box) { box.checked = preset.dataset.stopTargetPreset === 'recommended' && box.dataset.recommended === '1'; }); updateDirty(initial, changed, 'stop_targets', controlState(controls('stop_targets')), new Date()); renderDirty(); return; }
     var load = event.target.closest('[data-load-action]');
-    if (load) { event.preventDefault(); if (load.dataset.loadAction === 'backup-preview' && !requireSaved()) return; load.disabled = true; feedback('Ergebnis wird berechnet...'); try { renderReport(load.dataset.loadAction, await request(load.dataset.loadAction, {}, { timeout: 3600000 })); byId('action-feedback').hidden = true; } catch (error) { feedback(error.message, 'error'); renderRequestError(error); } finally { load.disabled = false; } return; }
+    if (load) {
+      event.preventDefault(); if (load.dataset.loadAction === 'backup-preview' && !requireSaved()) return;
+      var sequence = ++reportSequence; load.disabled = true; feedback('Ergebnis wird berechnet...', undefined, sequence);
+      try {
+        var report = await request(load.dataset.loadAction, {}, { timeout: 3600000 });
+        if (sequence === reportSequence) { renderReport(load.dataset.loadAction, report, load); setView('action-feedback', false, false); }
+      } catch (error) { if (sequence === reportSequence) { feedback(error.message, 'error'); renderRequestError(error, load); } }
+      finally { load.disabled = false; } return;
+    }
     var preview = event.target.closest('[data-restore-preview]');
-    if (preview) { var form = preview.closest('form'); preview.disabled = true; try { var data = new FormData(form), result = await request('restore-plan', { backup_id: data.get('backup_id'), destination: data.get('restore_destination'), volume_map: data.get('restore_volume_map') }, { timeout: 3600000 }); byId('restore-plan-output').textContent = result.text; byId('restore-plan-output').hidden = false; } catch (error) { feedback(error.message, 'error'); } finally { preview.disabled = false; } }
+    if (preview) {
+      var form = preview.closest('form'), plan = byId('restore-plan-details'); preview.disabled = true;
+      plan.hidden = false; plan.open = true; byId('restore-plan-output').hidden = false; byId('restore-plan-output').textContent = 'Restore-Vorschau wird berechnet...';
+      try {
+        var data = new FormData(form), result = await request('restore-plan', { backup_id: data.get('backup_id'), destination: data.get('restore_destination'), volume_map: data.get('restore_volume_map') }, { timeout: 3600000 });
+        // Do not reopen a preview the user collapsed while waiting.
+        byId('restore-plan-output').textContent = result.text;
+      } catch (error) { byId('restore-plan-output').textContent = error.message; feedback(error.message, 'error'); }
+      finally { preview.disabled = false; }
+    }
   });
   function setBackupRoot(path) { var input = byId('backup-root-input'); if (input && path) { input.value = path; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); input.focus(); } }
   document.addEventListener('dragstart', function (event) { var picker = event.target.closest('[data-backup-root]'); if (picker && event.dataTransfer) event.dataTransfer.setData('text/plain', picker.dataset.backupRoot); });
@@ -684,6 +820,7 @@
   byId('settings-change-toggle').addEventListener('click', function () { var list = byId('settings-change-list'); list.hidden = !list.hidden; this.setAttribute('aria-expanded', list.hidden ? 'false' : 'true'); this.textContent = list.hidden ? 'Details anzeigen' : 'Details ausblenden'; });
   byId('task-history').addEventListener('change', function () { selectTask(this.value, true); });
   byId('task-log').addEventListener('scroll', function () { followLog = logViewport(this.scrollTop, this.clientHeight, this.scrollHeight); });
+  byId('overview-details').addEventListener('toggle', function () { if (!this.open) { reportSequence += 1; setView('operation-result', false, false); } });
   byId('log-follow').addEventListener('click', function () { followLog = true; byId('task-log').scrollTop = byId('task-log').scrollHeight; });
   root.addEventListener('beforeunload', function (event) { if (!intentionalNavigation && (dirty() || busyCount || pendingImport)) { event.preventDefault(); event.returnValue = ''; } });
   root.addEventListener('pagehide', function () { if (reportDownloadUrl) URL.revokeObjectURL(reportDownloadUrl); });

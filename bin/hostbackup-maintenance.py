@@ -537,14 +537,68 @@ def forget_integrity(root, state, backup_id, marker):
     return {"backup_id": backup_id, "removed": [path.name for path, _ in paths]}
 
 
+def load_integrity_report(report_path, backup_id, record):
+    """Read a saved result without scanning data or creating a new baseline.
+
+    Missing/corrupt reports are presentation states, never successful checks.
+    Target, manifest and protected-state checks happen before this helper.
+    """
+    unavailable = {"backup_id": backup_id, "content_verified": False,
+                   "restore_tested": False, "report_available": False}
+    try:
+        try:
+            info = report_path.lstat()
+        except FileNotFoundError:
+            return {**unavailable, "status": "not_checked",
+                    "message": "Noch kein Bericht einer Dateiinhaltspruefung gespeichert. Die Abschlusswarnungen stehen direkt beim Backup unter 'Hinweise ansehen'. 'Dateiinhalte pruefen' erstellt ohne vorhandene Vergleichsbasis zunaechst nur diese Basis; das ist noch kein erfolgreicher Vergleich."}
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            fail("Expected an unlinked regular integrity report file.")
+        report = read_json(report_path)
+        if report.get("backup_id") != backup_id:
+            fail("Integrity report belongs to a different backup identifier.")
+        status = report.get("status")
+        if status not in ("baseline_created", "baseline_exists", "verified", "changed",
+                          "structure_verified", "error", "not_checked", "stale"):
+            fail("Invalid integrity report status.")
+        if type(report.get("content_verified")) is not bool or report["content_verified"] != (status == "verified"):
+            fail("Invalid integrity report verification flag.")
+        if "changes" in report and (not isinstance(report["changes"], list)
+                                    or len(report["changes"]) > 1000
+                                    or any(not isinstance(item, dict)
+                                           or not isinstance(item.get("path"), str)
+                                           or not isinstance(item.get("change"), str)
+                                           for item in report["changes"])):
+            fail("Invalid integrity report changes.")
+        for field in ("checked_files", "change_count"):
+            if field in report and (type(report[field]) is not int or report[field] < 0):
+                fail("Invalid integrity report counter.")
+        if "changes_truncated" in report and type(report["changes_truncated"]) is not bool:
+            fail("Invalid integrity report truncation flag.")
+        if status == "verified" and (report.get("changes") or report.get("change_count", 0) > 0
+                                      or report.get("changes_truncated", False)):
+            fail("Verified integrity report contradicts its recorded changes.")
+        if "change_count" in report and report["change_count"] < len(report.get("changes", [])):
+            fail("Integrity report change count contradicts its recorded changes.")
+        for field in ("checked_at", "baseline_at", "message"):
+            if field in report and not isinstance(report[field], str):
+                fail("Invalid integrity report text field.")
+        if "manifest_sha256" in report and (not isinstance(report["manifest_sha256"], str)
+                                             or not re.fullmatch(r"[a-f0-9]{64}", report["manifest_sha256"])):
+            fail("Invalid integrity report manifest hash.")
+    except (ValueError, OSError) as error:
+        return {**unavailable, "status": "error",
+                "message": "Der gespeicherte Dateiinhaltsbericht konnte nicht sicher gelesen werden. Das ist kein erfolgreicher Pruefnachweis. Bestehende Sicherungen und Vergleichsbasis bleiben unveraendert; technische Details pruefen.",
+                "report_error": str(error)}
+    if report.get("manifest_sha256") != record["manifest_sha256"]:
+        report = {**report, "status": "stale", "content_verified": False,
+                  "message": "Der gespeicherte Bericht gehoert nicht nachweislich zum aktuellen Manifeststand. Er bestaetigt die aktuellen Backup-Inhalte nicht."}
+    return {**report, "report_available": True}
+
+
 def integrity(root, state, backup_id, report_only=False, record_only=False):
     target, record, identity, baseline_path, report_path = integrity_paths(root, state, backup_id)
     if report_only:
-        report = read_json(report_path, {"backup_id": backup_id, "status": "not_checked",
-                                         "content_verified": False, "restore_tested": False})
-        if report.get("manifest_sha256", record["manifest_sha256"]) != record["manifest_sha256"]:
-            report = {"backup_id": backup_id, "status": "stale", "content_verified": False,
-                      "message": "Manifest changed since the recorded inspection."}
+        report = load_integrity_report(report_path, backup_id, record)
         return {**report, **restore_test_summary(state, identity, record)}
     if not record["good"]:
         fail("Only completed validated backups can have an integrity baseline.")

@@ -346,6 +346,9 @@ sub run_shell {
   my ($cmd) = @_;
   my $output = `$cmd 2>&1`;
   my $status = $? >> 8;
+  if ($status == 5 && $output =~ /\A(?:Another HostBackup operation is active\.|Backup is busy: [A-Za-z0-9._-]+)\s*\z/) {
+    $output = 'Diese Aktion ist waehrend eines laufenden Backup-, Restore- oder Wartungsvorgangs gesperrt. Bitte dessen Abschluss abwarten. Live-Status und gespeicherte Hinweise bleiben erreichbar; der laufende Vorgang wird nicht unterbrochen.';
+  }
   return ($status, $output);
 }
 
@@ -500,7 +503,7 @@ if ($notice eq 'saved') {
 }
 
 my $requested_active_task = $q->param('active_task') || '';
-if ($requested_active_task =~ /^(backup|restore|export|import)-[A-Za-z0-9._-]+\.log$/) {
+if ($requested_active_task =~ /\A(?:backup|restore|export|import|verify)-[A-Za-z0-9._-]+\.log\z/) {
   $active_task = $requested_active_task;
 }
 
@@ -579,7 +582,7 @@ if ($action =~ /\Arepository-(?:status|init|key-export|confirm-key)\z/) {
 if ($action eq 'restore-plan') {
   reject_request('400 Bad Request', 'Ungueltige Backup-ID.') unless $backup_id =~ /^[A-Za-z0-9._-]+$/;
   my ($status, $out) = run_shell(backend_cmd('restore-plan', $backup_id, $q->param('destination') || '/', $q->param('volume_map') || '[]'));
-  reject_request('400 Bad Request', $out || 'Restore-Vorschau fehlgeschlagen.') if $status != 0;
+  reject_request($status == 5 ? '409 Conflict' : '400 Bad Request', $out || 'Restore-Vorschau fehlgeschlagen.') if $status != 0;
   json_response({ ok => JSON::PP::true, text => $out });
 }
 
@@ -594,7 +597,7 @@ if ($action =~ /^(?:task-overview|source-info|backup-preview|storage-info|verifi
   # Missing selected mounts are an actionable report, not a broken endpoint.
   # Preserve the inventory so the user can correct an old selection safely.
   json_response($data) if $action eq 'source-info' && ref($data) eq 'HASH' && ref($data->{volumes}) eq 'ARRAY';
-  reject_request('500 Internal Server Error', $out || 'Die Daten konnten nicht geladen werden.') if $status != 0 || !$data;
+  reject_request($status == 5 ? '409 Conflict' : '500 Internal Server Error', $out || 'Die Daten konnten nicht geladen werden.') if $status != 0 || !$data;
   json_response($data);
 }
 
@@ -1471,7 +1474,7 @@ sub render_backup_target_picker {
       my $state = $target->{recommended} ? 'empfohlen' : 'pr&uuml;fen';
       my $safe_fs = escapeHTML($target->{fs});
       my $safe_free = escapeHTML($target->{free});
-      $buttons .= qq{<span role="button" tabindex="0" class="path-choice$class" draggable="true" data-backup-root="$safe_path"><span class="path-choice-head"><strong>$safe_label</strong> <em>$state</em></span><span class="path-choice-path">$safe_path</span><span class="path-choice-meta">$safe_fs &middot; frei ca. $safe_free MB</span></span>};
+      $buttons .= qq{<button data-role="none" type="button" class="path-choice$class" draggable="true" data-backup-root="$safe_path"><span class="path-choice-head"><strong>$safe_label</strong> <em>$state</em></span><span class="path-choice-path">$safe_path</span><span class="path-choice-meta">$safe_fs &middot; frei ca. $safe_free MB</span></button>};
     }
     my $safe_title = escapeHTML($group->{title});
     my $count = scalar @targets;
@@ -1486,6 +1489,59 @@ sub render_backup_target_picker {
 <div class="target-picker-groups">$groups_html</div>
 </details>
 };
+}
+
+sub validation_display_text {
+  my ($value, $fallback, $limit) = @_;
+  return $fallback unless defined($value) && !ref($value) && length($value);
+  $limit ||= 4096;
+  my $truncated = length($value) > $limit;
+  $value = substr($value, 0, $limit) if $truncated;
+  my $escaped = escapeHTML($value);
+  # JSON fields are Unicode, while this CGI also prints existing UTF-8 markup
+  # as bytes. ASCII entities preserve non-ASCII values without changing the
+  # output layer (which would double-encode the existing page).
+  $escaped =~ s/([^\x00-\x7f])/sprintf('&#%d;', ord($1))/ge;
+  return $escaped . ($truncated ? ' &hellip; [gek&uuml;rzt]' : '');
+}
+
+sub render_validation_details {
+  my ($validation, $backup_id) = @_;
+  return '' unless ref($validation) eq 'HASH' && %$validation;
+  my $status = !ref($validation->{status}) ? ($validation->{status} || '') : '';
+  my $summary = $status eq 'ok' ? 'Pr&uuml;fdetails' : 'Hinweise ansehen';
+  my $id = validation_display_text($backup_id, '', 160);
+  my $checked = validation_display_text($validation->{checked_at}, 'nicht gespeichert', 160);
+  my $items = '';
+  my $checks = ref($validation->{checks}) eq 'ARRAY' ? $validation->{checks} : [];
+  my $count = 0;
+  for my $check (@$checks) {
+    last if $count++ >= 100;
+    if (ref($check) ne 'HASH') {
+      $items .= '<li class="validation-check muted">Ein gespeicherter Pr&uuml;fpunkt ist nicht lesbar.</li>';
+      next;
+    }
+    my $name = validation_display_text($check->{name}, 'Unbenannter Pr&uuml;fpunkt', 256);
+    my $has_result = JSON::PP::is_bool($check->{ok});
+    my $ok = $has_result && $check->{ok};
+    my $optional = JSON::PP::is_bool($check->{optional}) && $check->{optional};
+    my $informational = JSON::PP::is_bool($check->{informational}) && $check->{informational};
+    my ($class, $label) = !$has_result ? ('muted', 'Ergebnis nicht lesbar')
+      : $ok ? ('ok', 'OK')
+      : ($optional || $informational) ? ('warning', 'Hinweis')
+      : ('error', 'Nicht erf&uuml;llt');
+    $label .= ' (optional)' if $optional;
+    $label .= ' (Information)' if $informational;
+    my $value = validation_display_text($check->{value}, '', 4096);
+    my $details = validation_display_text($check->{details}, '', 4096);
+    $items .= qq{<li class="validation-check $class"><strong>$name</strong><span class="validation-check-state">$label</span>};
+    $items .= qq{<p class="validation-check-value">$value</p>} if length($value);
+    $items .= qq{<p class="validation-check-value">$details</p>} if length($details);
+    $items .= '</li>';
+  }
+  $items = '<li class="validation-check muted">Keine lesbaren Einzelpr&uuml;fungen gespeichert. F&uuml;r weitere Angaben das zugeh&ouml;rige Backup-Log pr&uuml;fen.</li>' unless length($items);
+  $items .= '<li class="validation-check muted">Weitere Pr&uuml;fpunkte sind ausgeblendet; der vollst&auml;ndige Bericht liegt als backup-validation.json im Backup.</li>' if @$checks > 100;
+  return qq{<details class="backup-validation-details" data-backup-id="$id"><summary>$summary</summary><div class="backup-validation-body"><p><strong>Abschlusspr&uuml;fung dieses Backups</strong><br>Gepr&uuml;ft: $checked</p><p>Dies sind die gespeicherten Pr&uuml;fergebnisse beim Backup-Abschluss, nicht der separate Bericht der Dateiinhaltspr&uuml;fung und kein Restore-Test. Optionale oder informative Hinweise sind nicht automatisch ein Fehler.</p><ul class="backup-validation-checks">$items</ul></div></details>};
 }
 
 sub render_backup_rows {
@@ -1520,9 +1576,9 @@ sub render_backup_rows {
       $export = qq{<span class="export-state failed">fehlgeschlagen</span>};
       $export .= qq{<small class="muted">$export_message</small>} if length $export_message;
     }
-    my $validation = $backup->{validation} || {};
+    my $validation = ref($backup->{validation}) eq 'HASH' ? $backup->{validation} : {};
     my $backup_status = $backup->{status} || '';
-    my $validation_status = $validation->{status} || '';
+    my $validation_status = !ref($validation->{status}) ? ($validation->{status} || '') : '';
     my $is_complete = ($backup_status eq 'complete' && $validation_status eq 'ok')
       || ($backup_status eq 'complete_with_warnings' && $validation_status eq 'warning');
     my $storage_format = (($backup->{backup} || {})->{storage_format}) || $backup->{storage_format} || 'directory';
@@ -1533,11 +1589,11 @@ sub render_backup_rows {
     my $validation_label = '';
     my $delete_label = $is_complete ? 'L&ouml;schen' : 'Unvollst&auml;ndiges Backup l&ouml;schen';
     if ($backup_status =~ /^complete(?:_with_warnings)?$/) {
-      if (($validation->{status} || '') eq 'ok') {
+      if ($validation_status eq 'ok') {
         $validation_label = '<small class="backup-health ok">Pr&uuml;fung ok</small>';
-      } elsif (($validation->{status} || '') eq 'warning') {
+      } elsif ($validation_status eq 'warning') {
         $validation_label = '<small class="backup-health warning">Pr&uuml;fung mit Hinweis</small>';
-      } elsif (($validation->{status} || '') eq 'error') {
+      } elsif ($validation_status eq 'error') {
         $validation_label = '<small class="backup-health error">Pr&uuml;fung fehlerhaft</small>';
       } else {
         $validation_label = '<small class="backup-health muted">Pr&uuml;fung nicht vorhanden</small>';
@@ -1545,6 +1601,7 @@ sub render_backup_rows {
     } elsif (($backup->{status} || '') =~ /^(stopped|failed|running|unbekannt)$/) {
       $validation_label = '<small class="backup-health warning">Unvollst&auml;ndig: bei Bedarf l&ouml;schen</small>';
     }
+    $validation_label .= render_validation_details($validation, $raw_id);
     my $active_task_hidden = hidden_active_task();
     my $pinned = $backup->{pinned} || $backup->{protected};
     my $pin_value = $pinned ? '' : '1';
@@ -1927,16 +1984,16 @@ $csrf_html
 <p>Ein Dienst-Wiederanlauf ist noch offen. Bitte zuerst die Journal-/Loghinweise prüfen.</p>
 <button data-role="none" type="submit">Offene Dienste wieder starten</button>$action_help{'recover-services'}
 </form>
-<div id="operation-result" hidden></div>
+<button data-role="none" type="button" id="operation-result-toggle" aria-controls="operation-result" aria-expanded="false" hidden>Letztes Ergebnis anzeigen</button>
+<div id="operation-result" tabindex="-1" role="region" aria-label="Prüfergebnis" hidden></div>
 </div>
 </section>
 
 <section class="panel task-monitor" id="task-monitor" data-active-task="$active_task_attr">
-<h2>Live-Status</h2>
-<div class="panel-content">
+<div class="task-monitor-header"><h2>Live-Status</h2><span class="task-state state-running" id="task-state">Kein laufender Task ausgewählt</span><button data-role="none" type="button" id="task-monitor-toggle" aria-controls="task-monitor-content" aria-expanded="true">Live-Status ausblenden</button></div>
+<div class="panel-content" id="task-monitor-content">
 <label class="task-history-label"><span>Aktuelle und letzte Vorgänge</span><select data-role="none" id="task-history"><option value="">Noch kein Vorgang ausgewählt</option></select></label>
 <div class="task-actions">
-<span class="task-state state-running" id="task-state">Kein laufender Task ausgewählt</span>
 <span class="task-heartbeat" id="task-heartbeat">Nach einem gestarteten Backup werden hier Status und Log angezeigt.</span>
 <form data-ajax="false" method="post" class="stop-task-form" id="stop-task-form">
 $csrf_html
@@ -1948,6 +2005,7 @@ $csrf_html
 <pre class="terminal" id="task-log">Noch keine Live-Ausgabe vorhanden.</pre>
 <div class="task-actions"><button data-role="none" type="button" id="log-follow">Zum Ende des Logs</button><a data-ajax="false" class="button-link" id="download-task-log" hidden>Vollständiges Log herunterladen</a></div>
 <p class="muted">Die Live-Ansicht zeigt den letzten Log-Ausschnitt. Das vollständige Original steht als Download bereit. Beim Hochscrollen bleibt deine Leseposition erhalten.</p>
+<button data-role="none" type="button" data-close-view="task-monitor">Live-Status ausblenden</button>
 </div>
 </section>
 
@@ -2374,10 +2432,11 @@ if ($browse_id) {
   my $close_browse_url = base_url_with_active_task() . '#backups';
 
   print qq{
+<button data-role="none" type="button" data-show-view="backup-browser" aria-controls="backup-browser" aria-expanded="false" hidden>Dateiansicht wieder anzeigen</button>
 <div class="subpanel" id="backup-browser">
 <div class="detail-header">
 <h3>Dateien in Backup <code>$safe_browse_id</code></h3>
-<a data-ajax="false" data-skip-scroll-save="1" class="button-link" href="$close_browse_url">Ansicht schliessen</a>
+<a data-ajax="false" data-skip-scroll-save="1" data-close-view="backup-browser" class="button-link" href="$close_browse_url">Ansicht schliessen</a>
 </div>
 <p>Pfad: <code>$safe_browse_path</code></p>
 <details><summary>Datei oder Ordner getrennt wiederherstellen $action_help{'restore-files'}</summary>
@@ -2467,6 +2526,7 @@ if ($restore_id) {
   }
 
   print qq{
+<button data-role="none" type="button" data-show-view="restore-panel" aria-controls="restore-panel" aria-expanded="false" hidden>Restore-Auswahl wieder anzeigen</button>
 <section class="panel restore-panel" id="restore-panel">
 <h2>Restore</h2>
 <fieldset class="backup-content">
@@ -2475,7 +2535,7 @@ if ($restore_id) {
 <div class="subpanel">
 <div class="detail-header">
 <h3>Ausgewähltes Backup: <code>$safe_restore_id</code></h3>
-<a data-ajax="false" data-skip-scroll-save="1" class="button-link" href="$close_restore_url">Restore-Auswahl schliessen</a>
+<a data-ajax="false" data-skip-scroll-save="1" data-close-view="restore-panel" class="button-link" href="$close_restore_url">Restore-Auswahl schliessen</a>
 </div>
 };
 
@@ -2516,7 +2576,7 @@ if ($restore_id) {
   }
 
   if ($restore_plan) {
-    print qq{<pre>$restore_plan</pre>};
+    print qq{<details class="restore-plan-details" open><summary>Restore-Vorschau</summary><pre>$restore_plan</pre></details>};
   }
 
   print qq{
@@ -2531,7 +2591,7 @@ $degraded_confirmation
 <p class="muted">Mit / wird das aktuelle System wiederhergestellt. Für einen vorbereiteten Offline-Datenträger dessen Einhängepfad eintragen. Separate Daten-Volumes werden nur mit ausdrücklicher Zuordnung wiederhergestellt.</p>
 <details><summary>Volume-Zuordnung für zusätzliche Datenträger $action_help{'restore-volumes'}</summary><label><span>Zuordnung als JSON-Liste; leer lassen mit []</span><textarea data-role="none" name="restore_volume_map" rows="3">[]</textarea></label><p class="muted">Beispiel: [&#123;&quot;source&quot;:&quot;/media/usb/Daten&quot;,&quot;destination&quot;:&quot;/mnt/recovery-root/media/usb/Daten&quot;&#125;]. Beide Ziele müssen bereits eingehängt beziehungsweise angelegt sein.</p></details>
 <span class="action-with-help"><button data-role="none" type="button" data-restore-preview>Restore-Vorschau erstellen</button>$action_help{'restore-preview'}</span>
-<pre id="restore-plan-output" class="terminal" hidden></pre>
+<details id="restore-plan-details" class="restore-plan-details" hidden><summary>Restore-Vorschau</summary><pre id="restore-plan-output" class="terminal" hidden></pre></details>
 <label>
 <span>Backup-ID zur Sicherheitsbestätigung eingeben</span>
 <input data-role="none" type="text" name="restore_challenge" value="" autocomplete="off" required pattern="[A-Za-z0-9._-]+" placeholder="$safe_restore_id">

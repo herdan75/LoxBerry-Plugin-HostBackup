@@ -12,6 +12,29 @@ validiert werden.
 
 ## [Unveröffentlicht / develop] - 2026-10-15
 
+- Hinweise der gespeicherten Backup-Abschlussprüfung direkt beim betroffenen
+  Backup lesbar gemacht; ursprüngliche Abschlussprüfung und optionaler
+  Inhaltsprüfbericht bleiben ausdrücklich getrennt. Fehlende oder fehlerhafte
+  Berichte werden nicht als erfolgreiche Prüfung dargestellt.
+- Inhaltsprüfbericht mit unterscheidbaren Zuständen für fehlende, nicht lesbare
+  und nicht mehr zum Backup passende Berichtsdaten; keine scheinbar gültigen
+  Downloads oder Erfolgsanzeige für nicht verfügbare Nachweise.
+- Prüfergebnisse, Live-Status, Aktionsmeldungen und Restore-Vorschauen vollständig
+  schliessbar und erneut aufrufbar gemacht. Anzeige schliessen stoppt keinen
+  Vorgang und verwirft keine ungespeicherten Eingaben.
+- Nach erfolgreichem manuellem Start eines Hintergrundvorgangs die vorherige
+  Prüfansicht schliessen und den Live-Status einmalig sichtbar machen.
+  Automatische Aktualisierungen respektieren geschlossene Ansichten und
+  verändern die Scrollposition nicht; Startfehler lassen Prüfergebnisse erhalten.
+  Das gilt auch für den Start eines externen Backup-Imports.
+- Laufende Inhaltsprüfungen behalten ihre Vorgangs-ID auch beim Öffnen anderer
+  Backup-Ansichten und beim erneuten Laden der Seite.
+- Zielauswahl zusätzlich mit Enter und Leertaste bedienbar; weiterhin nur
+  Entwurfsänderung, kein automatisches Speichern oder Starten.
+- Zusätzliche aufwendige Vorprüfungen während einer belegten Vorgangssperre
+  frühzeitig abweisen. Gespeicherte Hinweise, Status und die Dateiansicht älterer
+  Backups bleiben verfügbar; Ansicht schliessen löst keinen Abbruch aus.
+  Eine längere Pause der Logausgabe ist allein kein Nachweis eines Stillstands.
 - Langsame Dienst-/Container-Ermittlung korrigiert: systemd-Eigenschaften werden
   gebündelt statt mit wiederholten Einzelaufrufen abgefragt. Ein gemeinsames
   Zeitlimit von 45 Sekunden plus höchstens 2 Sekunden zum Beenden begrenzt

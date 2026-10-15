@@ -1952,6 +1952,35 @@ a.button-link:hover {
 #hostbackup-app .info-help.is-open .info-bubble { display: block; opacity: 1; visibility: visible; pointer-events: auto; }
 #hostbackup-app .info-button:focus-visible, #hostbackup-app button:focus-visible, #hostbackup-app a:focus-visible { outline: 3px solid #14769a; outline-offset: 3px; }
 #hostbackup-app #operation-result { margin-top: 16px; overflow-wrap: anywhere; }
+#hostbackup-app .result-toolbar { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+#hostbackup-app .view-close, #hostbackup-app .view-reopen, #hostbackup-app #operation-result-toggle {
+  white-space: normal; max-width: 100%; font-size: 13px;
+}
+#hostbackup-app .dismissible-notice { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+#hostbackup-app .dismissible-notice > span { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
+#hostbackup-app .task-monitor-header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 18px; }
+#hostbackup-app .task-monitor-header h2 { margin: 0; padding: 0; }
+#hostbackup-app .task-monitor-header button { margin-left: auto; white-space: normal; max-width: 100%; }
+#hostbackup-app #task-monitor, #hostbackup-app #operation-result { scroll-margin-top: 16px; }
+#hostbackup-app .backup-validation-details { margin-top: 8px; max-width: 440px; min-width: 0; }
+#hostbackup-app .backup-validation-details > summary, #hostbackup-app #restore-plan-details > summary {
+  cursor: pointer; font-size: 13px; font-weight: 600; white-space: normal;
+}
+#hostbackup-app .backup-validation-body { max-height: 420px; overflow: auto; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; }
+#hostbackup-app .backup-validation-body p { font-size: 13px; font-weight: 400; letter-spacing: normal; margin: 8px 0; }
+#hostbackup-app .backup-validation-checks { padding-left: 18px; margin: 8px 0; }
+#hostbackup-app .validation-check { margin: 8px 0; }
+#hostbackup-app .validation-check-state { display: block; }
+#hostbackup-app .validation-check.error .validation-check-state { color: #9e2f2f; }
+#hostbackup-app .validation-check.warning .validation-check-state { color: #805900; }
+#hostbackup-app .validation-check.ok .validation-check-state { color: #1f6b32; }
+#hostbackup-app #restore-plan-details { max-width: 100%; min-width: 0; width: 100%; }
+@media (max-width: 760px) {
+  #hostbackup-app .task-monitor-header { gap: 8px; }
+  #hostbackup-app .task-monitor-header button { margin-left: 0; }
+  #hostbackup-app .detail-header { flex-wrap: wrap; }
+  #hostbackup-app .detail-header h3 { min-width: 0; overflow-wrap: anywhere; }
+}
 #hostbackup-app .report-table { width: 100%; }
 #hostbackup-app .source-selection-panel {
   /* LoxBerry's global .wide means large/bold text; here it only means a full-width fieldset. */
