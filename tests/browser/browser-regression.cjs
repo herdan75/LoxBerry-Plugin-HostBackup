@@ -1235,7 +1235,19 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     const compactSourceMobile=await page.locator('#source-selection-panel').evaluate(node=>({height:node.getBoundingClientRect().height,mainHeight:node.querySelector('#source-volume-list').getBoundingClientRect().height,technicalOpen:node.querySelector('#source-technical-details').open}));
     assert.ok(compactSourceMobile.height<1450&&compactSourceMobile.mainHeight<=422&&!compactSourceMobile.technicalOpen,JSON.stringify(compactSourceMobile));
     await page.locator('#source-selection-panel').screenshot({path:path.join(temp,'source-selection-mobile.png')});
-    assert.ok(await page.locator('#source-selection-panel').evaluate(node=>{const right=node.getBoundingClientRect().right;return Array.from(node.querySelectorAll('select,label,strong,small')).every(item=>item.getBoundingClientRect().right<=right+1);}), 'Source controls and descriptions stay inside their mobile panel');
+    // Closed details may retain stale desktop layout boxes after resizing in
+    // Chromium. Check rendered elements, then open and check the technical rows
+    // too, so hidden layout caching cannot disguise actual mobile overflow.
+    const sourceMobileOverflow=()=>page.locator('#source-selection-panel').evaluate(node=>{const right=node.getBoundingClientRect().right;return Array.from(node.querySelectorAll('select,label,strong,small')).filter(item=>item.checkVisibility()).map(item=>({tag:item.tagName,text:item.textContent.slice(0,90),right:item.getBoundingClientRect().right,panelRight:right})).filter(item=>item.right>right+1);});
+    assert.deepEqual(await sourceMobileOverflow(),[], 'Visible source controls and descriptions stay inside their mobile panel');
+    const mobileSourceState=await page.locator('#source-selection-json').inputValue(),mobileSourcePosts=postCount;
+    await technicalDetails.locator('summary').focus();await page.keyboard.press('Enter');
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    assert.equal(await technicalDetails.evaluate(node=>node.open),true);
+    assert.deepEqual(await sourceMobileOverflow(),[], 'Expanded technical source controls and descriptions stay inside their mobile panel');
+    await page.locator('#source-selection-panel').screenshot({path:path.join(temp,'source-selection-mobile-expanded.png')});
+    await technicalDetails.locator('summary').focus();await page.keyboard.press('Space');
+    assert.equal(await technicalDetails.evaluate(node=>node.open),false);assert.equal(await page.locator('#source-selection-json').inputValue(),mobileSourceState);assert.equal(postCount,mobileSourcePosts);
     await page.locator('#operational-overview').scrollIntoViewIfNeeded();
     const mobileOverview=await page.locator('#overview-values').evaluate(node=>({columns:getComputedStyle(node).gridTemplateColumns.split(' ').length,cards:Array.from(node.children).map(card=>{const title=card.querySelector('.overview-label').getBoundingClientRect(),value=card.querySelector('.overview-value').getBoundingClientRect();return {gap:value.top-title.bottom,right:card.getBoundingClientRect().right};})}));
     assert.equal(mobileOverview.columns,1);assert.ok(mobileOverview.cards.every(card=>card.gap>=4.5&&card.right<=392),JSON.stringify(mobileOverview));
