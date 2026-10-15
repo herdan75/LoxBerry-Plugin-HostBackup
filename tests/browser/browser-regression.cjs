@@ -657,6 +657,7 @@ async function checkStopTargets(browser,base) {
   }
 }
 async function checkMaintenance(browser,base) {
+  const maintenanceActionStart=postActions.length;
   const page=await browser.newPage({viewport:{width:1440,height:1100}});page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
   await page.goto(base);await visible(page,'#settings-save-form');await page.locator('#stop-targets-list [name="stop_targets_loaded"]').waitFor({state:'attached'});
   const panel=page.locator('#maintenance-settings-panel'),summary=panel.locator(':scope > summary');
@@ -737,7 +738,7 @@ async function checkMaintenance(browser,base) {
   await preview.click();await pendingToken;await daily.fill('18');await page.waitForFunction(()=>document.getElementById('maintenance-preview-form').getAttribute('aria-busy')==='false');tokenDelay=0;
   assert.equal(maintenancePreviews.length,previewCount,'A draft created during CSRF refresh also blocks saved-only preview');
   await daily.fill('17');await clean();await submitAndWait(preview,'maintenance-preview');assert.deepEqual(maintenancePreviews.at(-1),savedMaintenance);
-  assert.equal(postActions.includes('maintenance-run'),false,'Layout and preview tests never invoke a deletion');
+  assert.equal(postActions.slice(maintenanceActionStart).includes('maintenance-run'),false,'Layout and preview tests never invoke a deletion');
   receipts.push('Maintenance preview submits only action/CSRF and uses persisted policy; drafts in either form or introduced during token refresh block it; no deletion invoked');
   await page.close();
 }
