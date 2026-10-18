@@ -66,4 +66,3 @@ recover_restart_journals() {
   done
   return "$failed"
 }
-

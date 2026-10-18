@@ -43,7 +43,7 @@ def legacy_recovery_functions():
     source = LEGACY_RECOVERY.read_text(encoding="utf-8")
     result = {}
     for name, digest in LEGACY_RECOVERY_HASHES.items():
-        match = re.search(rf"^{name}\(\) \{{\n.*?^\}}\n(?=\n)", source, re.M | re.S)
+        match = re.search(rf"^{name}\(\) \{{\n.*?^\}}\n(?=\n|\Z)", source, re.M | re.S)
         assert match is not None, name
         result[name] = match.group(0)
         assert hashlib.sha256(result[name].encode()).hexdigest() == digest, name
