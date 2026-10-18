@@ -1,5 +1,41 @@
 # Sicherheitsmodell
 
+## Unveröffentlichte Ergänzung: Docker-Wiederanlauf, 18.10.2026
+
+Der Entwicklungsstand behandelt bestätigte Alt-IDs automatisch, erweitert aber
+keine privilegierte Startbefugnis: Eine fehlgeschlagene Docker-Abfrage allein
+beweist keine Löschung. Nur eine ausdrückliche Meldung über eine fehlende
+Container-ID zusammen mit einer erfolgreichen vollständigen Inventur darf einen
+Docker-Eintrag eines inaktiven Vorgangs als `missing` abschliessen. Fehler des
+Daemons, der Berechtigungen oder der Abfrage bleiben offen. systemd-Einträge
+werden nicht auf diese Weise abgeschlossen.
+
+Neue Journale speichern vollständige IDs und Namen. Die Namen dienen nur der
+Dokumentation, nicht dem automatischen Start eines Ersatzcontainers; ältere
+kurze IDs bleiben abgleichbar. Während eines aktiven Backups/Restores führt ein
+fehlgeschlagener Wiederanlauf weiterhin zuerst zum Fehlerzustand. Automatische
+Bereinigung darf keinen erfolgreichen Backup-/Restore-Abschluss vortäuschen.
+
+Sobald keine tatsächlich offenen Wiederanläufe verbleiben, wird ein Journal mit
+fehlenden Containern atomar in einem eigenen Verzeichnis unter
+`ROOT_STATE_DIR/recovery-history/`
+archiviert; der Task bleibt als fehlgeschlagen mit eigenem Hinweis sichtbar.
+Die root-geschützte Historie behält das gesamte Journal einschliesslich möglicher
+Repository-Kontrolldaten. Wiederholte Vorgangsnamen erhalten neue Archivziele;
+vorhandene Historie wird nicht überschrieben. Unsichere Pfade und Fehler beim
+Sichern der Historie bleiben Fehler; sie rechtfertigen kein Löschen der Belege.
+Archivierte Alt-IDs blockieren danach keine neuen Backups oder Deinstallationen.
+Tatsächlich offene Wiederanläufe und aktive Vorgänge behalten ihren Schutz.
+Die Historie wird erst bei bewusster Deinstallation mit den lokalen Laufzeitdaten
+entfernt, nicht durch die normale Wiederanlauf- oder Backup-Aufbewahrung.
+
+Eine im geschützten Journal gespeicherte Fehlersignatur begrenzt nur die
+automatische Cron-Ausgabe: erster/geänderter Fehler sowie gleiche Erinnerung
+nach frühestens 24 Stunden. Startversuche und Logs bleiben im Fünfminutentakt,
+manuelle Aufrufe zeigen immer ihr Ergebnis. Keine neue Benutzeroption, kein
+pauschales Abschalten der Wiederherstellung und keine Änderung der Backup-Mails.
+Diese Ergänzung gehört noch nicht zum veröffentlichten 1.2.2-beta-Paket.
+
 ## Aktuelle Ergänzung: 1.2.2-beta vom 15.10.2026
 
 Die Dienst-/Container-Ermittlung verwendet gebündelte systemd-Abfragen mit

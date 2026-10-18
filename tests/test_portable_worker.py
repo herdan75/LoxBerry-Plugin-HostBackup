@@ -291,7 +291,7 @@ class PortableJournalCleanupTests(unittest.TestCase):
 set -euo pipefail
 cd -- "$WORKER_TEST_DIR"
 RESTART_JOURNAL_DIR="$(pwd)/journals"
-restart_journal_update() { [ "$2" = pending ]; }
+restart_journal_update() { [ "$2" = pending ] || [ "$2" = missing-list ]; }
 log() { printf '%s\n' "$*"; }
 '''
         script += '\n'.join(function(name) for name in (

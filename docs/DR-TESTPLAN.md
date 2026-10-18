@@ -5,6 +5,55 @@ bei Änderungen an rsync-/tar-Optionen, Mount-Prüfung, Import, Restore oder
 Retention auszuführen. Produktive Daten werden durch synthetische Marker und
 Testdienste ersetzt.
 
+## Docker-Wiederanlauf: Entwicklungsabnahme vom 18.10.2026
+
+Diese Korrektur ist noch nicht veröffentlicht. Paketversion und Updatekanäle
+bleiben unverändert; die nachfolgenden Fälle sind ein Prüfauftrag, keine pauschale
+Erfolgszusage. Automatisierte Nachweise gehören zu `tests/test_docker_recovery.py`,
+`tests/test_runtime_safety.py` und den Installer-/Deinstallationstests. Ergebnis,
+genauen Commit, Testumgebung und übersprungene Fälle separat dokumentieren.
+
+1. Einen zuvor laufenden Testcontainer durch HostBackup stoppen lassen und vor
+   dem Wiederanlauf löschen. Der aktive Backup-/Restore-Vorgang muss zunächst
+   fehlschlagen. Erst die Wiederanlauf-Prüfung des inaktiven Vorgangs darf die
+   fehlende ID nach ausdrücklicher Docker-Meldung **und** erfolgreicher
+   vollständiger Inventur abschliessen. Der Task bleibt fehlgeschlagen sichtbar.
+2. Einen neuen Container unter demselben Namen anlegen und bewusst gestoppt
+   lassen. Die alte ID darf nicht durch den Namen ersetzt werden; der neue
+   Container muss gestoppt bleiben. Neue Stop-Journale müssen vollständige ID
+   und Namen speichern und vor `docker stop` synchronisiert sein. Alte kurze
+   IDs aus 1.2.2 müssen weiterhin korrekt abgeglichen werden.
+3. Nach dem Abschluss eines reinen Alt-ID-Journals den vollständigen Nachweis
+   unter `recovery-history/` prüfen: root-geschützt, kein Verlust von
+   Zusatzdateien oder Repository-Kontrolldaten, kein Überschreiben einer bereits
+   vorhandenen Historie und keine Symlink-Verfolgung. Wiederholte Vorgangsnamen
+   müssen eigene Archivverzeichnisse erhalten. Weitere Backups dürfen
+   nicht mehr wegen dieses erledigten Journals blockiert werden.
+4. Docker unerreichbar machen, Socket-Zugriff verweigern sowie Timeout,
+   unvollständige/fehlerhafte Inventur und ungültige Antwort simulieren. Keinen
+   dieser Fälle als gelöschten Container werten; Journal und Wiederholungen
+   erhalten. Ein gestoppter, noch vorhandener Container muss über dieselbe ID
+   gestartet werden; einen echten Startfehler nicht automatisch abschliessen.
+5. Fehlende Container und tatsächlich fehlgeschlagene Docker-/systemd-Starts
+   in einem Journal mischen. Die wirklichen offenen Fälle müssen geschützt
+   bleiben; keine Archivierung des ganzen Journals, solange Wiederanläufe offen
+   sind. Aktive Prozesse und belegte Vorgangssperren unverändert respektieren.
+6. Automatische Wiederholung in getrennten Prozessen ausführen: erster Fehler
+   erzeugt Ausgabe; unveränderter Fehler vor 24 Stunden keine erneute Cron-Mail,
+   aber einen erneuten Startversuch und einen Logeintrag. Geänderter Fehler und
+   Ablauf von 24 Stunden erzeugen erneut Ausgabe. Neustart und rückwärts
+   korrigierte Uhr prüfen. Manuelle Wiederholung darf niemals als Mail-Duplikat
+   stummgeschaltet werden.
+7. Auf einem isolierten Testhost nach automatischer Alt-ID-Bereinigung
+   deinstallieren: archivierte Alt-IDs dürfen nicht mehr blockieren. Aktive
+   Vorgänge, echte offene Wiederanläufe, unsichere Pfade oder ein Backup-Ziel
+   innerhalb des Deinstallationsbaums müssen weiterhin schützen. Lokale Historie
+   erst bei der bewussten Deinstallation entfernen, externe Backups erhalten.
+8. Die Fälle mit einem realen entbehrlichen Docker-Container in einer isolierten
+   Linux-Testumgebung wiederholen. Prozess-Fixtures und grüne CI belegen nicht
+   den Zustand produktiver Dienste, Cron-Mailzustellung beim Anwender oder einen
+   Hardware-Restore. Keine produktiven Container zu Testzwecken löschen.
+
 ## Ergänzende Freigabe- und Bedienungsabnahme für 1.2.2-beta
 
 Diese Szenarien gelten für die Vorabversion vom **15.10.2026**. Sie prüfen die

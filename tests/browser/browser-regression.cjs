@@ -152,7 +152,7 @@ const overviewBackupId='20260901-020002', overviewFinishedAt='2026-09-01T02:07:2
 const overviewTarget='/media/usb/PI_Backup/loxberry-hostbackup/'+'backup-target-with-a-deliberately-long-name-'.repeat(3);
 const verificationReport={backup_id:'fixture-ok',status:'verified',checked_files:3,checked_at:'2026-09-13T12:00:00Z',changes:[],content_verified:true,restore_tested:false};
 let failSave=true, taskFinished=false, tokenNumber=0, postCount=0, htmlCount=0, statusCount=0, tokenDelay=0, saveDelay=0, lastSavedPath='';
-let overviewIssues=false, reportRequests=0, taskPhase='copying';
+let overviewIssues=false, overviewMissingRecovery=false, reportRequests=0, taskPhase='copying';
 let panelFlowFixture=false,reportDelay=0,failPanelReport=false;
 let actionWiring=false,verificationMode='available',configImportSuccess=false;
 const wiredRequests=[];
@@ -237,7 +237,7 @@ const server=http.createServer(async(req,res)=>{
     if(action==='csrf-token'){await new Promise(resolve=>setTimeout(resolve,tokenDelay));return json(res,{csrf_token:'fresh-'+(++tokenNumber),expires_at:Date.now()/1000+3600});}
     if(action==='repository-status')return json(res,repositoryState);
     if(action==='source-info')return json(res,failSources?{ok:false,error:'Mountliste momentan nicht erreichbar'}:{selection:savedSources,volumes:sourceVolumes,notices:['Netzfreigaben bewusst auswählen.']},failSources?500:200);
-    if(action==='task-overview')return json(res,{tasks:[{task,state:taskFinished?'finished':'running'},...(panelFlowFixture?[{task:'export-panel-fixture.log',state:'finished'}]:[])],active_task:taskFinished?null:task,last_success:{backup_id:overviewBackupId,finished_at:overviewFinishedAt},next_run:{local:'14.09.2026 02:00'},last_failure:overviewIssues?{task:'backup-old-failure.log',state:'failed'}:null,pending_service_recovery:overviewIssues?1:0,target:{configured:true,readable:true,path:overviewTarget,available_mb:20000}});
+    if(action==='task-overview')return json(res,{tasks:[{task,state:taskFinished?'finished':'running'},...(panelFlowFixture?[{task:'export-panel-fixture.log',state:'finished'}]:[])],active_task:taskFinished?null:task,last_success:{backup_id:overviewBackupId,finished_at:overviewFinishedAt},next_run:{local:'14.09.2026 02:00'},last_failure:overviewIssues?{task:'backup-old-failure.log',state:'failed',phase:overviewMissingRecovery?'recovery_missing_containers':'cleanup_failed'}:null,pending_service_recovery:overviewIssues&&!overviewMissingRecovery?1:0,target:{configured:true,readable:true,path:overviewTarget,available_mb:20000}});
     if(['backup-preview','storage-info','runtime-cleanup-preview','diagnostics','inspect-backup','verification-report','recovery-sheet'].includes(action)){reportRequests++;if(reportDelay)await new Promise(resolve=>setTimeout(resolve,reportDelay));}
     if(action==='task-status'){statusCount++;return json(res,{state:taskFinished?'finished':'running',phase:taskFinished?'complete':taskPhase,now:100,mtime:99,content_b64:Buffer.from(longLog()).toString('base64')});}
     if(action==='target-notice'){
@@ -1085,6 +1085,11 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     assert.equal(await disclosure.evaluate(node=>node.open),false);
     assert.match(await page.locator('#overview-last-failure').innerText(),/Letzter protokollierter Fehler: backup-old-failure.log/);
     assert.equal(await page.locator('#recover-services-form').isVisible(),true,'Recovery action must not be hidden in details');
+    overviewMissingRecovery=true;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+    await page.locator('#recover-services-form').waitFor({state:'hidden'});
+    assert.match(await page.locator('#overview-last-failure').innerText(),/Nicht wieder gestartet; im Log dokumentiert/);
+    assert.match(await page.locator('#overview-last-failure').innerText(),/Diese veralteten Einträge blockieren keine weiteren Vorgänge/);
+    overviewMissingRecovery=false;
     overviewIssues=false;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
     await page.locator('#overview-last-failure').waitFor({state:'hidden'});
     assert.equal(await disclosure.evaluate(node=>node.open),false,'Polling preserves the closed disclosure');

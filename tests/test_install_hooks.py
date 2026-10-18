@@ -696,7 +696,12 @@ def platform_upgrade_integration():
         refused = hook(uninstall, "pending-uninstall", success=False)
         assert refused.returncode == 2 and "recover services" in refused.stderr
         assert launcher.exists() and trusted.exists() and config.read_bytes() == saved_bytes
-        shutil.rmtree(pending)
+        # Once confirmed missing-container evidence has left the actionable
+        # queue, its protected audit history must NOT permanently block uninstall.
+        history = state / "recovery-history/backup-missing.log-fixture/journal"
+        history.parent.mkdir(parents=True, mode=0o700)
+        pending.rename(history)
+        (history / "journal.json").write_text('{"entries":[{"type":"docker","id":"df26d4b1ade4","phase":"missing"}]}', encoding="utf-8")
         import fcntl
         with operation_lock.open("a") as held:
             fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -715,6 +720,7 @@ def platform_upgrade_integration():
         refused = hook(uninstall, "backup-uninstall", success=False)
         assert refused.returncode == 2 and "Backup target is inside" in refused.stderr
         assert (protected_backup / "sentinel").read_bytes() == b"backup"
+        assert (history / "journal.json").exists()
         config.write_bytes(saved_bytes)
         shutil.rmtree(protected_backup)
 

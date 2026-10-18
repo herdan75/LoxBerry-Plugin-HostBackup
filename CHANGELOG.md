@@ -10,6 +10,36 @@ Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
+## [Unreleased] - develop, 2026-10-18
+
+- Docker-Wiederanlauf unterscheidet laufende, gestoppte, nachweislich fehlende und
+  nicht zuverlässig abfragbare Container. Fehlende IDs werden nur nach einer
+  ausdrücklichen Docker-Fehlmeldung und erfolgreicher vollständiger Inventur
+  in einem inaktiven Vorgang automatisch abgeschlossen. Kein Start eines
+  gleichnamigen Ersatzcontainers und keine falsche Erfolgsmeldung.
+- Neue Stop-Journale speichern vollständige Container-IDs und Namen; alte kurze
+  IDs bleiben unterstützt. Stoppen erfolgt nach der Auflösung über die konkrete
+  ID, nicht über einen möglicherweise inzwischen neu belegten Namen.
+- Reine Alt-ID-Journale aus der offenen Warteschlange in die root-geschützte
+  `recovery-history/` verschieben. Der Vorgang bleibt als fehlgeschlagen
+  sichtbar, der Nachweis erhalten; solche Einträge blockieren nach der Prüfung
+  keine weiteren Backups oder Deinstallationen. Tatsächlich offene Wiederanläufe
+  und aktive Vorgänge behalten ihren Schutz. Historie bis zur bewussten
+  Deinstallation aufbewahren, nicht mit einer erfolgreichen Wiederherstellung
+  verwechseln.
+- Cron-Mails bei unverändertem Wiederanlauf-Fehler begrenzen: erster und geänderter
+  Fehler sofort, gleiche Erinnerung frühestens nach 24 Stunden. Versuche bleiben
+  im Fünfminutentakt und im Vorgangslog erhalten; manuelle Aufrufe zeigen das
+  Ergebnis immer. Ein während eines aktiven Backups/Restores verschwundener
+  Container lässt dessen Wiederanlauf weiterhin zunächst fehlschlagen.
+- Regressionstests und Abnahmeplan für gelöschte/ersetzte Container, alte IDs,
+  Docker-/Berechtigungsfehler, Mischfälle, Meldungsintervalle und erhaltene
+  Schutzgrenzen ergänzen. Keine neue Einstellung oder Sicherungsart.
+- Nur Entwicklungsstand: Paketversion, Tags, bereits veröffentlichte ZIPs und
+  beide Updatekanäle bleiben unverändert. Diese Korrektur ist noch nicht im
+  veröffentlichten 1.2.2-beta-Paket enthalten. Automatisierte Tests ersetzen
+  keinen Test auf dem betroffenen Anwendergerät oder einen Hardware-Restore.
+
 ## [1.2.2-beta] - 2026-10-15
 
 - Hinweise der gespeicherten Backup-Abschlussprüfung direkt beim betroffenen

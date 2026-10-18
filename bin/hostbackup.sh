@@ -1683,7 +1683,7 @@ restart_journal_path_is_safe() {
 restart_journal_update() {
   local state_dir="$1" action="$2" type="${3:-}" identity="${4:-}" label="${5:-}"
   restart_journal_path_is_safe "$state_dir" || { echo "Unsafe restart journal." >&2; return 13; }
-  perl -MJSON::PP -MFile::Temp=tempfile -MFcntl=:DEFAULT -MIO::Handle -e '
+  perl -MJSON::PP -MDigest::SHA=sha256_hex -MFile::Temp=tempfile -MFcntl=:DEFAULT -MIO::Handle -e '
     my ($dir, $action, $type, $id, $label) = @ARGV;
     my ($task) = $dir =~ m{([^/]+)$};
     my $file = "$dir/journal.json";
@@ -1694,23 +1694,52 @@ restart_journal_update() {
       die "Invalid restart journal\n" unless ref($data) eq "HASH" && ($data->{task} // "") eq $task && ref($data->{entries}) eq "ARRAY";
     } elsif ($action ne "init") { die "Restart journal missing\n"; }
     for my $entry (@{$data->{entries}}) {
-      die "Invalid journal entry\n" unless ref($entry) eq "HASH" && ($entry->{type} // "") =~ /\A(?:docker|systemd)\z/ && ($entry->{id} // "") =~ /\A[A-Za-z0-9][A-Za-z0-9_.@:\\-]*\z/ && ($entry->{phase} // "") =~ /\A(?:intended|stopped|restarted)\z/;
+      die "Invalid journal entry\n" unless ref($entry) eq "HASH" && ($entry->{type} // "") =~ /\A(?:docker|systemd)\z/ && ($entry->{id} // "") =~ /\A[A-Za-z0-9][A-Za-z0-9_.@:\\-]*\z/ && ($entry->{phase} // "") =~ /\A(?:intended|stopped|restarted|missing)\z/;
+      die "Invalid missing service\n" if $entry->{phase} eq "missing" && $entry->{type} ne "docker";
     }
-    if ($action eq "pending") {
+    if ($action eq "pending" || $action eq "missing-list") {
       for my $entry (reverse @{$data->{entries}}) {
-        next if $entry->{phase} eq "restarted";
+        next if $action eq "pending" && $entry->{phase} =~ /\A(?:restarted|missing)\z/;
+        next if $action eq "missing-list" && $entry->{phase} ne "missing";
         print "$entry->{type}\t$entry->{id}\t$entry->{phase}\n";
       }
       exit 0;
     }
-    if ($action ne "init") {
-      die "Invalid restart operation\n" unless $action =~ /\A(?:intended|stopped|restarted)\z/ && $type =~ /\A(?:docker|systemd)\z/ && $id =~ /\A[A-Za-z0-9][A-Za-z0-9_.@:\\-]*\z/;
+    my $notification = "";
+    if ($action eq "notification") {
+      # Stable state, not timestamped command output: identical failures still
+      # retry every five minutes but only remind once per day, across reboots.
+      my $signature = sha256_hex(JSON::PP->new->canonical->encode([
+        map { [@{$_}{qw(type id phase)}, $_->{problem} // ""] } @{$data->{entries}}
+      ]));
+      my $previous = $data->{notification};
+      my $now = time();
+      if (ref($previous) eq "HASH" && ($previous->{signature} // "") eq $signature &&
+          ($previous->{at} // "") =~ /\A[0-9]+\z/ && $previous->{at} <= $now && $now - $previous->{at} < 86400) {
+        print "quiet\n"; exit 0;
+      }
+      $data->{notification} = {signature => $signature, at => $now};
+      $notification = "notify\n";
+    } elsif ($action ne "init") {
+      die "Invalid restart operation\n" unless $action =~ /\A(?:intended|stopped|restarted|missing|problem)\z/ && $type =~ /\A(?:docker|systemd)\z/ && $id =~ /\A[A-Za-z0-9][A-Za-z0-9_.@:\\-]*\z/;
+      die "Invalid missing service\n" if $action eq "missing" && $type ne "docker";
       my ($entry) = grep { $_->{type} eq $type && $_->{id} eq $id } @{$data->{entries}};
       if (!$entry) {
         die "Missing restart intent\n" unless $action eq "intended";
         $entry = {type => $type, id => $id}; push @{$data->{entries}}, $entry;
       }
-      $entry->{phase} = $action; $entry->{updated_at} = time();
+      if ($action eq "problem") {
+        die "Invalid recovery problem\n" unless $label =~ /\A[a-z][a-z-]*\z/;
+        $entry->{problem} = $label;
+      } else {
+        $entry->{phase} = $action;
+        delete $entry->{problem};
+        if (length($label)) {
+          die "Invalid container label\n" unless $label =~ /\A[A-Za-z0-9][A-Za-z0-9_.@:\\-]*\z/;
+          $entry->{label} = $label;
+        }
+      }
+      $entry->{updated_at} = time();
     }
     my ($out, $tmp) = tempfile(".journal-XXXXXX", DIR => $dir, UNLINK => 0);
     chmod 0600, $tmp or die $!;
@@ -1728,6 +1757,7 @@ restart_journal_update() {
         close $parent_directory or die $!;
       }
     }
+    print $notification;
   ' "$state_dir" "$action" "$type" "$identity" "$label"
 }
 
@@ -1741,10 +1771,18 @@ restart_journal_create() {
 }
 
 restart_journal_finish() {
-  local state_dir="$1" pending control name entry
+  local state_dir="$1" pending missing control name entry
   restart_journal_path_is_safe "$state_dir" || return 13
   pending="$(restart_journal_update "$state_dir" pending)" || return 20
   [ -z "$pending" ] || { log "ERROR: Service recovery is still pending in $state_dir"; return 20; }
+  missing="$(restart_journal_update "$state_dir" missing-list)" || return 20
+  if [ -n "$missing" ]; then
+    # Never discard evidence or call a vanished container successfully restarted.
+    # The complete local journal (including unpublished repository controls) is
+    # retained outside the actionable queue, so it cannot block future work.
+    restart_journal_archive "$state_dir"
+    return $?
+  fi
   # Preserve the journal itself when unexpected material needs investigation.
   for entry in "$state_dir"/* "$state_dir"/.[!.]* "$state_dir"/..?*; do
     [ -e "$entry" ] || [ -L "$entry" ] || continue
@@ -1775,24 +1813,97 @@ restart_journal_finish() {
   rmdir -- "$state_dir" || return 20
 }
 
+restart_journal_archive() {
+  local state_dir="$1" history="$ROOT_STATE_DIR/recovery-history" task archived
+  restart_journal_path_is_safe "$state_dir" || return 13
+  task="${state_dir##*/}"
+  archived="$(perl -MFile::Temp=tempdir -MFcntl=:DEFAULT -MIO::Handle -e '
+    my ($source, $history, $task) = @ARGV;
+    if (!lstat($history)) { mkdir($history, 0700) or die "Cannot create recovery history: $!\n"; }
+    my @info = lstat($history);
+    die "Unsafe recovery history\n" unless @info && -d _ && !-l _ && $info[4] == $> && ($info[2] & 0077) == 0;
+    # A restore can reuse the same task name. Reserve a unique audit directory
+    # rather than overwrite old evidence or permanently block on a collision.
+    my $reservation = tempdir("$task-XXXXXXXX", DIR => $history, CLEANUP => 0);
+    my $destination = "$reservation/journal";
+    rename($source, $destination) or die "Cannot archive recovery journal: $!\n";
+    if ($^O eq "linux") {
+      (my $parent = $source) =~ s{/[^/]+$}{};
+      (my $root = $history) =~ s{/[^/]+$}{};
+      for my $path ($reservation, $history, $parent, $root) {
+        sysopen(my $directory, $path, O_RDONLY | O_NOFOLLOW) or die $!;
+        $directory->sync or die "Cannot sync recovery history: $!\n";
+        close $directory or die $!;
+      }
+    }
+    print "$destination\n";
+  ' "$state_dir" "$history" "$task")" || return 20
+  log "WARNING: Missing Docker containers were NOT restarted. Recovery evidence retained in $archived; obsolete IDs no longer block HostBackup."
+}
+
+docker_recovery_state() {
+  local identity="$1" output inventory row found=false inspected=false
+  # A failed inspect alone is NOT proof of deletion (daemon/socket/permission
+  # failures must remain retryable). Require both an explicit not-found result
+  # and a successful, fully validated inventory from Docker.
+  if command -v timeout >/dev/null 2>&1; then
+    if output="$(LC_ALL=C timeout 15 docker container inspect --format '{{.State.Running}}' "$identity" 2>&1)"; then inspected=true; fi
+  else
+    if output="$(LC_ALL=C docker container inspect --format '{{.State.Running}}' "$identity" 2>&1)"; then inspected=true; fi
+  fi
+  if [ "$inspected" = true ]; then
+    case "$output" in
+      true) printf 'running\n'; return 0 ;;
+      false) printf 'stopped\n'; return 0 ;;
+    esac
+  fi
+  if [[ ! "$identity" =~ ^[a-f0-9]{12,64}$ ]] || [[ "$output" != *"No such container:"* && "$output" != *"No such object:"* ]]; then
+    printf 'unavailable\n'; return 0
+  fi
+  if command -v timeout >/dev/null 2>&1; then
+    inventory="$(LC_ALL=C timeout 15 docker ps -a --no-trunc --format '{{.ID}}' 2>/dev/null)" || { printf 'unavailable\n'; return 0; }
+  else
+    inventory="$(LC_ALL=C docker ps -a --no-trunc --format '{{.ID}}' 2>/dev/null)" || { printf 'unavailable\n'; return 0; }
+  fi
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    [[ "$row" =~ ^[a-f0-9]{64}$ ]] || { printf 'unavailable\n'; return 0; }
+    [[ "$row" != "$identity"* ]] || found=true
+  done <<< "$inventory"
+  if [ "$found" = false ]; then printf 'missing\n'; else printf 'unavailable\n'; fi
+}
+
 restart_journal_retry_type() {
-  local state_dir="$1" requested_type="$2" pending type identity phase failed=0
+  local state_dir="$1" requested_type="$2" pending type identity phase state failed=0
   pending="$(restart_journal_update "$state_dir" pending)" || return 20
   while IFS=$'\t' read -r type identity phase; do
     [ "$type" = "$requested_type" ] || continue
     log "Recovering $type $identity (journal state: $phase)"
     if [ "$type" = docker ]; then
-      if ! command -v docker >/dev/null 2>&1; then failed=1; continue; fi
-      if [ "$(docker inspect --format '{{.State.Running}}' "$identity" 2>/dev/null || true)" != true ]; then
+      state="$(docker_recovery_state "$identity")" || state=unavailable
+      if [ "$state" = missing ] && [ "${RECOVERY_SETTLE_MISSING:-false}" = true ]; then
+        restart_journal_update "$state_dir" missing docker "$identity" || { failed=1; continue; }
+        log "WARNING: Docker container $identity no longer exists (confirmed by Docker inventory). It was NOT restarted; no replacement container will be started by name."
+        continue
+      fi
+      if [ "$state" = stopped ]; then
         if command -v timeout >/dev/null 2>&1; then timeout 45 docker start "$identity" || true;
         else docker start "$identity" || true; fi
+        state="$(docker_recovery_state "$identity")" || state=unavailable
+        [ "$state" != stopped ] || state=start-failed
       fi
-      if [ "$(docker inspect --format '{{.State.Running}}' "$identity" 2>/dev/null || true)" != true ]; then
+      if [ "$state" != running ]; then
+        restart_journal_update "$state_dir" problem docker "$identity" "$state" || return 20
+        log "Docker recovery state: $state ($identity)"
         log "ERROR: Docker container $identity did not restart; journal retained for retry"; failed=1; continue
       fi
     else
-      if ! command -v systemctl >/dev/null 2>&1; then failed=1; continue; fi
+      if ! command -v systemctl >/dev/null 2>&1; then
+        restart_journal_update "$state_dir" problem systemd "$identity" unavailable || return 20
+        log "ERROR: systemctl unavailable; journal retained for retry"; failed=1; continue
+      fi
       if ! systemctl is-active --quiet "$identity" 2>/dev/null; then
+        restart_journal_update "$state_dir" problem systemd "$identity" start-failed || return 20
         if command -v timeout >/dev/null 2>&1; then timeout 45 systemctl start "$identity" || true;
         else systemctl start "$identity" || true; fi
       fi
@@ -1807,7 +1918,10 @@ restart_journal_retry_type() {
 
 recover_restart_journals() {
   require_root_for_write || return $?
-  local state_dir task log_file failed=0 busy_notice=report lock_status=0
+  local state_dir task log_file output missing notification finish_output result phase failed=0 busy_notice=report lock_status=0
+  # Only inactive journals are settled automatically. A deletion during an
+  # active backup/restore must first fail that operation, never report success.
+  local RECOVERY_SETTLE_MISSING=true
   case "$#:${1:-}" in
     0:) ;;
     1:--scheduled) busy_notice=quiet-busy ;;
@@ -1826,12 +1940,34 @@ recover_restart_journals() {
     task_process_is_current "$task" && continue
     log_file="$TASK_LOG_DIR/$task"
     prepare_log_file "$log_file" append || { failed=1; continue; }
-    log "Recovering interrupted task $task from local restart journal" | tee -a "$log_file"
-    if start_backup_targets_if_needed "$state_dir" 2>&1 | tee -a "$log_file" && restart_journal_finish "$state_dir"; then
-      task_state_write "$task" failed recovered_after_interruption "$log_file" 0 20 || failed=1
-    else
-      task_state_write "$task" failed cleanup_failed "$log_file" 0 20 || true
+    result=0
+    output="$(log "Recovering interrupted task $task from local restart journal"; start_backup_targets_if_needed "$state_dir" 2>&1)" || result=$?
+    printf '%s\n' "$output" >> "$log_file" || return 20
+    # Query/notification errors stay visible; malformed control data must never
+    # be silenced as a duplicate or removed from the queue.
+    missing="$(restart_journal_update "$state_dir" missing-list)" || { printf '%s\n' "$output"; return 20; }
+    notification=notify
+    if [ "$busy_notice" = quiet-busy ]; then
+      notification="$(restart_journal_update "$state_dir" notification)" || { printf '%s\n' "$output"; return 20; }
+    fi
+    if [ "$result" -eq 0 ]; then
+      phase=recovered_after_interruption
+      [ -z "$missing" ] || phase=recovery_missing_containers
+      # Record a failed outcome before moving evidence out of the active queue.
+      task_state_write "$task" failed "$phase" "$log_file" 0 20 || return 20
+      finish_output="$(restart_journal_finish "$state_dir" 2>&1)" || result=$?
+      [ -z "$finish_output" ] || { printf '%s\n' "$finish_output" >> "$log_file"; output+=$'\n'"$finish_output"; }
+      [ "$result" -eq 0 ] || notification=notify
+    fi
+    if [ "$result" -ne 0 ]; then
+      task_state_write "$task" failed cleanup_failed "$log_file" 0 20 || return 20
       failed=1
+    fi
+    if [ "$notification" != quiet ]; then
+      printf '%s\n' "$output"
+      if [ "$result" -ne 0 ] && [ "$busy_notice" = quiet-busy ]; then
+        printf '%s\n' 'Unchanged recovery failures are retried every five minutes; the next identical email reminder is due in 24 hours. Details remain in the task log.'
+      fi
     fi
   done
   return "$failed"
@@ -1841,7 +1977,7 @@ stop_docker_if_requested() {
   if [ "$(json_get_bool stop_docker_before_backup)" = "true" ] && command -v docker >/dev/null 2>&1; then
     local state_dir="$1" failed=0
     local id name
-    docker ps --format '{{.ID}}\t{{.Names}}' > "$state_dir/docker-to-stop.tsv" 2>/dev/null || return 1
+    docker ps --no-trunc --format '{{.ID}}\t{{.Names}}' > "$state_dir/docker-to-stop.tsv" 2>/dev/null || return 1
     if [ -s "$state_dir/docker-to-stop.tsv" ]; then
       log "Docker containers running before backup:"
       while IFS="$(printf '\t')" read -r id name; do
@@ -1850,6 +1986,7 @@ stop_docker_if_requested() {
       done < "$state_dir/docker-to-stop.tsv"
       while IFS="$(printf '\t')" read -r id name; do
         [ -n "$id" ] || continue
+        [[ "$id" =~ ^[a-f0-9]{64}$ ]] || { log "ERROR: Docker did not return a full container identity for $name"; return 20; }
         restart_journal_update "$state_dir" intended docker "$id" "$name" || return 20
         log "Stopping Docker container $name ($id)"
         if command -v timeout >/dev/null 2>&1; then
@@ -1905,24 +2042,33 @@ stop_selected_systemd_targets() {
 stop_selected_docker_targets() {
   local state_dir="$1"
   local targets_file="$2"
-  local type name id running failed=0
+  local type name id running inspection extra failed=0
   [ -s "$targets_file" ] || return 0
   command -v docker >/dev/null 2>&1 || return 0
   while IFS="$(printf '\t')" read -r type name; do
     [ "$type" = "docker" ] || continue
     [ -n "$name" ] || continue
-    running="$(docker inspect --format '{{.State.Running}}' "$name" 2>/dev/null || true)"
+    # Read immutable identity and running state together. Looking these up by
+    # name separately could accidentally capture a newly recreated replacement.
+    if ! inspection="$(docker container inspect --format '{{.Id}} {{.State.Running}}' "$name" 2>/dev/null)"; then
+      log "ERROR: Docker container $name could not be inspected before stopping"
+      failed=1; continue
+    fi
+    read -r id running extra <<< "$inspection"
+    if [[ ! "$id" =~ ^[a-f0-9]{64}$ ]] || [[ "$running" != true && "$running" != false ]] || [ -n "$extra" ] || [[ "$inspection" == *$'\n'* ]]; then
+      log "ERROR: Docker did not return a full container identity and state for $name"
+      failed=1; continue
+    fi
     if [ "$running" = "true" ]; then
-      id="$(docker inspect --format '{{.Id}}' "$name" 2>/dev/null | cut -c1-12)"
-      restart_journal_update "$state_dir" intended docker "${id:-$name}" "$name" || return 20
+      restart_journal_update "$state_dir" intended docker "$id" "$name" || return 20
       log "Stopping Docker container $name (${id:-unknown})"
       if command -v timeout >/dev/null 2>&1; then
-        timeout 45 docker stop -t 30 "$name" || failed=1
+        timeout 45 docker stop -t 30 "$id" || failed=1
       else
-        docker stop -t 30 "$name" || failed=1
+        docker stop -t 30 "$id" || failed=1
       fi
-      if [ "$(docker inspect --format '{{.State.Running}}' "$name" 2>/dev/null || true)" = "false" ]; then
-        restart_journal_update "$state_dir" stopped docker "${id:-$name}" "$name" || return 20
+      if [ "$(docker inspect --format '{{.State.Running}}' "$id" 2>/dev/null || true)" = "false" ]; then
+        restart_journal_update "$state_dir" stopped docker "$id" "$name" || return 20
       else
         log "ERROR: Docker container $name is still running"
         failed=1

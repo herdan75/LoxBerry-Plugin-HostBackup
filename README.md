@@ -1,6 +1,16 @@
 # LoxBerry Host Backup
 
 > [!NOTE]
+> **Neu auf develop, noch nicht veröffentlicht (18.10.2026):** Veraltete
+> Wiederanlauf-Einträge für nachweislich nicht mehr vorhandene Docker-Container
+> werden automatisch abgeschlossen und mit ihrem Nachweis archiviert. Dadurch
+> blockieren diese alten IDs nach der Prüfung weder weitere Backups noch eine
+> Deinstallation. Tatsächliche Startfehler werden weiterhin erneut versucht;
+> unveränderte Fehler erzeugen nicht mehr alle fünf Minuten eine Cron-Mail.
+> Keine neue Einstellung und kein neuer Sicherungsmodus. Das veröffentlichte
+> Paket 1.2.2-beta und die Updatekanäle enthalten diese Änderung noch nicht.
+
+> [!NOTE]
 > **Neu in 1.2.2-beta (15.10.2026):** Die Dienst-/Container-Auswahl verwendet
 > gebündelte systemd-Abfragen und eigene, begrenzte Zeitlimits. Erneutes Laden
 > und Schutz bestehender Auswahlen machen verzögerte oder fehlgeschlagene
@@ -976,6 +986,28 @@ Das Manifest hält zusätzlich die Stop-Ziele fest. Ein abgebrochenes Backup wir
 als `stopped` markiert; schlägt der Wiederanlauf fehl, bleibt ein Fehlerzustand
 mit offenem Journal sichtbar. Unvollständige Backups vor einer Löschung prüfen.
 
+**Entwicklungsstand vom 18.10.2026, noch nicht im veröffentlichten 1.2.2-beta:**
+Neue Journale speichern die vollständige Docker-ID und den Namen; vorhandene
+Journale mit kurzen IDs bleiben lesbar. Fehlt ein früherer Container, muss Docker
+dies ausdrücklich melden und eine erfolgreiche vollständige Containerliste das
+Fehlen bestätigen. Nur bei nicht mehr laufenden Backup-/Restore-Aufgaben wird
+dieser Eintrag danach automatisch aus der offenen Wiederanlauf-Liste genommen.
+Ein gleichnamiger Ersatzcontainer wird nicht gestartet. Der frühere Vorgang bleibt
+als fehlgeschlagen sichtbar, nicht als erfolgreich wiederhergestellt.
+
+Der vollständige Nachweis bleibt unter
+`/var/lib/loxberryhostbackup/recovery-history/` root-geschützt erhalten,
+bis das Plugin bewusst deinstalliert wird. Reine Alt-ID-Fälle blockieren nach
+dieser Prüfung weder neue Backups noch die Deinstallation. Bei nicht erreichbarem
+Docker, fehlenden Berechtigungen oder echten Startfehlern bleiben die betroffenen
+Einträge dagegen offen und geschützt. Automatische Versuche laufen weiterhin
+alle fünf Minuten; Cron-Ausgaben erfolgen beim ersten Fehler, bei einer Änderung
+des Fehlerzustands und danach bei unverändertem Fehler frühestens nach 24 Stunden.
+Jeder Versuch bleibt im Vorgangslog dokumentiert. Der manuelle Wiederanlauf zeigt
+das Ergebnis immer an. Keine zusätzliche Bedienung erforderlich; laufende
+Backups/Restores melden einen fehlgeschlagenen Wiederanlauf weiterhin zuerst als
+Fehler, statt ihn während des Vorgangs still zu übergehen.
+
 **In Version 1.0.0 enthalten:** Die Boot-/Fünfminuten-Regel
 ruft `recover-services --scheduled` auf. Hält gerade ein Backup, Restore oder anderer
 Vorgang die globale Sperre, endet nur dieser automatische Versuch ohne Ausgabe
@@ -1139,6 +1171,10 @@ funktioniert auch bei verschwundenem Backup-Medium. Offene Neustarts werden
 beim Booten, danach alle fünf Minuten und vor einem neuen Backup erneut versucht.
 Laufende Aufträge bleiben unberührt; nur im Journal festgehaltene Dienste oder
 Container werden behandelt. Misslingt ein Neustart, bleibt das Journal erhalten.
+Im noch unveröffentlichten Entwicklungsstand vom 18.10.2026 werden ausschliesslich
+bestätigt nicht mehr vorhandene Docker-IDs in inaktiven Vorgängen gesondert
+behandelt; der Nachweis bleibt in `recovery-history/` erhalten. Siehe
+[Dienst-Wiederanlauf](#dienste-und-container-anhalten).
 
 ## Backup-Liste Und Aktionen
 
@@ -1380,6 +1416,14 @@ Aufgaben entfernt.
 
 Bei der Deinstallation entfernt das Plugin seine LoxBerry-Plugin-Dateien und den
 Cron-Eintrag `/etc/cron.d/loxberryhostbackup`.
+
+Aktive Vorgänge und tatsächlich noch offene Dienst-Wiederanläufe bleiben aus
+Sicherheitsgründen geschützt. Im noch unveröffentlichten Entwicklungsstand vom
+18.10.2026 blockieren bestätigte, automatisch archivierte Alt-IDs gelöschter
+Docker-Container die Deinstallation nicht mehr. Das bedeutet nicht, dass ein
+Docker-Ausfall oder ein echter Dienst-Startfehler automatisch ignoriert wird.
+Die lokale Wiederanlauf-Historie wird bei einer bewussten Deinstallation zusammen
+mit den lokalen Laufzeitdaten entfernt; benötigte Nachweise vorher sichern.
 
 Backup-Daten auf externen Datenträgern werden nicht automatisch gelöscht. Sie
 sollen bewusst erhalten bleiben, damit ein Restore oder eine spätere manuelle

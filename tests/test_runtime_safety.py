@@ -35,7 +35,8 @@ COMMON_FUNCTIONS = (
 )
 JOURNAL_FUNCTIONS = (
     "restart_journal_path_is_safe", "restart_journal_update", "restart_journal_create",
-    "restart_journal_finish", "restart_journal_retry_type", "recover_restart_journals",
+    "restart_journal_archive", "restart_journal_finish", "docker_recovery_state",
+    "restart_journal_retry_type", "recover_restart_journals",
     "stop_selected_systemd_targets", "stop_selected_docker_targets", "stop_docker_if_requested",
     "stop_backup_targets", "start_docker_if_needed", "start_systemd_if_needed",
     "log_restart_targets", "start_backup_targets_if_needed", "backup_cleanup_on_exit",
@@ -67,7 +68,10 @@ verify_backup_target() { :; }
 protected_systemd_service() { return 1; }
 run_hook() { :; }
 notify_hostbackup() { :; }
-timeout() { shift; "$@"; }
+timeout() {
+  case "${1:-}" in -k|--kill-after) shift 2 ;; --kill-after=*) shift ;; esac
+  shift; "$@"
+}
 systemctl() {
   case "$1" in
     is-active) [ -f "$TEST_ROOT/active-$3" ] ;;
@@ -85,11 +89,15 @@ systemctl() {
   esac
 }
 docker() {
+  [ "${1:-}" != container ] || shift
   case "$1" in
     ps) : ;;
     inspect)
       case "$3" in
-        '{{.Id}}') echo abc123 ;;
+        '{{.Id}}') printf '%064d\n' 123 ;;
+        '{{.Id}} {{.State.Running}}')
+          printf '%064d ' 123
+          if [ -f "$TEST_ROOT/docker-active" ]; then echo true; else echo false; fi ;;
         '{{.State.Running}}') [ ! -f "$TEST_ROOT/docker-active" ] || { echo true; return 0; }; echo false ;;
       esac ;;
     stop)

@@ -632,6 +632,9 @@
       var data = await request('task-overview'), target = byId('overview-values'), details = byId('overview-detail-values');
       var active = data.active_task && typeof data.active_task === 'object' ? data.active_task.task : data.active_task;
       var failure = data.last_failure ? data.last_failure.task + ' · ' + data.last_failure.state : '';
+      if (data.last_failure && data.last_failure.phase === 'recovery_missing_containers') {
+        failure += ' · Frühere Docker-Container sind nicht mehr vorhanden. Nicht wieder gestartet; im Log dokumentiert. Diese veralteten Einträge blockieren keine weiteren Vorgänge.';
+      }
       target.replaceChildren(); details.replaceChildren();
       byId('recover-services-form').hidden = !data.pending_service_recovery;
       var failureNotice = byId('overview-last-failure'); failureNotice.hidden = !failure;

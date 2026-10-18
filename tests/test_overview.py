@@ -68,6 +68,24 @@ class OverviewTests(unittest.TestCase):
             (state / "tasks/backup-current.log.json").write_text(json.dumps(task))
             self.assertEqual(overview.overview({}, None, state)["active_task"], "backup-current.log")
 
+    def test_archived_missing_container_is_visible_but_not_pending_recovery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp)
+            (state / "tasks").mkdir()
+            (state / "restart-journals").mkdir()
+            archive = state / "recovery-history/backup-missing.log-unique/journal"
+            archive.mkdir(parents=True)
+            (archive / "journal.json").write_text(json.dumps({"entries": [{"type": "docker", "id": "a" * 64, "phase": "missing"}]}))
+            (state / "tasks/backup-missing.log.json").write_text(json.dumps({
+                "state": "failed", "phase": "recovery_missing_containers", "pid": 0,
+                "updated_at": 10, "exit_status": 20,
+            }))
+            result = overview.overview({}, None, state)
+            self.assertEqual(result["pending_service_recovery"], 0)
+            self.assertEqual(result["last_failure"]["phase"], "recovery_missing_containers")
+            self.assertEqual(result["last_failure"]["state"], "failed")
+            self.assertIsNone(result["last_success"])
+
     def test_preview_excludes_backup_stick_not_other_usb_data(self):
         mounted = {"filesystems": [{"target": "/", "fstype": "ext4"}, {"target": "/media/usb/PI_Backup", "fstype": "ext4"}, {"target": "/media/usb/USB_Loxberry", "fstype": "ext4"}]}
         with patch.object(overview.subprocess, "run", return_value=type("Result", (), {"stdout": json.dumps(mounted)})()):
