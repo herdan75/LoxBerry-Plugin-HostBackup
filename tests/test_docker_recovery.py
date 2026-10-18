@@ -70,7 +70,7 @@ docker() {
       printf '%s\n' "$identity" ;;
     stop)
       identity="${!#}"
-      grep -q '"phase":"intended"' "$RESTART_JOURNAL_DIR/backup-test.log/journal.json" || return 88
+      grep -q '"phase":"intended"' "$RESTART_JOURNAL_DIR/${MOCK_TASK_NAME:-backup-test.log}/journal.json" || return 88
       printf '%s\n' "$identity" >> "$TEST_ROOT/docker-stops"
       printf 'stopped\n' > "$TEST_ROOT/docker-state-$identity" ;;
     *) return 99 ;;
@@ -126,6 +126,17 @@ class DockerRecoveryTests(unittest.TestCase):
     def starts(self):
         path = self.root / "docker-starts"
         return path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+
+    def complete_selected_service_cycle(self, env=None):
+        """Finish the actual stop/restart journal lifecycle, without copying data."""
+        self.execute(r'''
+state_dir="$(restart_journal_create backup-test.log)"
+printf 'docker\tdemo\n' > "$TEST_ROOT/selected.tsv"
+stop_selected_docker_targets "$state_dir" "$TEST_ROOT/selected.tsv"
+start_backup_targets_if_needed "$state_dir"
+restart_journal_finish "$state_dir"
+''', env)
+        self.assertFalse(self.journal_path.exists())
 
     def test_state_distinguishes_running_stopped_and_confirmed_missing(self):
         for state, expected in (("running", "running"), ("stopped", "stopped"), ("missing", "missing")):
@@ -239,6 +250,107 @@ start_backup_targets_if_needed "$state_dir"
 ''')
         self.assertEqual(self.journal()["entries"], [])
         self.assertFalse((self.root / "docker-stops").exists())
+        self.assertEqual(self.starts(), [])
+
+    def test_container_removed_between_successful_service_cycles_does_not_block_next_backup(self):
+        self.state("demo", "running")
+        self.state(FULL_ID, "running")
+        self.complete_selected_service_cycle()
+        self.assertEqual(self.starts(), [FULL_ID])
+
+        # Removal is AFTER the completed first cycle; the saved selection still
+        # contains demo. This is not an interrupted-backup recovery scenario.
+        self.state("demo", "missing")
+        self.state(FULL_ID, "missing")
+        self.complete_selected_service_cycle()
+        self.assertEqual(self.starts(), [FULL_ID])
+        self.assertEqual((self.root / "docker-stops").read_text().splitlines(), [FULL_ID])
+        self.assertEqual(list((self.root / "state/restart-journals").iterdir()), [])
+        scheduled = self.execute("recover_restart_journals --scheduled\n")
+        self.assertEqual(scheduled.stdout + scheduled.stderr, "")
+
+    def test_two_actual_backup_workers_finish_when_container_is_removed_between_runs(self):
+        self.state("demo", "running")
+        self.state(FULL_ID, "running")
+        self.run_shell(DOCKER_MOCK + runtime_safety.PREFLIGHT_MOCKS + r'''
+preflight_backup() { printf '{"status":"ok"}\n'; }
+json_get_bool() { echo false; }
+write_backup_marker() { :; }
+write_manifest() { printf '{"status":"%s"}\n' "$3" > "$1/manifest.json"; }
+selected_stop_targets() { printf 'docker\tdemo\n'; }
+rsync_live_options() { :; }
+rsync_metadata_options() { :; }
+rsync_destination() { printf '%s\n' "$2"; }
+# Only the copy/validation/storage dependencies are simulated. The production
+# backup worker and its complete service/journal lifecycle run unchanged.
+rsync() { [[ "${!#}" == "$TEST_ROOT/target/"*"/rootfs/" ]]; }
+calculate_size() { echo 12; }
+calculate_files() { echo 1; }
+validate_completed_backup() { :; }
+prune_old_backups() { :; }
+MOCK_TASK_NAME=backup-first.log create_backup first
+printf 'missing\n' > "$TEST_ROOT/docker-state-demo"
+printf 'missing\n' > "$TEST_ROOT/docker-state-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+MOCK_TASK_NAME=backup-second.log create_backup second
+''', (*JOURNAL_FUNCTIONS, "create_backup"))
+        for name in ("first", "second"):
+            task = json.loads((self.root / f"state/tasks/backup-{name}.log.json").read_text())
+            manifest = json.loads((self.root / f"target/{name}/manifest.json").read_text())
+            self.assertEqual((task["state"], task["phase"]), ("finished", "complete"))
+            self.assertEqual(manifest["status"], "complete")
+        self.assertEqual(self.starts(), [FULL_ID])
+        self.assertEqual((self.root / "docker-stops").read_text().splitlines(), [FULL_ID])
+        self.assertEqual(list((self.root / "state/restart-journals").iterdir()), [])
+        scheduled = self.execute("recover_restart_journals --scheduled\n")
+        self.assertEqual(scheduled.stdout + scheduled.stderr, "")
+
+    def test_same_name_recreated_between_backups_uses_current_full_id_only(self):
+        self.state("demo", "running")
+        self.state(FULL_ID, "running")
+        self.complete_selected_service_cycle()
+        self.state(FULL_ID, "missing")
+        self.state(REPLACEMENT_ID, "running")
+        self.complete_selected_service_cycle({"MOCK_RESOLVED_ID": REPLACEMENT_ID})
+        self.assertEqual(self.starts(), [FULL_ID, REPLACEMENT_ID])
+        self.assertEqual((self.root / "docker-stops").read_text().splitlines(), [FULL_ID, REPLACEMENT_ID])
+        self.assertEqual((self.root / ("docker-state-" + FULL_ID)).read_text(), "missing")
+        self.assertFalse(self.journal_path.exists())
+
+    def test_missing_selected_name_requires_reliable_inventory_before_skipping(self):
+        self.execute('state_dir="$(restart_journal_create backup-test.log)"\n')
+        cases = (
+            {"MOCK_PS_STATUS": "1"},
+            {"MOCK_PS_STATUS": "124"},
+            {"MOCK_PS_LIST": "demo"},
+            {"MOCK_PS_LIST": "other\ndemo"},
+            {"MOCK_PS_LIST": "bad container name"},
+            {"MOCK_PS_LIST": "other\n/name-with-slash"},
+            {"MOCK_DOCKER_STATE": "unavailable"},
+            {"MOCK_DOCKER_STATE": "permission"},
+            {"MOCK_DOCKER_STATE": "timeout"},
+        )
+        for env in cases:
+            with self.subTest(env=env):
+                self.execute(r'''
+printf 'docker\tdemo\n' > "$TEST_ROOT/selected.tsv"
+stop_selected_docker_targets "$RESTART_JOURNAL_DIR/backup-test.log" "$TEST_ROOT/selected.tsv"
+''', env, expected=1)
+                self.assertEqual(self.journal()["entries"], [])
+        self.assertFalse((self.root / "docker-stops").exists())
+        self.assertEqual(self.starts(), [])
+
+    def test_deleted_selection_is_skipped_with_other_valid_named_containers_present(self):
+        self.complete_selected_service_cycle({"MOCK_PS_LIST": "other-container\ndemo.other\ndemo2"})
+        self.assertEqual(self.starts(), [])
+        self.assertFalse((self.root / "docker-stops").exists())
+        calls = (self.root / "docker-calls").read_text()
+        self.assertIn("{{.Names}}", calls)
+
+    def test_old_name_only_journal_is_not_retired_by_selected_name_detection(self):
+        self.initialize(("demo",))
+        self.execute("recover_restart_journals --scheduled\n", expected=1)
+        self.assertEqual(self.journal()["entries"][0]["phase"], "stopped")
+        self.assertEqual(self.history_paths(), [])
         self.assertEqual(self.starts(), [])
 
     @unittest.skipIf(os.name == "nt", "Production archive ownership/mode checks require Linux")

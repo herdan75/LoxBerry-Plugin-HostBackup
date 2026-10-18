@@ -16,6 +16,15 @@ kurze IDs bleiben abgleichbar. Während eines aktiven Backups/Restores führt ei
 fehlgeschlagener Wiederanlauf weiterhin zuerst zum Fehlerzustand. Automatische
 Bereinigung darf keinen erfolgreichen Backup-/Restore-Abschluss vortäuschen.
 
+Davon getrennt ist eine gespeicherte Stop-Auswahl für ein **neues** Backup:
+Nach abgeschlossenem Vorgängerbackup wird ein neu erstellter Container über
+seine aktuell beobachtete vollständige ID erfasst. Ein inzwischen gelöschter
+Name darf nur nach ausdrücklicher Fehlmeldung und einer unabhängigen, gültigen
+vollständigen Namensinventur übersprungen werden. Die Auswahl bleibt gespeichert;
+Daemon-, Berechtigungs- und Abfragefehler werden nicht als Löschung interpretiert.
+Diese Ausnahme berechtigt niemals den Wiederanlauf einer alten ID, einen
+gleichnamigen Ersatzcontainer zu starten.
+
 Sobald keine tatsächlich offenen Wiederanläufe verbleiben, wird ein Journal mit
 fehlenden Containern atomar in einem eigenen Verzeichnis unter
 `ROOT_STATE_DIR/recovery-history/`

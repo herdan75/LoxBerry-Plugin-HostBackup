@@ -526,6 +526,20 @@ def platform_upgrade_integration():
 
         # Recover the root-owned legacy staging directory and then repeat the
         # exact same version again. All purges/copies happen as the web user.
+        # A retained restart intent must block unsafe UNINSTALL, not prevent
+        # installing the corrected runtime over the existing plugin. Neither
+        # pending evidence nor already archived evidence may be discarded.
+        state = home / "data/plugins/loxberryhostbackup/root-state"
+        recovery_evidence = {}
+        for relative, phase in (("restart-journals/pending/journal.json", "stopped"),
+                                ("recovery-history/older/journal/journal.json", "missing")):
+            evidence = state / relative
+            evidence.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            payload = json.dumps({"task": "backup-retained.log", "entries": [
+                {"type": "docker", "id": "df26d4b1ade4", "phase": phase}]}).encode()
+            evidence.write_bytes(payload)
+            evidence.chmod(0o600)
+            recovery_evidence[evidence] = payload
         for install_id in ("repair", "repeat"):
             # Legacy root-owned cache directories and external links must not
             # turn this migration into a recursive chown of the trusted store.
@@ -548,6 +562,9 @@ def platform_upgrade_integration():
             assert active != previous
             assert previous.is_dir() and first.is_dir()
             assert {p.name: p.read_bytes() for p in first.iterdir()} == first_contents
+            for evidence, payload in recovery_evidence.items():
+                assert evidence.read_bytes() == payload
+                assert evidence.stat().st_uid == 0 and evidence.stat().st_mode & 0o777 == 0o600
 
         # Old PREROOT changed directory owners only. Without the upgrade purge,
         # root-owned files still reject cp even in writable parent directories.

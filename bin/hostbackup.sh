@@ -1842,7 +1842,7 @@ restart_journal_archive() {
 }
 
 docker_recovery_state() {
-  local identity="$1" output inventory row found=false inspected=false
+  local identity="$1" purpose="${2:-journal}" output inventory row format='{{.ID}}' found=false inspected=false
   # A failed inspect alone is NOT proof of deletion (daemon/socket/permission
   # failures must remain retryable). Require both an explicit not-found result
   # and a successful, fully validated inventory from Docker.
@@ -1857,18 +1857,30 @@ docker_recovery_state() {
       false) printf 'stopped\n'; return 0 ;;
     esac
   fi
-  if [[ ! "$identity" =~ ^[a-f0-9]{12,64}$ ]] || [[ "$output" != *"No such container:"* && "$output" != *"No such object:"* ]]; then
+  if [[ "$output" != *"No such container:"* && "$output" != *"No such object:"* ]]; then
+    printf 'unavailable\n'; return 0
+  fi
+  if [ "$purpose" = selected-name ] && [[ "$identity" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+    # A saved selection is a name, not an outstanding restart intent. If it was
+    # removed BETWEEN backups, there is nothing to stop in this new operation.
+    format='{{.Names}}'
+  elif [ "$purpose" != journal ] || [[ ! "$identity" =~ ^[a-f0-9]{12,64}$ ]]; then
     printf 'unavailable\n'; return 0
   fi
   if command -v timeout >/dev/null 2>&1; then
-    inventory="$(LC_ALL=C timeout 15 docker ps -a --no-trunc --format '{{.ID}}' 2>/dev/null)" || { printf 'unavailable\n'; return 0; }
+    inventory="$(LC_ALL=C timeout 15 docker ps -a --no-trunc --format "$format" 2>/dev/null)" || { printf 'unavailable\n'; return 0; }
   else
-    inventory="$(LC_ALL=C docker ps -a --no-trunc --format '{{.ID}}' 2>/dev/null)" || { printf 'unavailable\n'; return 0; }
+    inventory="$(LC_ALL=C docker ps -a --no-trunc --format "$format" 2>/dev/null)" || { printf 'unavailable\n'; return 0; }
   fi
   while IFS= read -r row; do
     [ -n "$row" ] || continue
-    [[ "$row" =~ ^[a-f0-9]{64}$ ]] || { printf 'unavailable\n'; return 0; }
-    [[ "$row" != "$identity"* ]] || found=true
+    if [ "$purpose" = selected-name ]; then
+      [[ "$row" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || { printf 'unavailable\n'; return 0; }
+      [ "$row" != "$identity" ] || found=true
+    else
+      [[ "$row" =~ ^[a-f0-9]{64}$ ]] || { printf 'unavailable\n'; return 0; }
+      [[ "$row" != "$identity"* ]] || found=true
+    fi
   done <<< "$inventory"
   if [ "$found" = false ]; then printf 'missing\n'; else printf 'unavailable\n'; fi
 }
@@ -2050,7 +2062,11 @@ stop_selected_docker_targets() {
     [ -n "$name" ] || continue
     # Read immutable identity and running state together. Looking these up by
     # name separately could accidentally capture a newly recreated replacement.
-    if ! inspection="$(docker container inspect --format '{{.Id}} {{.State.Running}}' "$name" 2>/dev/null)"; then
+    if ! inspection="$(docker container inspect --format '{{.Id}} {{.State.Running}}' "$name" 2>&1)"; then
+      if [[ "$inspection" == *"No such container:"* || "$inspection" == *"No such object:"* ]] && [ "$(docker_recovery_state "$name" selected-name)" = missing ]; then
+        log "Docker container $name no longer exists; saved stop selection skipped (nothing to stop)."
+        continue
+      fi
       log "ERROR: Docker container $name could not be inspected before stopping"
       failed=1; continue
     fi

@@ -20,6 +20,11 @@ validiert werden.
 - Neue Stop-Journale speichern vollständige Container-IDs und Namen; alte kurze
   IDs bleiben unterstützt. Stoppen erfolgt nach der Auflösung über die konkrete
   ID, nicht über einen möglicherweise inzwischen neu belegten Namen.
+- Entfernen oder Neuerstellen von Containern zwischen vollständig abgeschlossenen
+  Backups berücksichtigen: neue Backups lösen die aktuelle ID auf. Gelöschte
+  gespeicherte Stop-Auswahlen nur nach ausdrücklicher Fehlmeldung und unabhängig
+  bestätigter vollständiger Docker-Namensliste überspringen; Abfragefehler bleiben
+  Fehler. Alte Wiederanlauf-Journale starten weiterhin keinen Ersatz nach Namen.
 - Reine Alt-ID-Journale aus der offenen Warteschlange in die root-geschützte
   `recovery-history/` verschieben. Der Vorgang bleibt als fehlgeschlagen
   sichtbar, der Nachweis erhalten; solche Einträge blockieren nach der Prüfung

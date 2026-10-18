@@ -53,6 +53,22 @@ genauen Commit, Testumgebung und übersprungene Fälle separat dokumentieren.
    Linux-Testumgebung wiederholen. Prozess-Fixtures und grüne CI belegen nicht
    den Zustand produktiver Dienste, Cron-Mailzustellung beim Anwender oder einen
    Hardware-Restore. Keine produktiven Container zu Testzwecken löschen.
+9. Zwei vollständige `create_backup`-Durchläufe ausführen und einen Container
+   ausschliesslich **zwischen** den abgeschlossenen Backups entfernen oder unter
+   demselben Namen neu erstellen. Ein neu laufender Ersatz muss im zweiten Backup
+   über seine aktuelle vollständige ID gestoppt und wieder gestartet werden.
+   Eine inzwischen fehlende Stop-Auswahl darf erst nach ausdrücklicher Fehlmeldung
+   und unabhängig gültiger vollständiger Namensliste übersprungen werden; kein
+   falsches Wiederanlauf-Journal anlegen. Fehlende Berechtigung, Daemon-Ausfall und
+   fehlerhafte oder widersprüchliche Inventur dürfen diese Ausnahme nicht nutzen.
+   Reale Worker-Funktionen mit Docker-Fixtures belegen den Steuerungsablauf,
+   nicht den Zustand eines produktiven Docker-Hosts.
+10. Korrigiertes Paket über eine bestehende Installation mit offenem Docker-
+    Journal und archiviertem Wiederanlauf-Nachweis installieren. Vorbereitung,
+    Plattform-Kopiervorgang und Aktivierung müssen ohne Deinstallation gelingen;
+    Einstellungen, Journal und Archiv müssen unverändert erhalten bleiben und
+    der geschützte Launcher danach die neue Engine verwenden. Ein tatsächlich
+    laufender Vorgang darf die Installation weiterhin vorübergehend sperren.
 
 ## Ergänzende Freigabe- und Bedienungsabnahme für 1.2.2-beta
 

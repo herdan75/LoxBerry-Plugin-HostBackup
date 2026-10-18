@@ -995,6 +995,23 @@ dieser Eintrag danach automatisch aus der offenen Wiederanlauf-Liste genommen.
 Ein gleichnamiger Ersatzcontainer wird nicht gestartet. Der frühere Vorgang bleibt
 als fehlgeschlagen sichtbar, nicht als erfolgreich wiederhergestellt.
 
+Normale Container-Updates **zwischen abgeschlossenen Backups** bleiben möglich:
+Ein neues Backup ermittelt für den gespeicherten Containernamen die aktuell
+vorhandene vollständige ID. Ist eine gespeicherte Stop-Auswahl inzwischen
+gelöscht, wird sie nur nach ausdrücklicher Fehlmeldung und einer unabhängigen,
+gültigen vollständigen Docker-Namensliste übersprungen und im Log vermerkt.
+Es gibt dann nichts zu stoppen; die gespeicherte Auswahl wird nicht verändert.
+Docker-/Abfragefehler bleiben dagegen Fehler. Das ist von der Wiederherstellung
+einer alten ID zu unterscheiden, die niemals einen Ersatzcontainer startet.
+
+Der korrigierte Stand kann als Plugin-Update über die bestehende Installation
+installiert werden; eine vorherige Deinstallation oder manuelle Änderung der
+Journale ist nicht nötig. Einstellungen und Wiederanlauf-Nachweise bleiben
+erhalten. Ein gerade laufender Backup-/Recovery-Vorgang kann die Installation
+vorübergehend sperren; nach dessen Ende erneut versuchen. Erst das korrigierte
+Paket verwenden, nicht lediglich die unveränderte öffentliche 1.2.2 erneut
+installieren. Dieser Abschnitt beschreibt noch den develop-Stand.
+
 Der vollständige Nachweis bleibt unter
 `/var/lib/loxberryhostbackup/recovery-history/` root-geschützt erhalten,
 bis das Plugin bewusst deinstalliert wird. Reine Alt-ID-Fälle blockieren nach
