@@ -2,8 +2,10 @@
 import pathlib
 import ast
 import configparser
+import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -29,6 +31,23 @@ WORKFLOW = (ROOT / ".github" / "workflows" / "build-plugin.yml").read_text(
     encoding="utf-8"
 )
 LAUNCHER = (ROOT / "bin" / "hostbackup-launcher.sh").read_text(encoding="utf-8")
+LEGACY_RECOVERY = ROOT / "tests/fixtures/hostbackup-1.2.2-recovery.sh"
+LEGACY_RECOVERY_HASHES = {
+    "restart_journal_retry_type": "b050afe7151b01f6ce5289c5f3ed462186604220122af7132837b870b611d46a",
+    "recover_restart_journals": "dec0bd7610dd2d8cfa721a473560145c9570f337cf1e1c58f8978e358953e206",
+}
+
+
+def legacy_recovery_functions():
+    """Pinned release functions; no git history or download is needed in CI."""
+    source = LEGACY_RECOVERY.read_text(encoding="utf-8")
+    result = {}
+    for name, digest in LEGACY_RECOVERY_HASHES.items():
+        match = re.search(rf"^{name}\(\) \{{\n.*?^\}}\n(?=\n)", source, re.M | re.S)
+        assert match is not None, name
+        result[name] = match.group(0)
+        assert hashlib.sha256(result[name].encode()).hexdigest() == digest, name
+    return result
 
 
 def installer_fixture_source(text, sandbox):
@@ -49,6 +68,22 @@ def stage_installer_helper(package_root, sandbox, rewrite):
 
 
 class InstallHookTests(unittest.TestCase):
+    def test_legacy_recovery_fixture_and_installer_sources_match_1_2_2(self) -> None:
+        self.assertEqual(set(legacy_recovery_functions()), set(LEGACY_RECOVERY_HASHES))
+        # These files are byte-identical to v1.2.2-beta/9322736. Hash Git's
+        # LF-normalized blob directly, without requiring checkout history.
+        originals = {
+            "preroot.sh": "94c927def2f0c1d27b63eb54684047ec98588f93",
+            "postroot.sh": "b32029a1178a9b9609187db4eec2925d20eb9da5",
+            "bin/hostbackup-install-safety.py": "1f0dfa253ec9eb601eb325f03187cbc7d8c53775",
+            "uninstall/uninstall.sh": "47d22c5457bc2a0599ac973ba0d5ff5f1cfa2c13",
+        }
+        for name, digest in originals.items():
+            with self.subTest(source=name):
+                data = (ROOT / name).read_text(encoding="utf-8").encode()
+                blob = f"blob {len(data)}\0".encode() + data
+                self.assertEqual(hashlib.sha1(blob).hexdigest(), digest)
+
     def test_uninstall_refuses_repository_state_before_any_cleanup(self) -> None:
         safety = (ROOT / "bin/hostbackup-install-safety.py").read_text(encoding="utf-8")
         tree = ast.parse(safety)
@@ -459,7 +494,42 @@ def platform_upgrade_integration():
                 target.write_text(rewrite(source.read_text(encoding="utf-8")), encoding="utf-8")
                 target.chmod(0o755)
         stage_installer_helper(incoming.parent, sandbox, rewrite)
-        (incoming / "runtime-version").write_text("0.7.0\n", encoding="utf-8")
+        # Force BOTH isolated backends to use a private Docker executable even
+        # if a launcher clears the caller's environment. No real Docker daemon
+        # is accessed; unexpected CLI commands fail rather than fall through.
+        docker_bin = sandbox / "mock-docker"
+        docker_bin.mkdir(mode=0o700)
+        docker_calls = sandbox / "docker-calls"
+        docker_stub = docker_bin / "docker"
+        docker_stub.write_text(
+            "#!/bin/bash\nset -euo pipefail\n"
+            f"printf '%s\\n' \"$*\" >> {str(docker_calls)!r}\n"
+            '[ "${1:-}" != container ] || shift\n'
+            'case "${1:-}" in\n'
+            '  inspect) [ "$#" = 4 ] && [ "$2" = --format ] && [ "$3" = "{{.State.Running}}" ] || exit 98 ;;\n'
+            '  start) [ "$#" = 2 ] || exit 98 ;;\n'
+            '  ps) [ "$*" = "ps -a --no-trunc --format {{.ID}}" ] || exit 98; exit 0 ;;\n'
+            '  *) echo "Unexpected fixture Docker call" >&2; exit 98 ;;\n'
+            'esac\n'
+            'identity="${!#}"\n'
+            'case "$identity" in df26d4b1ade4|be8fc1318035) ;; *) exit 98 ;; esac\n'
+            'printf "Error response from daemon: No such container: %s\\n" "$identity" >&2\n'
+            'exit 1\n', encoding="utf-8")
+        docker_stub.chmod(0o700)
+        backend_file = incoming / "hostbackup.sh"
+        dispatch = '\naction="${1:-}"\n'
+        current_backend = backend_file.read_text(encoding="utf-8")
+        assert current_backend.count(dispatch) == 1
+        isolation = (f"\nexport PATH={str(docker_bin)!r}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n"
+                     f'[ "$(command -v docker)" = {str(docker_stub)!r} ] || exit 98\n')
+        current_backend = current_backend.replace(dispatch, isolation + dispatch)
+        historical_backend = current_backend
+        for name, legacy in legacy_recovery_functions().items():
+            historical_backend, count = re.subn(rf"^{name}\(\) \{{\n.*?^\}}\n(?=\n)",
+                                                lambda match: legacy, historical_backend, flags=re.M | re.S)
+            assert count == 1, name
+        backend_file.write_text(historical_backend, encoding="utf-8")
+        (incoming / "runtime-version").write_text("1.2.2\n", encoding="utf-8")
         postroot, preroot = sandbox / "postroot.sh", sandbox / "preroot.sh"
         postroot.write_text(rewrite(POSTROOT), encoding="utf-8")
         preroot.write_text(rewrite(PREROOT), encoding="utf-8")
@@ -490,7 +560,7 @@ def platform_upgrade_integration():
             assert config.stat().st_uid == 0 and config.stat().st_mode & 0o777 == 0o600
             active = (trusted / "current").resolve()
             assert (active / "hostbackup.sh").read_bytes() == (incoming / "hostbackup.sh").read_bytes()
-            assert (active / "runtime-version").read_text() == "0.7.0\n"
+            assert (active / "runtime-version").read_text() == "1.2.2\n"
             loaded = json.loads(run("bash", launcher, "config").stdout)
             for key, value in saved.items():
                 assert loaded[key] == value, (key, loaded[key], value)
@@ -502,6 +572,36 @@ def platform_upgrade_integration():
         hook(postroot, "first")
         first = assert_settings_and_backend()
         first_contents = {p.name: p.read_bytes() for p in first.iterdir()}
+
+        # Reproduce the reported 1.2.2 failure with its exact old recovery
+        # functions, installed through the unchanged released installer. This
+        # is not a claim that unrelated old backend functions are reproduced.
+        state = home / "data/plugins/loxberryhostbackup/root-state"
+        legacy_task = "backup-legacy-1-2-2.log"
+        legacy_dir = state / "restart-journals" / legacy_task
+        legacy_dir.mkdir(mode=0o700)
+        legacy_journal = legacy_dir / "journal.json"
+        legacy_payload = json.dumps({"task": legacy_task, "entries": [
+            {"type": "docker", "id": identity, "phase": "stopped"}
+            for identity in ("df26d4b1ade4", "be8fc1318035")]}).encode()
+        legacy_journal.write_bytes(legacy_payload)
+        legacy_journal.chmod(0o600)
+        for _ in range(2):
+            failed_recovery = run("bash", launcher, "recover-services", "--scheduled", success=False)
+            assert failed_recovery.returncode == 1, failed_recovery.stdout + failed_recovery.stderr
+            assert failed_recovery.stdout.count("No such container:") == 2
+            assert legacy_journal.read_bytes() == legacy_payload
+        assert docker_calls.read_text().splitlines().count("start df26d4b1ade4") == 2
+        assert docker_calls.read_text().splitlines().count("start be8fc1318035") == 2
+        legacy_uninstall = sandbox / "legacy-uninstall.sh"
+        legacy_uninstall.write_text(rewrite(UNINSTALL).replace(
+            '/etc/sudoers.d/loxberryhostbackup', str(sandbox / 'sudoers')), encoding="utf-8")
+        refused = hook(legacy_uninstall, "old-pending-uninstall", success=False)
+        assert refused.returncode == 2 and "recover services" in refused.stderr
+        assert launcher.exists() and (trusted / "current").resolve() == first
+        assert legacy_journal.read_bytes() == legacy_payload and config.read_bytes() == saved_bytes
+        # The incoming package now contains the real corrected recovery code.
+        backend_file.write_text(current_backend, encoding="utf-8")
         # Explicitly reproduce the previously hidden Permission-denied copy.
         purge = run("rm", "-rf", bindir, platform=True, success=False)
         assert purge.returncode != 0 and "Permission denied" in purge.stderr
@@ -523,6 +623,34 @@ def platform_upgrade_integration():
         assert refused.returncode == 64 and "refusing a recursive start" in refused.stderr
         (trusted / "current").unlink()
         (trusted / "current").symlink_to(first)
+
+        # Incoming PREROOT must succeed WITHOUT calling the refused old
+        # uninstall. Purge/copy run as the web user; the pending journal remains
+        # byte-identical until the newly activated backend handles it itself.
+        hook(preroot, "blocked-1-2-2-upgrade")
+        assert legacy_journal.read_bytes() == legacy_payload
+        run("cp", defaults, config, platform=True)
+        copy_as_platform()
+        hook(postroot, "blocked-1-2-2-upgrade")
+        corrected = assert_settings_and_backend()
+        assert corrected != first and first.is_dir()
+        assert {p.name: p.read_bytes() for p in first.iterdir()} == first_contents
+        assert legacy_journal.read_bytes() == legacy_payload
+        starts_before = [line for line in docker_calls.read_text().splitlines() if line.startswith("start ")]
+        recovered = run("bash", launcher, "recover-services", "--scheduled")
+        assert "no longer exists" in recovered.stdout and "NOT restarted" in recovered.stdout
+        assert not legacy_dir.exists()
+        archives = list((state / "recovery-history").glob(legacy_task + "-*/journal/journal.json"))
+        assert len(archives) == 1
+        archived = json.loads(archives[0].read_text())
+        assert [entry["phase"] for entry in archived["entries"]] == ["missing", "missing"]
+        assert archives[0].stat().st_uid == 0 and archives[0].stat().st_mode & 0o777 == 0o600
+        task_state = json.loads((state / "tasks" / (legacy_task + ".json")).read_text())
+        assert (task_state["state"], task_state["phase"]) == ("failed", "recovery_missing_containers")
+        again = run("bash", launcher, "recover-services", "--scheduled")
+        assert again.stdout == again.stderr == ""
+        assert config.read_bytes() == saved_bytes
+        assert [line for line in docker_calls.read_text().splitlines() if line.startswith("start ")] == starts_before
 
         # Recover the root-owned legacy staging directory and then repeat the
         # exact same version again. All purges/copies happen as the web user.

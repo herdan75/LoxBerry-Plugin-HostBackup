@@ -69,6 +69,12 @@ genauen Commit, Testumgebung und übersprungene Fälle separat dokumentieren.
     Einstellungen, Journal und Archiv müssen unverändert erhalten bleiben und
     der geschützte Launcher danach die neue Engine verwenden. Ein tatsächlich
     laufender Vorgang darf die Installation weiterhin vorübergehend sperren.
+    Zusätzlich die Wiederanlauf-Funktionen aus dem veröffentlichten 1.2.2-Stand
+    verwenden: fehlende Container müssen zunächst wiederholt scheitern und die
+    Deinstallation blockieren. Danach ohne Deinstallation aktualisieren; die
+    neue Engine muss dieselben alten Journale kontrolliert abschliessen und bei
+    der Folgeprüfung still bleiben. Docker-Antworten in dieser Fehlernachstellung
+    sind simuliert; keine produktiven Container oder Nutzerdaten verwenden.
 
 ## Ergänzende Freigabe- und Bedienungsabnahme für 1.2.2-beta
 

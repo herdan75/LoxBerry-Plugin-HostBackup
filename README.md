@@ -1012,6 +1012,15 @@ vorübergehend sperren; nach dessen Ende erneut versuchen. Erst das korrigierte
 Paket verwenden, nicht lediglich die unveränderte öffentliche 1.2.2 erneut
 installieren. Dieser Abschnitt beschreibt noch den develop-Stand.
 
+**Update ist nicht Deinstallation:** LoxBerry 4.0.0.15 und 4.0.1.1 führen beim
+Update zuerst die Vorbereitung aus dem eingehenden Paket aus; der alte
+Deinstallations-Hook wird dabei nicht aufgerufen. Die Sperre wegen eines offenen
+Journals verhindert deshalb nicht grundsätzlich das Update
+([LoxBerry-Installationsablauf](https://github.com/mschlenstedt/Loxberry/blob/4.0.0.15/sbin/plugininstall.pl)). Ein develop-Testpaket
+mit weiterhin gleicher Versionsnummer muss manuell als ZIP installiert werden;
+der automatische Updatekanal erkennt nur höhere Versionsnummern. Ein anderer
+Installationsfehler lässt sich erst anhand seines Installationslogs beurteilen.
+
 Der vollständige Nachweis bleibt unter
 `/var/lib/loxberryhostbackup/recovery-history/` root-geschützt erhalten,
 bis das Plugin bewusst deinstalliert wird. Reine Alt-ID-Fälle blockieren nach
