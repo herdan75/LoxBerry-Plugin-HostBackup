@@ -914,13 +914,14 @@ def platform_upgrade_integration():
 
         # Refuse a substituted bin-directory link without touching its target.
         first = (trusted / "current").resolve()
+        fresh_contents = {p.name: p.read_bytes() for p in first.iterdir()}
         original_bin = bindir.with_name("bin-saved")
         bindir.rename(original_bin)
         bindir.symlink_to(first, target_is_directory=True)
         rejected = hook(preroot, "unsafe-link", success=False)
         assert rejected.returncode == 2 and "refused" in rejected.stderr.lower()
         assert (first / "hostbackup.sh").stat().st_uid == 0
-        assert {p.name: p.read_bytes() for p in first.iterdir()} == first_contents
+        assert {p.name: p.read_bytes() for p in first.iterdir()} == fresh_contents
 
 
 def installer_safety_integration():
