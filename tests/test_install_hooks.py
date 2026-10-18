@@ -708,8 +708,9 @@ def platform_upgrade_integration():
         ).replace('/etc/sudoers.d/loxberryhostbackup', str(sandbox / 'sudoers')), encoding="utf-8")
         state = home / "data/plugins/loxberryhostbackup/root-state"
         pending = state / "restart-journals/pending"
-        pending.mkdir(parents=True)
-        (pending / "journal.json").write_text('{"entries":[]}', encoding="utf-8")
+        # Reuse the original pending journal preserved through every upgrade;
+        # do not replace it with a freshly created uninstall-only fixture.
+        assert (pending / "journal.json").read_bytes() == recovery_evidence[pending / "journal.json"]
         refused = hook(uninstall, "pending-uninstall", success=False)
         assert refused.returncode == 2 and "recover services" in refused.stderr
         assert launcher.exists() and trusted.exists() and config.read_bytes() == saved_bytes
