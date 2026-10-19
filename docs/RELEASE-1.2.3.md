@@ -1,9 +1,13 @@
-# LoxBerry Host Backup 1.2.3 – Entwicklungsstand
+# LoxBerry Host Backup 1.2.3-beta
 
-**Noch nicht veröffentlicht.** Interne Programm- und Paketversion: `1.2.3`.
-Vorbereitung für eine spätere `1.2.3-beta`; es gibt dafür noch keinen öffentlichen
-Release-Download und kein Update-Angebot über LoxBerry. Der Vorabkanal bleibt
-auf **1.2.2-beta**, der stabile Kanal und `main` bleiben auf **1.2.0**.
+**Vorabfreigabe vom 19.10.2026.** Interne Programm- und Paketversion: `1.2.3`,
+Release-Tag: `v1.2.3-beta`, Plugin-ZIP: `LoxBerryHostBackup_1.2.3.zip`.
+Der stabile Kanal und `main` bleiben auf **1.2.0**; ältere Pakete unverändert.
+
+**Freigabestatus:** Die Entwicklungsbasis `d4e8e38` ist erfolgreich geprüft.
+Tag-Pipeline und öffentlicher ZIP-Download benötigen noch ihre eigene Prüfung.
+Erst danach wird der bisherige Vorabfeed von **1.2.2-beta** auf **1.2.3-beta**
+umgestellt. Der Branch-Lauf allein ist kein Nachweis der Veröffentlichung.
 
 ## Gemeinsame Korrekturen
 
@@ -30,13 +34,21 @@ auf **1.2.2-beta**, der stabile Kanal und `main` bleiben auf **1.2.0**.
 Keine neuen Sicherungsmodi oder zusätzlichen Einstellungen. Die bisherigen
 NAS-Inode-, Dienstelisten- und Bedienungskorrekturen bleiben enthalten.
 
-## Testpaket installieren
+## Installation und Update
 
-Ein aus diesem Entwicklungsstand gebautes `LoxBerryHostBackup_1.2.3.zip` kann manuell über die
-bestehende Installation installiert werden. **Nicht vorher deinstallieren.**
+Nach Aktivierung des neuen Vorabfeeds in der LoxBerry-Pluginverwaltung
+Vorabversionen zulassen und nach Updates suchen. Alternativ das freigegebene
+`LoxBerryHostBackup_1.2.3.zip` direkt installieren, nicht entpacken.
+Das Paket kann auch für eine Neuinstallation verwendet werden; Backup-Ziel,
+Sicherungsverfahren und Quellen danach einrichten und die Vorprüfung ausführen.
+
+Bestehende Installationen direkt aktualisieren, **nicht vorher deinstallieren.**
 Aktive Vorgänge beenden lassen und Einstellungen vorher exportieren. Offene
-Journale und vorhandene Einstellungen sollen erhalten bleiben; ein laufender
-Vorgang darf die Installation weiterhin vorübergehend sperren.
+Journale und vorhandene Einstellungen bleiben erhalten; ein laufender
+Vorgang darf die Installation weiterhin vorübergehend sperren. Wer schon ein
+Testpaket mit interner Version `1.2.3` installiert hat, erhält keinen höheren
+numerischen Versionshinweis und kann das öffentliche Beta-ZIP bei Bedarf
+manuell darüber installieren.
 
 Nach dem Update Dienst-/Container-Auswahl und Vorprüfung kontrollieren, ein
 manuelles Backup vollständig abschliessen lassen und den Wiederanlauf prüfen.
@@ -50,11 +62,14 @@ Der [Testplan](DR-TESTPLAN.md) umfasst vollständige Backup-/Wiederanlauf-Abläu
 alte und neue Journale, Instanzdienste, gelöschte oder ersetzte Container,
 Alias-Schutz, Fehlerfälle und Installation über einen vorhandenen Stand.
 Das [Sicherheitsmodell](SECURITY.md) beschreibt die erhaltenen Schutzgrenzen.
-Diese Entwicklungsnotiz behauptet noch keine bestandene Freigabeprüfung:
-Testergebnisse müssen dem genauen Commit zugeordnet werden.
+Die Entwicklungsbasis `d4e8e382b9cacb2482738812713775a3a32aff6a` hat
+[CI-Lauf 39298263840](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39298263840)
+erfolgreich abgeschlossen: Build-/Testjob erfolgreich, Release-Job beim
+Branch-Lauf bestimmungsgemäss übersprungen. Dies belegt die Entwicklungsabnahme,
+nicht die noch gesondert nachzuweisende Tag-/Paketfreigabe.
 
 Kontrollierte Docker-/systemd-Antworten und automatisierte Tests ersetzen weder
 die Prüfung produktiver Anwenderdienste noch jede NAS-Konfiguration oder einen
 bootfähigen Hardware-Restore. Ein develop-Push oder Workflow-Artefakt ist keine
-Veröffentlichung. Eine spätere Freigabe benötigt gesondert geprüfte Tag-Pipeline,
+Veröffentlichung. Die Freigabe benötigt gesondert geprüfte Tag-Pipeline,
 öffentlichen ZIP-Download und anschliessende Aktivierung des Vorabfeeds.

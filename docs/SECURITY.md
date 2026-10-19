@@ -1,9 +1,10 @@
 # Sicherheitsmodell
 
-## Entwicklungsstand 1.2.3: Journal-Identitäten und Stop-Auswahl
+## 1.2.3-beta: Journal-Identitäten und Stop-Auswahl
 
-Noch nicht veröffentlicht; der Vorabkanal bleibt auf 1.2.2-beta, der stabile
-Kanal auf 1.2.0. Dieser Stand bündelt die nachfolgenden Docker-/Dienstkorrekturen
+Paketfreigabe und Vorabkanal-Aktivierung erfolgen getrennt; Nachweise stehen in
+den [Release Notes](RELEASE-1.2.3.md). Der stabile Kanal bleibt auf 1.2.0.
+Dieser Stand bündelt die nachfolgenden Docker-/Dienstkorrekturen
 mit der durchgängigen Prüfung konkreter systemd-Dienstnamen. Unterstützt werden
 ASCII-Buchstaben/Ziffern, `:`, `-`, `_`, Punkte und wörtliche Backslashes, auch
 `\xHH`-Schreibweisen. Der Präfix vor dem ersten `@` und ein vorhandener Instanzteil
@@ -23,11 +24,11 @@ Die Prüfung gespeicherter Stop-Ziele erfolgt vor dem ersten Stopp, sodass eine
 ungültige Auswahl nicht erst nach bereits gestoppten Diensten auffällt.
 Ungültige Namen und unsichere Journalpfade bleiben abgewiesen; Schutzliste,
 Operationssperre und protokollierter Wiederanlauf werden nicht abgeschwächt.
-Eine höhere Entwicklungspaketversion schaltet weder einen Download noch einen
+Eine höhere Paketversion allein schaltet weder einen Download noch einen
 öffentlichen Updatekanal frei. Vorhandene Installationen sollen aktualisiert,
 nicht zuvor deinstalliert werden; laufende Vorgänge bleiben geschützt.
 
-## Unveröffentlichte Ergänzung: Dienstempfehlungen und Aliase, 19.10.2026
+## Dienstempfehlungen und Aliase ab 1.2.3-beta
 
 Eine Empfehlung ist keine Stop-Berechtigung. Allgemeine Begriffe wie `db` werden
 nicht mehr innerhalb von `dbus` erkannt; die Zuordnung verwendet den tatsächlichen
@@ -43,12 +44,12 @@ nicht sicher auflösbare Identitäten rechtfertigen keinen Stopp. Echte Stop-Feh
 erlaubter Dienste blockieren weiterhin und erscheinen mit Rückgabecode im Log.
 Bereits offene Wiederanlauf-Aufträge werden nicht verändert. Dienstdateien
 bleiben gemäss bestehender Quellenauswahl gesichert: Stop-Schutz ist kein
-Backup-Ausschluss. Keine neuen Einstellungen, Berechtigungen oder Updatekanäle;
-diese Ergänzung ist noch nicht veröffentlicht.
+Backup-Ausschluss. Keine neuen Einstellungen, Berechtigungen oder zusätzlichen
+Updatekanäle.
 
-## Unveröffentlichte Ergänzung: Docker-Wiederanlauf, 18.10.2026
+## Docker-Wiederanlauf ab 1.2.3-beta
 
-Der Entwicklungsstand behandelt bestätigte Alt-IDs automatisch, erweitert aber
+Dieser Stand behandelt bestätigte Alt-IDs automatisch, erweitert aber
 keine privilegierte Startbefugnis: Eine fehlgeschlagene Docker-Abfrage allein
 beweist keine Löschung. Nur eine ausdrückliche Meldung über eine fehlende
 Container-ID zusammen mit einer erfolgreichen vollständigen Inventur darf einen
@@ -89,9 +90,9 @@ automatische Cron-Ausgabe: erster/geänderter Fehler sowie gleiche Erinnerung
 nach frühestens 24 Stunden. Startversuche und Logs bleiben im Fünfminutentakt,
 manuelle Aufrufe zeigen immer ihr Ergebnis. Keine neue Benutzeroption, kein
 pauschales Abschalten der Wiederherstellung und keine Änderung der Backup-Mails.
-Diese Ergänzung gehört noch nicht zum veröffentlichten 1.2.2-beta-Paket.
+Diese Ergänzung ist im älteren 1.2.2-beta-Paket noch nicht enthalten.
 
-## Aktuelle Ergänzung: 1.2.2-beta vom 15.10.2026
+## Weiterhin enthalten: 1.2.2-beta vom 15.10.2026
 
 Die Dienst-/Container-Ermittlung verwendet gebündelte systemd-Abfragen mit
 begrenzter Laufzeit. Fehlgeschlagene oder unvollständige Antworten werden nicht

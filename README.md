@@ -1,9 +1,12 @@
 # LoxBerry Host Backup
 
-**Version 1.2.3 · Entwicklungsstand auf develop · noch nicht veröffentlicht.**
-Vorgesehen für eine spätere **1.2.3-beta**; kein neuer öffentlicher Download und
-noch kein Update-Angebot über LoxBerry. Der Vorabkanal bleibt auf **1.2.2-beta**,
-der stabile Kanal auf **1.2.0**.
+**Version 1.2.3-beta · Vorabversion · 19.10.2026.**
+Programm- und Paketversion: `1.2.3`; Release-Tag: `v1.2.3-beta`.
+Die geprüfte Entwicklungsbasis ist `d4e8e38`. Die Freigabe erfolgt in zwei
+Schritten: zuerst Tag-Pipeline und öffentlicher ZIP-Download, danach Prüfung des
+Pakets und Aktivierung des Vorabkanals. Bis dahin bietet dieser weiterhin
+**1.2.2-beta** an. Der stabile Kanal und `main` bleiben auf **1.2.0**.
+Den jeweiligen Freigabenachweis nennen die [Release Notes](docs/RELEASE-1.2.3.md).
 
 Dieser gemeinsame Korrekturstand enthält den automatischen Umgang mit veralteten
 Docker-Wiederanläufen, sicherere Dienstempfehlungen und die Journal-Korrektur für
@@ -11,25 +14,26 @@ konkrete systemd-Namen einschliesslich Instanzen, `:`, `-`, `_`, Punkten und
 wörtlichen Backslashes wie in `dienst@geraet\x2d1.service`.
 Gespeicherte ungültige Stop-Auswahlen werden vor dem ersten Stopp mit einer
 verständlichen Fehlermeldung abgewiesen. Keine neuen Sicherungsmodi oder
-zusätzlichen Einstellungen. Ein Testpaket kann ohne vorherige Deinstallation
-darüber installiert werden; aktive Vorgänge vorher beenden lassen.
+zusätzlichen Einstellungen. Für bestehende Installationen genügt das Update
+ohne vorherige Deinstallation; aktive Vorgänge vorher beenden lassen.
+Auch eine Neuinstallation ist möglich, mit anschliessender Einrichtung und
+Vorprüfung des eigenen Backup-Ziels.
 
 > [!NOTE]
-> **Neu auf develop, noch nicht veröffentlicht (18.10.2026):** Veraltete
+> **Neu in 1.2.3-beta:** Veraltete
 > Wiederanlauf-Einträge für nachweislich nicht mehr vorhandene Docker-Container
 > werden automatisch abgeschlossen und mit ihrem Nachweis archiviert. Dadurch
 > blockieren diese alten IDs nach der Prüfung weder weitere Backups noch eine
 > Deinstallation. Tatsächliche Startfehler werden weiterhin erneut versucht;
 > unveränderte Fehler erzeugen nicht mehr alle fünf Minuten eine Cron-Mail.
-> Keine neue Einstellung und kein neuer Sicherungsmodus. Das veröffentlichte
-> Paket 1.2.2-beta und die Updatekanäle enthalten diese Änderung noch nicht.
+> Keine neue Einstellung und kein neuer Sicherungsmodus. Im älteren
+> Paket 1.2.2-beta sind diese Korrekturen noch nicht enthalten.
 
-> **Zusätzlich in Entwicklung (19.10.2026):** Empfehlungen für Stop-Dienste
+> **Sicherere Dienstempfehlungen:** Empfehlungen für Stop-Dienste
 > verwechseln `dbus` nicht mehr mit einer Datenbank. Avahi, ModemManager und
-> D-Bus bleiben auch über Dienst-Aliase vor dem Stoppen geschützt; unsichere
-> alte Auswahlen werden beim Backup protokolliert übersprungen. Das betrifft
-> nur das Stoppen, nicht die Sicherung ihrer Dateien. Noch nicht veröffentlicht;
-> keine neue Einstellung und keine Änderung der Updatekanäle.
+> D-Bus bleiben auch über Dienst-Aliase vor dem Stoppen geschützt; alte Auswahlen
+> dieser geschützten Dienste werden protokolliert übersprungen. Das betrifft
+> nur das Stoppen, nicht die Sicherung ihrer Dateien.
 
 > [!NOTE]
 > **Neu in 1.2.2-beta (15.10.2026):** Die Dienst-/Container-Auswahl verwendet
@@ -43,24 +47,19 @@ darüber installiert werden; aktive Vorgänge vorher beenden lassen.
 > Dateien älterer Backups bleiben lesbar. Der Inhaltsprüfbericht unterscheidet
 > fehlende, nicht lesbare und nicht mehr zum aktuellen Backup passende Nachweise.
 
-**Version 1.2.2-beta · Vorabversion · 15.10.2026.**
-Enthält weiterhin die korrigierte Inode-Prüfung für NAS-/Dateisysteme,
+**Aus den bisherigen Vorabversionen weiterhin enthalten:** Korrigierte
+Inode-Prüfung für NAS-/Dateisysteme,
 die keine auswertbare Gesamtzahl melden, beispielsweise `df -i` mit `0/0/0`.
 Tatsächlich erschöpfte Inodes und andere Pflichtfehler bleiben blockierend.
-Programm- und Paketversion sind `1.2.2`; der GitHub-Tag lautet `v1.2.2-beta`.
-Das reguläre Release und der stabile Plugin-Updatekanal bleiben auf `1.2.0`.
-Der veröffentlichte Vorabkanal zeigt auf `1.2.2`, noch nicht auf den
-Entwicklungsstand 1.2.3. Keine Deinstallation erforderlich. Testumfang und
-Grenzen stehen in den [Release Notes für 1.2.2-beta](docs/RELEASE-1.2.2.md).
-
-[**LoxBerryHostBackup_1.2.2.zip herunterladen (Vorabversion)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.2-beta/LoxBerryHostBackup_1.2.2.zip)
+Der bisherige Testumfang bleibt in den
+[Release Notes für 1.2.2-beta](docs/RELEASE-1.2.2.md) dokumentiert.
 
 > [!NOTE]
 > **Reguläres Release 1.2.0:** Übernimmt den Programmstand der geprüften
 > 1.2.0-beta unverändert als stabiles Release, einschliesslich verständlicher
 > Sicherungsverfahren und portabler, platzsparender NAS-Sicherungsstände.
 > Ein Wechsel auf den Vorabkanal ist für 1.2.0 nicht nötig. Der stabile
-> Updatekanal bleibt auch bei der Freigabe von 1.2.2-beta auf diesem Paket.
+> Updatekanal bleibt auch bei der Freigabe von 1.2.3-beta auf diesem Paket.
 > Einrichtung und Schlüssel-Recovery erklärt die
 > [Anleitung für portable Sicherungsstände](docs/PORTABLE-REPOSITORY.md).
 
@@ -101,12 +100,11 @@ Backups: keine automatische Einrichtung von Partitionen oder Bootloader und
 ausdrückliche Zuordnung separater Boot-/Datenlaufwerke beim Restore.
 
 > [!IMPORTANT]
-> **Update auf 1.2.2-beta:** Für das Angebot in der Plugin-Verwaltung den
-> Vorabkanal aktivieren und erneut nach Updates suchen.
-> Die interne Version 1.2.2 ist höher als 1.2.0 und 1.2.1, auch gegenüber den
-> bisherigen develop-Testpaketen mit Version 1.2.1. Wer bereits ein manuelles
-> Paket mit interner Version 1.2.2 installiert hat, erhält keinen zusätzlichen
-> numerischen Versionssprung und kann das öffentliche Beta-ZIP darüber installieren.
+> **Update auf 1.2.3-beta:** Nach Aktivierung des neuen Vorabfeeds in der
+> Plugin-Verwaltung Vorabversionen zulassen und erneut nach Updates suchen.
+> Die interne Version 1.2.3 ist höher als 1.2.0, 1.2.1 und 1.2.2. Wer bereits
+> ein manuelles Paket mit interner Version 1.2.3 installiert hat, erhält keinen
+> zusätzlichen numerischen Versionssprung und kann das öffentliche Beta-ZIP darüber installieren.
 > Vor einem Update Einstellungen exportieren, aktive Vorgänge beenden lassen
 > und nicht vorher deinstallieren.
 
@@ -294,8 +292,8 @@ Siehe [Offline-Wiederherstellung](docs/PORTABLE-REPOSITORY.md#offline-wiederhers
 ## Aktueller Validierungsstand
 
 Bisherige veröffentlichte Stände wurden wie folgt geprüft. Diese historischen
-Praxistests sind **kein** vollständiger Hardware-Nachweis für 1.2.0, 1.2.1-beta
-oder 1.2.2-beta:
+Praxistests sind **kein** vollständiger Hardware-Nachweis für 1.2.0, 1.2.1-beta,
+1.2.2-beta oder 1.2.3-beta:
 
 - Bash-Syntax für Backend, Postinstall, Restore-Helper und Uninstall
 - Perl/CGI-Syntax mit lokalem `CGI.pm`-Stub
@@ -369,6 +367,14 @@ Kanalaktivierung bleiben von der Entwicklungsabnahme getrennt; siehe
 [Release Notes für 1.2.2-beta](docs/RELEASE-1.2.2.md) und
 [Aktionsmatrix im Testplan](docs/DR-TESTPLAN.md#aktionsmatrix-jeder-sichtbare-button-hat-einen-prüfauftrag).
 
+Für 1.2.3-beta ist die Entwicklungsbasis `d4e8e38` mit
+[CI-Lauf 39298263840](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39298263840)
+erfolgreich geprüft. Hinzu kommen Namens-/Alias-Tests durch Oberfläche, Speicherung
+und Wiederanlauf, vollständige Backup-Worker-Abläufe, alte Docker-Journale und
+das Update über eine bestehende Installation. Der Release-Job dieses Branch-Laufs
+wurde bestimmungsgemäss übersprungen; Tag-Pipeline, öffentlicher Download und
+Vorabfeed benötigen eigene Nachweise in den [Release Notes](docs/RELEASE-1.2.3.md).
+
 ### Weiterhin bekannte Grenzen
 
 - **Speicherbelegung berechnen:** durchsucht alle erkannten Backup-Dateien und
@@ -390,8 +396,8 @@ Kanalaktivierung bleiben von der Entwicklungsabnahme getrennt; siehe
 1. Das reguläre Release 1.2.0 unten herunterladen oder das angebotene Update in
    der LoxBerry-Plugin-Verwaltung verwenden. Der stabile Kanal genügt;
    ein Beta-/Vorabkanal muss dafür nicht aktiviert werden. Für die
-   aktuellen Korrekturen in 1.2.2-beta das unten verlinkte Vorabpaket verwenden oder
-   den Vorabkanal aktivieren. Entwicklungspaket 1.2.3 ist dort noch nicht verfügbar.
+   aktuellen Korrekturen in 1.2.3-beta nach deren Paketfreigabe das unten verlinkte
+   Vorabpaket verwenden oder nach Kanalaktivierung Vorabversionen zulassen.
 2. In LoxBerry unter **Plugins > Plugin installieren** hochladen.
 3. Nach der Installation die Plugin-Oberfläche öffnen.
 4. Root-Freigabe in den Einstellungen bewusst bestätigen.
@@ -411,17 +417,18 @@ Aktuelles reguläres Release-Paket:
 Der stabile Download und der reguläre Kanal bleiben unverändert. Den
 Freigabestatus dieses Pakets nennen die [Release Notes für 1.2.0](docs/RELEASE-1.2.0.md).
 
-Neue Vorabversion mit robusterer Diensteliste, Bedienungs- und Berichtskorrekturen
-sowie der bereits enthaltenen NAS-Inode-Korrektur:
+Neue Vorabversion mit sicherem Dienstnamen-Handling, automatischer Behandlung
+veralteter Docker-Wiederanläufe und den bisherigen NAS-/Bedienungskorrekturen:
 
-[**LoxBerryHostBackup_1.2.2.zip herunterladen (1.2.2-beta)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.2-beta/LoxBerryHostBackup_1.2.2.zip)
+[**LoxBerryHostBackup_1.2.3.zip herunterladen (1.2.3-beta, nach Paketfreigabe)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.3-beta/LoxBerryHostBackup_1.2.3.zip)
 
 Der öffentliche Beta-Download wird von der geprüften Tag-Pipeline bereitgestellt.
 Erst nach Prüfung dieses ZIPs wird der live abgefragte Vorabkanal aktiviert.
 Den aktuellen Freigabestatus nennen die
-[Release Notes für 1.2.2-beta](docs/RELEASE-1.2.2.md).
+[Release Notes für 1.2.3-beta](docs/RELEASE-1.2.3.md).
 
 Historische Pakete bleiben unverändert erhalten:
+[1.2.2-beta](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.2-beta/LoxBerryHostBackup_1.2.2.zip),
 [1.2.1-beta](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.1-beta/LoxBerryHostBackup_1.2.1.zip),
 [1.0.0](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip),
 [1.2.0-beta](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0-beta/LoxBerryHostBackup_1.2.0.zip) und
@@ -434,19 +441,21 @@ GitHub Actions sind äussere Artefakt-ZIPs, aus denen das innere Plugin-ZIP
 zuerst entpackt werden muss. Alte Downloads bleiben in der
 [Release-Historie](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases) erhalten.
 
-### Update auf 1.2.2-beta
+### Update auf 1.2.3-beta
 
 Einstellungen exportieren und laufende Aufgaben beenden lassen. In der
-LoxBerry-Plugin-Verwaltung den Vorabkanal aktivieren und nach Updates suchen,
-oder das öffentliche Beta-ZIP direkt installieren.
+LoxBerry-Plugin-Verwaltung nach Freischaltung des neuen Vorabfeeds Vorabversionen
+zulassen und nach Updates suchen, oder das freigegebene öffentliche Beta-ZIP
+direkt installieren. Auch neue Nutzer können dieses ZIP installieren und ihr
+Backup-Ziel danach einrichten und prüfen.
 **Nicht vorher deinstallieren.** Programmversion, Release-Tag und Paket lauten
-`1.2.2`, `v1.2.2-beta` und `LoxBerryHostBackup_1.2.2.zip`.
+`1.2.3`, `v1.2.3-beta` und `LoxBerryHostBackup_1.2.3.zip`.
 
-Für 1.2.0, 1.2.0-beta und 1.2.1-beta sowie die bisherigen develop-Testpakete
-mit interner Version 1.2.1 wird dadurch eine höhere Pluginversion angeboten.
+Für bisherige Installationen mit interner Version 1.2.0, 1.2.1 oder 1.2.2 wird
+dadurch eine höhere Pluginversion angeboten.
 Die automatische Installation hängt weiterhin von der persönlichen
 Update-Einstellung ab. Wer bereits ein develop-Testpaket mit interner Version
-1.2.2 installiert hat, bekommt keinen neuen numerischen Versionshinweis und
+1.2.3 installiert hat, bekommt keinen neuen numerischen Versionshinweis und
 kann das öffentliche Beta-ZIP bei Bedarf manuell darüber installieren.
 
 Bestehende Einstellungen, Sicherungsverfahren und Backupformate bleiben
@@ -461,7 +470,7 @@ eine Freigabe trotz laufender Container ersetzt deren kontrolliertes Stoppen nic
 
 In der LoxBerry-Plugin-Verwaltung nach Updates suchen oder das ZIP manuell
 installieren. Das reguläre Release benötigt kein Beta-Opt-in. Der stabile Kanal
-bleibt auf diesem Paket; der Vorabkanal wird separat für 1.2.2-beta freigeschaltet.
+bleibt auf diesem Paket; der Vorabkanal wird separat für 1.2.3-beta freigeschaltet.
 Die automatische Installation hängt von der persönlichen Update-Einstellung ab.
 Programmversion, Release-Tag und Paket lauten `1.2.0`, `v1.2.0` und
 `LoxBerryHostBackup_1.2.0.zip`.
@@ -963,7 +972,7 @@ zeigt gespeicherte Regeln, erkannte Volumes und eine verwendbare Snapshot-Refere
 
 ### Dienste Und Container Anhalten
 
-**Entwicklungsstand 1.2.3, noch unveröffentlicht:** Konkrete systemd-Namen werden
+**Ab 1.2.3-beta:** Konkrete systemd-Namen werden
 durchgehend unverändert behandelt: auch Instanzen mit weiteren `@` im Instanzteil,
 `:`, `-`, `_`, Punkte, wörtliche Backslashes/`\xHH` und führende zulässige
 Satzzeichen, bis 255 ASCII-Zeichen einschliesslich `.service`. Escape-Sequenzen
@@ -974,7 +983,7 @@ abgewiesen. Eine ungültige gespeicherte Stop-Auswahl wird vor dem ersten Stopp
 erkannt. Namensgültigkeit ersetzt weder die Prüfung der tatsächlichen
 Dienstidentität noch den Schutz kritischer Dienste.
 
-**Unveröffentlichte Ergänzung vom 19.10.2026:** Allgemeine Empfehlungsbegriffe
+**Dienstempfehlungen ab 1.2.3-beta:** Allgemeine Empfehlungsbegriffe
 wie `db` werden als ganze Begriffe geprüft, nicht als Teil von `dbus`. Aliase
 desselben systemd-Dienstes werden über den tatsächlichen Dienstnamen zu einem
 Eintrag zusammengefasst; bereits gespeicherte Auswahlen bleiben zugeordnet.
@@ -1014,7 +1023,7 @@ abwählen. Nach erfolgreichem Laden die gewünschten Ziele auswählen,
 **Änderungen speichern** und anschliessend **Nächstes Backup prüfen** öffnen.
 Die Freigabe eines Backups trotz laufender Container ersetzt deren Stoppen nicht
 und garantiert keine konsistenten Datenbanken. Die Korrektur gehört zum
-1.2.2-beta-Paket; der Vorabkanal wird nach Prüfung des öffentlichen ZIPs aktiviert.
+1.2.2-beta-Paket und bleibt in 1.2.3-beta enthalten.
 
 Das verbessert die Konsistenz von Container-, Datenbank- und Dienst-Daten, kann
 aber diese Dienste während des Backups unterbrechen. Das Plugin startet nur
@@ -1035,7 +1044,7 @@ Das Manifest hält zusätzlich die Stop-Ziele fest. Ein abgebrochenes Backup wir
 als `stopped` markiert; schlägt der Wiederanlauf fehl, bleibt ein Fehlerzustand
 mit offenem Journal sichtbar. Unvollständige Backups vor einer Löschung prüfen.
 
-**Entwicklungsstand vom 18.10.2026, noch nicht im veröffentlichten 1.2.2-beta:**
+**Docker-Wiederanlauf ab 1.2.3-beta:**
 Neue Journale speichern die vollständige Docker-ID und den Namen; vorhandene
 Journale mit kurzen IDs bleiben lesbar. Fehlt ein früherer Container, muss Docker
 dies ausdrücklich melden und eine erfolgreiche vollständige Containerliste das
@@ -1058,17 +1067,16 @@ installiert werden; eine vorherige Deinstallation oder manuelle Änderung der
 Journale ist nicht nötig. Einstellungen und Wiederanlauf-Nachweise bleiben
 erhalten. Ein gerade laufender Backup-/Recovery-Vorgang kann die Installation
 vorübergehend sperren; nach dessen Ende erneut versuchen. Erst das korrigierte
-Paket verwenden, nicht lediglich die unveränderte öffentliche 1.2.2 erneut
-installieren. Dieser Abschnitt beschreibt den noch unveröffentlichten
-Entwicklungsstand 1.2.3.
+Paket 1.2.3 verwenden, nicht lediglich die unveränderte öffentliche 1.2.2 erneut
+installieren.
 
 **Update ist nicht Deinstallation:** LoxBerry 4.0.0.15 und 4.0.1.1 führen beim
 Update zuerst die Vorbereitung aus dem eingehenden Paket aus; der alte
 Deinstallations-Hook wird dabei nicht aufgerufen. Die Sperre wegen eines offenen
 Journals verhindert deshalb nicht grundsätzlich das Update
-([LoxBerry-Installationsablauf](https://github.com/mschlenstedt/Loxberry/blob/4.0.0.15/sbin/plugininstall.pl)). Das develop-Testpaket
-1.2.3 muss vor seiner Veröffentlichung manuell als ZIP installiert werden;
-eine höhere Paketversion allein aktiviert keinen Updatekanal. Ein anderer
+([LoxBerry-Installationsablauf](https://github.com/mschlenstedt/Loxberry/blob/4.0.0.15/sbin/plugininstall.pl)). Paketfreigabe
+und Aktivierung des Vorabfeeds erfolgen getrennt; eine höhere Paketversion allein
+aktiviert keinen Updatekanal. Ein anderer
 Installationsfehler lässt sich erst anhand seines Installationslogs beurteilen.
 
 Der vollständige Nachweis bleibt unter
@@ -1247,7 +1255,7 @@ funktioniert auch bei verschwundenem Backup-Medium. Offene Neustarts werden
 beim Booten, danach alle fünf Minuten und vor einem neuen Backup erneut versucht.
 Laufende Aufträge bleiben unberührt; nur im Journal festgehaltene Dienste oder
 Container werden behandelt. Misslingt ein Neustart, bleibt das Journal erhalten.
-Im noch unveröffentlichten Entwicklungsstand vom 18.10.2026 werden ausschliesslich
+Ab 1.2.3-beta werden ausschliesslich
 bestätigt nicht mehr vorhandene Docker-IDs in inaktiven Vorgängen gesondert
 behandelt; der Nachweis bleibt in `recovery-history/` erhalten. Siehe
 [Dienst-Wiederanlauf](#dienste-und-container-anhalten).
@@ -1494,8 +1502,8 @@ Bei der Deinstallation entfernt das Plugin seine LoxBerry-Plugin-Dateien und den
 Cron-Eintrag `/etc/cron.d/loxberryhostbackup`.
 
 Aktive Vorgänge und tatsächlich noch offene Dienst-Wiederanläufe bleiben aus
-Sicherheitsgründen geschützt. Im noch unveröffentlichten Entwicklungsstand vom
-18.10.2026 blockieren bestätigte, automatisch archivierte Alt-IDs gelöschter
+Sicherheitsgründen geschützt. Ab 1.2.3-beta blockieren bestätigte,
+automatisch archivierte Alt-IDs gelöschter
 Docker-Container die Deinstallation nicht mehr. Das bedeutet nicht, dass ein
 Docker-Ausfall oder ein echter Dienst-Startfehler automatisch ignoriert wird.
 Die lokale Wiederanlauf-Historie wird bei einer bewussten Deinstallation zusammen
@@ -1535,19 +1543,20 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 Aktueller Entwicklungs- und Veröffentlichungsstand:
 
 - `main`: regulärer Hauptstand 1.2.0
-- `develop`: unveröffentlichter Entwicklungsstand 1.2.3 für eine spätere 1.2.3-beta
+- `develop`: Paketstand 1.2.3 für die Freigabe als 1.2.3-beta
 - `pre-develop`: älterer Referenzstand; unverändert
 
 Öffentliche Update-Dateien und Freigabereihenfolge:
 
 - `main/release.cfg`: reguläres Paket 1.2.0 unter Tag `v1.2.0`
-- `develop/prerelease.cfg`: weiterhin das veröffentlichte Paket 1.2.2 unter
-  Tag `v1.2.2-beta`; noch kein Verweis auf 1.2.3
+- `develop/prerelease.cfg`: zunächst Paket 1.2.2 unter Tag `v1.2.2-beta`;
+  Umstellung auf 1.2.3 unter `v1.2.3-beta` erst nach Prüfung des öffentlichen ZIPs
 
-Ein develop-Push allein aktiviert kein Plugin-Update. Für 1.2.3 wird noch kein
-Tag oder Release angelegt und kein öffentlicher Download versprochen. Eine
-spätere Veröffentlichung benötigt zuerst die geprüfte Tag-Pipeline, danach
-die Prüfung des öffentlichen ZIPs und erst dann die Aktivierung des Vorabfeeds.
+Ein develop-Push allein aktiviert kein Plugin-Update. Die Freigabe von 1.2.3-beta
+benötigt zuerst die erfolgreiche Tag-Pipeline, danach die Prüfung des öffentlichen
+ZIPs und erst dann die Aktivierung des Vorabfeeds. Der abgeschlossene Branch-Lauf
+allein weist diese Veröffentlichungsschritte nicht nach; der aktuelle Beleg steht
+in den [Release Notes](docs/RELEASE-1.2.3.md).
 `main`, bestehende Tags, ältere öffentliche ZIPs und die Wiki-Seite werden
 dabei nicht geändert.
 

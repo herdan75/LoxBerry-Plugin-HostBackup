@@ -5,12 +5,15 @@ bei Änderungen an rsync-/tar-Optionen, Mount-Prüfung, Import, Restore oder
 Retention auszuführen. Produktive Daten werden durch synthetische Marker und
 Testdienste ersetzt.
 
-## Gemeinsame Entwicklungsabnahme 1.2.3
+## Gemeinsame Abnahme 1.2.3-beta
 
-Für eine spätere 1.2.3-beta vorbereitet, noch nicht veröffentlicht. Der
-Vorabkanal bleibt auf 1.2.2-beta, der stabile Kanal auf 1.2.0. Diese Fälle
-ergänzen die nachfolgenden Docker-/Dienstprüfungen; Ergebnisse immer für den
-genauen Commit dokumentieren, keine pauschale CI- oder Hardware-Zusage.
+Diese Fälle ergänzen die nachfolgenden Docker-/Dienstprüfungen. Die
+Entwicklungsbasis `d4e8e38` wurde in
+[CI-Lauf 39298263840](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39298263840)
+erfolgreich geprüft. Tag-/Paketfreigabe und Aktivierung des Vorabfeeds werden
+anschliessend separat nachgewiesen; der stabile Kanal bleibt auf 1.2.0.
+Ergebnisse immer für den genauen Commit dokumentieren, keine pauschale
+Hardware-Zusage. Siehe [Freigabestatus](RELEASE-1.2.3.md).
 
 1. Die nachfolgende Namensmatrix durch Auswahl, Speicherung, Aliase und alle
    Journal-Zustände führen: vor dem Stopp
@@ -24,14 +27,17 @@ genauen Commit dokumentieren, keine pauschale CI- oder Hardware-Zusage.
 3. Eine ungültige gespeicherte Auswahl hinter gültigen Einträgen platzieren:
    vor dem ersten `systemctl stop` oder `docker stop` mit verständlicher Meldung
    abbrechen. Keine teilweise gestartete Stop-Sequenz und kein unechter Erfolg.
-4. Testpaket 1.2.3 ohne Deinstallation über 1.2.2 mit vorhandenen Einstellungen,
+4. Paket 1.2.3 ohne Deinstallation über 1.2.2 mit vorhandenen Einstellungen,
    alten kurzen Docker-IDs und offenen Journaleinträgen installieren. Vorhandene
    Belege erhalten; aktive Vorgänge weiterhin schützen. Erst nach Installation
    den korrigierten Ablauf prüfen, nicht den alten Prozess umdeuten.
-5. Paketversion 1.2.3, unveränderten stabilen/Vorabfeed und fehlende Veröffentlichung
-   prüfen. Ein Branch-Artefakt ist kein öffentlicher Release-Download. Reale
-   Anwenderdienste, NAS-Einbindung und bootfähiger Restore bleiben eigene
-   Praxisabnahmen; Tests mit kontrollierten Docker-/systemd-Antworten benennen.
+5. Paketversion 1.2.3 und unveränderten stabilen Feed prüfen. Tag-Pipeline für
+   `v1.2.3-beta` erfolgreich abschliessen, öffentliches ZIP ohne Anmeldung laden,
+   Version, Inhalt, Rechte und Prüfsumme vergleichen. Erst danach den Vorabfeed
+   auf 1.2.3 umstellen und die dortige Download-URL erneut prüfen. Ein
+   Branch-Artefakt ist kein öffentlicher Release-Download. Reale Anwenderdienste,
+   NAS-Einbindung und bootfähiger Restore bleiben eigene Praxisabnahmen; Tests
+   mit kontrollierten Docker-/systemd-Antworten benennen.
 
 ### Namensmatrix und unveränderte Argumente
 
@@ -54,9 +60,10 @@ Anwendersystem tatsächlich als Dienst geladen werden kann.
 
 ## Dienstempfehlungen und Alias-Schutz: Entwicklungsabnahme vom 19.10.2026
 
-Noch unveröffentlicht; die folgenden Fälle sind ein Prüfauftrag, keine Aussage
-über bereits bestandene CI oder produktive Geräte. Nachweise in den Dienstlisten-
-und Laufzeitsicherheitstests für den jeweiligen Commit getrennt festhalten.
+Die folgenden Fälle bleiben ein Prüfauftrag, keine pauschale Aussage über
+produktive Geräte. Nachweise in den Dienstlisten- und Laufzeitsicherheitstests
+für den jeweiligen Commit getrennt festhalten; Entwicklungs- und Tag-Abnahme
+nicht gleichsetzen.
 
 1. `dbus` und beliebige Dienstnamen mit eingebettetem `db` dürfen nicht allein
    deshalb empfohlen werden. Bekannte Datenbankdienste und begrenzte allgemeine
@@ -75,14 +82,14 @@ und Laufzeitsicherheitstests für den jeweiligen Commit getrennt festhalten.
    Rückgabecode im Log, Backup weiterhin blockiert, Wiederanlaufschutz erhalten.
 5. Prüfen, dass die Änderung nur das Stoppen betrifft: keine zusätzlichen
    Dateiausschlüsse, keine Veränderung bereits offener Wiederanlauf-Aufträge,
-   keine neuen Einstellungen und keine Änderung der veröffentlichten Updatefeeds.
+   keine neuen Einstellungen; die Freigabe der Updatefeeds separat prüfen.
    Produktive Systemdienste für diese Prüfungen nicht stoppen.
 
 ## Docker-Wiederanlauf: Entwicklungsabnahme vom 18.10.2026
 
-Diese Korrektur ist im noch unveröffentlichten Entwicklungspaket 1.2.3 enthalten.
-Updatekanäle bleiben unverändert; die nachfolgenden Fälle sind ein Prüfauftrag,
-keine pauschale Erfolgszusage. Automatisierte Nachweise gehören zu `tests/test_docker_recovery.py`,
+Diese Korrektur ist im Paket 1.2.3 für 1.2.3-beta enthalten. Die nachfolgenden
+Fälle sind ein Prüfauftrag, keine pauschale Erfolgszusage. Automatisierte
+Nachweise gehören zu `tests/test_docker_recovery.py`,
 `tests/test_runtime_safety.py` und den Installer-/Deinstallationstests. Ergebnis,
 genauen Commit, Testumgebung und übersprungene Fälle separat dokumentieren.
 

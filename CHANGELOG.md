@@ -3,15 +3,16 @@
 Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
-Entwicklungsstand 1.2.3 ist für eine spätere 1.2.3-beta vorbereitet, aber noch
-nicht veröffentlicht. Der Vorabkanal bleibt auf 1.2.2-beta mit Paketversion 1.2.2,
-Version 1.2.0 bleibt das reguläre Release. Frühere Vorabversionen bleiben als
+1.2.3-beta ist für die Vorabfreigabe vom 19.10.2026 vorgesehen. Paketfreigabe und
+Aktivierung des Vorabkanals erfolgen getrennt: Bis Tag-Pipeline und öffentlicher
+ZIP-Download geprüft sind, bleibt der Feed auf 1.2.2-beta. Version 1.2.0 bleibt
+das reguläre Release. Frühere Vorabversionen bleiben als
 historische Einträge erhalten.
 Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
-## [Unreleased] - develop 1.2.3, Stand 2026-10-19
+## [1.2.3-beta] - 2026-10-19
 
 - Konkrete systemd-Namen durchgehend unterstützen: `@`-Instanzen auch mit weiteren
   `@` im Instanzteil, `:`, `-`, `_`, Punkte, wörtliche Backslashes/`\xHH`, führende
@@ -33,8 +34,8 @@ validiert werden.
   überspringen und protokollieren; keine Stop-Journale dafür erzeugen. Ihre
   Dateien bleiben gemäss Quellenauswahl gesichert. Bereits offene Wiederanläufe
   bleiben unverändert. Echte Stop-Fehler weiterhin blockieren und ihren
-  Rückgabecode deutlicher protokollieren. Ergänzung vom 19.10.2026, noch nicht
-  veröffentlicht und ohne zusätzliche Einstellungen oder Sicherungsmodi.
+  Rückgabecode deutlicher protokollieren. Keine zusätzlichen Einstellungen oder
+  Sicherungsmodi.
 - Docker-Wiederanlauf unterscheidet laufende, gestoppte, nachweislich fehlende und
   nicht zuverlässig abfragbare Container. Fehlende IDs werden nur nach einer
   ausdrücklichen Docker-Fehlmeldung und erfolgreicher vollständiger Inventur
@@ -63,10 +64,16 @@ validiert werden.
 - Regressionstests und Abnahmeplan für gelöschte/ersetzte Container, alte IDs,
   Docker-/Berechtigungsfehler, Mischfälle, Meldungsintervalle und erhaltene
   Schutzgrenzen ergänzen. Keine neue Einstellung oder Sicherungsart.
-- Nur Entwicklungsstand: neue Paketversion 1.2.3 für spätere 1.2.3-beta; Tags,
-  bereits veröffentlichte ZIPs und beide Updatekanäle bleiben unverändert.
-  Diese Korrekturen sind nicht im veröffentlichten 1.2.2-beta-Paket enthalten.
-  Automatisierte Tests ersetzen
+- Vorabversion `v1.2.3-beta` mit numerischer Paketversion `1.2.3`; geprüft auf
+  Entwicklungsbasis `d4e8e38` in
+  [CI-Lauf 39298263840](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39298263840).
+  Das Update erfolgt ohne vorherige Deinstallation; auch Neuinstallationen sind
+  möglich. Bestehende Einstellungen und offene Wiederanlauf-Nachweise bleiben
+  erhalten. Aktive Vorgänge vorher beenden lassen und danach ein Testbackup prüfen.
+- Tag-Pipeline, öffentlicher Download und Aktivierung des Vorabfeeds werden separat
+  nachgewiesen; `main`, stabiler Kanal 1.2.0 und ältere Pakete bleiben unverändert.
+  Diese Korrekturen fehlen im älteren 1.2.2-beta-Paket. Nachweise und Grenzen:
+  [Release Notes 1.2.3-beta](docs/RELEASE-1.2.3.md). Automatisierte Tests ersetzen
   keinen Test auf dem betroffenen Anwendergerät oder einen Hardware-Restore.
 
 ## [1.2.2-beta] - 2026-10-15
@@ -1023,7 +1030,8 @@ nicht überarbeitet worden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.2-beta...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.3-beta...develop
+[1.2.3-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.2-beta...v1.2.3-beta
 [1.2.2-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.1-beta...v1.2.2-beta
 [1.2.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.0...v1.2.1-beta
 [1.2.0]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.0
