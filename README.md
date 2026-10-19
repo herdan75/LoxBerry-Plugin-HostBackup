@@ -2,11 +2,11 @@
 
 **Version 1.2.3-beta · Vorabversion · 19.10.2026.**
 Programm- und Paketversion: `1.2.3`; Release-Tag: `v1.2.3-beta`.
-Die geprüfte Entwicklungsbasis ist `d4e8e38`. Die Freigabe erfolgt in zwei
-Schritten: zuerst Tag-Pipeline und öffentlicher ZIP-Download, danach Prüfung des
-Pakets und Aktivierung des Vorabkanals. Bis dahin bietet dieser weiterhin
-**1.2.2-beta** an. Der stabile Kanal und `main` bleiben auf **1.2.0**.
-Den jeweiligen Freigabenachweis nennen die [Release Notes](docs/RELEASE-1.2.3.md).
+Tag-Pipeline und öffentlicher ZIP-Download sind erfolgreich geprüft. Die
+Vorab-Kanaldatei dieses Aktivierungsstands verweist auf **1.2.3-beta**; der stabile
+Kanal und `main` bleiben auf **1.2.0**. Die Prüfung des Aktivierungscommits und
+des live abgefragten Feeds erfolgt getrennt von der bereits bestätigten
+Paketfreigabe. Nachweise stehen in den [Release Notes](docs/RELEASE-1.2.3.md).
 
 Dieser gemeinsame Korrekturstand enthält den automatischen Umgang mit veralteten
 Docker-Wiederanläufen, sicherere Dienstempfehlungen und die Journal-Korrektur für
@@ -100,8 +100,8 @@ Backups: keine automatische Einrichtung von Partitionen oder Bootloader und
 ausdrückliche Zuordnung separater Boot-/Datenlaufwerke beim Restore.
 
 > [!IMPORTANT]
-> **Update auf 1.2.3-beta:** Nach Aktivierung des neuen Vorabfeeds in der
-> Plugin-Verwaltung Vorabversionen zulassen und erneut nach Updates suchen.
+> **Update auf 1.2.3-beta:** In der Plugin-Verwaltung Vorabversionen zulassen
+> und erneut nach Updates suchen; alternativ das öffentliche Beta-ZIP installieren.
 > Die interne Version 1.2.3 ist höher als 1.2.0, 1.2.1 und 1.2.2. Wer bereits
 > ein manuelles Paket mit interner Version 1.2.3 installiert hat, erhält keinen
 > zusätzlichen numerischen Versionssprung und kann das öffentliche Beta-ZIP darüber installieren.
@@ -367,13 +367,15 @@ Kanalaktivierung bleiben von der Entwicklungsabnahme getrennt; siehe
 [Release Notes für 1.2.2-beta](docs/RELEASE-1.2.2.md) und
 [Aktionsmatrix im Testplan](docs/DR-TESTPLAN.md#aktionsmatrix-jeder-sichtbare-button-hat-einen-prüfauftrag).
 
-Für 1.2.3-beta ist die Entwicklungsbasis `d4e8e38` mit
-[CI-Lauf 39298263840](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39298263840)
-erfolgreich geprüft. Hinzu kommen Namens-/Alias-Tests durch Oberfläche, Speicherung
-und Wiederanlauf, vollständige Backup-Worker-Abläufe, alte Docker-Journale und
-das Update über eine bestehende Installation. Der Release-Job dieses Branch-Laufs
-wurde bestimmungsgemäss übersprungen; Tag-Pipeline, öffentlicher Download und
-Vorabfeed benötigen eigene Nachweise in den [Release Notes](docs/RELEASE-1.2.3.md).
+1.2.3-beta wurde nach der Entwicklungsabnahme von `d4e8e38` auch unter dem Tag
+`v1.2.3-beta` auf Commit `3818549` vollständig geprüft:
+[Tag-CI 39303332839](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39303332839),
+Build und Release erfolgreich. Dazu gehören Namens-/Alias-Tests, vollständige
+Backup-Worker-Abläufe, alte Docker-Journale, Installation über einen vorhandenen
+Stand sowie Linux-/CIFS-, Browser- und Paketprüfungen. Das öffentliche ZIP ist
+ohne Anmeldung erreichbar und stimmt mit dem Workflow-Artefakt überein.
+Prüfsumme, Testumfang und getrennten Feed-Nachweis nennen die
+[Release Notes](docs/RELEASE-1.2.3.md).
 
 ### Weiterhin bekannte Grenzen
 
@@ -396,8 +398,8 @@ Vorabfeed benötigen eigene Nachweise in den [Release Notes](docs/RELEASE-1.2.3.
 1. Das reguläre Release 1.2.0 unten herunterladen oder das angebotene Update in
    der LoxBerry-Plugin-Verwaltung verwenden. Der stabile Kanal genügt;
    ein Beta-/Vorabkanal muss dafür nicht aktiviert werden. Für die
-   aktuellen Korrekturen in 1.2.3-beta nach deren Paketfreigabe das unten verlinkte
-   Vorabpaket verwenden oder nach Kanalaktivierung Vorabversionen zulassen.
+   aktuellen Korrekturen in 1.2.3-beta das unten verlinkte Vorabpaket verwenden
+   oder in der Plugin-Verwaltung Vorabversionen zulassen.
 2. In LoxBerry unter **Plugins > Plugin installieren** hochladen.
 3. Nach der Installation die Plugin-Oberfläche öffnen.
 4. Root-Freigabe in den Einstellungen bewusst bestätigen.
@@ -420,11 +422,11 @@ Freigabestatus dieses Pakets nennen die [Release Notes für 1.2.0](docs/RELEASE-
 Neue Vorabversion mit sicherem Dienstnamen-Handling, automatischer Behandlung
 veralteter Docker-Wiederanläufe und den bisherigen NAS-/Bedienungskorrekturen:
 
-[**LoxBerryHostBackup_1.2.3.zip herunterladen (1.2.3-beta, nach Paketfreigabe)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.3-beta/LoxBerryHostBackup_1.2.3.zip)
+[**LoxBerryHostBackup_1.2.3.zip herunterladen (1.2.3-beta)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.3-beta/LoxBerryHostBackup_1.2.3.zip)
 
-Der öffentliche Beta-Download wird von der geprüften Tag-Pipeline bereitgestellt.
-Erst nach Prüfung dieses ZIPs wird der live abgefragte Vorabkanal aktiviert.
-Den aktuellen Freigabestatus nennen die
+Der öffentliche Beta-Download ist geprüft und ohne GitHub-Anmeldung erreichbar.
+Die Vorab-Kanaldatei wird getrennt auf genau dieses Paket umgestellt.
+Paketnachweis und Status der Kanalprüfung nennen die
 [Release Notes für 1.2.3-beta](docs/RELEASE-1.2.3.md).
 
 Historische Pakete bleiben unverändert erhalten:
@@ -444,8 +446,8 @@ zuerst entpackt werden muss. Alte Downloads bleiben in der
 ### Update auf 1.2.3-beta
 
 Einstellungen exportieren und laufende Aufgaben beenden lassen. In der
-LoxBerry-Plugin-Verwaltung nach Freischaltung des neuen Vorabfeeds Vorabversionen
-zulassen und nach Updates suchen, oder das freigegebene öffentliche Beta-ZIP
+LoxBerry-Plugin-Verwaltung Vorabversionen zulassen und nach Updates suchen,
+oder das freigegebene öffentliche Beta-ZIP
 direkt installieren. Auch neue Nutzer können dieses ZIP installieren und ihr
 Backup-Ziel danach einrichten und prüfen.
 **Nicht vorher deinstallieren.** Programmversion, Release-Tag und Paket lauten
@@ -470,7 +472,7 @@ eine Freigabe trotz laufender Container ersetzt deren kontrolliertes Stoppen nic
 
 In der LoxBerry-Plugin-Verwaltung nach Updates suchen oder das ZIP manuell
 installieren. Das reguläre Release benötigt kein Beta-Opt-in. Der stabile Kanal
-bleibt auf diesem Paket; der Vorabkanal wird separat für 1.2.3-beta freigeschaltet.
+bleibt auf diesem Paket; der Vorabkanal ist separat auf 1.2.3-beta ausgerichtet.
 Die automatische Installation hängt von der persönlichen Update-Einstellung ab.
 Programmversion, Release-Tag und Paket lauten `1.2.0`, `v1.2.0` und
 `LoxBerryHostBackup_1.2.0.zip`.
@@ -1543,20 +1545,19 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 Aktueller Entwicklungs- und Veröffentlichungsstand:
 
 - `main`: regulärer Hauptstand 1.2.0
-- `develop`: Paketstand 1.2.3 für die Freigabe als 1.2.3-beta
+- `develop`: Paketstand 1.2.3 und Aktivierung des Vorabkanals 1.2.3-beta
 - `pre-develop`: älterer Referenzstand; unverändert
 
 Öffentliche Update-Dateien und Freigabereihenfolge:
 
 - `main/release.cfg`: reguläres Paket 1.2.0 unter Tag `v1.2.0`
-- `develop/prerelease.cfg`: zunächst Paket 1.2.2 unter Tag `v1.2.2-beta`;
-  Umstellung auf 1.2.3 unter `v1.2.3-beta` erst nach Prüfung des öffentlichen ZIPs
+- `develop/prerelease.cfg`: Paket 1.2.3 unter Tag `v1.2.3-beta`
 
-Ein develop-Push allein aktiviert kein Plugin-Update. Die Freigabe von 1.2.3-beta
-benötigt zuerst die erfolgreiche Tag-Pipeline, danach die Prüfung des öffentlichen
-ZIPs und erst dann die Aktivierung des Vorabfeeds. Der abgeschlossene Branch-Lauf
-allein weist diese Veröffentlichungsschritte nicht nach; der aktuelle Beleg steht
-in den [Release Notes](docs/RELEASE-1.2.3.md).
+Ein develop-Push allein veröffentlicht kein neues Paket. Für 1.2.3-beta sind
+Tag-Pipeline und öffentlicher ZIP-Download geprüft. Die Kanalumstellung wird
+anschliessend mit einem separaten Aktivierungscommit veröffentlicht und am
+live abgefragten Feed überprüft; die Paketprüfung belegt diesen Schritt nicht
+automatisch. Nachweise stehen in den [Release Notes](docs/RELEASE-1.2.3.md).
 `main`, bestehende Tags, ältere öffentliche ZIPs und die Wiki-Seite werden
 dabei nicht geändert.
 

@@ -3,10 +3,10 @@
 Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
-1.2.3-beta ist für die Vorabfreigabe vom 19.10.2026 vorgesehen. Paketfreigabe und
-Aktivierung des Vorabkanals erfolgen getrennt: Bis Tag-Pipeline und öffentlicher
-ZIP-Download geprüft sind, bleibt der Feed auf 1.2.2-beta. Version 1.2.0 bleibt
-das reguläre Release. Frühere Vorabversionen bleiben als
+1.2.3-beta ist als Vorabversion vom 19.10.2026 veröffentlicht; Tag-Pipeline und
+öffentlicher ZIP-Download sind geprüft. Die Vorab-Kanaldatei wird im separaten
+Aktivierungsstand auf dieses Paket gestellt; dessen Remote-Prüfung ist ein
+eigener Nachweis. Version 1.2.0 bleibt das reguläre Release. Frühere Vorabversionen bleiben als
 historische Einträge erhalten.
 Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
@@ -70,8 +70,12 @@ validiert werden.
   Das Update erfolgt ohne vorherige Deinstallation; auch Neuinstallationen sind
   möglich. Bestehende Einstellungen und offene Wiederanlauf-Nachweise bleiben
   erhalten. Aktive Vorgänge vorher beenden lassen und danach ein Testbackup prüfen.
-- Tag-Pipeline, öffentlicher Download und Aktivierung des Vorabfeeds werden separat
-  nachgewiesen; `main`, stabiler Kanal 1.2.0 und ältere Pakete bleiben unverändert.
+- Tag `v1.2.3-beta` auf `3818549` mit erfolgreicher
+  [Tag-CI 39303332839](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39303332839)
+  veröffentlicht. Öffentliches ZIP ohne Anmeldung geprüft, identisch mit dem
+  Workflow-Artefakt. Die Kanaldatei verweist auf 1.2.3; der Aktivierungscommit und
+  sein live abgefragter Feed werden separat geprüft. `main`, stabiler Kanal 1.2.0
+  und ältere Pakete bleiben unverändert.
   Diese Korrekturen fehlen im älteren 1.2.2-beta-Paket. Nachweise und Grenzen:
   [Release Notes 1.2.3-beta](docs/RELEASE-1.2.3.md). Automatisierte Tests ersetzen
   keinen Test auf dem betroffenen Anwendergerät oder einen Hardware-Restore.

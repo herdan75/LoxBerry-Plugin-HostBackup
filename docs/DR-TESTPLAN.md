@@ -10,8 +10,10 @@ Testdienste ersetzt.
 Diese Fälle ergänzen die nachfolgenden Docker-/Dienstprüfungen. Die
 Entwicklungsbasis `d4e8e38` wurde in
 [CI-Lauf 39298263840](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39298263840)
-erfolgreich geprüft. Tag-/Paketfreigabe und Aktivierung des Vorabfeeds werden
-anschliessend separat nachgewiesen; der stabile Kanal bleibt auf 1.2.0.
+erfolgreich geprüft. Auch die Tag-/Paketfreigabe auf `3818549` ist mit
+[Tag-CI 39303332839](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39303332839)
+und öffentlichem ZIP-Audit nachgewiesen. Aktivierungscommit und live abgefragter
+Vorabfeed bleiben eine getrennte Abnahme; der stabile Kanal bleibt auf 1.2.0.
 Ergebnisse immer für den genauen Commit dokumentieren, keine pauschale
 Hardware-Zusage. Siehe [Freigabestatus](RELEASE-1.2.3.md).
 

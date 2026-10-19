@@ -4,10 +4,12 @@
 Release-Tag: `v1.2.3-beta`, Plugin-ZIP: `LoxBerryHostBackup_1.2.3.zip`.
 Der stabile Kanal und `main` bleiben auf **1.2.0**; ältere Pakete unverändert.
 
-**Freigabestatus:** Die Entwicklungsbasis `d4e8e38` ist erfolgreich geprüft.
-Tag-Pipeline und öffentlicher ZIP-Download benötigen noch ihre eigene Prüfung.
-Erst danach wird der bisherige Vorabfeed von **1.2.2-beta** auf **1.2.3-beta**
-umgestellt. Der Branch-Lauf allein ist kein Nachweis der Veröffentlichung.
+**Freigabestatus:** Das Beta-Paket ist öffentlich veröffentlicht; Tag-Pipeline
+und ZIP-Prüfung sind erfolgreich abgeschlossen. Der separate Aktivierungsstand
+setzt `develop/prerelease.cfg` auf **1.2.3** und das geprüfte Beta-ZIP. Der
+abschliessende Nachweis für seinen Push, seine CI und den live abgefragten Feed
+wird im [GitHub-Pre-Release](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.3-beta)
+festgehalten; der Paketnachweis allein belegt diese Kanalprüfung nicht.
 
 ## Gemeinsame Korrekturen
 
@@ -36,9 +38,11 @@ NAS-Inode-, Dienstelisten- und Bedienungskorrekturen bleiben enthalten.
 
 ## Installation und Update
 
-Nach Aktivierung des neuen Vorabfeeds in der LoxBerry-Pluginverwaltung
-Vorabversionen zulassen und nach Updates suchen. Alternativ das freigegebene
-`LoxBerryHostBackup_1.2.3.zip` direkt installieren, nicht entpacken.
+In der LoxBerry-Pluginverwaltung Vorabversionen zulassen und nach Updates suchen.
+Alternativ das öffentliche
+[LoxBerryHostBackup_1.2.3.zip](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.3-beta/LoxBerryHostBackup_1.2.3.zip)
+direkt installieren, nicht entpacken. Der direkte Download benötigt kein
+GitHub-Konto und ist unabhängig vom Abschluss der Kanalumstellung verfügbar.
 Das Paket kann auch für eine Neuinstallation verwendet werden; Backup-Ziel,
 Sicherungsverfahren und Quellen danach einrichten und die Vorprüfung ausführen.
 
@@ -56,20 +60,42 @@ Nicht mehr auflösbare ausgewählte native Dienste müssen geprüft werden; echt
 Stop-/Startfehler werden nicht automatisch ignoriert. Bewährte Backups und den
 extern gesicherten Repository-Wiederherstellungsschlüssel aufbewahren.
 
-## Prüfung und Grenzen
+## Freigabenachweise
+
+- Entwicklungsbasis `d4e8e382b9cacb2482738812713775a3a32aff6a`:
+  [CI 39298263840](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39298263840)
+  erfolgreich; der Release-Job dieses Branch-Laufs wurde bestimmungsgemäss übersprungen.
+- Tag `v1.2.3-beta` auf `381854915f5d24bfc17383b6376d1a611a93ce91`:
+  [Tag-CI 39303332839](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39303332839)
+  mit erfolgreichem Build- und Release-Job. 518 Grundtests mit 7 bedingten
+  Auslassungen; zusätzlich 15 unprivilegierte Tests, Linux-Integrationssuiten
+  mit 29 und 18 Tests, CIFS-Vorprüfung mit 6 Tests und Metadaten-Roundtrip sowie
+  CIFS-Suiten mit 29 und 18 Tests. Browserregression und 8 Paketprüfungen erfolgreich.
+- Öffentliches GitHub-Pre-Release, kein Entwurf. ZIP ohne Anmeldung mit HTTP 200
+  geladen: **29'488'060 Bytes**. Identisch mit Workflow-Artefakt und Asset-Digest;
+  zusätzliches lokales ZIP-Audit mit 8 Tests erfolgreich. 32 geprüfte Quell-/Modus-
+  Einträge stimmen mit dem Tag überein; Paket und Laufzeit melden `1.2.3`.
+
+SHA-256 des öffentlichen Plugin-ZIPs:
+
+```text
+a34d9aa3cc78e681550618980e7fab12c976e7c74800c99afde7a26422d3fc56
+```
+
+Die Vorab-Kanaldatei wird erst nach diesen Paketprüfungen umgestellt. Die
+abschliessende Remote-/CI-Prüfung des Aktivierungscommits wird als eigener
+Nachweis im GitHub-Pre-Release dokumentiert; der stabile Kanal, `main` und das
+reguläre Release 1.2.0 bleiben unverändert.
+
+## Prüfgrenzen
 
 Der [Testplan](DR-TESTPLAN.md) umfasst vollständige Backup-/Wiederanlauf-Abläufe,
 alte und neue Journale, Instanzdienste, gelöschte oder ersetzte Container,
 Alias-Schutz, Fehlerfälle und Installation über einen vorhandenen Stand.
 Das [Sicherheitsmodell](SECURITY.md) beschreibt die erhaltenen Schutzgrenzen.
-Die Entwicklungsbasis `d4e8e382b9cacb2482738812713775a3a32aff6a` hat
-[CI-Lauf 39298263840](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39298263840)
-erfolgreich abgeschlossen: Build-/Testjob erfolgreich, Release-Job beim
-Branch-Lauf bestimmungsgemäss übersprungen. Dies belegt die Entwicklungsabnahme,
-nicht die noch gesondert nachzuweisende Tag-/Paketfreigabe.
 
 Kontrollierte Docker-/systemd-Antworten und automatisierte Tests ersetzen weder
 die Prüfung produktiver Anwenderdienste noch jede NAS-Konfiguration oder einen
-bootfähigen Hardware-Restore. Ein develop-Push oder Workflow-Artefakt ist keine
-Veröffentlichung. Die Freigabe benötigt gesondert geprüfte Tag-Pipeline,
-öffentlichen ZIP-Download und anschliessende Aktivierung des Vorabfeeds.
+bootfähigen Hardware-Restore. Die 7 bedingten Auslassungen sind keine bestandenen
+Einzeltests. Ein grüner Branch-Lauf allein belegt weder eine Veröffentlichung
+noch den live wirksamen Updatekanal.
