@@ -475,7 +475,12 @@ def platform_upgrade_integration():
                  "keep_backups": 3, "metadata_mode": "native-strict",
                  "schedule_enabled": True, "schedule_mode": "daily", "schedule_time": "03:17",
                  "rsync_extra_excludes": ["/media/usb/PI_Backup"],
-                 "stop_targets": ["systemd:mosquitto.service"], "backup_mode": "snapshot"}
+                 "stop_targets": [
+                     *({"type": "systemd", "name": name} for name in (
+                         "mosquitto.service", "squeezelite-lbp-mixer.service",
+                         "squeezelite-lbp@inst_bad.service", "squeezelite-lbp@inst_wozi_k_che.service",
+                         r"worker\x2dzone@room\x20one.service")),
+                     {"type": "docker", "name": "sonn-core"}], "backup_mode": "snapshot"}
         saved_bytes = json.dumps(saved).encode()
         config.write_bytes(saved_bytes)
         cgi.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -555,6 +560,26 @@ def platform_upgrade_integration():
             run("chmod", "-R", "755", bindir)
             return result
 
+        def assert_active_selection_reader(active, targets):
+            # Execute only the real reader from the ACTIVATED backend against
+            # the installed config. Never source its dispatcher or stop units.
+            source = (active / "hostbackup.sh").read_text(encoding="utf-8")
+            reader = re.search(r"^selected_stop_targets\(\) \{\n.*?^\}\n(?=\n|\Z)", source, re.M | re.S)
+            assert reader is not None, f"Activated backend has no selection reader: {active}"
+            script = 'set -euo pipefail\nCONFIG_FILE="$1"\n' + reader.group(0) + '\nselected_stop_targets\n'
+            try:
+                result = subprocess.run(["bash", "--noprofile", "--norc", "-s", "--", str(config)],
+                                        input=script, text=True, capture_output=True, check=False,
+                                        timeout=10, cwd=sandbox)
+            except subprocess.TimeoutExpired as exc:
+                raise AssertionError(f"Activated selection reader timed out: {active}") from exc
+            assert result.returncode == 0, (
+                f"Activated selection reader failed ({result.returncode}): {active}\n"
+                + result.stdout + result.stderr)
+            expected = "".join(f"{target['type']}\t{target['name']}\n" for target in targets)
+            assert result.stdout == expected, (
+                "Installed stop-target names changed or were dropped", result.stdout, expected)
+
         def assert_settings_and_backend(expected_version="1.2.3"):
             assert config.read_bytes() == saved_bytes
             assert config.stat().st_uid == 0 and config.stat().st_mode & 0o777 == 0o600
@@ -564,6 +589,8 @@ def platform_upgrade_integration():
             loaded = json.loads(run("bash", launcher, "config").stdout)
             for key, value in saved.items():
                 assert loaded[key] == value, (key, loaded[key], value)
+            if expected_version != "1.2.2":
+                assert_active_selection_reader(active, saved["stop_targets"])
             assert "17 3 * * * root " in (cron / "loxberryhostbackup").read_text()
             assert bindir.stat().st_uid == 0
             return active
@@ -912,6 +939,7 @@ def platform_upgrade_integration():
         hook(postroot, "fresh-after-uninstall")
         assert json.loads(config.read_text())["keep_backups"] == 10
         assert (trusted / "current/hostbackup.sh").read_bytes() == (incoming / "hostbackup.sh").read_bytes()
+        assert_active_selection_reader((trusted / "current").resolve(), [])
 
         # Refuse a substituted bin-directory link without touching its target.
         first = (trusted / "current").resolve()
