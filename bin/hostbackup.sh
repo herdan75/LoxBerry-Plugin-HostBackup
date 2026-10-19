@@ -2050,7 +2050,7 @@ stop_docker_if_requested() {
 }
 
 systemd_stop_identity() {
-  local requested="$1" output key value canonical="" names="" load_state="" name found=false protected=false
+  local requested="$1" output key value canonical="" unit_names_text="" load_state="" name found=false protected=false
   local seen_id=0 seen_names=0 seen_load=0
   local metadata_name_re='^([A-Za-z0-9_.@:-]|\\x[0-9A-Fa-f]{2})+\.service$'
   local -a aliases=()
@@ -2062,7 +2062,7 @@ systemd_stop_identity() {
   while IFS='=' read -r key value; do
     case "$key" in
       Id) canonical="$value"; seen_id=$((seen_id + 1)) ;;
-      Names) names="$value"; seen_names=$((seen_names + 1)) ;;
+      Names) unit_names_text="$value"; seen_names=$((seen_names + 1)) ;;
       LoadState) load_state="$value"; seen_load=$((seen_load + 1)) ;;
       '') [ -z "$value" ] || return 1 ;;
       *) return 1 ;;
@@ -2070,9 +2070,9 @@ systemd_stop_identity() {
   done <<< "$output"
   [ "$seen_id:$seen_names:$seen_load" = 1:1:1 ] || return 1
   [[ "$canonical" =~ ^[A-Za-z0-9_.@:-]+\.service$ ]] && [[ "$canonical" != *@.service ]] || return 1
-  [ -n "$names" ] || return 1
+  [ -n "$unit_names_text" ] || return 1
   case "$load_state" in loaded|masked) ;; *) return 1 ;; esac
-  IFS=$' \t' read -r -a aliases <<< "$names"
+  IFS=$' \t' read -r -a aliases <<< "$unit_names_text"
   for name in "$canonical" "${aliases[@]}"; do
     [[ "$name" =~ $metadata_name_re ]] && [[ "$name" != *@.service ]] || return 1
     [ "$name" != "$requested" ] || found=true
