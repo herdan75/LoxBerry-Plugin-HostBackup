@@ -5,6 +5,53 @@ bei Änderungen an rsync-/tar-Optionen, Mount-Prüfung, Import, Restore oder
 Retention auszuführen. Produktive Daten werden durch synthetische Marker und
 Testdienste ersetzt.
 
+## Gemeinsame Entwicklungsabnahme 1.2.3
+
+Für eine spätere 1.2.3-beta vorbereitet, noch nicht veröffentlicht. Der
+Vorabkanal bleibt auf 1.2.2-beta, der stabile Kanal auf 1.2.0. Diese Fälle
+ergänzen die nachfolgenden Docker-/Dienstprüfungen; Ergebnisse immer für den
+genauen Commit dokumentieren, keine pauschale CI- oder Hardware-Zusage.
+
+1. Die nachfolgende Namensmatrix durch Auswahl, Speicherung, Aliase und alle
+   Journal-Zustände führen: vor dem Stopp
+   `intended`, danach `stopped`, nach geprüftem Wiederanlauf `restarted`.
+   Gültige Namen dürfen kein `Invalid restart operation` auslösen; ungültige
+   Namen müssen weiterhin abgewiesen werden.
+2. Gemischte gespeicherte Auswahl mit gewöhnlichem Dienst, Instanzdienst und
+   Docker-Container durch den vollständigen Backup-Worker führen. Stop-Reihenfolge,
+   Journal, Kopierphase, Wiederanlauf und Abschluss prüfen, nicht nur einzelne
+   Regex-Aufrufe. Echte Stop-/Startfehler weiterhin gezielt nachstellen.
+3. Eine ungültige gespeicherte Auswahl hinter gültigen Einträgen platzieren:
+   vor dem ersten `systemctl stop` oder `docker stop` mit verständlicher Meldung
+   abbrechen. Keine teilweise gestartete Stop-Sequenz und kein unechter Erfolg.
+4. Testpaket 1.2.3 ohne Deinstallation über 1.2.2 mit vorhandenen Einstellungen,
+   alten kurzen Docker-IDs und offenen Journaleinträgen installieren. Vorhandene
+   Belege erhalten; aktive Vorgänge weiterhin schützen. Erst nach Installation
+   den korrigierten Ablauf prüfen, nicht den alten Prozess umdeuten.
+5. Paketversion 1.2.3, unveränderten stabilen/Vorabfeed und fehlende Veröffentlichung
+   prüfen. Ein Branch-Artefakt ist kein öffentlicher Release-Download. Reale
+   Anwenderdienste, NAS-Einbindung und bootfähiger Restore bleiben eigene
+   Praxisabnahmen; Tests mit kontrollierten Docker-/systemd-Antworten benennen.
+
+### Namensmatrix und unveränderte Argumente
+
+| Fall | Erwartung |
+| --- | --- |
+| `dienst@instanz.service`, `dienst@a@b.service`, `dienst@@.service` | Konkrete Instanzen akzeptieren; erstes `@` trennt Präfix/Instanz. |
+| `dienst:teil-a_b.c.service`, `-dienst.service`, `_dienst.service`, `.dienst.service`, `:dienst.service` | Namenssyntax akzeptieren; vorhandenen/ladefähigen Dienst und Schutz separat prüfen. |
+| `dienst\name.service`, `dienst@a\x2db.service`, `dienst@a\x2fb.service` | Backslashes und Zeichenfolge exakt erhalten; nicht in Bindestrich oder `/` umwandeln. |
+| Vollständiger Name mit 255 / 256 ASCII-Zeichen | 255 akzeptieren, 256 abweisen; `.service` zählt mit. |
+| `dienst@.service`, `@instanz.service`, `.service` | Leeres Template, fehlender Präfix oder fehlender Name abweisen. |
+| Namen mit Leerzeichen, Tab, Zeilenumbruch, `/`, `*`, `?`, `[]`, `$`, `;` oder Backtick | Vor dem ersten Stopp abweisen; keine Glob- oder Shell-Auswertung. |
+
+Für führendes `-` die echten Argumentgrenzen bei `show`, `is-active`, `stop` und
+`start` prüfen: `--` muss vor dem unveränderten Namen stehen. Positivfälle dürfen
+keine zweite Identität erzeugen; Alias-Zusammenfassung und geschützte Dienste
+bleiben zu prüfen. Massgeblich sind die im [Sicherheitsmodell](SECURITY.md)
+verlinkte systemd-Dokumentation und `unit-name.c` v257. Diese Matrix ist ein
+Prüfauftrag und kein Nachweis, dass jeder syntaktisch gültige Name auf einem
+Anwendersystem tatsächlich als Dienst geladen werden kann.
+
 ## Dienstempfehlungen und Alias-Schutz: Entwicklungsabnahme vom 19.10.2026
 
 Noch unveröffentlicht; die folgenden Fälle sind ein Prüfauftrag, keine Aussage
@@ -28,14 +75,14 @@ und Laufzeitsicherheitstests für den jeweiligen Commit getrennt festhalten.
    Rückgabecode im Log, Backup weiterhin blockiert, Wiederanlaufschutz erhalten.
 5. Prüfen, dass die Änderung nur das Stoppen betrifft: keine zusätzlichen
    Dateiausschlüsse, keine Veränderung bereits offener Wiederanlauf-Aufträge,
-   keine neuen Einstellungen und keine Änderung von Version oder Updatefeeds.
+   keine neuen Einstellungen und keine Änderung der veröffentlichten Updatefeeds.
    Produktive Systemdienste für diese Prüfungen nicht stoppen.
 
 ## Docker-Wiederanlauf: Entwicklungsabnahme vom 18.10.2026
 
-Diese Korrektur ist noch nicht veröffentlicht. Paketversion und Updatekanäle
-bleiben unverändert; die nachfolgenden Fälle sind ein Prüfauftrag, keine pauschale
-Erfolgszusage. Automatisierte Nachweise gehören zu `tests/test_docker_recovery.py`,
+Diese Korrektur ist im noch unveröffentlichten Entwicklungspaket 1.2.3 enthalten.
+Updatekanäle bleiben unverändert; die nachfolgenden Fälle sind ein Prüfauftrag,
+keine pauschale Erfolgszusage. Automatisierte Nachweise gehören zu `tests/test_docker_recovery.py`,
 `tests/test_runtime_safety.py` und den Installer-/Deinstallationstests. Ergebnis,
 genauen Commit, Testumgebung und übersprungene Fälle separat dokumentieren.
 

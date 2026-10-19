@@ -1,5 +1,32 @@
 # Sicherheitsmodell
 
+## Entwicklungsstand 1.2.3: Journal-Identitäten und Stop-Auswahl
+
+Noch nicht veröffentlicht; der Vorabkanal bleibt auf 1.2.2-beta, der stabile
+Kanal auf 1.2.0. Dieser Stand bündelt die nachfolgenden Docker-/Dienstkorrekturen
+mit der durchgängigen Prüfung konkreter systemd-Dienstnamen. Unterstützt werden
+ASCII-Buchstaben/Ziffern, `:`, `-`, `_`, Punkte und wörtliche Backslashes, auch
+`\xHH`-Schreibweisen. Der Präfix vor dem ersten `@` und ein vorhandener Instanzteil
+müssen nicht leer sein; weitere `@` im Instanzteil sind zulässig. Einschliesslich
+`.service` gilt die Grenze von 255 Zeichen. Zulässige führende Satzzeichen ändern
+diese Namensprüfung nicht; ein syntaktisch gültiger Name belegt noch keinen
+vorhandenen, geladenen oder sicher stoppbaren Dienst.
+
+Namen bleiben in Auswahl, JSON-Journal und Kommandoargumenten unverändert, ohne
+Unescaping oder Shell-Auswertung. `systemctl --` begrenzt die Optionen auch bei
+führendem `-`. Leere Templates, Leer-/Steuerzeichen, Globs, `/` und Shell-
+Sonderzeichen werden abgewiesen. Der Zeichenumfang und die Instanzbehandlung
+orientieren sich an [systemd.unit](https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html)
+und den Funktionen `unit_name_is_valid`/`unit_instance_is_valid` in
+[systemd v257: unit-name.c](https://github.com/systemd/systemd/blob/v257/src/basic/unit-name.c).
+Die Prüfung gespeicherter Stop-Ziele erfolgt vor dem ersten Stopp, sodass eine
+ungültige Auswahl nicht erst nach bereits gestoppten Diensten auffällt.
+Ungültige Namen und unsichere Journalpfade bleiben abgewiesen; Schutzliste,
+Operationssperre und protokollierter Wiederanlauf werden nicht abgeschwächt.
+Eine höhere Entwicklungspaketversion schaltet weder einen Download noch einen
+öffentlichen Updatekanal frei. Vorhandene Installationen sollen aktualisiert,
+nicht zuvor deinstalliert werden; laufende Vorgänge bleiben geschützt.
+
 ## Unveröffentlichte Ergänzung: Dienstempfehlungen und Aliase, 19.10.2026
 
 Eine Empfehlung ist keine Stop-Berechtigung. Allgemeine Begriffe wie `db` werden

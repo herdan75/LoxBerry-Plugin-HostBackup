@@ -421,10 +421,10 @@ save_config() {
       $entry =~ s/^\s+|\s+$//g;
       next unless length $entry;
       my ($type, $name) = split /:/, $entry, 2;
-      next unless defined $name && length $name;
-      next unless $type =~ /^(docker|systemd)$/;
-      next if $type eq "docker" && $name !~ /^[A-Za-z0-9_.-]+$/;
-      next if $type eq "systemd" && $name !~ /^[A-Za-z0-9_.\@:\\-]+\.service$/;
+      die "Invalid stop target\n" unless defined $name && length $name && $type =~ /\A(?:docker|systemd)\z/;
+      die "Invalid Docker stop target\n" if $type eq "docker" && $name !~ /\A[A-Za-z0-9][A-Za-z0-9_.-]*\z/;
+      die "Invalid systemd stop target\n" if $type eq "systemd" &&
+        (length($name) > 255 || $name !~ /\A[A-Za-z0-9_:.\\-]+(?:\@[A-Za-z0-9_.\@:\\-]+)?\.service\z/);
       my $key = "$type:$name";
       next if $seen_target{$key}++;
       push @stop_targets, { type => $type, name => $name };
@@ -1478,18 +1478,25 @@ run_hook() {
 selected_stop_targets() {
   perl -MJSON::PP -e '
     my ($file) = @ARGV;
-    open my $fh, "<", $file or exit 0;
+    open my $fh, "<", $file or die "Cannot read stop selection: $!\n";
     local $/;
-    my $cfg = eval { decode_json(<$fh>) } || {};
-    my $targets = $cfg->{stop_targets};
-    exit 0 unless ref($targets) eq "ARRAY";
+    my $cfg = decode_json(<$fh>);
+    die "Invalid stop selection configuration\n" unless ref($cfg) eq "HASH";
+    my $targets = exists($cfg->{stop_targets}) ? $cfg->{stop_targets} : [];
+    die "Invalid stop selection: expected a list\n" unless ref($targets) eq "ARRAY";
+    # Validate the entire saved selection before emitting anything or stopping
+    # a service. A malformed entry must not turn into the legacy empty choice.
     for my $target (@$targets) {
-      next unless ref($target) eq "HASH";
+      die "Invalid stop selection entry\n" unless ref($target) eq "HASH";
       my $type = $target->{type} // "";
       my $name = $target->{name} // "";
-      next unless $type =~ /^(docker|systemd)$/ && length $name;
-      print "$type\t$name\n";
+      die "Invalid stop selection entry\n" if ref($type) || ref($name);
+      my $valid = $type eq "docker"
+        ? $name =~ /\A[A-Za-z0-9][A-Za-z0-9_.-]*\z/
+        : $type eq "systemd" && length($name) <= 255 && $name =~ /\A[A-Za-z0-9_:.\\-]+(?:\@[A-Za-z0-9_.\@:\\-]+)?\.service\z/;
+      die "Invalid stop target: " . encode_json($target) . "\n" unless $valid;
     }
+    print "$_->{type}\t$_->{name}\n" for @$targets;
   ' "$CONFIG_FILE"
 }
 
@@ -1531,10 +1538,9 @@ discover_stop_targets() {
       close $fh or die "Service discovery query failed (status $?).\n";
       return decode("UTF-8", $output, FB_CROAK);
     }
-    sub supported_name { return $_[0] =~ /\A[A-Za-z0-9_.\@:\-]+\z/; }
+    sub docker_name { return $_[0] =~ /\A[A-Za-z0-9][A-Za-z0-9_.-]*\z/; }
     sub service_metadata_name {
-      return $_[0] =~ /\A(?:[A-Za-z0-9_.\@:\-]|\\x[0-9A-Fa-f]{2})+\.service\z/
-        && $_[0] !~ /\@\.service\z/;
+      return length($_[0]) <= 255 && $_[0] =~ /\A[A-Za-z0-9_:.\\-]+(?:\@[A-Za-z0-9_.\@:\\-]+)?\.service\z/;
     }
     sub protected_unit {
       # Keep in sync with protected_systemd_service; regression tests compare
@@ -1579,7 +1585,7 @@ discover_stop_targets() {
         next unless length $line;
         my ($name, $image, $status) = split /\t/, $line, 3;
         die "Incomplete Docker service discovery response.\n" unless defined $status && length($name // "");
-        next unless supported_name($name);
+        next unless docker_name($name);
         push @items, {
           type => "docker", name => $name, label => $name,
           group => "Docker-Container", status => $status, details => $image,
@@ -1599,10 +1605,10 @@ discover_stop_targets() {
           next unless $line =~ /\S/;
           my ($unit) = $line =~ /^\s*(\S+)\s+\S+/;
           die "Incomplete systemd service discovery response.\n" unless defined $unit;
-          next unless supported_name($unit) && $unit =~ /\.service\z/;
+          next unless service_metadata_name($unit);
           # A template is not a runnable instance and cannot be queried/stopped
           # like a concrete service. Instantiated plugin services remain listed.
-          next if protected_unit($unit) || $unit =~ /\@\.service\z/;
+          next if protected_unit($unit);
           $units{$unit} = 1;
         }
       }
@@ -1626,7 +1632,7 @@ discover_stop_targets() {
               $properties{$key} = $value;
             }
           }
-          my $diagnostic_id = supported_name($properties{Id} // "") ? $properties{Id} : "unknown";
+          my $diagnostic_id = service_metadata_name($properties{Id} // "") ? $properties{Id} : "unknown";
           my $diagnostic_state = ($properties{LoadState} // "") =~ /\A[a-z-]+\z/ ? $properties{LoadState} : "unknown";
           for my $key (qw(Id Names LoadState ActiveState SubState Description FragmentPath)) {
             die "Incomplete systemd service properties: missing $key (unit $diagnostic_id, load state $diagnostic_state).\n"
@@ -1656,11 +1662,9 @@ discover_stop_targets() {
           # Installed aliases must not expose a protected canonical service.
           next if protected_unit($properties->{Id})
             || grep { protected_unit($_) } split /\s+/, $properties->{Names};
-          # systemd permits escaped unit names. They are valid metadata, but
-          # the existing selection/journal format only accepts plain names.
-          # Omit unsupported choices, not the entire service inventory.
-          next unless supported_name($canonical);
-          my %aliases = map { $_ => 1 } grep { supported_name($_) } @all_aliases;
+          # Keep systemd identities byte-for-byte, including literal backslash
+          # escapes. Decoding them would change which unit gets stopped.
+          my %aliases = map { $_ => 1 } @all_aliases;
           my $description = $properties->{Description};
           my $metadata = join " ", $canonical, @{$properties}{qw(Description ExecStart FragmentPath)};
           my $plugin = $metadata =~ m{(/plugins/|/opt/loxberry/(bin|data|config)/plugins|stats4lox|loxone|loxhue|netatmo|zigbee|mqtt|miniserver)}i;
@@ -1716,6 +1720,18 @@ restart_journal_update() {
     my ($dir, $action, $type, $id, $label) = @ARGV;
     my ($task) = $dir =~ m{([^/]+)$};
     my $file = "$dir/journal.json";
+    # Perl interpolates an unescaped @ in regex literals, even in a character
+    # class. Keep instance units and historical journal IDs readable alike.
+    my $valid_identity = qr/\A[A-Za-z0-9][A-Za-z0-9_.\@:\\-]*\z/;
+    my $valid_service = qr/\A[A-Za-z0-9_:.\\-]+(?:\@[A-Za-z0-9_.\@:\\-]+)?\.service\z/;
+    my $journal_identity = sub {
+      my ($kind, $value) = @_;
+      return 0 if ref($value);
+      # Preserve the old journal read contract, while accepting all concrete
+      # systemd names supported by the selection path (including leading -).
+      return $value =~ $valid_identity ||
+        ($kind eq "systemd" && length($value) <= 255 && $value =~ $valid_service);
+    };
     my $data = {task => $task, entries => []};
     if (-e $file) {
       sysopen(my $in, $file, O_RDONLY | O_NOFOLLOW) or die "Cannot read restart journal: $!\n";
@@ -1723,7 +1739,7 @@ restart_journal_update() {
       die "Invalid restart journal\n" unless ref($data) eq "HASH" && ($data->{task} // "") eq $task && ref($data->{entries}) eq "ARRAY";
     } elsif ($action ne "init") { die "Restart journal missing\n"; }
     for my $entry (@{$data->{entries}}) {
-      die "Invalid journal entry\n" unless ref($entry) eq "HASH" && ($entry->{type} // "") =~ /\A(?:docker|systemd)\z/ && ($entry->{id} // "") =~ /\A[A-Za-z0-9][A-Za-z0-9_.@:\\-]*\z/ && ($entry->{phase} // "") =~ /\A(?:intended|stopped|restarted|missing)\z/;
+      die "Invalid journal entry\n" unless ref($entry) eq "HASH" && ($entry->{type} // "") =~ /\A(?:docker|systemd)\z/ && $journal_identity->($entry->{type}, $entry->{id} // "") && ($entry->{phase} // "") =~ /\A(?:intended|stopped|restarted|missing)\z/;
       die "Invalid missing service\n" if $entry->{phase} eq "missing" && $entry->{type} ne "docker";
     }
     if ($action eq "pending" || $action eq "missing-list") {
@@ -1750,7 +1766,7 @@ restart_journal_update() {
       $data->{notification} = {signature => $signature, at => $now};
       $notification = "notify\n";
     } elsif ($action ne "init") {
-      die "Invalid restart operation\n" unless $action =~ /\A(?:intended|stopped|restarted|missing|problem)\z/ && $type =~ /\A(?:docker|systemd)\z/ && $id =~ /\A[A-Za-z0-9][A-Za-z0-9_.@:\\-]*\z/;
+      die "Invalid restart operation\n" unless $action =~ /\A(?:intended|stopped|restarted|missing|problem)\z/ && $type =~ /\A(?:docker|systemd)\z/ && $journal_identity->($type, $id);
       die "Invalid missing service\n" if $action eq "missing" && $type ne "docker";
       my ($entry) = grep { $_->{type} eq $type && $_->{id} eq $id } @{$data->{entries}};
       if (!$entry) {
@@ -1764,7 +1780,7 @@ restart_journal_update() {
         $entry->{phase} = $action;
         delete $entry->{problem};
         if (length($label)) {
-          die "Invalid container label\n" unless $label =~ /\A[A-Za-z0-9][A-Za-z0-9_.@:\\-]*\z/;
+          die "Invalid container label\n" unless $label =~ $valid_identity;
           $entry->{label} = $label;
         }
       }
@@ -1943,12 +1959,12 @@ restart_journal_retry_type() {
         restart_journal_update "$state_dir" problem systemd "$identity" unavailable || return 20
         log "ERROR: systemctl unavailable; journal retained for retry"; failed=1; continue
       fi
-      if ! systemctl is-active --quiet "$identity" 2>/dev/null; then
+      if ! systemctl is-active --quiet -- "$identity" 2>/dev/null; then
         restart_journal_update "$state_dir" problem systemd "$identity" start-failed || return 20
-        if command -v timeout >/dev/null 2>&1; then timeout 45 systemctl start "$identity" || true;
-        else systemctl start "$identity" || true; fi
+        if command -v timeout >/dev/null 2>&1; then timeout 45 systemctl start -- "$identity" || true;
+        else systemctl start -- "$identity" || true; fi
       fi
-      if ! systemctl is-active --quiet "$identity" 2>/dev/null; then
+      if ! systemctl is-active --quiet -- "$identity" 2>/dev/null; then
         log "ERROR: Systemd service $identity did not restart; journal retained for retry"; failed=1; continue
       fi
     fi
@@ -2052,7 +2068,7 @@ stop_docker_if_requested() {
 systemd_stop_identity() {
   local requested="$1" output key value canonical="" unit_names_text="" load_state="" name found=false protected=false
   local seen_id=0 seen_names=0 seen_load=0
-  local metadata_name_re='^([A-Za-z0-9_.@:-]|\\x[0-9A-Fa-f]{2})+\.service$'
+  local metadata_name_re='^[A-Za-z0-9_:.\\-]+(@[A-Za-z0-9_:.@\\-]+)?\.service$'
   local -a aliases=()
   if command -v timeout >/dev/null 2>&1; then
     output="$(LC_ALL=C timeout -k 2s 15s systemctl show --no-pager -p Id -p Names -p LoadState -- "$requested")" || return 1
@@ -2069,12 +2085,12 @@ systemd_stop_identity() {
     esac
   done <<< "$output"
   [ "$seen_id:$seen_names:$seen_load" = 1:1:1 ] || return 1
-  [[ "$canonical" =~ ^[A-Za-z0-9_.@:-]+\.service$ ]] && [[ "$canonical" != *@.service ]] || return 1
+  [[ "$canonical" =~ $metadata_name_re ]] && [ "${#canonical}" -le 255 ] || return 1
   [ -n "$unit_names_text" ] || return 1
   case "$load_state" in loaded|masked) ;; *) return 1 ;; esac
   IFS=$' \t' read -r -a aliases <<< "$unit_names_text"
   for name in "$canonical" "${aliases[@]}"; do
-    [[ "$name" =~ $metadata_name_re ]] && [[ "$name" != *@.service ]] || return 1
+    [[ "$name" =~ $metadata_name_re ]] && [ "${#name}" -le 255 ] || return 1
     [ "$name" != "$requested" ] || found=true
     if protected_systemd_service "$name"; then protected=true; fi
   done
@@ -2088,6 +2104,7 @@ stop_selected_systemd_targets() {
   local targets_file="$2"
   local type unit identity decision canonical stop_status failed=0
   local -A seen=()
+  local -a resolved_units=()
   [ -s "$targets_file" ] || return 0
   while IFS="$(printf '\t')" read -r type unit; do
     [ "$type" = "systemd" ] || continue
@@ -2108,21 +2125,28 @@ stop_selected_systemd_targets() {
     fi
     [ -z "${seen[$canonical]:-}" ] || continue
     seen[$canonical]=1
-    unit="$canonical"
-    if systemctl is-active --quiet "$unit" 2>/dev/null; then
-      restart_journal_update "$state_dir" intended systemd "$unit" || return 20
+    resolved_units+=("$canonical")
+  done < "$targets_file"
+  # Resolve all native identities first; a bad later choice must not interrupt
+  # services already validated earlier in the same saved selection.
+  for unit in "${resolved_units[@]}"; do
+    if systemctl is-active --quiet -- "$unit" 2>/dev/null; then
+      restart_journal_update "$state_dir" intended systemd "$unit" || {
+        log "ERROR: Cannot record restart intent for $unit; this service was not stopped"
+        return 20
+      }
       log "Stopping systemd service $unit"
       stop_status=0
       if command -v timeout >/dev/null 2>&1; then
-        timeout 45 systemctl stop "$unit" || stop_status=$?
+        timeout 45 systemctl stop -- "$unit" || stop_status=$?
       else
-        systemctl stop "$unit" || stop_status=$?
+        systemctl stop -- "$unit" || stop_status=$?
       fi
       if [ "$stop_status" -ne 0 ]; then
         log "ERROR: Stopping systemd service $unit failed (exit status $stop_status); backup will not continue"
         failed=1
       fi
-      if ! systemctl is-active --quiet "$unit" 2>/dev/null; then
+      if ! systemctl is-active --quiet -- "$unit" 2>/dev/null; then
         restart_journal_update "$state_dir" stopped systemd "$unit" || return 20
       else
         log "ERROR: systemd service $unit is still active"
@@ -2131,7 +2155,7 @@ stop_selected_systemd_targets() {
     else
       log "Systemd service $unit is not running; nothing to stop"
     fi
-  done < "$targets_file"
+  done
   return "$failed"
 }
 
@@ -2249,11 +2273,11 @@ start_systemd_if_needed() {
       [ -n "$unit" ] || continue
       log "Starting systemd service $unit"
       if command -v timeout >/dev/null 2>&1; then
-        timeout 45 systemctl start "$unit" || failed=1
+        timeout 45 systemctl start -- "$unit" || failed=1
       else
-        systemctl start "$unit" || failed=1
+        systemctl start -- "$unit" || failed=1
       fi
-      systemctl is-active --quiet "$unit" 2>/dev/null || { log "ERROR: systemd service $unit did not restart"; failed=1; }
+      systemctl is-active --quiet -- "$unit" 2>/dev/null || { log "ERROR: systemd service $unit did not restart"; failed=1; }
     done < <(tac "$state_file" 2>/dev/null)
   fi
   return "$failed"

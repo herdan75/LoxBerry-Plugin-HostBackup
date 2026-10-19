@@ -12,7 +12,7 @@ from test_runtime_safety import BASH, ROOT, function
 
 @unittest.skipUnless(BASH, "Bash is required")
 class SettingsWorkflowTests(unittest.TestCase):
-    def run_save(self, metadata="native-strict", mode="full", schedule="false", weekdays="0", monthdays="1", months="*", selection=None, previous_selection=None):
+    def run_save(self, metadata="native-strict", mode="full", schedule="false", weekdays="0", monthdays="1", months="*", selection=None, previous_selection=None, stop_targets=""):
         with tempfile.TemporaryDirectory(prefix="hostbackup-settings-") as tmp:
             base = Path(tmp)
             original = {"backup_root": "", "keep_backups": 3, "metadata_mode": "native-strict",
@@ -23,6 +23,7 @@ class SettingsWorkflowTests(unittest.TestCase):
                 original["source_selection"] = previous_selection
             (base / "config.json").write_text(json.dumps(original), encoding="utf-8")
             args = ["", "/media/usb/PI_Backup", "false", "false", "5", schedule, "weekly" if schedule == "true" else "daily", "02:00", "0", "1", months, weekdays, monthdays, "", "", "true", mode, "", "false", "", "true", "true", "true", "true", metadata]
+            args[17] = stop_targets
             if selection is not None:
                 args.append(json.dumps(selection))
             source = r'''
@@ -55,6 +56,35 @@ install_schedule() { printf installed > schedule-called; }
             self.assertEqual(saved[key], original[key], key)
         self.assertTrue(registered)
         self.assertTrue(scheduled)
+
+    def test_systemd_names_are_saved_exactly_without_decoding_or_dropping_selection(self):
+        names = ("squeezelite-lbp@inst_bad.service", "_worker.service", ":worker.service", "-worker.service",
+                 "worker.zone:one.service", r"worker\x2dzone@room\x20one.service", r"worker\q.service",
+                 r"\x2eprivate.service", "worker@zone@one.service", "worker@@.service", "a" * 247 + ".service")
+        targets = [*(f"systemd:{name}" for name in names), "docker:sonn-core"]
+        result, saved, _, scheduled, _ = self.run_save(stop_targets=",".join(targets))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(saved["stop_targets"], [
+            *({"type": "systemd", "name": name} for name in names), {"type": "docker", "name": "sonn-core"}])
+        self.assertTrue(scheduled)
+
+    def test_invalid_service_name_does_not_partially_save_valid_targets(self):
+        for name in ("worker@.service", "@instance.service", "worker*.service", "a" * 248 + ".service",
+                     "worker/one.service", "worker;command.service"):
+            with self.subTest(name=name):
+                result, saved, _, scheduled, original = self.run_save(
+                    stop_targets=f"systemd:mosquitto.service,systemd:{name}")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(saved, original)
+                self.assertFalse(scheduled)
+
+    def test_unknown_or_incomplete_stop_target_cannot_silently_empty_selection(self):
+        for target in ("unknown:demo", "systemd:", "docker", "docker:-option"):
+            with self.subTest(target=target):
+                result, saved, _, scheduled, original = self.run_save(stop_targets=target)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(saved, original)
+                self.assertFalse(scheduled)
 
     def test_portable_snapshot_setting_is_preserved_for_root_runtime_preflight(self):
         result, saved, registered, scheduled, original = self.run_save(metadata="portable-archive", mode="snapshot")

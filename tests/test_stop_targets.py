@@ -245,11 +245,11 @@ timeout() {
         queried = {name for call in shows for name in call[call.index("--") + 1:]}
         self.assertFalse(queried.intersection(protected))
 
-    def test_template_and_unsaveable_names_excluded_but_instance_preserved(self):
+    def test_template_excluded_but_instance_and_escaped_concrete_unit_preserved(self):
         response = self.run_discovery({"units": {
             "mqtt@.service": {}, "mqtt@main.service": {}, "mnt\\x2ddata.service": {},
         }})
-        self.assertEqual([item["name"] for item in json.loads(response.stdout)], ["mqtt@main.service"])
+        self.assertEqual({item["name"] for item in json.loads(response.stdout)}, {"mqtt@main.service", r"mnt\x2ddata.service"})
 
     def test_systemd_alias_matches_names_without_duplicate_requested_rows(self):
         response = self.run_discovery({"units": {
@@ -301,9 +301,31 @@ timeout() {
         }}}, selected=[{"type": "systemd", "name": "ordinary.service"}])
         item, = json.loads(response.stdout)
         self.assertEqual(item["name"], "ordinary.service")
-        self.assertEqual(item["aliases"], ["ordinary.service"])
+        self.assertEqual(set(item["aliases"]), {"ordinary.service", r"ordinary\x2dalias.service"})
         self.assertTrue(item["selected"])
         self.assertFalse(item["recommended"])
+
+    def test_supported_systemd_name_matrix_remains_selectable_without_decoding(self):
+        names = ("_prefix.service", ":prefix.service", "-prefix.service", ".prefix.service", r"escaped\x2dname.service",
+                 r"literal\q.service", "prefix@part@second.service", "a" * 247 + ".service")
+        response = self.run_discovery({"units": {name: {"Description": "Ordinary application"} for name in names}},
+                                      selected=[{"type": "systemd", "name": name} for name in names])
+        by_name = {item["name"]: item for item in json.loads(response.stdout)}
+        self.assertEqual(set(by_name), set(names))
+        for name in names:
+            self.assertTrue(by_name[name]["selected"], name)
+            self.assertEqual(by_name[name]["aliases"], [name])
+        shows = [call for call in self.calls if call[1] == "show"]
+        self.assertEqual({name for call in shows for name in call[call.index("--") + 1:]}, set(names))
+        self.assertNotIn("escaped-name.service", by_name)
+
+    def test_oversized_and_invalid_unselected_systemd_names_are_not_offered(self):
+        invalid = ("a" * 248 + ".service", "@instance.service", "prefix@.service", ".service",
+                   "glob*.service", "glob?.service", "glob[1].service", "shell;name.service", "dollar$name.service", "ümlaut.service")
+        response = self.run_discovery({"units": {name: {} for name in (*invalid, "ordinary.service")}})
+        self.assertEqual([item["name"] for item in json.loads(response.stdout)], ["ordinary.service"])
+        shows = [call for call in self.calls if call[1] == "show"]
+        self.assertEqual([name for call in shows for name in call[call.index("--") + 1:]], ["ordinary.service"])
 
     def test_alias_name_cannot_make_an_ordinary_service_a_recommended_plugin(self):
         response = self.run_discovery({"units": {"mqtt-plugin-alias.service": {

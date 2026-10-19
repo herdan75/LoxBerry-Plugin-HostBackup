@@ -1,5 +1,19 @@
 # LoxBerry Host Backup
 
+**Version 1.2.3 · Entwicklungsstand auf develop · noch nicht veröffentlicht.**
+Vorgesehen für eine spätere **1.2.3-beta**; kein neuer öffentlicher Download und
+noch kein Update-Angebot über LoxBerry. Der Vorabkanal bleibt auf **1.2.2-beta**,
+der stabile Kanal auf **1.2.0**.
+
+Dieser gemeinsame Korrekturstand enthält den automatischen Umgang mit veralteten
+Docker-Wiederanläufen, sicherere Dienstempfehlungen und die Journal-Korrektur für
+konkrete systemd-Namen einschliesslich Instanzen, `:`, `-`, `_`, Punkten und
+wörtlichen Backslashes wie in `dienst@geraet\x2d1.service`.
+Gespeicherte ungültige Stop-Auswahlen werden vor dem ersten Stopp mit einer
+verständlichen Fehlermeldung abgewiesen. Keine neuen Sicherungsmodi oder
+zusätzlichen Einstellungen. Ein Testpaket kann ohne vorherige Deinstallation
+darüber installiert werden; aktive Vorgänge vorher beenden lassen.
+
 > [!NOTE]
 > **Neu auf develop, noch nicht veröffentlicht (18.10.2026):** Veraltete
 > Wiederanlauf-Einträge für nachweislich nicht mehr vorhandene Docker-Container
@@ -35,8 +49,8 @@ die keine auswertbare Gesamtzahl melden, beispielsweise `df -i` mit `0/0/0`.
 Tatsächlich erschöpfte Inodes und andere Pflichtfehler bleiben blockierend.
 Programm- und Paketversion sind `1.2.2`; der GitHub-Tag lautet `v1.2.2-beta`.
 Das reguläre Release und der stabile Plugin-Updatekanal bleiben auf `1.2.0`.
-Der Vorabkanal wird erst nach Prüfung des öffentlichen Beta-ZIPs auf `1.2.2`
-umgestellt. Keine Deinstallation erforderlich. Testumfang, Freigabestatus und
+Der veröffentlichte Vorabkanal zeigt auf `1.2.2`, noch nicht auf den
+Entwicklungsstand 1.2.3. Keine Deinstallation erforderlich. Testumfang und
 Grenzen stehen in den [Release Notes für 1.2.2-beta](docs/RELEASE-1.2.2.md).
 
 [**LoxBerryHostBackup_1.2.2.zip herunterladen (Vorabversion)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.2-beta/LoxBerryHostBackup_1.2.2.zip)
@@ -88,7 +102,7 @@ ausdrückliche Zuordnung separater Boot-/Datenlaufwerke beim Restore.
 
 > [!IMPORTANT]
 > **Update auf 1.2.2-beta:** Für das Angebot in der Plugin-Verwaltung den
-> Vorabkanal aktivieren und nach dessen Freischaltung erneut nach Updates suchen.
+> Vorabkanal aktivieren und erneut nach Updates suchen.
 > Die interne Version 1.2.2 ist höher als 1.2.0 und 1.2.1, auch gegenüber den
 > bisherigen develop-Testpaketen mit Version 1.2.1. Wer bereits ein manuelles
 > Paket mit interner Version 1.2.2 installiert hat, erhält keinen zusätzlichen
@@ -377,7 +391,7 @@ Kanalaktivierung bleiben von der Entwicklungsabnahme getrennt; siehe
    der LoxBerry-Plugin-Verwaltung verwenden. Der stabile Kanal genügt;
    ein Beta-/Vorabkanal muss dafür nicht aktiviert werden. Für die
    aktuellen Korrekturen in 1.2.2-beta das unten verlinkte Vorabpaket verwenden oder
-   nach dessen Freischaltung den Vorabkanal aktivieren.
+   den Vorabkanal aktivieren. Entwicklungspaket 1.2.3 ist dort noch nicht verfügbar.
 2. In LoxBerry unter **Plugins > Plugin installieren** hochladen.
 3. Nach der Installation die Plugin-Oberfläche öffnen.
 4. Root-Freigabe in den Einstellungen bewusst bestätigen.
@@ -423,8 +437,8 @@ zuerst entpackt werden muss. Alte Downloads bleiben in der
 ### Update auf 1.2.2-beta
 
 Einstellungen exportieren und laufende Aufgaben beenden lassen. In der
-LoxBerry-Plugin-Verwaltung den Vorabkanal aktivieren und nach dessen Freischaltung
-nach Updates suchen, oder das öffentliche Beta-ZIP direkt installieren.
+LoxBerry-Plugin-Verwaltung den Vorabkanal aktivieren und nach Updates suchen,
+oder das öffentliche Beta-ZIP direkt installieren.
 **Nicht vorher deinstallieren.** Programmversion, Release-Tag und Paket lauten
 `1.2.2`, `v1.2.2-beta` und `LoxBerryHostBackup_1.2.2.zip`.
 
@@ -949,6 +963,17 @@ zeigt gespeicherte Regeln, erkannte Volumes und eine verwendbare Snapshot-Refere
 
 ### Dienste Und Container Anhalten
 
+**Entwicklungsstand 1.2.3, noch unveröffentlicht:** Konkrete systemd-Namen werden
+durchgehend unverändert behandelt: auch Instanzen mit weiteren `@` im Instanzteil,
+`:`, `-`, `_`, Punkte, wörtliche Backslashes/`\xHH` und führende zulässige
+Satzzeichen, bis 255 ASCII-Zeichen einschliesslich `.service`. Escape-Sequenzen
+werden nicht aufgelöst und Namen nicht als Shellcode ausgewertet;
+`systemctl --` trennt sie von Optionen.
+Leere Templates, Steuerzeichen, Platzhalter, `/` und Shell-Sonderzeichen bleiben
+abgewiesen. Eine ungültige gespeicherte Stop-Auswahl wird vor dem ersten Stopp
+erkannt. Namensgültigkeit ersetzt weder die Prüfung der tatsächlichen
+Dienstidentität noch den Schutz kritischer Dienste.
+
 **Unveröffentlichte Ergänzung vom 19.10.2026:** Allgemeine Empfehlungsbegriffe
 wie `db` werden als ganze Begriffe geprüft, nicht als Teil von `dbus`. Aliase
 desselben systemd-Dienstes werden über den tatsächlichen Dienstnamen zu einem
@@ -1034,15 +1059,16 @@ Journale ist nicht nötig. Einstellungen und Wiederanlauf-Nachweise bleiben
 erhalten. Ein gerade laufender Backup-/Recovery-Vorgang kann die Installation
 vorübergehend sperren; nach dessen Ende erneut versuchen. Erst das korrigierte
 Paket verwenden, nicht lediglich die unveränderte öffentliche 1.2.2 erneut
-installieren. Dieser Abschnitt beschreibt noch den develop-Stand.
+installieren. Dieser Abschnitt beschreibt den noch unveröffentlichten
+Entwicklungsstand 1.2.3.
 
 **Update ist nicht Deinstallation:** LoxBerry 4.0.0.15 und 4.0.1.1 führen beim
 Update zuerst die Vorbereitung aus dem eingehenden Paket aus; der alte
 Deinstallations-Hook wird dabei nicht aufgerufen. Die Sperre wegen eines offenen
 Journals verhindert deshalb nicht grundsätzlich das Update
-([LoxBerry-Installationsablauf](https://github.com/mschlenstedt/Loxberry/blob/4.0.0.15/sbin/plugininstall.pl)). Ein develop-Testpaket
-mit weiterhin gleicher Versionsnummer muss manuell als ZIP installiert werden;
-der automatische Updatekanal erkennt nur höhere Versionsnummern. Ein anderer
+([LoxBerry-Installationsablauf](https://github.com/mschlenstedt/Loxberry/blob/4.0.0.15/sbin/plugininstall.pl)). Das develop-Testpaket
+1.2.3 muss vor seiner Veröffentlichung manuell als ZIP installiert werden;
+eine höhere Paketversion allein aktiviert keinen Updatekanal. Ein anderer
 Installationsfehler lässt sich erst anhand seines Installationslogs beurteilen.
 
 Der vollständige Nachweis bleibt unter
@@ -1509,18 +1535,19 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 Aktueller Entwicklungs- und Veröffentlichungsstand:
 
 - `main`: regulärer Hauptstand 1.2.0
-- `develop`: Vorabversion 1.2.2-beta auf Basis von 1.2.0 und 1.2.1-beta
+- `develop`: unveröffentlichter Entwicklungsstand 1.2.3 für eine spätere 1.2.3-beta
 - `pre-develop`: älterer Referenzstand; unverändert
 
 Öffentliche Update-Dateien und Freigabereihenfolge:
 
 - `main/release.cfg`: reguläres Paket 1.2.0 unter Tag `v1.2.0`
-- `develop/prerelease.cfg`: wird nach Prüfung des öffentlichen Beta-ZIPs auf
-  Paket 1.2.2 unter Tag `v1.2.2-beta` umgestellt; bis dahin bleibt 1.2.1-beta aktiv
+- `develop/prerelease.cfg`: weiterhin das veröffentlichte Paket 1.2.2 unter
+  Tag `v1.2.2-beta`; noch kein Verweis auf 1.2.3
 
-Ein develop-Push allein aktiviert kein Plugin-Update. Die geprüfte Tag-Pipeline
-veröffentlicht `LoxBerryHostBackup_1.2.2.zip` unter `v1.2.2-beta`; erst nach
-Prüfung dieses öffentlichen Pakets wird die Vorab-Kanaldatei aktiviert.
+Ein develop-Push allein aktiviert kein Plugin-Update. Für 1.2.3 wird noch kein
+Tag oder Release angelegt und kein öffentlicher Download versprochen. Eine
+spätere Veröffentlichung benötigt zuerst die geprüfte Tag-Pipeline, danach
+die Prüfung des öffentlichen ZIPs und erst dann die Aktivierung des Vorabfeeds.
 `main`, bestehende Tags, ältere öffentliche ZIPs und die Wiki-Seite werden
 dabei nicht geändert.
 

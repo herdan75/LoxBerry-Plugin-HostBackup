@@ -14,19 +14,31 @@
     }
     return items[0].value || '';
   }
+  function validStopTargetName(type, name) {
+    if (typeof name !== 'string') return false;
+    // The final lookahead also rejects trailing newlines (unlike JavaScript $).
+    if (type === 'docker') return /^[A-Za-z0-9][A-Za-z0-9_.-]*(?![\s\S])/.test(name);
+    return type === 'systemd' && name.length <= 255 &&
+      /^[A-Za-z0-9_:.\\-]+(?:@[A-Za-z0-9_:.@\\-]+)?\.service(?![\s\S])/.test(name);
+  }
+  function validStopTargetValue(value) {
+    if (typeof value !== 'string') return false;
+    var separator = value.indexOf(':');
+    return separator > 0 && validStopTargetName(value.slice(0, separator), value.slice(separator + 1));
+  }
   function stopTargetSelection(values, targets) {
-    var validValue = /^(docker|systemd):[A-Za-z0-9_.@:\-]+$/, identities = new Map();
-    if (!Array.isArray(values) || values.some(function (value) { return typeof value !== 'string' || !validValue.test(value); })) throw new Error('invalid-stop-targets');
+    var identities = new Map();
+    if (!Array.isArray(values) || values.some(function (value) { return !validStopTargetValue(value); })) throw new Error('invalid-stop-targets');
     targets.forEach(function (target) {
-      if (!target || typeof target.value !== 'string' || !validValue.test(target.value) || identities.has(target.value)) throw new Error('invalid-stop-targets');
+      if (!target || !validStopTargetValue(target.value) || identities.has(target.value)) throw new Error('invalid-stop-targets');
       identities.set(target.value, target.value);
     });
     targets.forEach(function (target) {
       if (target.aliases === undefined) return;
-      if (!/^systemd:[A-Za-z0-9_.@:\-]+\.service$/.test(target.value) || /@\.service$/.test(target.value) || !Array.isArray(target.aliases)) throw new Error('invalid-stop-targets');
+      if (!target.value.startsWith('systemd:') || !Array.isArray(target.aliases)) throw new Error('invalid-stop-targets');
       var seen = new Set();
       target.aliases.forEach(function (alias) {
-        if (typeof alias !== 'string' || !/^[A-Za-z0-9_.@:\-]+\.service$/.test(alias) || /@\.service$/.test(alias) || seen.has(alias)) throw new Error('invalid-stop-targets');
+        if (!validStopTargetName('systemd', alias) || seen.has(alias)) throw new Error('invalid-stop-targets');
         seen.add(alias);
         var value = 'systemd:' + alias;
         if (identities.has(value) && identities.get(value) !== target.value) throw new Error('invalid-stop-targets');
@@ -94,7 +106,7 @@
     var allSourcesNotice = 'Alle eingebundenen Quellen: Auch Netzfreigaben werden mitgesichert. Fuer einen begrenzten Umfang lokale Laufwerke waehlen und Netzfreigaben einzeln aktivieren.';
     return (notices || []).filter(function (notice) { return notice !== legacyNotice && notice !== allSourcesNotice; }).concat(errors || []);
   }
-  var core = { normalizeLogForDisplay: normalizeLogForDisplay, controlState: controlState, stopTargetSelection: stopTargetSelection, validateSettings: validateSettings, updateDirty: updateDirty, logViewport: logViewport, phaseLabel: phaseLabel, metadataLabel: metadataLabel, backupModeLabel: backupModeLabel, advancedMetadata: advancedMetadata, sourceSelection: sourceSelection, sourceIncluded: sourceIncluded, sourceDisplayGroup: sourceDisplayGroup, sourceNotices: sourceNotices };
+  var core = { normalizeLogForDisplay: normalizeLogForDisplay, controlState: controlState, validStopTargetName: validStopTargetName, validStopTargetValue: validStopTargetValue, stopTargetSelection: stopTargetSelection, validateSettings: validateSettings, updateDirty: updateDirty, logViewport: logViewport, phaseLabel: phaseLabel, metadataLabel: metadataLabel, backupModeLabel: backupModeLabel, advancedMetadata: advancedMetadata, sourceSelection: sourceSelection, sourceIncluded: sourceIncluded, sourceDisplayGroup: sourceDisplayGroup, sourceNotices: sourceNotices };
   if (typeof module !== 'undefined' && module.exports) module.exports = core;
   if (!root.document) return;
   var document = root.document;
@@ -484,7 +496,7 @@
       if (node.tagName === 'BUTTON' && node.type !== 'button') throw new Error('invalid-stop-targets');
       if (node.hasAttribute('name') && node !== markers[0]) {
         if (node.tagName !== 'INPUT' || node.type !== 'checkbox' || node.name !== 'stop_targets' ||
-            !/^(docker|systemd):[A-Za-z0-9_.@:\-]+$/.test(node.value) || names.has(node.value)) throw new Error('invalid-stop-targets');
+            !validStopTargetValue(node.value) || names.has(node.value)) throw new Error('invalid-stop-targets');
         names.add(node.value);
       }
     });

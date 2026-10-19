@@ -128,13 +128,18 @@ else backupRows=execFileSync('perl',['-e',backupRowsProgram],{cwd:repo,env:{...p
 assert.match(backupRows,/<details class="backup-extra-actions">/);assert.match(backupRows,/value="fixture-ok"/);
 const stopFixtureTargets=[{type:'systemd',name:'test.service',label:'Testdienst',group:'LoxBerry-/Plugin-Dienste',status:'active',details:'Fixture systemd service',selected:true,recommended:true},{type:'docker',name:'fixture-container',label:'Fixture-Container',group:'Docker-Container',status:'running',details:'Fixture container',selected:false,recommended:true}];
 function renderStopRows(targets) {
-  const program=`BEGIN { require HostBackupFixture; require CGI; my $original=\\&CORE::GLOBAL::readpipe; no warnings 'redefine'; *CORE::GLOBAL::readpipe=sub { my ($command)=@_; if ($command =~ /'stop-targets'\\s+2>&1$/) { $?=0; return ${quote(JSON.stringify(targets))}; } return $original->(@_); }; *CGI::param=sub { return ($_[1] || '') eq 'action' ? 'stop-targets' : ''; }; } do './webfrontend/htmlauth/index.cgi'; die $@ if $@;`;
-  if(process.platform==='win32')return execFileSync('C:/Program Files/Git/bin/bash.exe',['-s'],{cwd:repo,input:`PERL5LIB=${quote(perlLib)} LBPDATADIR=${quote(posix(temp))} REQUEST_METHOD=GET REMOTE_USER=fixture HTTP_USER_AGENT=fixture perl -e ${quote(program)}\n`,encoding:'utf8'});
-  return execFileSync('perl',['-e',program],{cwd:repo,env:{...process.env,PERL5LIB:perlLib,LBPDATADIR:temp,REQUEST_METHOD:'GET',REMOTE_USER:'fixture',HTTP_USER_AGENT:'fixture'},encoding:'utf8'});
+  const program=`BEGIN { require HostBackupFixture; require CGI; my $original=\\&CORE::GLOBAL::readpipe; no warnings 'redefine'; *CORE::GLOBAL::readpipe=sub { my ($command)=@_; if ($command =~ /'stop-targets'\\s+2>&1$/) { $?=0; return $ENV{STOP_BROWSER_JSON}; } return $original->(@_); }; *CGI::param=sub { return ($_[1] || '') eq 'action' ? 'stop-targets' : ''; }; } do './webfrontend/htmlauth/index.cgi'; die $@ if $@;`;
+  if(process.platform==='win32')return execFileSync('C:/Program Files/Git/bin/bash.exe',['-s'],{cwd:repo,input:`STOP_BROWSER_JSON=${quote(JSON.stringify(targets))} PERL5LIB=${quote(perlLib)} LBPDATADIR=${quote(posix(temp))} REQUEST_METHOD=GET REMOTE_USER=fixture HTTP_USER_AGENT=fixture perl -e ${quote(program)}\n`,encoding:'utf8'});
+  return execFileSync('perl',['-e',program],{cwd:repo,env:{...process.env,STOP_BROWSER_JSON:JSON.stringify(targets),PERL5LIB:perlLib,LBPDATADIR:temp,REQUEST_METHOD:'GET',REMOTE_USER:'fixture',HTTP_USER_AGENT:'fixture'},encoding:'utf8'});
 }
 const richStopRows=renderStopRows(stopFixtureTargets),missingStopRows=renderStopRows(stopFixtureTargets.slice(0,1)),emptyStopRows=renderStopRows([]);
 const aliasStopRows=renderStopRows([{...stopFixtureTargets[0],aliases:['test.service','test-old.service','test-other.service']},stopFixtureTargets[1]]);
 const legacyAliasStopRows=renderStopRows([{...stopFixtureTargets[0],name:'test-old.service'},stopFixtureTargets[1]]);
+const literalStopNames=['-worker.service','_worker.service',':worker.service','.worker.service',
+  String.raw`worker@room\x20one@zone.service`,String.raw`raw\q.service`,'worker@@.service'];
+const literalStopAlias=String.raw`_old@room\x20one@zone.service`;
+const literalStopRows=renderStopRows(literalStopNames.map(name=>({...stopFixtureTargets[0],name,label:name,selected:true,
+  aliases:name===literalStopNames[4]?[name,literalStopAlias]:[name]})).concat(stopFixtureTargets[1]));
 assert.match(richStopRows,/<details class="stop-target-group">/);assert.match(richStopRows,/name="stop_targets_loaded" value="1"/);
 assert.match(html,/value="\/fixture\/backup"/);
 assert.doesNotMatch(html,/Speichern und Backup-Start bleiben gesperrt/);
@@ -262,6 +267,7 @@ const server=http.createServer(async(req,res)=>{
       if(mode==='invalid-alias'){res.end('<input type="hidden" name="stop_targets_loaded" value="1"><input type="checkbox" name="stop_targets" value="systemd:test.service" data-stop-aliases="[&quot;bad$(id).service&quot;]">');return;}
       if(mode==='alias-canonical'){res.end(aliasStopRows);return;}
       if(mode==='alias-legacy'){res.end(legacyAliasStopRows);return;}
+      if(mode==='literal-names'){res.end(literalStopRows);return;}
       if(mode==='missing-selected'){res.end(missingStopRows);return;}
       if(mode==='no-targets'){res.end(emptyStopRows);return;}
       await new Promise(resolve=>setTimeout(resolve,mode==='slow'?22000:100));res.end(fragment);return;
@@ -289,7 +295,8 @@ const server=http.createServer(async(req,res)=>{
     if(url.pathname==='/system/images/icons/loxberryhostbackup/icon_64.png'){res.writeHead(200,{'Content-Type':'image/png'});res.end(fs.readFileSync(path.join(repo,'icons/icon_64.png')));return;}
     if(url.pathname.startsWith('/system/')){res.writeHead(204);res.end();return;}
     let pageHtml=url.searchParams.get('fixture')==='verify'?verifySelectionHtml:url.searchParams.get('fixture')==='selection'?selectionHtml:url.searchParams.get('fixture')==='portable'?portableHtml:html;
-    const stopSelections={'no-stops':[],'alias-stops':['systemd:test-old.service'],'alias-draft':['systemd:test-old.service','systemd:test-other.service','systemd:test.service'],'protected-stops':['systemd:dbus-org.freedesktop.Avahi.service']};
+    const stopSelections={'no-stops':[],'alias-stops':['systemd:test-old.service'],'alias-draft':['systemd:test-old.service','systemd:test-other.service','systemd:test.service'],'protected-stops':['systemd:dbus-org.freedesktop.Avahi.service'],
+      'literal-stops':literalStopNames.map(name=>'systemd:'+name).filter(value=>value!=='systemd:'+literalStopNames[4]).concat('systemd:'+literalStopAlias)};
     if(Object.hasOwn(stopSelections,url.searchParams.get('fixture')))pageHtml=pageHtml.replace(/(data-draft-stops=")[^"]*(")/,'$1'+JSON.stringify(stopSelections[url.searchParams.get('fixture')]).replace(/"/g,'&quot;')+'$2');
     if(url.searchParams.get('fixture')==='alias-draft')pageHtml=pageHtml.replace('data-pending-settings="0"','data-pending-settings="1"');
     htmlCount++;res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(pageHtml);
@@ -684,6 +691,19 @@ async function checkStopTargets(browser,base) {
     assert.doesNotMatch(await unavailable().textContent(),/Aktuell nicht gefunden/);
     assert.equal(postCount,postsBefore,'Alias mapping and protected-selection explanations never save or execute anything');
     receipts.push('Saved and draft systemd aliases map to one canonical checkbox; old-list refresh preserves the dirty baseline and unchecked edits; Docker selection is unchanged; protected old choices are explained without claiming a live service state or posting changes');
+    stopTargetsMode='literal-names';await page.goto(base+'?fixture=literal-stops');await settled();
+    const literalValues=literalStopNames.map(name=>'systemd:'+name).sort();
+    assert.deepEqual(await selected(),literalValues);assert.equal(await unavailable().count(),0);
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true');
+    const serialized=()=>page.locator('#settings-save-form').evaluate(form=>new URLSearchParams(new FormData(form)).getAll('stop_targets').sort());
+    assert.deepEqual(await serialized(),literalValues,'Browser form encoding preserves every literal backslash, leading punctuation and additional @');
+    await panel.evaluate(node=>node.open=true);await openGroups();
+    await list.locator('[name="stop_targets"]:checked').first().uncheck();
+    const edited=await selected();assert.equal(edited.length,literalValues.length-1);await retry().click();await settled();
+    assert.deepEqual(await selected(),edited);assert.deepEqual(await serialized(),edited);
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false');
+    assert.equal(postCount,postsBefore);
+    receipts.push('Actual CGI rendering, HTML attributes, browser alias mapping, URL-encoded form values and refresh preserve literal systemd backslashes, leading punctuation and extra @ without unescaping or implicit saving');
   } finally {
     stopTargetsMode='ok';stopTargetsRich=false;
     for(const held of heldStopResponses.splice(0))held.res.destroy();

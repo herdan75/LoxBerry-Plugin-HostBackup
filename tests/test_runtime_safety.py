@@ -75,16 +75,18 @@ timeout() {
 systemctl() {
   case "$1" in
     show) printf 'Id=%s\nNames=%s\nLoadState=loaded\n' "${!#}" "${!#}" ;;
-    is-active) [ -f "$TEST_ROOT/active-$3" ] ;;
+    is-active) [ "$#:$2:$3" = '4:--quiet:--' ] && [ -f "$TEST_ROOT/active-$4" ] ;;
     stop)
+      [ "$#:$2" = '3:--' ] || return 99
       grep -q '"phase":"intended"' "$RESTART_JOURNAL_DIR/backup-test.log/journal.json" || return 88
-      printf 'stop %s\n' "$2" >> "$TEST_ROOT/service-calls"
-      rm -f -- "$TEST_ROOT/active-$2"
+      printf 'stop %s\n' "$3" >> "$TEST_ROOT/service-calls"
+      rm -f -- "$TEST_ROOT/active-$3"
       ;;
     start)
-      printf 'start %s\n' "$2" >> "$TEST_ROOT/service-calls"
+      [ "$#:$2" = '3:--' ] || return 99
+      printf 'start %s\n' "$3" >> "$TEST_ROOT/service-calls"
       [ "${RESTART_FAIL:-false}" != true ] || return 1
-      : > "$TEST_ROOT/active-$2"
+      : > "$TEST_ROOT/active-$3"
       ;;
     *) return 99 ;;
   esac

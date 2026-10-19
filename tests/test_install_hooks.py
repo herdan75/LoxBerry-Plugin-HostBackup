@@ -234,20 +234,20 @@ class InstallHookTests(unittest.TestCase):
                 self.assertIn(f"## [{tag[1:]}]", CHANGELOG)
         self.assertIn("prerelease: ${{ contains(github.ref_name, '-') }}", WORKFLOW)
 
-    def test_beta_package_version_is_numeric_and_documented(self) -> None:
+    def test_development_package_version_is_numeric_and_not_published(self) -> None:
         plugin = configparser.ConfigParser()
         plugin.read_string(PLUGIN_CFG)
         version = plugin["PLUGIN"]["VERSION"]
-        self.assertEqual(version, "1.2.2")
+        self.assertEqual(version, "1.2.3")
         notes = (ROOT / "docs" / f"RELEASE-{version}.md").read_text(encoding="utf-8")
-        self.assertTrue(notes.startswith(f"# LoxBerry Host Backup {version}-beta\n"))
+        self.assertTrue(notes.startswith(f"# LoxBerry Host Backup {version} – Entwicklungsstand\n"))
         self.assertIn(f"**Version {version}", README)
-        self.assertIn(f"## [{version}-beta]", CHANGELOG)
+        self.assertIn(f"## [Unreleased] - develop {version}", CHANGELOG)
         self.assertNotIn(f"VERSION={version}-beta", PLUGIN_CFG)
         self.assertIn(f"LoxBerryHostBackup_{version}.zip", notes)
-        self.assertIn(f"v{version}-beta", notes)
-        self.assertNotIn("Noch nicht veröffentlicht", notes)
-        for source, expected in ((RELEASE_CFG, "1.2.0"), (PRERELEASE_CFG, version)):
+        self.assertIn(f"`{version}-beta`", notes)
+        self.assertIn("Noch nicht veröffentlicht", notes)
+        for source, expected in ((RELEASE_CFG, "1.2.0"), (PRERELEASE_CFG, "1.2.2")):
             channel = configparser.ConfigParser()
             channel.read_string(source)
             self.assertEqual(channel["AUTOUPDATE"]["VERSION"], expected)
@@ -555,12 +555,12 @@ def platform_upgrade_integration():
             run("chmod", "-R", "755", bindir)
             return result
 
-        def assert_settings_and_backend():
+        def assert_settings_and_backend(expected_version="1.2.3"):
             assert config.read_bytes() == saved_bytes
             assert config.stat().st_uid == 0 and config.stat().st_mode & 0o777 == 0o600
             active = (trusted / "current").resolve()
             assert (active / "hostbackup.sh").read_bytes() == (incoming / "hostbackup.sh").read_bytes()
-            assert (active / "runtime-version").read_text() == "1.2.2\n"
+            assert (active / "runtime-version").read_text() == expected_version + "\n"
             loaded = json.loads(run("bash", launcher, "config").stdout)
             for key, value in saved.items():
                 assert loaded[key] == value, (key, loaded[key], value)
@@ -570,7 +570,7 @@ def platform_upgrade_integration():
 
         copy_as_platform()
         hook(postroot, "first")
-        first = assert_settings_and_backend()
+        first = assert_settings_and_backend("1.2.2")
         first_contents = {p.name: p.read_bytes() for p in first.iterdir()}
 
         # Reproduce the reported 1.2.2 failure with its exact old recovery
@@ -602,6 +602,7 @@ def platform_upgrade_integration():
         assert legacy_journal.read_bytes() == legacy_payload and config.read_bytes() == saved_bytes
         # The incoming package now contains the real corrected recovery code.
         backend_file.write_text(current_backend, encoding="utf-8")
+        (incoming / "runtime-version").write_text("1.2.3\n", encoding="utf-8")
         # Explicitly reproduce the previously hidden Permission-denied copy.
         purge = run("rm", "-rf", bindir, platform=True, success=False)
         assert purge.returncode != 0 and "Permission denied" in purge.stderr

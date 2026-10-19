@@ -3,15 +3,27 @@
 Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
-Version 1.2.2-beta ist die neue Vorabversion mit interner Paketversion 1.2.2.
+Entwicklungsstand 1.2.3 ist für eine spätere 1.2.3-beta vorbereitet, aber noch
+nicht veröffentlicht. Der Vorabkanal bleibt auf 1.2.2-beta mit Paketversion 1.2.2,
 Version 1.2.0 bleibt das reguläre Release. Frühere Vorabversionen bleiben als
 historische Einträge erhalten.
 Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
-## [Unreleased] - develop, Stand 2026-10-19
+## [Unreleased] - develop 1.2.3, Stand 2026-10-19
 
+- Konkrete systemd-Namen durchgehend unterstützen: `@`-Instanzen auch mit weiteren
+  `@` im Instanzteil, `:`, `-`, `_`, Punkte, wörtliche Backslashes/`\xHH`, führende
+  zulässige Satzzeichen und bis 255 Zeichen einschliesslich `.service`.
+  Auswahl, Journal und Wiederanlauf behalten den Namen unverändert; kein Unescaping.
+  `systemctl --` schützt vor einer Optionsauswertung führender Bindestriche.
+  Leere Templates, Steuerzeichen, Globs, `/` und Shell-Sonderzeichen bleiben
+  abgewiesen; gültige Zeichen lösen kein `Invalid restart operation` mehr aus.
+- Gespeicherte ungültige Stop-Auswahlen vor dem ersten Dienst-/Container-Stopp
+  mit verständlicher Fehlermeldung abweisen. Gesamtablauf einschliesslich
+  gemischter Stop-Auswahl, Backup und Wiederanlauf in den Prüfplan aufnehmen;
+  ungültige Namen bleiben abgewiesen, Sicherheitsprüfungen werden nicht umgangen.
 - Dienstempfehlungen korrigiert: allgemeine Begriffe wie `db` nur als ganze
   Begriffe erkennen; `dbus` ist kein Datenbankdienst. Empfehlungen verwenden den
   tatsächlichen systemd-Dienstnamen; Aliase werden zusammengefasst und vorhandene
@@ -22,7 +34,7 @@ validiert werden.
   Dateien bleiben gemäss Quellenauswahl gesichert. Bereits offene Wiederanläufe
   bleiben unverändert. Echte Stop-Fehler weiterhin blockieren und ihren
   Rückgabecode deutlicher protokollieren. Ergänzung vom 19.10.2026, noch nicht
-  veröffentlicht und ohne Änderung von Version, Einstellungen oder Updatekanälen.
+  veröffentlicht und ohne zusätzliche Einstellungen oder Sicherungsmodi.
 - Docker-Wiederanlauf unterscheidet laufende, gestoppte, nachweislich fehlende und
   nicht zuverlässig abfragbare Container. Fehlende IDs werden nur nach einer
   ausdrücklichen Docker-Fehlmeldung und erfolgreicher vollständiger Inventur
@@ -51,9 +63,10 @@ validiert werden.
 - Regressionstests und Abnahmeplan für gelöschte/ersetzte Container, alte IDs,
   Docker-/Berechtigungsfehler, Mischfälle, Meldungsintervalle und erhaltene
   Schutzgrenzen ergänzen. Keine neue Einstellung oder Sicherungsart.
-- Nur Entwicklungsstand: Paketversion, Tags, bereits veröffentlichte ZIPs und
-  beide Updatekanäle bleiben unverändert. Diese Korrektur ist noch nicht im
-  veröffentlichten 1.2.2-beta-Paket enthalten. Automatisierte Tests ersetzen
+- Nur Entwicklungsstand: neue Paketversion 1.2.3 für spätere 1.2.3-beta; Tags,
+  bereits veröffentlichte ZIPs und beide Updatekanäle bleiben unverändert.
+  Diese Korrekturen sind nicht im veröffentlichten 1.2.2-beta-Paket enthalten.
+  Automatisierte Tests ersetzen
   keinen Test auf dem betroffenen Anwendergerät oder einen Hardware-Restore.
 
 ## [1.2.2-beta] - 2026-10-15

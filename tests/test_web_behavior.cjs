@@ -19,6 +19,26 @@ assert.throws(()=>ui.stopTargetSelection([],[{value:'docker:mqtt',aliases:[]}]),
 assert.throws(()=>ui.stopTargetSelection([],[{value:'systemd:a.service',aliases:['b.service']},{value:'systemd:b.service'}]),/invalid-stop-targets/);
 assert.throws(()=>ui.stopTargetSelection([],[{value:'systemd:a.service',aliases:['shared.service']},{value:'systemd:b.service',aliases:['shared.service']}]),/invalid-stop-targets/);
 assert.throws(()=>ui.stopTargetSelection(['invalid'],stopRows),/invalid-stop-targets/);
+const validUnitNames=['plain.service','_worker.service',':worker.service','-worker.service','.worker.service',
+  'worker:zone.service','worker@zone:one@two.service','worker@@.service',String.raw`worker@room\x20one.service`,String.raw`\x2dworker.service`,String.raw`raw\q.service`,String.raw`slash\.service`,
+  'a'.repeat(247)+'.service'];
+for(const name of validUnitNames) {
+  assert.equal(ui.validStopTargetName('systemd',name),true,'Valid literal systemd name: '+name);
+  assert.equal(ui.validStopTargetValue('systemd:'+name),true);
+  assert.deepEqual(ui.stopTargetSelection(['systemd:'+name],[{value:'systemd:'+name,aliases:[name]}]),{selected:['systemd:'+name],missing:[]});
+}
+for(const name of ['', '.service','@worker.service','worker@.service','worker.socket','a'.repeat(248)+'.service',
+  'worker.service\n','worker.service\r','worker.service\u2028','bad name.service','bad\tname.service','worker/other.service',
+  'worker*.service','worker?.service','worker[one].service','worker;id.service','worker$(id).service','worker`id`.service',
+  "worker'one.service",'worker"one.service','worker,one.service','wörker.service']) {
+  assert.equal(ui.validStopTargetName('systemd',name),false,'Invalid systemd name: '+JSON.stringify(name));
+  assert.throws(()=>ui.stopTargetSelection(['systemd:'+name],[]),/invalid-stop-targets/);
+  assert.throws(()=>ui.stopTargetSelection([],[{value:'systemd:valid.service',aliases:[name]}]),/invalid-stop-targets/);
+}
+for(const name of ['sonn-core','1worker','test_a.b-c'])assert.equal(ui.validStopTargetName('docker',name),true);
+for(const name of ['-option','_leading','with:colon','with@at',String.raw`with\slash`,'sonn-core\n'])assert.equal(ui.validStopTargetName('docker',name),false);
+const escapedCanonical=String.raw`systemd:-worker@room\x20one@zone.service`,escapedAlias=String.raw`_worker@room\x20one@zone.service`;
+assert.deepEqual(ui.stopTargetSelection(['systemd:'+escapedAlias],[{value:escapedCanonical,aliases:[escapedAlias]}]),{selected:[escapedCanonical],missing:[]},'Escaped identities remain literal while mapping aliases');
 const portableSnapshot={metadata_mode:'portable-archive',backup_mode:'snapshot',create_export_after_backup:'0'};
 const repositoryReady={available:true,initialized:true,key_confirmed:true,target_matches:true};
 assert.match(ui.validateSettings(portableSnapshot), /bestätigte Aufbewahrung/);

@@ -401,21 +401,39 @@ sub array_csv {
   return @clean ? join(',', @clean) : $default;
 }
 
+sub valid_stop_target_name {
+  my ($type, $name) = @_;
+  return 0 unless defined($type) && !ref($type) && defined($name) && !ref($name);
+  return $name =~ /\A[A-Za-z0-9][A-Za-z0-9_.-]*\z/ if $type eq 'docker';
+  # Keep literal systemd names, including backslashes, unchanged. The first @
+  # separates a nonempty prefix/instance; more @ are valid inside the instance.
+  return $type eq 'systemd' && length($name) <= 255
+    && $name =~ /\A[A-Za-z0-9_:.\\-]+(?:\@[A-Za-z0-9_:.\@\\-]+)?\.service\z/;
+}
+
+sub valid_stop_target_value {
+  my ($value) = @_;
+  return 0 unless defined($value) && !ref($value);
+  my ($type, $name) = split /:/, $value, 2;
+  return valid_stop_target_name($type, $name);
+}
+
 sub stop_targets_csv {
   my ($value) = @_;
-  return '' unless ref($value) eq 'ARRAY' && @$value;
+  return '' unless defined $value;
+  die "Ungueltige Auswahl der zu stoppenden Dienste/Container.\n" unless ref($value) eq 'ARRAY';
   my @clean;
+  my %seen;
   for my $target (@$value) {
     my ($type, $name);
     if (ref($target) eq 'HASH') {
-      $type = $target->{type} || '';
-      $name = $target->{name} || '';
-    } elsif (!ref($target) && $target =~ /^([^:]+):(.+)$/) {
-      ($type, $name) = ($1, $2);
+      ($type, $name) = @{$target}{qw(type name)};
+    } elsif (defined($target) && !ref($target)) {
+      ($type, $name) = split /:/, $target, 2;
     }
-    next unless ($type || '') =~ /^(docker|systemd)$/;
-    next unless defined $name && length $name;
-    next unless $name =~ /^[A-Za-z0-9_.\@:\-]+(?:\.service)?$/;
+    die "Ungueltiger Name in der Auswahl der zu stoppenden Dienste/Container.\n"
+      unless valid_stop_target_name($type, $name);
+    next if $seen{"$type:$name"}++;
     push @clean, "$type:$name";
   }
   return join(',', @clean);
@@ -715,7 +733,8 @@ if ($q->request_method eq 'POST') {
         my $root_permission_ack = 'false';
         my $backup_mode = $imported->{backup_mode} || 'full';
         my $metadata_mode = $imported->{metadata_mode} || 'native-strict';
-        my $stop_targets = stop_targets_csv($imported->{stop_targets});
+        my $stop_targets = eval { stop_targets_csv($imported->{stop_targets}) };
+        $error = escapeHTML($@) if $@;
         my $mail_notify_enabled = bool_arg($imported->{mail_notify_enabled});
         my $mail_notify_to = $imported->{mail_notify_to} || '';
         my $mail_notify_success = exists $imported->{mail_notify_success} ? bool_arg($imported->{mail_notify_success}) : 'true';
@@ -813,12 +832,19 @@ if ($q->request_method eq 'POST') {
 
     if ($q->param('stop_targets_loaded')) {
       my @stop_targets = $q->param('stop_targets');
-      $stop_targets = join(',', grep { defined $_ && /^(docker|systemd):[A-Za-z0-9_.\@:\-]+(?:\.service)?$/ } @stop_targets);
+      $stop_targets = eval { stop_targets_csv(\@stop_targets) };
+      $error ||= escapeHTML($@) if $@;
     } else {
       my ($current_status, $current_json) = run_shell(backend_cmd('config'));
       if ($current_status == 0) {
-        my $current = eval { decode_json($current_json) } || {};
-        $stop_targets = stop_targets_csv($current->{stop_targets});
+        $stop_targets = eval {
+          my $current = decode_json($current_json);
+          die "Die gespeicherte Dienstauswahl konnte nicht gelesen werden.\n" unless ref($current) eq 'HASH';
+          stop_targets_csv($current->{stop_targets});
+        };
+        $error ||= escapeHTML($@) if $@;
+      } else {
+        $error ||= escapeHTML($current_json || 'Die gespeicherte Dienstauswahl konnte nicht gelesen werden.');
       }
     }
 
@@ -1116,7 +1142,7 @@ if ($action eq 'save-config' && $error && $config_loaded) {
     $config->{source_selection} = decode_json($sources) if defined $sources && !$@;
   }
   if ($q->param('stop_targets_loaded')) {
-    my @targets = $q->param('stop_targets');
+    my @targets = grep { valid_stop_target_value($_) } $q->param('stop_targets');
     $config->{stop_targets} = [map { my ($type, $name) = split /:/, $_, 2; { type => $type, name => $name } } @targets];
   }
 }
@@ -1739,8 +1765,7 @@ sub validated_stop_targets {
     for my $key (qw(type name label group status details)) {
       die "Invalid stop-target field\n" unless defined($target->{$key}) && !ref($target->{$key});
     }
-    die "Invalid stop-target identity\n" unless $target->{type} =~ /\A(?:docker|systemd)\z/
-      && $target->{name} =~ /\A[A-Za-z0-9_.\@:\-]+\z/
+    die "Invalid stop-target identity\n" unless valid_stop_target_name($target->{type}, $target->{name})
       && !$seen{$target->{type} . ':' . $target->{name}}++;
     die "Invalid stop-target state\n" unless JSON::PP::is_bool($target->{selected}) && JSON::PP::is_bool($target->{recommended});
   }
@@ -1748,12 +1773,11 @@ sub validated_stop_targets {
   for my $target (@$targets) {
     next unless exists $target->{aliases};
     die "Invalid stop-target aliases\n" unless $target->{type} eq 'systemd' && ref($target->{aliases}) eq 'ARRAY'
-      && $target->{name} =~ /\A[A-Za-z0-9_.\@:\-]+\.service\z/ && $target->{name} !~ /\@\.service\z/;
+      && valid_stop_target_name('systemd', $target->{name});
     my %aliases;
     my $identity = 'systemd:' . $target->{name};
     for my $alias (@{$target->{aliases}}) {
-      die "Invalid stop-target alias\n" unless defined($alias) && !ref($alias)
-        && $alias =~ /\A[A-Za-z0-9_.\@:\-]+\.service\z/ && $alias !~ /\@\.service\z/ && !$aliases{$alias}++;
+      die "Invalid stop-target alias\n" unless valid_stop_target_name('systemd', $alias) && !$aliases{$alias}++;
       my $key = 'systemd:' . $alias;
       die "Ambiguous stop-target alias\n" if exists($identities{$key}) && $identities{$key} ne $identity;
       $identities{$key} = $identity;
