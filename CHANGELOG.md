@@ -12,6 +12,25 @@ Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
+## [Unreleased]
+
+- rsync-Code 24 nur bei vollständig auswertbarer Diagnose und ausschliesslich
+  genau bekannten, entbehrlichen LoxBerry-Laufzeitlogs ohne unnötigen Warnstatus
+  behandeln: die drei bekannten Stats4Lox-Grabber-Logs, zeitgestempelte miniserverbackup-ng-Cron- und
+  LogMaintenance-Logs unter `system_tmpfs` samt bekannter Ramlog-Pfade. Bestehen
+  auch alle übrigen Prüfungen, ist der Abschluss `complete` mit „Prüfung OK“;
+  technische Details und der originale rsync-Code 24 bleiben im Log erhalten.
+- Keine pauschale Ausnahme für `.log`-Dateien oder rsync-Code 24. Unvollständige
+  oder unklare Diagnosen, unbekannte/wichtige fehlende Dateien und echte
+  Berechtigungs-/E/A-Fehler bleiben als Hinweise oder Fehler sichtbar.
+  Quellvollständigkeit wird getrennt von der Metadatenprüfung bewertet.
+- Keine neue Einstellung oder Sicherungsart; keine rückwirkende Umschreibung
+  alter Backup-Bewertungen. Diese lokale Änderung ist noch nicht im öffentlichen
+  1.2.3-beta-Paket enthalten. Regressionstests für bekannte/unklare Diagnosen,
+  Dienstewiederanlauf, Abbruch und unveränderte Portable-Sicherungen ergänzt;
+  zwei zusätzliche Linux-Tests erzeugen Code 24 mit echtem rsync. Eine erfolgreiche
+  Pipeline bleibt Voraussetzung für die Freigabe und ersetzt keinen Hardware-Restore.
+
 ## [1.2.3-beta] - 2026-10-19
 
 - Konkrete systemd-Namen durchgehend unterstützen: `@`-Instanzen auch mit weiteren

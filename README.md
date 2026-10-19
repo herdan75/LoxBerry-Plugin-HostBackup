@@ -20,6 +20,19 @@ Auch eine Neuinstallation ist möglich, mit anschliessender Einrichtung und
 Vorprüfung des eigenen Backup-Ziels.
 
 > [!NOTE]
+> **Unveröffentlichte Änderung auf develop – noch nicht in 1.2.3-beta:**
+> Während der Kopie verschwundene, genau bekannte entbehrliche LoxBerry-Laufzeitlogs
+> sollen bei vollständig auswertbarer rsync-Diagnose keinen unnötigen Warnstatus
+> mehr erzeugen. Das betrifft ausschliesslich die drei bekannten Stats4Lox-Grabber-Logs,
+> zeitgestempelte miniserverbackup-ng-Cron- und LogMaintenance-Logs samt bekannter
+> Ramlog-Pfade. Nur wenn alle übrigen Prüfungen erfolgreich sind, bleibt der
+> Abschluss normal (`complete`, „Prüfung OK“); technische Details und der originale
+> rsync-Code 24 bleiben im Log. Unbekannte oder wichtige fehlende Dateien sowie
+> Berechtigungs-/E/A-Fehler bleiben Hinweise oder Fehler. Keine pauschale Ausnahme
+> für `.log` oder Code 24, keine Änderung alter Backup-Bewertungen und kein
+> zusätzlicher Sicherungsmodus. Ein erfolgreicher Abschluss belegt keinen Restore.
+
+> [!NOTE]
 > **Neu in 1.2.3-beta:** Veraltete
 > Wiederanlauf-Einträge für nachweislich nicht mehr vorhandene Docker-Container
 > werden automatisch abgeschlossen und mit ihrem Nachweis archiviert. Dadurch

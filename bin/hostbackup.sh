@@ -1833,11 +1833,20 @@ restart_journal_finish() {
     [ -e "$entry" ] || [ -L "$entry" ] || continue
     case "${entry##*/}" in
       repository-controls) ;;
-      journal.json|selected-stop-targets.tsv|docker-to-stop.tsv|post-hook.started|post-hook.done|restart.done|source-files.nul|repository-candidate.json)
+      journal.json|selected-stop-targets.tsv|docker-to-stop.tsv|post-hook.started|post-hook.done|restart.done|source-files.nul|repository-candidate.json|rsync-stderr.log|rsync-stderr.logged)
         [ -f "$entry" ] && [ ! -L "$entry" ] || return 20 ;;
       *) return 20 ;;
     esac
   done
+  # A signal/process interruption may precede the normal stderr append. Do not erase
+  # the only diagnostic evidence when recovering a completed service journal.
+  # A failed append retains the journal/file for retry, not a successful result.
+  if [ -f "$state_dir/rsync-stderr.log" ] && [ ! -f "$state_dir/rsync-stderr.logged" ]; then
+    local recovery_log="$TASK_LOG_DIR/${state_dir##*/}"
+    prepare_log_file "$recovery_log" append || return 20
+    printf '\nRecovered rsync diagnostics after interrupted recording:\n' >> "$recovery_log" || return 20
+    cat -- "$state_dir/rsync-stderr.log" >> "$recovery_log" || return 20
+  fi
   # Portable workers keep recovery controls private until publication. Remove
   # only these known temporary files, never repository keys or unknown data.
   control="$state_dir/repository-controls"
@@ -1854,7 +1863,7 @@ restart_journal_finish() {
   [ ! -L "$state_dir/repository-candidate.json" ] && { [ ! -e "$state_dir/repository-candidate.json" ] || [ -f "$state_dir/repository-candidate.json" ]; } || return 20
   rm -f -- "$state_dir/repository-candidate.json" || return 20
   # Remove only the known local control files; retain unexpected data for diagnosis.
-  rm -f -- "$state_dir/journal.json" "$state_dir/selected-stop-targets.tsv" "$state_dir/docker-to-stop.tsv" "$state_dir/post-hook.started" "$state_dir/post-hook.done" "$state_dir/restart.done" "$state_dir/source-files.nul" || return 20
+  rm -f -- "$state_dir/journal.json" "$state_dir/selected-stop-targets.tsv" "$state_dir/docker-to-stop.tsv" "$state_dir/post-hook.started" "$state_dir/post-hook.done" "$state_dir/restart.done" "$state_dir/source-files.nul" "$state_dir/rsync-stderr.log" "$state_dir/rsync-stderr.logged" || return 20
   rmdir -- "$state_dir" || return 20
 }
 
@@ -2408,6 +2417,8 @@ validate_completed_backup() {
   local size_bytes="${4:-0}"
   local files_count="${5:-0}"
   local copy_status="${6:-0}"
+  local known_runtime_logs="${7:-false}" source_ok=true
+  local source_value="Kopiervorgang ohne ungeklaerte fehlende Quelldateien abgeschlossen."
   local validation_file="$target/backup-validation.json"
   local status="ok"
   local manifest_ok rootfs_ok etc_ok loxberry_ok varlib_ok mntdocker_ok hardlink_ok size_ok files_ok metadata_ok
@@ -2447,10 +2458,9 @@ validate_completed_backup() {
     metadata_value="xattrs and file capabilities intentionally omitted"
     metadata_informational=true
   fi
-  if [ "$copy_status" -eq 24 ]; then
-    metadata_ok=false
-    metadata_value="source files vanished during backup"
-    metadata_informational=false
+  if [ "$copy_status" -eq 24 ] && { [ "$known_runtime_logs" != true ] || [ "$metadata_mode_value" = portable-archive ]; }; then
+    source_ok=false
+    source_value="Quelldateien sind waehrend der Sicherung verschwunden; nicht ausschliesslich als entbehrliche Laufzeitlogs erkannt. Betroffene Pfade im vollstaendigen Vorgangslog pruefen."
   fi
 
   hardlink_ok=true
@@ -2463,12 +2473,12 @@ validate_completed_backup() {
 
   if [ "$manifest_ok" != "true" ] || [ "$rootfs_ok" != "true" ] || [ "$etc_ok" != "true" ] || [ "$loxberry_ok" != "true" ]; then
     status="error"
-  elif [ "$varlib_ok" != "true" ] || [ "$size_ok" != "true" ] || [ "$files_ok" != "true" ] || [ "$hardlink_ok" != "true" ] || [ "$metadata_ok" != "true" ]; then
+  elif [ "$varlib_ok" != "true" ] || [ "$size_ok" != "true" ] || [ "$files_ok" != "true" ] || [ "$hardlink_ok" != "true" ] || [ "$metadata_ok" != "true" ] || [ "$source_ok" != true ]; then
     status="warning"
   fi
 
   perl -MJSON::PP -MFile::Basename=dirname -MFile::Temp=tempfile -MIO::Handle -e '
-    my ($file, $status, $manifest_ok, $rootfs_ok, $etc_ok, $loxberry_ok, $varlib_ok, $mntdocker_ok, $hardlink_ok, $hardlink_value, $size_ok, $files_ok, $size_bytes, $files_count, $metadata_ok, $metadata_value, $metadata_mode, $metadata_informational) = @ARGV;
+    my ($file, $status, $manifest_ok, $rootfs_ok, $etc_ok, $loxberry_ok, $varlib_ok, $mntdocker_ok, $hardlink_ok, $hardlink_value, $size_ok, $files_ok, $size_bytes, $files_count, $metadata_ok, $metadata_value, $metadata_mode, $metadata_informational, $source_ok, $source_value) = @ARGV;
     my $bool = sub { $_[0] eq "true" ? JSON::PP::true : JSON::PP::false };
     my $hardlink_details = eval { decode_json($hardlink_value) };
     if (ref($hardlink_details) eq "HASH") {
@@ -2487,6 +2497,7 @@ validate_completed_backup() {
         { name => "Snapshot-Hardlinks", ok => $bool->($hardlink_ok), value => $hardlink_value, statistics => $hardlink_details, optional => JSON::PP::true, informational => JSON::PP::true },
         { name => "Backup-Groesse plausibel", ok => $bool->($size_ok), value => $size_bytes },
         { name => "Dateianzahl plausibel", ok => $bool->($files_ok), value => $files_count },
+        { name => "Quelldateien erfasst", ok => $bool->($source_ok), value => $source_value },
         { name => "Metadaten-Fidelitaet", ok => $bool->($metadata_ok), value => $metadata_value, mode => $metadata_mode, informational => $bool->($metadata_informational) },
       ],
     };
@@ -2496,7 +2507,7 @@ validate_completed_backup() {
     $fh->flush or die $!;
     close $fh or die $!;
     rename $tmp, $file or die $!;
-  ' "$validation_file" "$status" "$manifest_ok" "$rootfs_ok" "$etc_ok" "$loxberry_ok" "$varlib_ok" "$mntdocker_ok" "$hardlink_ok" "$hardlink_value" "$size_ok" "$files_ok" "$size_bytes" "$files_count" "$metadata_ok" "$metadata_value" "$metadata_mode_value" "$metadata_informational"
+  ' "$validation_file" "$status" "$manifest_ok" "$rootfs_ok" "$etc_ok" "$loxberry_ok" "$varlib_ok" "$mntdocker_ok" "$hardlink_ok" "$hardlink_value" "$size_ok" "$files_ok" "$size_bytes" "$files_count" "$metadata_ok" "$metadata_value" "$metadata_mode_value" "$metadata_informational" "$source_ok" "$source_value"
 
   log "Backup validation status: $status"
   case "$status" in
@@ -2963,6 +2974,8 @@ create_backup() {
   local mode task validation_status final_status post_hook pre_hook rsync_status export_status portable_excludes state_dir preflight_json preflight_status cleanup_trap
   local source_list="" selection_active=false source_plan_json repository_candidate="" repository_validation="" lineage=""
   local control_dir="" source_report=""
+  local rsync_stderr="" copy_diagnosis="" runtime_logs_only=false
+  local -a copy_pipeline=()
   local -a rsync_opts=() metadata_opts=() tar_opts=()
   root="$(backup_root)"
   backup_mode="$(json_get_string backup_mode)"
@@ -3112,8 +3125,36 @@ create_backup() {
     if [ "$selection_active" = true ]; then
       rsync_opts+=(--from0 --files-from="$source_list" --no-recursive --dirs)
     fi
-    rsync "${metadata_opts[@]}" --delete "${rsync_opts[@]}" --exclude-from="$exclude_file" / "$(rsync_destination "$mode" "$rootfs/")" 2>&1 | tee -a "$log_file"
-    rsync_status=${PIPESTATUS[0]}
+    # Only separate, completely captured stderr can justify a narrow exit-24
+    # exception. No async tee/process substitution: classification must wait
+    # for every diagnostic byte. Progress on stdout remains live.
+    rsync_stderr="$state_dir/rsync-stderr.log"
+    if (umask 077; set -o noclobber; : > "$rsync_stderr"); then
+      LC_ALL=C rsync "${metadata_opts[@]}" --delete "${rsync_opts[@]}" --exclude-from="$exclude_file" / "$(rsync_destination "$mode" "$rootfs/")" 2> "$rsync_stderr" | tee -a "$log_file"
+      copy_pipeline=("${PIPESTATUS[@]}")
+      rsync_status=${copy_pipeline[0]}
+      log "rsync process exit status: $rsync_status" | tee -a "$log_file"
+      if cat -- "$rsync_stderr" | tee -a "$log_file"; then
+        write_control_marker "$state_dir/rsync-stderr.logged" || rsync_status=23
+      else
+        log "ERROR: rsync diagnostics could not be completely recorded" | tee -a "$log_file"
+        rsync_status=23
+      fi
+      if [ "${copy_pipeline[1]}" -ne 0 ]; then
+        log "ERROR: rsync diagnostics/progress could not be completely recorded" | tee -a "$log_file"
+        rsync_status=23
+      fi
+      if [ "$rsync_status" -eq 24 ]; then
+        if command -v timeout >/dev/null 2>&1 && copy_diagnosis="$(timeout -k 2 15 python3 "$LBP_BINDIR/hostbackup-copy-diagnostics.py" --stderr "$rsync_stderr" --exit-code "$rsync_status" --loxberry-home "$LBHOMEDIR" 2>> "$log_file")"; then
+          runtime_logs_only=true
+          log "Known expendable runtime logs disappeared during copying; no backup warning required. Original rsync status remains 24." | tee -a "$log_file"
+        fi
+        printf 'rsync diagnostic classification: %s\n' "$copy_diagnosis" | tee -a "$log_file"
+      fi
+    else
+      log "ERROR: Cannot create private rsync diagnostic file" | tee -a "$log_file"
+      rsync_status=23
+    fi
   fi
   set -e
   # Docker/service restart can legitimately change mounts, so verify the source
@@ -3169,7 +3210,7 @@ create_backup() {
     fi
     printf '%s\n' "$repository_validation" | tee -a "$log_file"
   else
-    validate_completed_backup "$target" "$backup_mode" "${previous_backup:-}" "$size" "$files" "$rsync_status" 2>&1 | tee -a "$log_file"
+    validate_completed_backup "$target" "$backup_mode" "${previous_backup:-}" "$size" "$files" "$rsync_status" "$runtime_logs_only" 2>&1 | tee -a "$log_file"
     validation_status=${PIPESTATUS[0]}
   fi
   set -e
