@@ -1,5 +1,24 @@
 # Sicherheitsmodell
 
+## Unveröffentlichte Ergänzung: Dienstempfehlungen und Aliase, 19.10.2026
+
+Eine Empfehlung ist keine Stop-Berechtigung. Allgemeine Begriffe wie `db` werden
+nicht mehr innerhalb von `dbus` erkannt; die Zuordnung verwendet den tatsächlichen
+systemd-Namen. Mehrere Aliase bilden einen Listeneintrag, ohne gespeicherte
+Auswahlen zu verlieren. Avahi, ModemManager und D-Bus einschliesslich
+`dbus-broker` und bekannter Aliase gehören zu den geschützten Diensten.
+
+Vor einem Stopp löst das Backend den tatsächlichen Namen und die gemeldeten
+Aliase erneut auf und prüft den Schutz. Alte gespeicherte Auswahlen geschützter
+Dienste werden protokolliert übersprungen, nicht aus der Konfiguration gelöscht;
+kein Stopp und kein Wiederanlauf-Journal werden dafür erzeugt. Ungültige oder
+nicht sicher auflösbare Identitäten rechtfertigen keinen Stopp. Echte Stop-Fehler
+erlaubter Dienste blockieren weiterhin und erscheinen mit Rückgabecode im Log.
+Bereits offene Wiederanlauf-Aufträge werden nicht verändert. Dienstdateien
+bleiben gemäss bestehender Quellenauswahl gesichert: Stop-Schutz ist kein
+Backup-Ausschluss. Keine neuen Einstellungen, Berechtigungen oder Updatekanäle;
+diese Ergänzung ist noch nicht veröffentlicht.
+
 ## Unveröffentlichte Ergänzung: Docker-Wiederanlauf, 18.10.2026
 
 Der Entwicklungsstand behandelt bestätigte Alt-IDs automatisch, erweitert aber

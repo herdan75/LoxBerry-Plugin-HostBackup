@@ -78,6 +78,34 @@ sub header { my %fields = @_; return "Status: $fields{'-status'}\n\n"; }
         self.assertIn('name="stop_targets_loaded"', output)
         self.assertIn("Keine ausw", output)
 
+    def test_systemd_aliases_render_as_escaped_json_without_duplicate_controls(self):
+        output = self.request([self.row(type="systemd", name="mqtt.service",
+                                       aliases=["mqtt.service", "mqtt-old.service"]), self.row()])
+        self.assertIn("Status: 200 OK", output)
+        self.assertIn('data-stop-aliases="[&quot;mqtt.service&quot;,&quot;mqtt-old.service&quot;]"', output)
+        self.assertEqual(output.count('name="stop_targets"'), 2)
+        self.assertNotIn('value="systemd:mqtt-old.service"', output)
+
+    def test_invalid_alias_payload_or_ambiguous_identity_rejects_entire_list(self):
+        bad_aliases = (None, "mqtt.service", {}, [None], [1], [True], [{}], [""],
+                       ["bad\nname.service"], ["foo$(id).service"], ["ssh.socket"],
+                       ["mqtt@.service"], ["mqtt.service", "mqtt.service"])
+        for aliases in bad_aliases:
+            with self.subTest(aliases=aliases):
+                output = self.request([self.row(type="systemd", name="mqtt.service", aliases=aliases)])
+                self.assertIn("Status: 500", output)
+                self.assertNotIn('name="stop_targets_loaded"', output)
+        for records in (
+            [self.row(aliases=[])],
+            [self.row(type="systemd", name="template@.service", aliases=[])],
+            [self.row(type="systemd", name="mqtt.service", aliases=["other.service"]),
+             self.row(type="systemd", name="other.service")],
+            [self.row(type="systemd", name="mqtt.service", aliases=["shared.service"]),
+             self.row(type="systemd", name="other.service", aliases=["shared.service"])],
+        ):
+            with self.subTest(records=records):
+                self.assertIn("Status: 500", self.request(records))
+
     def test_invalid_json_and_wrong_container_never_render_empty_success(self):
         for data in ("", "warning\n[]", "{", "null", "{}", "true", '"text"', "[null]"):
             with self.subTest(data=data):

@@ -133,6 +133,8 @@ function renderStopRows(targets) {
   return execFileSync('perl',['-e',program],{cwd:repo,env:{...process.env,PERL5LIB:perlLib,LBPDATADIR:temp,REQUEST_METHOD:'GET',REMOTE_USER:'fixture',HTTP_USER_AGENT:'fixture'},encoding:'utf8'});
 }
 const richStopRows=renderStopRows(stopFixtureTargets),missingStopRows=renderStopRows(stopFixtureTargets.slice(0,1)),emptyStopRows=renderStopRows([]);
+const aliasStopRows=renderStopRows([{...stopFixtureTargets[0],aliases:['test.service','test-old.service','test-other.service']},stopFixtureTargets[1]]);
+const legacyAliasStopRows=renderStopRows([{...stopFixtureTargets[0],name:'test-old.service'},stopFixtureTargets[1]]);
 assert.match(richStopRows,/<details class="stop-target-group">/);assert.match(richStopRows,/name="stop_targets_loaded" value="1"/);
 assert.match(html,/value="\/fixture\/backup"/);
 assert.doesNotMatch(html,/Speichern und Backup-Start bleiben gesperrt/);
@@ -257,6 +259,9 @@ const server=http.createServer(async(req,res)=>{
       res.writeHead(200,{'Content-Type':mode==='wrong-content-type'?'application/json':'text/html; charset=utf-8','Cache-Control':'no-store'});
       if(mode==='empty'){res.end('');return;}
       if(mode==='malformed'){res.end('<form action="?action=backup"><input name="stop_targets_loaded" value="1"><img src=x onerror="window.unsafeStopError=true"></form>');return;}
+      if(mode==='invalid-alias'){res.end('<input type="hidden" name="stop_targets_loaded" value="1"><input type="checkbox" name="stop_targets" value="systemd:test.service" data-stop-aliases="[&quot;bad$(id).service&quot;]">');return;}
+      if(mode==='alias-canonical'){res.end(aliasStopRows);return;}
+      if(mode==='alias-legacy'){res.end(legacyAliasStopRows);return;}
       if(mode==='missing-selected'){res.end(missingStopRows);return;}
       if(mode==='no-targets'){res.end(emptyStopRows);return;}
       await new Promise(resolve=>setTimeout(resolve,mode==='slow'?22000:100));res.end(fragment);return;
@@ -283,7 +288,11 @@ const server=http.createServer(async(req,res)=>{
     if(['download-config','download-export','download-log','diagnostics'].includes(action)){res.writeHead(200,{'Content-Type':'application/octet-stream','Content-Disposition':'attachment; filename="fixture-'+action+'.txt"'});res.end('Isolated browser download fixture');return;}
     if(url.pathname==='/system/images/icons/loxberryhostbackup/icon_64.png'){res.writeHead(200,{'Content-Type':'image/png'});res.end(fs.readFileSync(path.join(repo,'icons/icon_64.png')));return;}
     if(url.pathname.startsWith('/system/')){res.writeHead(204);res.end();return;}
-    htmlCount++;res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(url.searchParams.get('fixture')==='verify'?verifySelectionHtml:url.searchParams.get('fixture')==='selection'?selectionHtml:url.searchParams.get('fixture')==='portable'?portableHtml:url.searchParams.get('fixture')==='no-stops'?html.replace(/(data-draft-stops=")[^"]*(")/,'$1[]$2'):html);
+    let pageHtml=url.searchParams.get('fixture')==='verify'?verifySelectionHtml:url.searchParams.get('fixture')==='selection'?selectionHtml:url.searchParams.get('fixture')==='portable'?portableHtml:html;
+    const stopSelections={'no-stops':[],'alias-stops':['systemd:test-old.service'],'alias-draft':['systemd:test-old.service','systemd:test-other.service','systemd:test.service'],'protected-stops':['systemd:dbus-org.freedesktop.Avahi.service']};
+    if(Object.hasOwn(stopSelections,url.searchParams.get('fixture')))pageHtml=pageHtml.replace(/(data-draft-stops=")[^"]*(")/,'$1'+JSON.stringify(stopSelections[url.searchParams.get('fixture')]).replace(/"/g,'&quot;')+'$2');
+    if(url.searchParams.get('fixture')==='alias-draft')pageHtml=pageHtml.replace('data-pending-settings="0"','data-pending-settings="1"');
+    htmlCount++;res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(pageHtml);
   }catch(error){errors.push(error.message);json(res,{error:error.message},500);}
 });
 async function visible(page,selector){await page.locator(selector).waitFor({state:'visible'});}
@@ -582,7 +591,7 @@ async function checkStopTargets(browser,base) {
     await service().uncheck();await container().check();
     await page.locator('#backup-root-input').fill('/fixture/unsaved-after-service-refresh');
     const draftBefore=await configurationControls(page),errorTexts={};
-    for(const mode of ['http-error','backend-timeout','network-error','empty','malformed','wrong-content-type']) {
+    for(const mode of ['http-error','backend-timeout','network-error','empty','malformed','wrong-content-type','invalid-alias']) {
       stopTargetsMode=mode;before=stopTargetsRequests;await retry().click();await settled();
       assert.equal(stopTargetsRequests,before+1);assert.equal(await retry().isEnabled(),true);assert.match(await retry().textContent(),/Erneut laden/);
       errorTexts[mode]=await status.textContent();assert.match(errorTexts[mode],/Dienste|Diensteliste|Container/);
@@ -650,6 +659,31 @@ async function checkStopTargets(browser,base) {
     await retry().click();await settled();assert.equal(await unavailable().count(),0);assert.equal(await list.locator('[name="stop_targets"]').count(),0);
     assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false','Explicit deselection remains an unsaved change after refresh');assert.equal(postCount,postsBefore);
     receipts.push('Legitimate empty discovery succeeds; initial unavailable saved targets remain checked and editable, and removing one requires explicit deselection with dirty state, never an implicit save');
+    stopTargetsMode='alias-legacy';await page.goto(base+'?fixture=alias-stops');await settled();
+    assert.deepEqual(await selected(),['systemd:test-old.service']);assert.equal(await unavailable().count(),0);
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true');
+    await panel.evaluate(node=>node.open=true);
+    stopTargetsMode='alias-canonical';await retry().click();await settled();
+    assert.deepEqual(await selected(),['systemd:test.service']);assert.equal(await unavailable().count(),0);
+    assert.equal(await list.locator('[name="stop_targets"][value="systemd:test-old.service"]').count(),0,'A resolvable alias must not become a false unavailable row');
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true','Canonical display identity does not create an unsaved change');
+    await panel.evaluate(node=>node.open=true);await openGroups();await service().uncheck();await container().check();
+    await retry().click();await settled();assert.deepEqual(await selected(),['docker:fixture-container'],'Refresh preserves an unchecked canonical service and independent Docker selection');
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false');
+    await openGroups();await service().check();await container().uncheck();
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true','Alias-normalised saved baseline survives an unsaved deselection and restoration');
+    await page.goto(base+'?fixture=alias-stops');await settled();
+    assert.deepEqual(await selected(),['systemd:test.service']);assert.equal(await unavailable().count(),0);
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true','Initial saved alias is mapped without a false dirty state');
+    await page.goto(base+'?fixture=alias-draft');await settled();
+    assert.deepEqual(await selected(),['systemd:test.service']);assert.equal(await unavailable().count(),0);
+    assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false','A draft remains unsaved when multiple aliases map to one checkbox');
+    stopTargetsMode='no-targets';await page.goto(base+'?fixture=protected-stops');await settled();
+    assert.deepEqual(await selected(),['systemd:dbus-org.freedesktop.Avahi.service']);
+    assert.match(await unavailable().textContent(),/Geschützte Systemdienste werden auch mit gespeichertem Häkchen nicht gestoppt/);
+    assert.doesNotMatch(await unavailable().textContent(),/Aktuell nicht gefunden/);
+    assert.equal(postCount,postsBefore,'Alias mapping and protected-selection explanations never save or execute anything');
+    receipts.push('Saved and draft systemd aliases map to one canonical checkbox; old-list refresh preserves the dirty baseline and unchecked edits; Docker selection is unchanged; protected old choices are explained without claiming a live service state or posting changes');
   } finally {
     stopTargetsMode='ok';stopTargetsRich=false;
     for(const held of heldStopResponses.splice(0))held.res.destroy();
@@ -817,9 +851,12 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     const base='http://127.0.0.1:'+server.address().port+'/';
     const launch={headless:true};if(process.env.HOSTBACKUP_BROWSER_EXECUTABLE)launch.executablePath=process.env.HOSTBACKUP_BROWSER_EXECUTABLE;
     browser=await chromium.launch(launch);
-    if(['panels','actions'].includes(process.env.HOSTBACKUP_BROWSER_FOCUS)) {
-      if(process.env.HOSTBACKUP_BROWSER_FOCUS==='actions'){await checkActionWiring(browser,base);const afterImport=await browser.newPage();await afterImport.close();}else await checkResultPanels(browser,base);assert.deepEqual(errors,[]);
-      const result={status:'passed',tests:receipts,artifacts:temp,renderer:'actual CGI with mocked backend; focused result panels',browser:await browser.version()};
+    if(['panels','actions','stops'].includes(process.env.HOSTBACKUP_BROWSER_FOCUS)) {
+      if(process.env.HOSTBACKUP_BROWSER_FOCUS==='actions'){await checkActionWiring(browser,base);const afterImport=await browser.newPage();await afterImport.close();}
+      else if(process.env.HOSTBACKUP_BROWSER_FOCUS==='stops')await checkStopTargets(browser,base);
+      else await checkResultPanels(browser,base);
+      assert.deepEqual(errors,[]);
+      const result={status:'passed',tests:receipts,artifacts:temp,renderer:'actual CGI with mocked backend; focused '+process.env.HOSTBACKUP_BROWSER_FOCUS,browser:await browser.version()};
       fs.writeFileSync(path.join(temp,'receipt.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));return;
     }
     const page=await browser.newPage({viewport:{width:1440,height:1100}});page.on('pageerror',error=>errors.push(error.message));

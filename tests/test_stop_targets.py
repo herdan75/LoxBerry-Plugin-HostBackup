@@ -194,7 +194,11 @@ timeout() {
         self.assertFalse(by_name["ordinary.service"]["recommended"])
         self.assertTrue(by_name["grafana.service"]["recommended"])
         for item in items:
-            self.assertEqual(set(item), {"type", "name", "label", "group", "status", "details", "recommended", "selected"})
+            expected_keys = {"type", "name", "label", "group", "status", "details", "recommended", "selected"}
+            if item["type"] == "systemd":
+                expected_keys.add("aliases")
+                self.assertIn(item["name"], item["aliases"])
+            self.assertEqual(set(item), expected_keys)
             self.assertIsInstance(item["selected"], bool)
             self.assertIsInstance(item["recommended"], bool)
         self.assertEqual(items, sorted(items, key=lambda item: (item["group"], item["label"])))
@@ -215,7 +219,9 @@ timeout() {
         protected = [
             "loxberry.service", "LoxBerryHostBackup.service", "loxberryhostbackup.service",
             "ssh.service", "sshd.service", "dropbear.service", "cron.service", "crond.service", "anacron.service",
-            "dbus.service", "polkit.service", "systemd-journald.service", "systemd-.service", "udev.service",
+            "dbus.service", "dbus-broker.service", "polkit.service", "systemd-journald.service", "systemd-.service", "udev.service",
+            "avahi-daemon.service", "dbus-org.freedesktop.Avahi.service", "ModemManager.service",
+            "dbus-org.freedesktop.ModemManager1.service",
             "getty@tty1.service", "serial-getty@ttyAMA0.service", "user@1001.service",
             "networking.service", "NetworkManager.service", "docker.service", "containerd.service",
             "apache2.service", "lighttpd.service", "nginx.service", "php-fpm.service", "php8.4-fpm.service",
@@ -250,7 +256,84 @@ timeout() {
             "mqtt-alias.service": {"Id": "mqtt-real.service", "Names": "mqtt-real.service mqtt-alias.service"},
         }}, selected=[{"type": "systemd", "name": "mqtt-alias.service"}])
         item, = json.loads(response.stdout)
-        self.assertEqual(item["name"], "mqtt-alias.service")
+        self.assertEqual(item["name"], "mqtt-real.service")
+        self.assertTrue(item["selected"])
+        self.assertEqual(set(item["aliases"]), {"mqtt-real.service", "mqtt-alias.service"})
+
+    def test_aliases_deduplicate_by_canonical_identity_and_preserve_saved_selection(self):
+        properties = {"Id": "mqtt-real.service", "Names": "mqtt-real.service mqtt-first.service mqtt-last.service",
+                      "Description": "MQTT daemon", "FragmentPath": "/usr/lib/systemd/system/mqtt-real.service"}
+        response = self.run_discovery({"units": {
+            "mqtt-real.service": properties, "mqtt-first.service": properties, "mqtt-last.service": properties,
+        }}, selected=[{"type": "systemd", "name": "mqtt-last.service"}])
+        item, = json.loads(response.stdout)
+        self.assertEqual(item["name"], "mqtt-real.service")
+        self.assertTrue(item["selected"])
+        self.assertTrue(item["recommended"])
+        self.assertEqual(set(item["aliases"]), {"mqtt-real.service", "mqtt-first.service", "mqtt-last.service"})
+
+    def test_canonical_deduplication_and_alias_selection_span_property_batches(self):
+        properties = {"Id": "z-mqtt.service", "Names": "a-mqtt-alias.service z-mqtt.service",
+                      "Description": "MQTT daemon", "FragmentPath": "/usr/lib/systemd/system/z-mqtt.service"}
+        units = {f"middle-{index:03}.service": {} for index in range(130)}
+        units.update({"a-mqtt-alias.service": properties, "z-mqtt.service": properties})
+        response = self.run_discovery({"units": units}, selected=[{"type": "systemd", "name": "a-mqtt-alias.service"}])
+        items = json.loads(response.stdout)
+        self.assertEqual(len(items), 131)
+        self.assertEqual(len([call for call in self.calls if call[1] == "show"]), 2)
+        item, = [item for item in items if item["name"] == "z-mqtt.service"]
+        self.assertTrue(item["selected"])
+        self.assertEqual(set(item["aliases"]), {"a-mqtt-alias.service", "z-mqtt.service"})
+        self.assertNotIn("a-mqtt-alias.service", {item["name"] for item in items})
+
+    def test_saved_unlisted_alias_matches_canonical_names(self):
+        response = self.run_discovery({"units": {"mqtt-real.service": {
+            "Names": "mqtt-real.service previous-mqtt-alias.service",
+        }}}, selected=[{"type": "systemd", "name": "previous-mqtt-alias.service"}])
+        item, = json.loads(response.stdout)
+        self.assertEqual(item["name"], "mqtt-real.service")
+        self.assertTrue(item["selected"])
+
+    def test_valid_escaped_alias_metadata_does_not_block_supported_canonical_service(self):
+        response = self.run_discovery({"units": {"ordinary.service": {
+            "Names": r"ordinary.service ordinary\x2dalias.service",
+            "Description": "Ordinary application",
+        }}}, selected=[{"type": "systemd", "name": "ordinary.service"}])
+        item, = json.loads(response.stdout)
+        self.assertEqual(item["name"], "ordinary.service")
+        self.assertEqual(item["aliases"], ["ordinary.service"])
+        self.assertTrue(item["selected"])
+        self.assertFalse(item["recommended"])
+
+    def test_alias_name_cannot_make_an_ordinary_service_a_recommended_plugin(self):
+        response = self.run_discovery({"units": {"mqtt-plugin-alias.service": {
+            "Id": "ordinary.service", "Names": "ordinary.service mqtt-plugin-alias.service",
+            "Description": "Ordinary application", "FragmentPath": "/usr/lib/systemd/system/ordinary.service",
+        }}})
+        item, = json.loads(response.stdout)
+        self.assertEqual(item["name"], "ordinary.service")
+        self.assertFalse(item["recommended"])
+        self.assertNotEqual(item["group"], "LoxBerry-/Plugin-Dienste")
+
+    def test_generic_db_recommendation_requires_a_token_not_dbus_or_other_substrings(self):
+        ordinary = ["dbus-custom.service", "adb-sync.service", "odbc-helper.service", "standby.service"]
+        databases = ["db.service", "application-db.service", "postgresql.service", "database.service"]
+        response = self.run_discovery({"units": {name: {"Description": "Application"} for name in ordinary + databases}})
+        by_name = {item["name"]: item for item in json.loads(response.stdout)}
+        self.assertEqual(set(by_name), set(ordinary + databases))
+        for name in ordinary:
+            self.assertFalse(by_name[name]["recommended"], name)
+        for name in databases:
+            self.assertTrue(by_name[name]["recommended"], name)
+
+    def test_custom_dbus_alias_for_actual_database_is_not_blanket_blocked(self):
+        response = self.run_discovery({"units": {"dbus-custom-database.service": {
+            "Id": "postgresql.service", "Names": "postgresql.service dbus-custom-database.service",
+            "Description": "Database application", "FragmentPath": "/usr/lib/systemd/system/postgresql.service",
+        }}}, selected=[{"type": "systemd", "name": "dbus-custom-database.service"}])
+        item, = json.loads(response.stdout)
+        self.assertEqual(item["name"], "postgresql.service")
+        self.assertTrue(item["recommended"])
         self.assertTrue(item["selected"])
 
     def test_aliases_cannot_expose_protected_canonical_or_alternative_names(self):
@@ -260,6 +343,9 @@ timeout() {
             "network-alias.service": {"Id": "NetworkManager.service", "Names": "NetworkManager.service network-alias.service"},
             "ssh-alias.service": {"Id": "sshd.service", "Names": "sshd.service ssh-alias.service"},
             "canonical.service": {"Id": "canonical.service", "Names": "canonical.service docker.service"},
+            "avahi-custom.service": {"Id": "avahi-daemon.service", "Names": "avahi-daemon.service avahi-custom.service"},
+            "modem-custom.service": {"Id": "ModemManager.service", "Names": "ModemManager.service modem-custom.service"},
+            "renamed-avahi.service": {"Id": "renamed-avahi.service", "Names": "renamed-avahi.service dbus-org.freedesktop.Avahi.service"},
             "mqtt.service": {},
         }})
         self.assertEqual([item["name"] for item in json.loads(response.stdout)], ["mqtt.service"])

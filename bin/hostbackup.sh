@@ -1498,7 +1498,9 @@ protected_systemd_service() {
   case "$unit" in
     loxberry.service|LoxBerryHostBackup.service|loxberryhostbackup.service) return 0 ;;
     ssh.service|sshd.service|dropbear.service|cron.service|crond.service|anacron.service) return 0 ;;
-    dbus.service|polkit.service|systemd-*.service|udev.service) return 0 ;;
+    dbus.service|dbus-broker.service|polkit.service|systemd-*.service|udev.service) return 0 ;;
+    avahi-daemon.service|dbus-org.freedesktop.Avahi.service) return 0 ;;
+    ModemManager.service|dbus-org.freedesktop.ModemManager1.service) return 0 ;;
     getty@*.service|serial-getty@*.service|user@*.service) return 0 ;;
     networking.service|NetworkManager.service) return 0 ;;
     docker.service|containerd.service) return 0 ;;
@@ -1530,11 +1532,15 @@ discover_stop_targets() {
       return decode("UTF-8", $output, FB_CROAK);
     }
     sub supported_name { return $_[0] =~ /\A[A-Za-z0-9_.\@:\-]+\z/; }
+    sub service_metadata_name {
+      return $_[0] =~ /\A(?:[A-Za-z0-9_.\@:\-]|\\x[0-9A-Fa-f]{2})+\.service\z/
+        && $_[0] !~ /\@\.service\z/;
+    }
     sub protected_unit {
       # Keep in sync with protected_systemd_service; regression tests compare
       # both predicates. Stop operations continue to use the shell safety check.
       my ($unit) = @_;
-      return $unit =~ /\A(?:loxberry|LoxBerryHostBackup|loxberryhostbackup|ssh|sshd|dropbear|cron|crond|anacron|dbus|polkit|udev|networking|NetworkManager|docker|containerd|apache2|lighttpd|nginx)\.service\z/
+      return $unit =~ /\A(?:loxberry|LoxBerryHostBackup|loxberryhostbackup|ssh|sshd|dropbear|cron|crond|anacron|dbus|dbus-broker|polkit|udev|networking|NetworkManager|docker|containerd|apache2|lighttpd|nginx|avahi-daemon|dbus-org\.freedesktop\.Avahi|ModemManager|dbus-org\.freedesktop\.ModemManager1)\.service\z/
         || $unit =~ /\A(?:systemd-.*|(?:getty|serial-getty|user)@.*|php.*-fpm)\.service\z/
         || $unit =~ /\.(?:mount|socket|timer)\z/;
     }
@@ -1550,7 +1556,8 @@ discover_stop_targets() {
       return length($description) ? $description : $unit;
     }
     my %selected;
-    my $recommend_re = qr/(mariadb|mysql|postgres|postgresql|influx|grafana|telegraf|mosquitto|mqtt|zigbee|node-?red|nodered|stats4lox|netatmo|miniserver|loxhue|huebridge|redis|mongodb|prometheus|homeassistant|home-assistant|portainer|database|db|broker)/i;
+    # Generic database terms must be whole tokens: "dbus" is not a database.
+    my $recommend_re = qr/(?:mariadb|mysql|postgres|postgresql|influx|grafana|telegraf|mosquitto|mqtt|zigbee|node-?red|nodered|stats4lox|netatmo|miniserver|loxhue|huebridge|redis|mongodb|prometheus|homeassistant|home-assistant|portainer)|(?:^|[^a-z0-9])(?:database|db|broker)(?:[^a-z0-9]|$)/i;
     {
       open my $fh, "<", $cfg_file or die "Cannot read service selection configuration.\n";
       local $/;
@@ -1583,6 +1590,7 @@ discover_stop_targets() {
     }
     if (length $systemctl_bin) {
       my %units;
+      my %systemd_items;
       for my $args (
         ["list-units", "--type=service", "--state=running", "--all", "--plain", "--no-legend", "--no-pager"],
         ["list-unit-files", "--type=service", "--no-legend", "--no-pager"]
@@ -1637,25 +1645,46 @@ discover_stop_targets() {
         }
         for my $unit (@batch) {
           my $properties = $records{$unit} or die "Missing systemd service properties; please retry.\n";
+          my $canonical = $properties->{Id};
+          die "Invalid canonical systemd service identity.\n"
+            unless service_metadata_name($canonical);
+          my @all_aliases = ($unit, $canonical, split /\s+/, $properties->{Names});
+          for my $alias (@all_aliases) {
+            die "Invalid alternative systemd service identity.\n"
+              unless service_metadata_name($alias);
+          }
           # Installed aliases must not expose a protected canonical service.
           next if protected_unit($properties->{Id})
             || grep { protected_unit($_) } split /\s+/, $properties->{Names};
+          # systemd permits escaped unit names. They are valid metadata, but
+          # the existing selection/journal format only accepts plain names.
+          # Omit unsupported choices, not the entire service inventory.
+          next unless supported_name($canonical);
+          my %aliases = map { $_ => 1 } grep { supported_name($_) } @all_aliases;
           my $description = $properties->{Description};
-          my $metadata = join " ", $unit, @{$properties}{qw(Description ExecStart FragmentPath)};
+          my $metadata = join " ", $canonical, @{$properties}{qw(Description ExecStart FragmentPath)};
           my $plugin = $metadata =~ m{(/plugins/|/opt/loxberry/(bin|data|config)/plugins|stats4lox|loxone|loxhue|netatmo|zigbee|mqtt|miniserver)}i;
           my $active = $properties->{ActiveState} eq "active";
           next unless $plugin || ($active && $properties->{SubState} eq "running");
-          my $label = friendly_label($unit, $description);
+          my $label = friendly_label($canonical, $description);
           my $group = $plugin ? "LoxBerry-/Plugin-Dienste" : "Weitere Systemdienste";
-          my $recommended = $active && ($plugin || "$unit $label" =~ $recommend_re);
-          push @items, {
-            type => "systemd", name => $unit, label => $label, group => $group,
-            status => "$properties->{ActiveState}/$properties->{SubState}", details => $unit,
+          my $recommended = $active && ($plugin || "$canonical $label" =~ $recommend_re);
+          if (exists $systemd_items{$canonical}) {
+            $aliases{$_} = 1 for @{$systemd_items{$canonical}{aliases}};
+          }
+          my $is_selected = grep { $selected{"systemd:$_"} } keys %aliases;
+          # Alias and canonical names may occur in different query batches.
+          # Keep one row, preserving a previously saved selection through any alias.
+          $systemd_items{$canonical} = {
+            type => "systemd", name => $canonical, label => $label, group => $group,
+            status => "$properties->{ActiveState}/$properties->{SubState}", details => $canonical,
             recommended => ($recommended ? JSON::PP::true : JSON::PP::false),
-            selected => ($selected{"systemd:$unit"} ? JSON::PP::true : JSON::PP::false),
+            selected => ($is_selected ? JSON::PP::true : JSON::PP::false),
+            aliases => [sort keys %aliases],
           };
         }
       }
+      push @items, values %systemd_items;
     }
     @items = sort { ($a->{group} cmp $b->{group}) || ($a->{label} cmp $b->{label}) } @items;
     print JSON::PP->new->ascii->canonical->pretty->encode(\@items);
@@ -2020,23 +2049,78 @@ stop_docker_if_requested() {
   fi
 }
 
+systemd_stop_identity() {
+  local requested="$1" output key value canonical="" names="" load_state="" name found=false protected=false
+  local seen_id=0 seen_names=0 seen_load=0
+  local metadata_name_re='^([A-Za-z0-9_.@:-]|\\x[0-9A-Fa-f]{2})+\.service$'
+  local -a aliases=()
+  if command -v timeout >/dev/null 2>&1; then
+    output="$(LC_ALL=C timeout -k 2s 15s systemctl show --no-pager -p Id -p Names -p LoadState -- "$requested")" || return 1
+  else
+    output="$(LC_ALL=C systemctl show --no-pager -p Id -p Names -p LoadState -- "$requested")" || return 1
+  fi
+  while IFS='=' read -r key value; do
+    case "$key" in
+      Id) canonical="$value"; seen_id=$((seen_id + 1)) ;;
+      Names) names="$value"; seen_names=$((seen_names + 1)) ;;
+      LoadState) load_state="$value"; seen_load=$((seen_load + 1)) ;;
+      '') [ -z "$value" ] || return 1 ;;
+      *) return 1 ;;
+    esac
+  done <<< "$output"
+  [ "$seen_id:$seen_names:$seen_load" = 1:1:1 ] || return 1
+  [[ "$canonical" =~ ^[A-Za-z0-9_.@:-]+\.service$ ]] && [[ "$canonical" != *@.service ]] || return 1
+  [ -n "$names" ] || return 1
+  case "$load_state" in loaded|masked) ;; *) return 1 ;; esac
+  IFS=$' \t' read -r -a aliases <<< "$names"
+  for name in "$canonical" "${aliases[@]}"; do
+    [[ "$name" =~ $metadata_name_re ]] && [[ "$name" != *@.service ]] || return 1
+    [ "$name" != "$requested" ] || found=true
+    if protected_systemd_service "$name"; then protected=true; fi
+  done
+  [ "$found" = true ] || return 1
+  if [ "$protected" = true ]; then printf 'protected\t%s\n' "$canonical";
+  else printf 'allowed\t%s\n' "$canonical"; fi
+}
+
 stop_selected_systemd_targets() {
   local state_dir="$1"
   local targets_file="$2"
-  local unit failed=0
+  local type unit identity decision canonical stop_status failed=0
+  local -A seen=()
   [ -s "$targets_file" ] || return 0
-  command -v systemctl >/dev/null 2>&1 || return 0
   while IFS="$(printf '\t')" read -r type unit; do
     [ "$type" = "systemd" ] || continue
     [ -n "$unit" ] || continue
-    protected_systemd_service "$unit" && { log "Skipping protected systemd service $unit"; continue; }
+    protected_systemd_service "$unit" && { log "Skipping protected systemd service $unit (saved stop selection ignored)"; continue; }
+    command -v systemctl >/dev/null 2>&1 || {
+      log "ERROR: systemctl is unavailable for selected service $unit; backup will not continue"
+      return 1
+    }
+    if ! identity="$(systemd_stop_identity "$unit")"; then
+      log "ERROR: Cannot safely resolve systemd service $unit before stopping; backup will not continue"
+      return 1
+    fi
+    IFS=$'\t' read -r decision canonical <<< "$identity"
+    if [ "$decision" = protected ]; then
+      log "Skipping protected systemd service $unit ($canonical; saved stop selection ignored)"
+      continue
+    fi
+    [ -z "${seen[$canonical]:-}" ] || continue
+    seen[$canonical]=1
+    unit="$canonical"
     if systemctl is-active --quiet "$unit" 2>/dev/null; then
       restart_journal_update "$state_dir" intended systemd "$unit" || return 20
       log "Stopping systemd service $unit"
+      stop_status=0
       if command -v timeout >/dev/null 2>&1; then
-        timeout 45 systemctl stop "$unit" || failed=1
+        timeout 45 systemctl stop "$unit" || stop_status=$?
       else
-        systemctl stop "$unit" || failed=1
+        systemctl stop "$unit" || stop_status=$?
+      fi
+      if [ "$stop_status" -ne 0 ]; then
+        log "ERROR: Stopping systemd service $unit failed (exit status $stop_status); backup will not continue"
+        failed=1
       fi
       if ! systemctl is-active --quiet "$unit" 2>/dev/null; then
         restart_journal_update "$state_dir" stopped systemd "$unit" || return 20

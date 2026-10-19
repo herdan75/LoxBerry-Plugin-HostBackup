@@ -14,6 +14,28 @@
     }
     return items[0].value || '';
   }
+  function stopTargetSelection(values, targets) {
+    var validValue = /^(docker|systemd):[A-Za-z0-9_.@:\-]+$/, identities = new Map();
+    if (!Array.isArray(values) || values.some(function (value) { return typeof value !== 'string' || !validValue.test(value); })) throw new Error('invalid-stop-targets');
+    targets.forEach(function (target) {
+      if (!target || typeof target.value !== 'string' || !validValue.test(target.value) || identities.has(target.value)) throw new Error('invalid-stop-targets');
+      identities.set(target.value, target.value);
+    });
+    targets.forEach(function (target) {
+      if (target.aliases === undefined) return;
+      if (!/^systemd:[A-Za-z0-9_.@:\-]+\.service$/.test(target.value) || /@\.service$/.test(target.value) || !Array.isArray(target.aliases)) throw new Error('invalid-stop-targets');
+      var seen = new Set();
+      target.aliases.forEach(function (alias) {
+        if (typeof alias !== 'string' || !/^[A-Za-z0-9_.@:\-]+\.service$/.test(alias) || /@\.service$/.test(alias) || seen.has(alias)) throw new Error('invalid-stop-targets');
+        seen.add(alias);
+        var value = 'systemd:' + alias;
+        if (identities.has(value) && identities.get(value) !== target.value) throw new Error('invalid-stop-targets');
+        identities.set(value, target.value);
+      });
+    });
+    var selected = Array.from(new Set(values.map(function (value) { return identities.get(value) || value; })));
+    return { selected: selected, missing: selected.filter(function (value) { return !identities.has(value); }) };
+  }
   function validateSettings(values, repository) {
     if (values.metadata_mode === 'portable-archive' && values.backup_mode === 'snapshot') {
       if (values.create_export_after_backup === '1') return 'Für portable Sicherungsstände den automatischen tar.gz-Export ausdrücklich deaktivieren. Repository-Stände teilen Datenblöcke und sind keine einzelnen Exportarchive.';
@@ -72,7 +94,7 @@
     var allSourcesNotice = 'Alle eingebundenen Quellen: Auch Netzfreigaben werden mitgesichert. Fuer einen begrenzten Umfang lokale Laufwerke waehlen und Netzfreigaben einzeln aktivieren.';
     return (notices || []).filter(function (notice) { return notice !== legacyNotice && notice !== allSourcesNotice; }).concat(errors || []);
   }
-  var core = { normalizeLogForDisplay: normalizeLogForDisplay, controlState: controlState, validateSettings: validateSettings, updateDirty: updateDirty, logViewport: logViewport, phaseLabel: phaseLabel, metadataLabel: metadataLabel, backupModeLabel: backupModeLabel, advancedMetadata: advancedMetadata, sourceSelection: sourceSelection, sourceIncluded: sourceIncluded, sourceDisplayGroup: sourceDisplayGroup, sourceNotices: sourceNotices };
+  var core = { normalizeLogForDisplay: normalizeLogForDisplay, controlState: controlState, stopTargetSelection: stopTargetSelection, validateSettings: validateSettings, updateDirty: updateDirty, logViewport: logViewport, phaseLabel: phaseLabel, metadataLabel: metadataLabel, backupModeLabel: backupModeLabel, advancedMetadata: advancedMetadata, sourceSelection: sourceSelection, sourceIncluded: sourceIncluded, sourceDisplayGroup: sourceDisplayGroup, sourceNotices: sourceNotices };
   if (typeof module !== 'undefined' && module.exports) module.exports = core;
   if (!root.document) return;
   var document = root.document;
@@ -487,23 +509,27 @@
       // Read the controls at response time, not request time: the user may have
       // changed a checkbox while a refresh was in flight.
       var required = hadList ? all('[name="stop_targets"]', target).filter(function (item) { return item.checked; }).map(function (item) { return item.value; }) : JSON.parse(app.dataset.draftStops || '[]');
-      var previous = hadList || pendingDraft ? required : null;
       var incoming = Array.from(content.querySelectorAll('[name="stop_targets"]'));
-      if (!Array.isArray(required) || required.some(function (value) { return typeof value !== 'string' || !/^(docker|systemd):[A-Za-z0-9_.@:\-]+$/.test(value); })) throw new Error('invalid-stop-targets');
-      var missing = Array.from(new Set(required)).filter(function (value) { return !incoming.some(function (item) { return item.value === value; }); });
+      var identities = incoming.map(function (item) { return { value: item.value, aliases: item.dataset.stopAliases === undefined ? undefined : JSON.parse(item.dataset.stopAliases) }; });
+      var selection = stopTargetSelection(required, identities);
+      var baseline = hadList ? stopTargetSelection(initial.stop_targets ? initial.stop_targets.split('\u001f') : [], identities).selected.sort().join('\u001f') : null;
+      // Resolve saved/unsaved alias selections only in the displayed controls.
+      // Configuration changes still require the user's explicit Save action.
+      var previous = hadList || pendingDraft ? selection.selected : null;
+      var missing = selection.missing;
       if (missing.length) {
         // A valid inventory can change (removed container, inactive service).
         // Retain explicit selections without trapping the user in a failed
         // initial load: unavailable targets can be deliberately deselected.
         var group = el('details', undefined, 'stop-target-group'); group.open = true;
         group.dataset.stopTargetUnavailable = '1';
-        group.append(el('summary', 'Ausgewählte Ziele aktuell nicht gefunden'));
-        group.append(el('p', 'Diese Ziele bleiben ausgewählt. Ein Container kann entfernt oder ein Dienst inaktiv sein. Auswahl prüfen und nicht mehr benötigte Ziele bewusst abwählen; danach speichern.', 'stop-target-hint'));
+        group.append(el('summary', 'Ausgewählte Ziele derzeit nicht angeboten'));
+        group.append(el('p', 'Diese Ziele bleiben in der Auswahl sichtbar. Ein Ziel kann fehlen, inaktiv oder geschützt sein. Geschützte Systemdienste werden auch mit gespeichertem Häkchen nicht gestoppt. Auswahl prüfen und nicht mehr benötigte Ziele bewusst abwählen; danach speichern.', 'stop-target-hint'));
         var grid = el('div', undefined, 'stop-target-grid');
         missing.forEach(function (value) {
           var label = el('label', undefined, 'stop-target-item'), input = el('input'), copy = el('span');
           input.type = 'checkbox'; input.name = 'stop_targets'; input.value = value; input.checked = true; input.dataset.role = 'none';
-          copy.append(el('strong', value), el('small', 'Aktuell nicht gefunden; bisherige Auswahl beibehalten.'));
+          copy.append(el('strong', value), el('small', 'Derzeit nicht angeboten; bisherige Auswahl beibehalten.'));
           label.append(input, copy); grid.append(label); incoming.push(input);
         });
         Array.from(content.querySelectorAll('p.empty')).forEach(function (node) { node.remove(); });
@@ -515,8 +541,9 @@
       Array.from(content.querySelectorAll('details')).forEach(function (item, index) { if (!item.dataset.stopTargetUnavailable && index < openGroups.length) item.open = openGroups[index]; });
       target.replaceChildren(content); target.classList.remove('loading');
       if (!hadList) initial.stop_targets = savedState;
+      else initial.stop_targets = baseline;
       updateDirty(initial, changed, 'stop_targets', controlState(controls('stop_targets')), new Date()); renderDirty();
-      stopTargetsStatus(missing.length ? 'Diensteliste geladen. ' + missing.length + ' ausgewählte Ziele wurden aktuell nicht gefunden und bleiben zur Prüfung sichtbar.' : 'Diensteliste geladen. Auswahl prüfen und Änderungen zuerst speichern.', missing.length > 0, false);
+      stopTargetsStatus(missing.length ? 'Diensteliste geladen. ' + missing.length + ' ausgewählte Ziele werden derzeit nicht angeboten und bleiben zur Prüfung sichtbar.' : 'Diensteliste geladen. Auswahl prüfen und Änderungen zuerst speichern.', missing.length > 0, false);
     } catch (error) {
       var message = controller.signal.aborted ? 'Zeitlimit beim Laden der Dienste nach 60 Sekunden erreicht.' :
         error.message === 'HTTP 504' ? 'Die Dienstermittlung auf dem LoxBerry hat ihr Zeitlimit erreicht (HTTP 504).' :

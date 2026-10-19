@@ -1246,7 +1246,7 @@ my $info_months = info_button('Nur bei monatlichen Backups relevant. Mit Alle Mo
 my $info_pre_hook = info_button('Optionales Skript, das direkt vor dem Backup ausgeführt wird. Sinnvoll für Datenbank-Dumps oder das Vorbereiten von Diensten. Das Skript muss absolut angegeben werden und wird aus Sicherheitsgründen nur ausgeführt, wenn es Root gehört und nicht durch andere Benutzer beschreibbar ist.');
 my $info_post_hook = info_button('Optionales Skript, das nach dem Backup ausgeführt wird. Sinnvoll zum Aufräumen, Dienste wieder in einen gewünschten Zustand zu bringen oder Benachrichtigungen auszuführen. Es gelten dieselben Sicherheitsregeln wie beim Skript vor dem Backup.');
 my $info_excludes = info_button('Hier kannst du Pfade vom rsync-Backup ausschliessen, je ein Pfad pro Zeile. Das ist sinnvoll für grosse Medienarchive, Netzwerkshares oder Daten, die separat gesichert werden. Zu viele Ausschlüsse können aber die Wiederherstellung unvollständig machen.');
-my $info_stop_targets = info_button('Wähle gezielt Docker-Container oder sicher steuerbare Dienste aus, die vor dem Backup angehalten und danach wieder gestartet werden. Laufende Dienste werden erkannt; zusätzlich werden LoxBerry-/Plugin-nahe Dienste angezeigt, auch wenn sie gerade inaktiv sind. Kritische LoxBerry-, Web-, SSH- und Backup-Dienste werden nicht angeboten. LoxBerry-Plugins ohne eigenen Dienst werden nicht hart beendet; dafür sind Pre-/Post-Backup-Hooks der sichere Weg. Empfohlene Auswahl setzen ersetzt die aktuelle Auswahl durch die erkannten Empfehlungen. Auswahl leeren entfernt alle Häkchen. Beides stoppt noch keinen Dienst: Auswahl kontrollieren und zuerst speichern; wirksam wird sie beim nächsten Backup.');
+my $info_stop_targets = info_button('Wähle gezielt Docker-Container oder sicher steuerbare Dienste aus, die vor dem Backup angehalten und danach wieder gestartet werden. Laufende Dienste werden erkannt; zusätzlich werden LoxBerry-/Plugin-nahe Dienste angezeigt, auch wenn sie gerade inaktiv sind. Kritische LoxBerry-, Web-, SSH-, Netzwerk- und Backup-Dienste werden nicht angeboten und auch bei einer älteren gespeicherten Auswahl nicht gestoppt. Mehrere Namen desselben Dienstes werden zusammengefasst; die Auswahl über einen bisherigen Namen bleibt erhalten. LoxBerry-Plugins ohne eigenen Dienst werden nicht hart beendet; dafür sind Pre-/Post-Backup-Hooks der sichere Weg. Empfohlene Auswahl setzen ersetzt die aktuelle Auswahl durch die erkannten Empfehlungen. Auswahl leeren entfernt alle Häkchen. Beides stoppt noch keinen Dienst: Auswahl kontrollieren und zuerst speichern; wirksam wird sie beim nächsten Backup.');
 my $info_export = info_button('Erstellt nach jedem Backup zusätzlich ein komprimiertes tar.gz-Archiv. Das ist praktisch zum Download, Kopieren oder Archivieren, benötigt aber zusätzlichen Speicherplatz und Zeit. Bei portablen Repository-Sicherungsständen ist dieser automatische Export nicht verfügbar und muss ausdrücklich deaktiviert werden: Einzelne Standordner enthalten nicht alle gemeinsam gespeicherten Datenblöcke.');
 my $info_mail = info_button('Sendet Mailbenachrichtigungen über die zentrale LoxBerry-Benachrichtigung. SMTP-Zugangsdaten werden nicht im Plugin gespeichert.');
 my $info_mail_to = info_button('Optional. Wenn leer, verwendet LoxBerry Host Backup die in LoxBerry hinterlegte Standardadresse aus der Mail- und Benachrichtigungskonfiguration.');
@@ -1744,6 +1744,21 @@ sub validated_stop_targets {
       && !$seen{$target->{type} . ':' . $target->{name}}++;
     die "Invalid stop-target state\n" unless JSON::PP::is_bool($target->{selected}) && JSON::PP::is_bool($target->{recommended});
   }
+  my %identities = map { ($_->{type} . ':' . $_->{name}) => ($_->{type} . ':' . $_->{name}) } @$targets;
+  for my $target (@$targets) {
+    next unless exists $target->{aliases};
+    die "Invalid stop-target aliases\n" unless $target->{type} eq 'systemd' && ref($target->{aliases}) eq 'ARRAY'
+      && $target->{name} =~ /\A[A-Za-z0-9_.\@:\-]+\.service\z/ && $target->{name} !~ /\@\.service\z/;
+    my %aliases;
+    my $identity = 'systemd:' . $target->{name};
+    for my $alias (@{$target->{aliases}}) {
+      die "Invalid stop-target alias\n" unless defined($alias) && !ref($alias)
+        && $alias =~ /\A[A-Za-z0-9_.\@:\-]+\.service\z/ && $alias !~ /\@\.service\z/ && !$aliases{$alias}++;
+      my $key = 'systemd:' . $alias;
+      die "Ambiguous stop-target alias\n" if exists($identities{$key}) && $identities{$key} ne $identity;
+      $identities{$key} = $identity;
+    }
+  }
   return $targets;
 }
 
@@ -1804,6 +1819,7 @@ sub render_stop_targets {
       my $is_stoppable = $type =~ /^(docker|systemd)$/;
       my $checked = $is_stoppable ? checked_attr($target->{selected}) : '';
       my $recommended = ($is_stoppable && $target->{recommended}) ? ' data-recommended="1"' : '';
+      my $aliases = exists($target->{aliases}) ? ' data-stop-aliases="' . escapeHTML(encode_json($target->{aliases})) . '"' : '';
       my $meta = join(' - ', grep { length $_ } ($status, $details));
       my $meta_html = length($meta) ? '<small>' . escapeHTML($meta) . '</small>' : '';
       my $reason_html = ($is_stoppable && $target->{recommended})
@@ -1812,7 +1828,7 @@ sub render_stop_targets {
       my $disabled = $is_stoppable ? '' : ' disabled';
       my $name_attr = $is_stoppable ? ' name="stop_targets"' : '';
 
-      $html .= qq{<label class="stop-target-item}.($is_stoppable ? '' : ' is-disabled').qq{"><input data-role="none" type="checkbox"$name_attr value="$value"$checked$disabled$recommended><span><strong>$label</strong>$meta_html$reason_html</span></label>};
+      $html .= qq{<label class="stop-target-item}.($is_stoppable ? '' : ' is-disabled').qq{"><input data-role="none" type="checkbox"$name_attr value="$value"$checked$disabled$recommended$aliases><span><strong>$label</strong>$meta_html$reason_html</span></label>};
     }
 
     $html .= '</div></details>';

@@ -10,6 +10,13 @@
 > Keine neue Einstellung und kein neuer Sicherungsmodus. Das veröffentlichte
 > Paket 1.2.2-beta und die Updatekanäle enthalten diese Änderung noch nicht.
 
+> **Zusätzlich in Entwicklung (19.10.2026):** Empfehlungen für Stop-Dienste
+> verwechseln `dbus` nicht mehr mit einer Datenbank. Avahi, ModemManager und
+> D-Bus bleiben auch über Dienst-Aliase vor dem Stoppen geschützt; unsichere
+> alte Auswahlen werden beim Backup protokolliert übersprungen. Das betrifft
+> nur das Stoppen, nicht die Sicherung ihrer Dateien. Noch nicht veröffentlicht;
+> keine neue Einstellung und keine Änderung der Updatekanäle.
+
 > [!NOTE]
 > **Neu in 1.2.2-beta (15.10.2026):** Die Dienst-/Container-Auswahl verwendet
 > gebündelte systemd-Abfragen und eigene, begrenzte Zeitlimits. Erneutes Laden
@@ -941,6 +948,23 @@ werden sollen. Nicht pauschal alle USB-Mounts ausschliessen. Die Sicherungsvorsc
 zeigt gespeicherte Regeln, erkannte Volumes und eine verwendbare Snapshot-Referenz.
 
 ### Dienste Und Container Anhalten
+
+**Unveröffentlichte Ergänzung vom 19.10.2026:** Allgemeine Empfehlungsbegriffe
+wie `db` werden als ganze Begriffe geprüft, nicht als Teil von `dbus`. Aliase
+desselben systemd-Dienstes werden über den tatsächlichen Dienstnamen zu einem
+Eintrag zusammengefasst; bereits gespeicherte Auswahlen bleiben zugeordnet.
+Avahi, ModemManager und D-Bus einschliesslich `dbus-broker` und ihrer bekannten
+Aliase werden nicht zum Stoppen angeboten. Vor einem Stopp prüft das Backend
+den tatsächlichen Namen und die gemeldeten Aliase erneut. Alte gespeicherte
+Auswahlen geschützter Dienste werden dabei ohne Konfigurationsänderung im Log
+vermerkt und übersprungen; dafür entsteht kein Wiederanlauf-Auftrag.
+Nicht mehr sicher auflösbare gespeicherte native Dienste blockieren dagegen
+bewusst den Backupstart; deren Auswahl muss geprüft und gegebenenfalls angepasst
+werden. Das ist von den ausdrücklich geschützten, übersprungenen Diensten getrennt.
+**Die Dateien dieser Dienste bleiben gemäss Quellenauswahl im Backup enthalten.**
+Ein echter Stop-Fehler eines erlaubten Dienstes verhindert weiterhin das Backup
+und wird mit Rückgabecode protokolliert. Bereits offene Wiederanlauf-Aufträge
+werden durch diese Änderung nicht umgeschrieben oder verworfen.
 
 In den Einstellungen kann gezielt ausgewählt werden, welche Docker-Container
 oder systemd-Dienste vor dem Backup gestoppt und danach wieder gestartet werden.

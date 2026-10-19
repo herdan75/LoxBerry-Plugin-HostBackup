@@ -5,6 +5,20 @@ assert.equal(ui.normalizeLogForDisplay('a\rb\r\nc\u001b[31md\u001b[0m'), 'a\nb\n
 assert.equal(ui.controlState([{type:'radio',value:'native',checked:false},{type:'radio',value:'network',checked:true}]), 'network');
 assert.equal(ui.controlState([{type:'checkbox',name:'stop_targets',value:'docker:x',checked:true}]), 'docker:x');
 assert.equal(ui.controlState([{type:'checkbox',name:'root_permission_ack',value:'1',checked:false}]), '0');
+const stopRows=[{value:'systemd:mqtt.service',aliases:['mqtt.service','mqtt-old.service','mqtt-second.service']},{value:'docker:mqtt-old.service'}];
+const oldStopSelection=['systemd:mqtt-old.service','systemd:mqtt-second.service','systemd:mqtt.service','docker:mqtt-old.service','systemd:removed.service'];
+const originalStopData=JSON.stringify({stopRows,oldStopSelection});
+assert.deepEqual(ui.stopTargetSelection(oldStopSelection,stopRows),{selected:['systemd:mqtt.service','docker:mqtt-old.service','systemd:removed.service'],missing:['systemd:removed.service']},'Aliases deduplicate into one canonical choice; Docker names remain exact and missing choices stay visible');
+assert.deepEqual(ui.stopTargetSelection([],stopRows),{selected:[],missing:[]},'An explicit unchecked draft does not regain a server-selected alias');
+assert.equal(JSON.stringify({stopRows,oldStopSelection}),originalStopData,'Alias mapping never changes its input or saved configuration');
+assert.deepEqual(ui.stopTargetSelection(['systemd:legacy.service'],[{value:'systemd:legacy.service'}]),{selected:['systemd:legacy.service'],missing:[]},'Old responses without alias metadata remain supported');
+for(const aliases of [null,'mqtt-old.service',{},[null],[1],[{}],['bad\nname.service'],['foo$(id).service'],['a.socket'],['template@.service'],['same.service','same.service']]) {
+  assert.throws(()=>ui.stopTargetSelection([],[{value:'systemd:mqtt.service',aliases}]),/invalid-stop-targets/);
+}
+assert.throws(()=>ui.stopTargetSelection([],[{value:'docker:mqtt',aliases:[]}]),/invalid-stop-targets/);
+assert.throws(()=>ui.stopTargetSelection([],[{value:'systemd:a.service',aliases:['b.service']},{value:'systemd:b.service'}]),/invalid-stop-targets/);
+assert.throws(()=>ui.stopTargetSelection([],[{value:'systemd:a.service',aliases:['shared.service']},{value:'systemd:b.service',aliases:['shared.service']}]),/invalid-stop-targets/);
+assert.throws(()=>ui.stopTargetSelection(['invalid'],stopRows),/invalid-stop-targets/);
 const portableSnapshot={metadata_mode:'portable-archive',backup_mode:'snapshot',create_export_after_backup:'0'};
 const repositoryReady={available:true,initialized:true,key_confirmed:true,target_matches:true};
 assert.match(ui.validateSettings(portableSnapshot), /bestätigte Aufbewahrung/);

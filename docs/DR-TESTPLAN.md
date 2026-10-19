@@ -5,6 +5,32 @@ bei Änderungen an rsync-/tar-Optionen, Mount-Prüfung, Import, Restore oder
 Retention auszuführen. Produktive Daten werden durch synthetische Marker und
 Testdienste ersetzt.
 
+## Dienstempfehlungen und Alias-Schutz: Entwicklungsabnahme vom 19.10.2026
+
+Noch unveröffentlicht; die folgenden Fälle sind ein Prüfauftrag, keine Aussage
+über bereits bestandene CI oder produktive Geräte. Nachweise in den Dienstlisten-
+und Laufzeitsicherheitstests für den jeweiligen Commit getrennt festhalten.
+
+1. `dbus` und beliebige Dienstnamen mit eingebettetem `db` dürfen nicht allein
+   deshalb empfohlen werden. Bekannte Datenbankdienste und begrenzte allgemeine
+   Begriffe wie `db`/`database` weiter berücksichtigen; Empfehlungen am
+   tatsächlichen Dienstnamen statt an einem irreführenden Alias prüfen.
+2. Tatsächlichen Namen und mehrere Aliase desselben Dienstes, auch über getrennte
+   Abfragegruppen, als genau einen Eintrag anzeigen. Eine früher über einen Alias
+   gespeicherte Auswahl muss diesem Eintrag zugeordnet bleiben.
+3. Avahi, ModemManager und D-Bus/`dbus-broker` sowie bekannte und zusätzlich
+   simulierte Aliase dürfen weder angeboten noch gestoppt werden. Auch eine alte
+   gespeicherte Auswahl muss im Backend nach Namens-/Aliasprüfung übersprungen
+   und protokolliert werden: keine Konfigurationsänderung, kein `systemctl stop`
+   und kein neuer Wiederanlauf-Eintrag für einen geschützten Dienst.
+4. Fehlende, widersprüchliche oder ungültige Identitätsdaten nicht als erlaubten
+   Dienst behandeln. Einen echten Stop-Fehler eines erlaubten Dienstes simulieren:
+   Rückgabecode im Log, Backup weiterhin blockiert, Wiederanlaufschutz erhalten.
+5. Prüfen, dass die Änderung nur das Stoppen betrifft: keine zusätzlichen
+   Dateiausschlüsse, keine Veränderung bereits offener Wiederanlauf-Aufträge,
+   keine neuen Einstellungen und keine Änderung von Version oder Updatefeeds.
+   Produktive Systemdienste für diese Prüfungen nicht stoppen.
+
 ## Docker-Wiederanlauf: Entwicklungsabnahme vom 18.10.2026
 
 Diese Korrektur ist noch nicht veröffentlicht. Paketversion und Updatekanäle

@@ -37,7 +37,7 @@ JOURNAL_FUNCTIONS = (
     "restart_journal_path_is_safe", "restart_journal_update", "restart_journal_create",
     "restart_journal_archive", "restart_journal_finish", "docker_recovery_state",
     "restart_journal_retry_type", "recover_restart_journals",
-    "stop_selected_systemd_targets", "stop_selected_docker_targets", "stop_docker_if_requested",
+    "systemd_stop_identity", "stop_selected_systemd_targets", "stop_selected_docker_targets", "stop_docker_if_requested",
     "stop_backup_targets", "start_docker_if_needed", "start_systemd_if_needed",
     "log_restart_targets", "start_backup_targets_if_needed", "backup_cleanup_on_exit",
 )
@@ -74,6 +74,7 @@ timeout() {
 }
 systemctl() {
   case "$1" in
+    show) printf 'Id=%s\nNames=%s\nLoadState=loaded\n' "${!#}" "${!#}" ;;
     is-active) [ -f "$TEST_ROOT/active-$3" ] ;;
     stop)
       grep -q '"phase":"intended"' "$RESTART_JOURNAL_DIR/backup-test.log/journal.json" || return 88

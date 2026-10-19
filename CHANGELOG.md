@@ -10,8 +10,19 @@ Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
-## [Unreleased] - develop, 2026-10-18
+## [Unreleased] - develop, Stand 2026-10-19
 
+- Dienstempfehlungen korrigiert: allgemeine Begriffe wie `db` nur als ganze
+  Begriffe erkennen; `dbus` ist kein Datenbankdienst. Empfehlungen verwenden den
+  tatsächlichen systemd-Dienstnamen; Aliase werden zusammengefasst und vorhandene
+  Auswahlen erhalten. Avahi, ModemManager und `dbus-broker` zusätzlich schützen.
+- Vor einem Dienst-Stopp tatsächlichen Namen und Aliase erneut prüfen. Alte
+  gespeicherte Auswahlen geschützter Dienste ohne Änderung der Konfiguration
+  überspringen und protokollieren; keine Stop-Journale dafür erzeugen. Ihre
+  Dateien bleiben gemäss Quellenauswahl gesichert. Bereits offene Wiederanläufe
+  bleiben unverändert. Echte Stop-Fehler weiterhin blockieren und ihren
+  Rückgabecode deutlicher protokollieren. Ergänzung vom 19.10.2026, noch nicht
+  veröffentlicht und ohne Änderung von Version, Einstellungen oder Updatekanälen.
 - Docker-Wiederanlauf unterscheidet laufende, gestoppte, nachweislich fehlende und
   nicht zuverlässig abfragbare Container. Fehlende IDs werden nur nach einer
   ausdrücklichen Docker-Fehlmeldung und erfolgreicher vollständiger Inventur
