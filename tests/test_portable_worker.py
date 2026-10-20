@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the real portable shell worker using isolated orchestration doubles.
 
-Only create_backup, portable_snapshot and its EXIT cleanup are extracted. The
+The worker, checked source report, portable mode and EXIT cleanup are extracted. The
 backend entry point is never sourced. File selection/copy, services and target
 registration are intercepted: no host-root enumeration, backup or restore runs.
 Real repository/metadata/recovery tests live in test_repository/test_portable.
@@ -198,7 +198,7 @@ class PortableWorkerTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         script = FIXTURE + '\n' + '\n'.join(function(name) for name in (
-            'portable_snapshot', 'backup_cleanup_on_exit', 'create_backup'))
+            'portable_snapshot', 'checked_source_info', 'backup_cleanup_on_exit', 'create_backup'))
         script += '\ncreate_backup portable-test\n'
         result = subprocess.run([BASH, '-s'], input=script, text=True, encoding='utf-8',
                                 capture_output=True, check=False, timeout=60,
