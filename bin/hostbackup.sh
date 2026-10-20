@@ -1849,9 +1849,10 @@ restart_journal_finish() {
   # A signal/process interruption may precede the normal stderr append. Do not erase
   # the only diagnostic evidence when recovering a completed service journal.
   # A failed append retains the journal/file for retry, not a successful result.
-  local diagnostic_kind recovery_log="$TASK_LOG_DIR/${state_dir##*/}"
+  local diagnostic_kind recovery_log
   for diagnostic_kind in rsync tar; do
     if [ -f "$state_dir/$diagnostic_kind-stderr.log" ] && [ ! -f "$state_dir/$diagnostic_kind-stderr.logged" ]; then
+      recovery_log="$TASK_LOG_DIR/${state_dir##*/}"
       prepare_log_file "$recovery_log" append || return 20
       printf '\nRecovered %s diagnostics after interrupted recording:\n' "$diagnostic_kind" >> "$recovery_log" || return 20
       cat -- "$state_dir/$diagnostic_kind-stderr.log" >> "$recovery_log" || return 20
