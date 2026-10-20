@@ -73,11 +73,16 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
         self.source = self.base / "source"
         self.source.mkdir(mode=0o750)
         self.source.chmod(0o750)
+        os.chown(self.source, 1001, 1001)
+        os.setxattr(self.source, "user.hostbackup-root", b"required-root-metadata")
+        command(["setfacl", "-m", "u:65534:r-x", self.source])
         self.home = self.source / "opt/loxberry"
         self.runtime = self.home / "log/plugins/audioserver4home"
         self.ram_runtime = self.home / "log/ramlog/log/system_tmpfs"
         self.persistent = self.home / "data/plugins/audioserver4home"
         self.audit = self.home / "log/system/plugininstall.log"
+        self.empty = self.source / "empty-required-directory"
+        self.empty.mkdir(mode=0o750)
         for directory in (self.runtime, self.ram_runtime, self.persistent, self.audit.parent):
             directory.mkdir(parents=True, exist_ok=True)
         self.runtime.chmod(0o750)
@@ -187,6 +192,7 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
         self.assertIn(".", raw_names)
         self.assertNotIn("./", raw_names)  # rsync would expand trailing-slash directories.
         self.assertTrue(all(name == "." or name.startswith("./") for name in raw_names), raw_names)
+        self.raw_names = raw_names
         self.names = [name[2:] if name.startswith("./") else name for name in raw_names]
         self.file_list.write_bytes(b"".join(os.fsencode(path) + b"\0" for path in raw_names))
         for path in self.edge_files:
@@ -198,6 +204,30 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
         if not include_runtime_logs:
             self.assertNotIn(str(self.runtime_log.relative_to(self.source)), self.names)
             self.assertFalse(any(name.endswith("cleanup.log") for name in self.names))
+
+    @contextlib.contextmanager
+    def late_unlisted_files(self):
+        """Prove no copy tool expands any listed directory after freezing."""
+        late_files = [directory / name for directory, name in (
+            (self.source, "late-unlisted-root-file"),
+            (self.persistent, "late-unlisted-persistent-file"),
+            (self.audit.parent, "late-unlisted-audit-file"),
+            (self.empty, "late-unlisted-empty-dir-file"),
+            (self.runtime, "late-unlisted-runtime-file"),
+        )]
+        late_directory = self.source / "late-unlisted-directory"
+        self.assertTrue(all(str(path.relative_to(self.source)) not in self.names for path in late_files))
+        try:
+            for path in late_files:
+                path.write_bytes(b"created only AFTER the authoritative list was frozen\n")
+            late_directory.mkdir()
+            (late_directory / "must-not-recurse").write_bytes(b"unlisted new directory payload\n")
+            yield
+        finally:
+            for path in late_files:
+                path.unlink(missing_ok=True)
+            (late_directory / "must-not-recurse").unlink(missing_ok=True)
+            late_directory.rmdir()
 
     @contextlib.contextmanager
     def rotating_logs(self):
@@ -260,7 +290,15 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
     def rsync_backup(self, name="rsync-backup", reference=None):
         destination = self.base / name
         destination.mkdir(mode=0o700)
-        argv = ["rsync", "-aHAXS", "--numeric-ids", "--from0", "--files-from=" + str(self.file_list),
+        # Use the same production adapter as `files --for-rsync`: an explicit
+        # '.' expands root contents with --dirs, while './entry' carries the
+        # root metadata through rsync's implied-directory handling.
+        rsync_list = self.base / "rsync-selection.nul"
+        entries = list(sources.rsync_list_entries(self.raw_names))
+        self.assertNotIn(".", entries)
+        self.assertEqual(entries, [entry for entry in self.raw_names if entry != "."])
+        rsync_list.write_bytes(b"".join(os.fsencode(path) + b"\0" for path in entries))
+        argv = ["rsync", "-aHAXS", "--numeric-ids", "--from0", "--files-from=" + str(rsync_list),
                 "--no-recursive", "--dirs"]
         if reference is not None:
             argv += ["--link-dest=" + str(reference)]
@@ -283,7 +321,7 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
         for original in (self.important, self.audit, self.capability, self.payload, self.sparse):
             target = restored / original.relative_to(self.source)
             self.assertEqual(target.read_bytes(), original.read_bytes())
-        for original in (self.runtime, self.important, self.capability):
+        for original in (self.source, self.runtime, self.important, self.capability):
             target = restored / original.relative_to(self.source)
             info, saved = original.stat(), target.stat()
             self.assertEqual((saved.st_uid, saved.st_gid, stat.S_IMODE(saved.st_mode)),
@@ -305,7 +343,7 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
     def test_gnu_tar_rotation_copy_and_metadata_restore(self):
         self.add_non_utf8_filename()
         self.freeze(enumerate_during_rotation=True)
-        with self.rotating_logs():
+        with self.late_unlisted_files(), self.rotating_logs():
             result, archive = self.tar_backup()
         self.assert_success(result)
         restored = self.base / "tar-restored"
@@ -319,18 +357,20 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
     def test_rsync_rotation_copy_and_metadata_restore(self):
         self.add_non_utf8_filename()
         self.freeze(enumerate_during_rotation=True)
-        with self.rotating_logs():
+        with self.late_unlisted_files(), self.rotating_logs():
             result, destination = self.rsync_backup()
         self.assert_success(result)
         self.assert_restored(destination)
 
     def test_rsync_incremental_reuses_persistent_files_despite_log_rotation(self):
         self.freeze()
-        result, first = self.rsync_backup("first")
+        with self.late_unlisted_files():
+            result, first = self.rsync_backup("first")
         self.assert_success(result)
         with self.rotating_logs():
             self.freeze()
-            result, second = self.rsync_backup("second", first)
+            with self.late_unlisted_files():
+                result, second = self.rsync_backup("second", first)
         self.assert_success(result)
         self.assert_restored(second)
         for original in (self.important, self.payload, self.audit):
@@ -451,9 +491,11 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
         self.freeze(enumerate_during_rotation=True)
         adapter = self.repository_fixture()
         with self.rotating_logs():
-            first = self.repository_commit(adapter, "first")
+            with self.late_unlisted_files():
+                first = self.repository_commit(adapter, "first")
             self.freeze()
-            second = self.repository_commit(adapter, "second")
+            with self.late_unlisted_files():
+                second = self.repository_commit(adapter, "second")
         self.assertEqual(second["summary"].get("files_new"), 0)
         self.assertEqual(second["summary"].get("files_changed"), 0)
         self.assertEqual(len(adapter.list_committed()), 2)

@@ -164,7 +164,7 @@ source_info() { printf '%s\n' '{"status":"ok","selection":{"policy":"legacy","ov
 python3() {
   if [ "${1:-}" = "$LBP_BINDIR/hostbackup-sources.py" ]; then
     shift
-    local action="$1" report="" verification="" excludes="" home="" config=""
+    local action="$1" report="" verification="" excludes="" home="" config="" for_rsync=false
     shift
     while [ "$#" -gt 0 ]; do
       case "$1" in
@@ -174,6 +174,7 @@ python3() {
         --loxberry-home) home="$2"; shift 2 ;;
         --config) config="$2"; shift 2 ;;
         --omit-sockets) shift ;;
+        --for-rsync) for_rsync=true; shift ;;
         *) return 99 ;;
       esac
     done
@@ -187,7 +188,7 @@ python3() {
         [ "$excludes" = "$private_dir/source-excludes.txt" ] || return 99
         grep -Fxq /proc "$excludes" || return 99
         printf '%s\n' '{"mount_verification_version":2,"status":"ok","fixture":true}' > "$report"
-        printf '.\0fixture.txt\0'
+        if [ "$for_rsync" = true ]; then printf './fixture.txt\0'; else printf '.\0./fixture.txt\0'; fi
         ;;
       verify)
         [ "$verification" = "$private_dir/source-verification.json" ] || return 99
@@ -219,7 +220,7 @@ assert_mock_copy_scope() {
   # Selection already applied the private newline-delimited exclusions.
   # --from0 must not reinterpret that file as a single NUL-delimited rule.
   [ -z "$excludes" ] || return 99
-  cmp -- "$files" <(printf '.\0fixture.txt\0') || return 99
+  cmp -- "$files" <(printf './fixture.txt\0') || return 99
 }
 current_mount_value() { echo ext4; }
 latest_complete_backup() { echo "${REFERENCE:-}"; }

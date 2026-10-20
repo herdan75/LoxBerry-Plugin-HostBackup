@@ -38,7 +38,9 @@ validiert werden.
   Stand je Host-/Formatlinie, wenn ein neuerer Stand Hinweise enthält.
 - Aus Primärquellen abgeleitete Randfälle: Dateilisteneinträge mit führendem
   `#` oder `;` verlustfrei an rsync übergeben und NUL-Dateilisten nicht mit
-  zeilengetrennten Ausschlusslisten vermischen. Eindeutig nachgewiesene
+  zeilengetrennten Ausschlusslisten vermischen. Den rekursionsähnlichen
+  rsync-Sonderfall für `.` vermeiden, damit nach der Auswahl entstandene
+  Wurzeleinträge nicht nachträglich hinzukommen. Eindeutig nachgewiesene
   Automount-/Datenträger-Schichten am selben Pfad unterstützen; mehrdeutige
   Überdeckungen bleiben gesperrt.
 - Regressionen und reale Linux-Simulationen für Logrotation, wichtige fehlende

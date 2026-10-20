@@ -407,8 +407,8 @@ def enumerate_files(plan, root=Path("/"), omit_sockets=False):
             return
         # rsync treats even NUL-delimited files-from entries starting with '#'
         # or ';' as comments. A literal './' prefix preserves those names.
-        # Root stays '.' rather than './': a trailing slash in an rsync list
-        # can request immediate directory contents outside our frozen list.
+        # TAR/repository need the explicit root node. The rsync transport
+        # adapter below omits it: even '.' expands immediate root contents.
         yield "." if logical == "/" else "." + logical
         if not is_dir:
             return
@@ -434,6 +434,30 @@ def enumerate_files(plan, root=Path("/"), omit_sockets=False):
             yield from visit(child, parents, children.get(name))
 
     yield from visit("/", set())
+
+
+def rsync_list_entries(entries):
+    """Keep exact selected paths; let './entry' imply root metadata only.
+
+    rsync --dirs expands the explicit '.' even with --no-recursive. Every
+    non-root entry has './', which causes rsync to send root as an implied
+    directory without traversing its children. A root-only selection cannot
+    preserve its metadata this way and is rejected instead of reported OK.
+    """
+    root_seen = False
+    non_root_seen = False
+    for path in entries:
+        if path == ".":
+            if root_seen:
+                raise SourceError("Doppeltes Root-Verzeichnis in rsync-Quellenauswahl.")
+            root_seen = True
+            continue
+        if not path.startswith("./") or path.endswith("/"):
+            raise SourceError("rsync-Quellenauswahl benoetigt literale ./-Pfade ohne abschliessenden Schraegstrich.")
+        non_root_seen = True
+        yield path
+    if not root_seen or not non_root_seen:
+        raise SourceError("Keine sicherbaren Eintraege ausser dem Root-Verzeichnis ausgewaehlt.")
 
 
 def read_config(path):
@@ -602,10 +626,14 @@ def main(argv=None):
     parser.add_argument("--loxberry-home", help="Explicit LoxBerry home enables the shared runtime-content policy")
     parser.add_argument("--omit-sockets", action="store_true",
                         help="For portable repository files only: omit lstat-confirmed Unix sockets; requires --report")
+    parser.add_argument("--for-rsync", action="store_true",
+                        help="For files action only: root metadata is implied, never enumerate root again in rsync")
     args = parser.parse_args(argv)
     try:
         if args.omit_sockets and (args.action != "files" or not args.report):
             raise SourceError("--omit-sockets ist nur fuer files mit --report erlaubt.")
+        if args.for_rsync and (args.action != "files" or args.omit_sockets):
+            raise SourceError("--for-rsync ist nur fuer files ohne --omit-sockets erlaubt.")
         if args.verification_report and args.action != "verify":
             raise SourceError("--verification-report ist nur fuer verify erlaubt.")
         if args.action == "verify":
@@ -628,7 +656,10 @@ def main(argv=None):
             plan = SourcePlan(config.get("source_selection"), mounts, read_excludes(args.excludes),
                               loxberry_home=args.loxberry_home, include_runtime_logs=config.get("include_runtime_logs", False))
             if args.action == "files":
-                for path in enumerate_files(plan, omit_sockets=args.omit_sockets):
+                paths = enumerate_files(plan, omit_sockets=args.omit_sockets)
+                if args.for_rsync:
+                    paths = rsync_list_entries(paths)
+                for path in paths:
                     sys.stdout.buffer.write(os.fsencode(path) + b"\0")
                 # Detect source mounts changed while building the list, before
                 # its caller is allowed to start the actual copy.

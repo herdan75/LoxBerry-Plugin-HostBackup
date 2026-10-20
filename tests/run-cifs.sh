@@ -235,9 +235,11 @@ for included in (False, True):
     assert ("./network/cifs-sentinel.txt" in paths) == included, paths
     listing = base / (name + ".nul")
     listing.write_bytes(b"".join(os.fsencode(path) + b"\0" for path in paths))
+    rsync_listing = base / (name + "-rsync.nul")
+    rsync_listing.write_bytes(b"".join(os.fsencode(path) + b"\0" for path in sources.rsync_list_entries(paths)))
     destination = base / (name + "-copy")
     destination.mkdir(mode=0o700)
-    subprocess.run(["rsync", "-aH", "--numeric-ids", "--from0", "--files-from=" + str(listing), "--no-recursive", "--dirs",
+    subprocess.run(["rsync", "-aH", "--numeric-ids", "--from0", "--files-from=" + str(rsync_listing), "--no-recursive", "--dirs",
                     str(source) + "/", str(destination) + "/"], check=True)
     assert (destination / "local.txt").is_file()
     assert (destination / "network/cifs-sentinel.txt").exists() == included

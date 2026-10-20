@@ -517,6 +517,13 @@ class EnumerationTests(unittest.TestCase):
         self.assertNotIn("./tmp/data.txt", entries)
         self.assertNotIn("./media/usb/PI_Backup/data.txt", entries)
 
+    def test_rsync_list_omits_only_explicit_root_and_preserves_literal_names(self):
+        entries = [".", "./#required", "./;required", "./etc", "./etc/data", "./line\nname"]
+        self.assertEqual(list(sources.rsync_list_entries(entries)), entries[1:])
+        for bad in (["."], [], ["./file"], [".", ".", "./file"], [".", "./"], [".", "./etc/"], [".", "unprefixed"]):
+            with self.subTest(entries=bad), self.assertRaises(sources.SourceError):
+                list(sources.rsync_list_entries(bad))
+
     def test_files_cli_emits_only_literal_prefixed_nul_records(self):
         (self.root / "#required").write_text("payload")
         (self.root / ";required").write_text("payload")
@@ -540,6 +547,34 @@ class EnumerationTests(unittest.TestCase):
         self.assertIn(b"./;required", entries)
         self.assertEqual(entries.count(b"."), 1)
         self.assertTrue(all(entry == b"." or entry.startswith(b"./") for entry in entries))
+
+    def test_files_cli_rsync_mode_never_emits_explicit_root(self):
+        output = io.BytesIO()
+        selection = self.selection()
+        with patch.object(sources, "read_config", return_value={}), \
+             patch.object(sources, "read_mounts", return_value=[]), \
+             patch.object(sources, "SourcePlan", return_value=selection), \
+             patch.object(sources, "enumerate_files", return_value=iter([".", "./#required", "./directory"])), \
+             patch.object(sources, "verify_mounts"), \
+             patch.object(sources.sys, "stdout", SimpleNamespace(buffer=output)):
+            result = sources.main(["files", "--config", "/fixture", "--for-rsync"])
+        self.assertEqual(result, 0)
+        self.assertEqual(output.getvalue(), b"./#required\0./directory\0")
+
+    def test_files_cli_root_only_rsync_selection_fails_without_success_report(self):
+        output = io.BytesIO()
+        report = self.root / "root-only-report.json"
+        with patch.object(sources, "read_config", return_value={}), \
+             patch.object(sources, "read_mounts", return_value=[]), \
+             patch.object(sources, "SourcePlan", return_value=self.selection()), \
+             patch.object(sources, "enumerate_files", return_value=iter(["."])), \
+             patch.object(sources.sys, "stdout", SimpleNamespace(buffer=output)), \
+             patch.object(sources.sys, "stderr", io.StringIO()) as error:
+            result = sources.main(["files", "--config", "/fixture", "--for-rsync", "--report", str(report)])
+        self.assertNotEqual(result, 0)
+        self.assertIn("Root-Verzeichnis", error.getvalue())
+        self.assertEqual(output.getvalue(), b"")
+        self.assertFalse(report.exists())
 
     @unittest.skipUnless(os.name == "posix", "POSIX filename bytes required")
     def test_exact_list_preserves_newlines_and_non_utf8_filename_bytes(self):
@@ -940,9 +975,11 @@ class EnumerationTests(unittest.TestCase):
             output = Path(output)
             file_list = output / "files.list"
             file_list.write_bytes(b"".join(os.fsencode(value) + b"\0" for value in entries))
+            rsync_list = output / "rsync.list"
+            rsync_list.write_bytes(b"".join(os.fsencode(value) + b"\0" for value in sources.rsync_list_entries(entries)))
             destination = output / "copy"
             destination.mkdir()
-            subprocess.run(["rsync", "-aH", "--from0", "--files-from=" + str(file_list), "--no-recursive", "--dirs", str(self.root) + "/", str(destination) + "/"], check=True, capture_output=True)
+            subprocess.run(["rsync", "-aH", "--from0", "--files-from=" + str(rsync_list), "--no-recursive", "--dirs", str(self.root) + "/", str(destination) + "/"], check=True, capture_output=True)
             self.assertEqual((destination / "etc/name\nwith newline").read_text(), "nul-safe")
             self.assertEqual((destination / "etc/data.txt").stat().st_ino, (destination / "etc/hardlink").stat().st_ino)
             self.assertTrue((destination / "etc/symlink").is_symlink())

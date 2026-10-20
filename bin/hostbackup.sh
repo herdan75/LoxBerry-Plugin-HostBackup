@@ -3084,7 +3084,11 @@ create_backup() {
   # non-recursive list and runtime-content policy as every other configuration.
   selection_active=true
   local -a source_options=()
-  if portable_snapshot; then selection_active=true; source_options+=(--omit-sockets); fi
+  if portable_snapshot; then
+    source_options+=(--omit-sockets)
+  elif [ "$mode" != portable-archive ]; then
+    source_options+=(--for-rsync)
+  fi
   if [ "$selection_active" = true ]; then
     task_state_write "$task" running selecting_sources "$log_file" "$$" ""
     log "Preparing explicit file list for selected local volumes and network shares" | tee -a "$log_file"

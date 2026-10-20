@@ -338,7 +338,7 @@ rsync() {
     done
     [ -z "$private_excludes" ] && [ "$from0:$no_recursive:$dirs" = true:true:true ] || return 94
     [ "$files" = "$RESTART_JOURNAL_DIR/backup-vanished-test.log/source-files.nul" ] || return 94
-    cmp -- "$files" <(printf '.\0./etc/fixture.txt\0') || return 94
+    cmp -- "$files" <(printf './etc/fixture.txt\0') || return 94
     [ "$(command cat "$RESTART_JOURNAL_DIR/backup-vanished-test.log/source-excludes.txt")" = $'/proc\n/sys\n/dev\n/run\n/tmp' ] || return 94
     event private-frozen-list-used
   fi
@@ -374,7 +374,7 @@ python3() {
     case "${2:-}" in
       files)
         shift 2
-        local private_excludes=''
+        local private_excludes='' for_rsync=false
         while [ "$#" -gt 0 ]; do
           if [ "$1" = --excludes ]; then
             private_excludes="$2"
@@ -383,13 +383,13 @@ python3() {
           fi
           if [ "$1" = --report ]; then
             printf '%s\n' '{"status":"ok","selection":{"policy":"local","overrides":{}},"runtime_content_policy":{"version":1,"omitted_regular_files":1}}' > "$2"
-            break
           fi
+          [ "$1" != --for-rsync ] || for_rsync=true
           shift
         done
         [ -n "$private_excludes" ] || return 94
         event private-source-excludes-used
-        printf '.\0./etc/fixture.txt\0'
+        if [ "$for_rsync" = true ]; then printf './etc/fixture.txt\0'; else printf '.\0./etc/fixture.txt\0'; fi
         ;;
       verify)
         event source-verify
