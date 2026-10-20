@@ -67,7 +67,7 @@ case "$action" in
     [ "$#" -eq 2 ] || fail "invalid import arguments"
     ;;
   save-config)
-    { [ "$#" -eq 26 ] || [ "$#" -eq 27 ]; } || fail "invalid configuration argument count"
+    { [ "$#" -eq 26 ] || [ "$#" -eq 27 ] || [ "$#" -eq 28 ]; } || fail "invalid configuration argument count"
     ;;
   *)
     fail "action is not permitted"

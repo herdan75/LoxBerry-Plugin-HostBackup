@@ -39,6 +39,7 @@ ROOT_STATE_DIR="$TEST_ROOT/state"
 TASK_LOG_DIR="$ROOT_STATE_DIR/logs"
 RESTART_JOURNAL_DIR="$ROOT_STATE_DIR/journals"
 LBP_BINDIR="$TEST_ROOT/never-executed-bin"
+LBHOMEDIR=/opt/loxberry
 CONFIG_FILE="$TEST_ROOT/config.json"
 EVENTS="$TEST_ROOT/events"
 mkdir -p "$TASK_LOG_DIR" "$RESTART_JOURNAL_DIR" "$TEST_ROOT/target"
@@ -96,22 +97,25 @@ rsync() { event forbidden-rsync; return 94; }
 python3() {
   if [ "${1:-}" = "$LBP_BINDIR/hostbackup-sources.py" ]; then
     shift
-    local action="$1" report="" excludes="" sockets=false
+    local action="$1" report="" excludes="" verification="" home="" sockets=false
     shift
     while [ "$#" -gt 0 ]; do
       case "$1" in
         --report) report="$2"; shift 2 ;;
+        --verification-report) verification="$2"; shift 2 ;;
         --excludes) excludes="$2"; shift 2 ;;
+        --loxberry-home) home="$2"; shift 2 ;;
         --omit-sockets) sockets=true; shift ;;
         --config) shift 2 ;;
         *) event unexpected-source-argument; return 95 ;;
       esac
     done
-    [ "$report" = "$RESTART_JOURNAL_DIR/backup-portable-test.log/repository-controls/source-selection.json" ] || return 98
+    [ "$report" = "$RESTART_JOURNAL_DIR/backup-portable-test.log/source-selection.json" ] || return 98
     case "$action" in
       files)
         [ "$sockets" = true ] || { event missing-socket-flag; return 96; }
-        [ "$excludes" = "$RESTART_JOURNAL_DIR/backup-portable-test.log/repository-controls/rsync-excludes.txt" ] || return 98
+        [ "$home" = "$LBHOMEDIR" ] || return 98
+        [ "$excludes" = "$RESTART_JOURNAL_DIR/backup-portable-test.log/source-excludes.txt" ] || return 98
         grep -Fxq /proc "$excludes" || return 98
         [ -e "$TEST_ROOT/services-stopped" ] || return 97
         event source-files-with-omit-sockets
@@ -123,7 +127,14 @@ python3() {
         event nas-control-tampered
         printf '.\0etc/config\0opt/loxberry/config\0'
         ;;
-      verify) event sources-verify; return "${VERIFY_STATUS:-0}" ;;
+      verify)
+        [ "$verification" = "$RESTART_JOURNAL_DIR/backup-portable-test.log/source-verification.json" ] || return 98
+        grep -q omitted_runtime_sockets "$report" || return 98
+        printf '{"version":2,"status":"%s","relevant_changes_count":%s}\n' \
+          "$([ "${VERIFY_STATUS:-0}" = 0 ] && echo ok || echo error)" "${VERIFY_STATUS:-0}" > "$verification"
+        event sources-verify
+        return "${VERIFY_STATUS:-0}"
+        ;;
       *) event forbidden-source-action; return 95 ;;
     esac
   elif [ "${1:-}" = -c ]; then
@@ -231,8 +242,14 @@ class PortableWorkerTests(unittest.TestCase):
         if os.name == 'posix':
             private = root / 'state/journals/backup-portable-test.log/repository-controls'
             self.assertEqual(stat.S_IMODE(private.stat().st_mode), 0o700)
-            for name in ('manifest.json', 'source-selection.json', 'rsync-excludes.txt'):
+            for name in ('manifest.json', 'source-selection.json', 'rsync-excludes.txt',
+                         'source-verification.json', 'copy-result.json'):
                 self.assertEqual(stat.S_IMODE((private / name).stat().st_mode), 0o600, name)
+            for name in ('source-excludes.txt', 'source-selection.json', 'source-verification.json', 'copy-result.json'):
+                self.assertEqual(stat.S_IMODE((private.parent / name).stat().st_mode), 0o600, name)
+        receipt = root / 'state/journals/backup-portable-test.log/copy-result.json'
+        self.assertEqual(json.loads(receipt.read_bytes()), {'tool': 'restic', 'copy_exit_status': 0,
+                         'source_verification_status': 0, 'effective_status': 0})
 
     def test_copy_failure_restarts_services_and_never_validates_or_publishes(self):
         events, manifest, _ = self.run_worker(expected=3, COPY_STATUS=3)
@@ -250,8 +267,25 @@ class PortableWorkerTests(unittest.TestCase):
         self.assert_failed_without_publication(events, manifest)
 
     def test_mount_verification_failure_restarts_services_and_blocks_publication(self):
-        events, manifest, _ = self.run_worker(expected=18, VERIFY_STATUS=1)
+        events, manifest, root = self.run_worker(expected=18, VERIFY_STATUS=1)
         self.assert_before(events, 'sources-verify', 'services-start')
+        self.assertNotIn('validation', events)
+        self.assert_failed_without_publication(events, manifest)
+        receipt = root / 'state/journals/backup-portable-test.log/copy-result.json'
+        self.assertEqual(json.loads(receipt.read_bytes()), {'tool': 'restic', 'copy_exit_status': 0,
+                         'source_verification_status': 18, 'effective_status': 18})
+
+    def test_copy_failure_and_mount_failure_keep_both_causes(self):
+        events, manifest, root = self.run_worker(expected=18, COPY_STATUS=3, VERIFY_STATUS=1)
+        self.assert_before(events, 'sources-verify', 'services-start')
+        self.assertNotIn('validation', events)
+        self.assert_failed_without_publication(events, manifest)
+        receipt = root / 'state/journals/backup-portable-test.log/copy-result.json'
+        self.assertEqual(json.loads(receipt.read_bytes()), {'tool': 'restic', 'copy_exit_status': 3,
+                         'source_verification_status': 18, 'effective_status': 18})
+
+    def test_rsync_specific_status_24_is_not_success_for_repository(self):
+        events, manifest, _ = self.run_worker(expected=24, COPY_STATUS=24)
         self.assertNotIn('validation', events)
         self.assert_failed_without_publication(events, manifest)
 
@@ -267,6 +301,7 @@ class PortableWorkerTests(unittest.TestCase):
 class PortableJournalCleanupTests(unittest.TestCase):
     CONTROL_NAMES = ('manifest.json', 'rsync-excludes.txt', 'source-selection.json',
                      'source-mounts.json', 'mounts.txt', 'metadata-probe.json',
+                     'source-verification.json', 'copy-result.json',
                      'package-list.txt', 'systemd-services.txt', 'docker.json', 'backup-validation.json')
 
     def setUp(self):
@@ -281,7 +316,8 @@ class PortableJournalCleanupTests(unittest.TestCase):
         for name in self.CONTROL_NAMES:
             (self.controls / name).write_bytes(b'fixture\n')
         for name in ('repository-candidate.json', 'source-files.nul', 'selected-stop-targets.tsv',
-                     'docker-to-stop.tsv', 'post-hook.started', 'post-hook.done', 'restart.done'):
+                     'docker-to-stop.tsv', 'post-hook.started', 'post-hook.done', 'restart.done',
+                     'source-excludes.txt', 'source-selection.json', 'source-verification.json', 'copy-result.json'):
             (self.journal / name).write_bytes(b'fixture\n')
         self.keep = self.root / 'never-delete.json'
         self.keep.write_bytes(b'protected outside journal\n')
@@ -339,6 +375,13 @@ log() { printf '%s\n' "$*"; }
 
     def test_symlink_candidate_is_rejected_before_journal_removal(self):
         path = self.journal / 'repository-candidate.json'
+        path.unlink()
+        self.make_symlink(path, self.keep)
+        self.run_finish(20)
+        self.assertTrue(path.is_symlink())
+
+    def test_symlink_private_source_report_is_rejected_without_following_target(self):
+        path = self.journal / 'source-selection.json'
         path.unlink()
         self.make_symlink(path, self.keep)
         self.run_finish(20)

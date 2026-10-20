@@ -64,6 +64,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
   "backup_mode": "full",
   "metadata_mode": "native-strict",
   "rsync_extra_excludes": [],
+  "include_runtime_logs": false,
   "source_selection": {"policy": "local", "overrides": {}},
   "stop_docker_before_backup": false,
   "stop_targets": [],
@@ -176,6 +177,8 @@ show_config() {
     $cfg->{backup_mode} = "full" unless ($cfg->{backup_mode} || "") =~ /^(full|snapshot)$/;
     $cfg->{metadata_mode} = "native-strict" unless ($cfg->{metadata_mode} || "") =~ /^(native-strict|network-compatible|fake-super|portable-archive)$/;
     $cfg->{rsync_extra_excludes} = [] unless ref($cfg->{rsync_extra_excludes}) eq "ARRAY";
+    $cfg->{include_runtime_logs} //= JSON::PP::false;
+    die "Invalid include_runtime_logs setting\n" unless JSON::PP::is_bool($cfg->{include_runtime_logs});
     # Existing installations keep their previous scope until explicitly changed.
     $cfg->{source_selection} //= { policy => "legacy", overrides => {} };
     $cfg->{stop_docker_before_backup} = $cfg->{stop_docker_before_backup} ? JSON::PP::true : JSON::PP::false;
@@ -342,6 +345,8 @@ save_config() {
   local mail_notify_restore="${24:-true}"
   local metadata_mode="${25:-native-strict}"
   local source_selection="${26:-}"
+  local include_runtime_logs="${27:-}"
+  case "$include_runtime_logs" in ''|true|false) ;; *) echo "Invalid runtime log setting." >&2; return 12 ;; esac
 
   python3 "$LBP_BINDIR/hostbackup-overview.py" check-settings "$backup_mode" "$metadata_mode" "$schedule_enabled" \
     "$schedule_mode" "$schedule_time" "$schedule_weekdays" "$schedule_monthdays" "$schedule_months"
@@ -353,7 +358,7 @@ save_config() {
 
   [ ! -L "$CONFIG_FILE.lock" ] || { echo "Unsafe configuration lock symlink." >&2; return 13; }
   perl -MJSON::PP -MFile::Basename=dirname -MFile::Temp=tempfile -MFcntl=:DEFAULT,:flock -MIO::Handle -e '
-    my ($file, $backup_root, $excludes_text, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $schedule_months, $schedule_weekdays, $schedule_monthdays, $pre_hook, $post_hook, $root_permission_ack, $backup_mode, $stop_targets_text, $mail_notify_enabled, $mail_notify_to, $mail_notify_success, $mail_notify_failure, $mail_notify_stopped, $mail_notify_restore, $metadata_mode, $target_marker, $target_mountpoint, $target_source, $target_fstype, $target_majmin, $source_selection) = @ARGV;
+    my ($file, $backup_root, $excludes_text, $stop_docker, $create_export, $keep_backups, $schedule_enabled, $schedule_mode, $schedule_time, $schedule_weekday, $schedule_monthday, $schedule_months, $schedule_weekdays, $schedule_monthdays, $pre_hook, $post_hook, $root_permission_ack, $backup_mode, $stop_targets_text, $mail_notify_enabled, $mail_notify_to, $mail_notify_success, $mail_notify_failure, $mail_notify_stopped, $mail_notify_restore, $metadata_mode, $target_marker, $target_mountpoint, $target_source, $target_fstype, $target_majmin, $source_selection, $include_runtime_logs) = @ARGV;
     my @excludes;
     for my $line (split /\r?\n/, $excludes_text) {
       $line =~ s/^\s+|\s+$//g;
@@ -472,6 +477,9 @@ save_config() {
     close $existing;
     $cfg->{source_selection} = length($source_selection) ? decode_json($source_selection)
       : ($old->{source_selection} // { policy => "legacy", overrides => {} });
+    $cfg->{include_runtime_logs} = length($include_runtime_logs)
+      ? ($include_runtime_logs eq "true" ? JSON::PP::true : JSON::PP::false)
+      : ($old->{include_runtime_logs} // JSON::PP::false);
     for my $key (qw(retention_mode keep_daily keep_weekly keep_monthly log_retention_days quarantine_retention_days integrity_enabled integrity_interval_days)) {
       $cfg->{$key} = $old->{$key} if exists $old->{$key};
     }
@@ -482,7 +490,7 @@ save_config() {
     $fh->sync or die "Cannot sync config: $!";
     close $fh or die "Cannot close config: $!";
     rename $tmp, $file or die "Cannot replace config: $!";
-  ' "$CONFIG_FILE" "$backup_root" "$excludes_text" "$stop_docker" "$create_export" "$keep_backups" "$schedule_enabled" "$schedule_mode" "$schedule_time" "$schedule_weekday" "$schedule_monthday" "$schedule_months" "$schedule_weekdays" "$schedule_monthdays" "$pre_hook" "$post_hook" "$root_permission_ack" "$backup_mode" "$stop_targets" "$mail_notify_enabled" "$mail_notify_to" "$mail_notify_success" "$mail_notify_failure" "$mail_notify_stopped" "$mail_notify_restore" "$metadata_mode" "$REGISTERED_MARKER" "$REGISTERED_MOUNTPOINT" "$REGISTERED_SOURCE" "$REGISTERED_FSTYPE" "$REGISTERED_MAJMIN" "$source_selection"
+  ' "$CONFIG_FILE" "$backup_root" "$excludes_text" "$stop_docker" "$create_export" "$keep_backups" "$schedule_enabled" "$schedule_mode" "$schedule_time" "$schedule_weekday" "$schedule_monthday" "$schedule_months" "$schedule_weekdays" "$schedule_monthdays" "$pre_hook" "$post_hook" "$root_permission_ack" "$backup_mode" "$stop_targets" "$mail_notify_enabled" "$mail_notify_to" "$mail_notify_success" "$mail_notify_failure" "$mail_notify_stopped" "$mail_notify_restore" "$metadata_mode" "$REGISTERED_MARKER" "$REGISTERED_MOUNTPOINT" "$REGISTERED_SOURCE" "$REGISTERED_FSTYPE" "$REGISTERED_MAJMIN" "$source_selection" "$include_runtime_logs"
   install_schedule
 }
 
@@ -1463,7 +1471,7 @@ source_info() {
   local rules status=0
   rules="$(mktemp "$ROOT_STATE_DIR/.source-rules.XXXXXX")" || return 18
   if ! backup_excludes "$(backup_root)" > "$rules"; then rm -f -- "$rules"; return 18; fi
-  python3 "$LBP_BINDIR/hostbackup-sources.py" source-info --config "$CONFIG_FILE" --excludes "$rules" || status=$?
+  python3 "$LBP_BINDIR/hostbackup-sources.py" source-info --config "$CONFIG_FILE" --excludes "$rules" --loxberry-home "$LBHOMEDIR" || status=$?
   rm -f -- "$rules"
   return "$status"
 }
@@ -1833,7 +1841,7 @@ restart_journal_finish() {
     [ -e "$entry" ] || [ -L "$entry" ] || continue
     case "${entry##*/}" in
       repository-controls) ;;
-      journal.json|selected-stop-targets.tsv|docker-to-stop.tsv|post-hook.started|post-hook.done|restart.done|source-files.nul|repository-candidate.json|rsync-stderr.log|rsync-stderr.logged)
+      journal.json|selected-stop-targets.tsv|docker-to-stop.tsv|post-hook.started|post-hook.done|restart.done|source-files.nul|source-excludes.txt|source-selection.json|source-verification.json|copy-result.json|repository-candidate.json|rsync-stderr.log|rsync-stderr.logged)
         [ -f "$entry" ] && [ ! -L "$entry" ] || return 20 ;;
       *) return 20 ;;
     esac
@@ -1852,7 +1860,7 @@ restart_journal_finish() {
   control="$state_dir/repository-controls"
   if [ -e "$control" ] || [ -L "$control" ]; then
     [ -d "$control" ] && [ ! -L "$control" ] || return 20
-    local -a names=(manifest.json rsync-excludes.txt source-selection.json source-mounts.json
+    local -a names=(manifest.json rsync-excludes.txt source-selection.json source-mounts.json source-verification.json copy-result.json
       mounts.txt metadata-probe.json package-list.txt systemd-services.txt docker.json backup-validation.json)
     for name in "${names[@]}"; do
       [ ! -L "$control/$name" ] && { [ ! -e "$control/$name" ] || [ -f "$control/$name" ]; } || return 20
@@ -1863,7 +1871,7 @@ restart_journal_finish() {
   [ ! -L "$state_dir/repository-candidate.json" ] && { [ ! -e "$state_dir/repository-candidate.json" ] || [ -f "$state_dir/repository-candidate.json" ]; } || return 20
   rm -f -- "$state_dir/repository-candidate.json" || return 20
   # Remove only the known local control files; retain unexpected data for diagnosis.
-  rm -f -- "$state_dir/journal.json" "$state_dir/selected-stop-targets.tsv" "$state_dir/docker-to-stop.tsv" "$state_dir/post-hook.started" "$state_dir/post-hook.done" "$state_dir/restart.done" "$state_dir/source-files.nul" "$state_dir/rsync-stderr.log" "$state_dir/rsync-stderr.logged" || return 20
+  rm -f -- "$state_dir/journal.json" "$state_dir/selected-stop-targets.tsv" "$state_dir/docker-to-stop.tsv" "$state_dir/post-hook.started" "$state_dir/post-hook.done" "$state_dir/restart.done" "$state_dir/source-files.nul" "$state_dir/source-excludes.txt" "$state_dir/source-selection.json" "$state_dir/source-verification.json" "$state_dir/copy-result.json" "$state_dir/rsync-stderr.log" "$state_dir/rsync-stderr.logged" || return 20
   rmdir -- "$state_dir" || return 20
 }
 
@@ -2973,8 +2981,8 @@ create_backup() {
   local root backup_id target rootfs log_file started finished size files exclude_file backup_mode previous_backup
   local mode task validation_status final_status post_hook pre_hook rsync_status export_status portable_excludes state_dir preflight_json preflight_status cleanup_trap
   local source_list="" selection_active=false source_plan_json repository_candidate="" repository_validation="" lineage=""
-  local control_dir="" source_report=""
-  local rsync_stderr="" copy_diagnosis="" runtime_logs_only=false
+  local control_dir="" source_report="" copy_tool="rsync" copy_exit_status=0 source_verify_status=0
+  local rsync_stderr="" runtime_logs_only=false
   local -a copy_pipeline=()
   local -a rsync_opts=() metadata_opts=() tar_opts=()
   root="$(backup_root)"
@@ -3040,7 +3048,8 @@ create_backup() {
     (umask 077; backup_excludes "$root" > "$exclude_file")
     (umask 077; write_manifest "$control_dir" "$backup_id" running "$started" "" 0 0)
   fi
-  source_report="$control_dir/source-selection.json"
+  # Authoritative source boundaries must not be mutable through the NAS.
+  source_report="$state_dir/source-selection.json"
   # Errexit can unwind function locals before EXIT executes. Freeze paths now.
   printf -v cleanup_trap 'HB_BACKUP_EXIT_STATUS=$?; trap - EXIT; backup_cleanup_on_exit "$HB_BACKUP_EXIT_STATUS" %q %q "${HB_BACKUP_RESTART_DONE:-false}" %q %q %q || { [ "$HB_BACKUP_EXIT_STATUS" -ne 0 ] || HB_BACKUP_EXIT_STATUS=20; }; exit "$HB_BACKUP_EXIT_STATUS"' "$target" "$log_file" "$post_hook" "$task" "$state_dir"
   # Intentionally freeze shell-quoted cleanup arguments.
@@ -3049,6 +3058,11 @@ create_backup() {
   trap 'exit 129' HUP
   trap 'exit 130' INT
   trap 'exit 143' TERM
+
+  # Copy tools and enumeration use the same root-owned exclusion snapshot.
+  # The copy on the target is documentary, never an authoritative input.
+  exclude_file="$state_dir/source-excludes.txt"
+  (umask 077; set -o noclobber; backup_excludes "$root" > "$exclude_file") || return 18
 
   log "Starting backup $backup_id" | tee -a "$log_file"
   log "Backup mode: $backup_mode" | tee -a "$log_file"
@@ -3066,15 +3080,18 @@ create_backup() {
   # Enumerate only after services are quiesced, so newly created database files
   # are not missed. Any enumeration failure uses the normal restart EXIT trap.
   source_plan_json="$(source_info)" || return 18
-  selection_active="$(printf '%s' "$source_plan_json" | python3 -c 'import json,sys; s=json.load(sys.stdin)["selection"]; print("true" if s["policy"] != "legacy" or s["overrides"] else "false")')"
+  # Legacy still selects its original volumes, but uses the same frozen,
+  # non-recursive list and runtime-content policy as every other configuration.
+  selection_active=true
   local -a source_options=()
   if portable_snapshot; then selection_active=true; source_options+=(--omit-sockets); fi
   if [ "$selection_active" = true ]; then
     task_state_write "$task" running selecting_sources "$log_file" "$$" ""
     log "Preparing explicit file list for selected local volumes and network shares" | tee -a "$log_file"
     source_list="$state_dir/source-files.nul"
-    (umask 077; set -o noclobber; python3 "$LBP_BINDIR/hostbackup-sources.py" files --config "$CONFIG_FILE" --excludes "$exclude_file" --report "$source_report" "${source_options[@]}" > "$source_list") 2>> "$log_file" || return 18
+    (umask 077; set -o noclobber; python3 "$LBP_BINDIR/hostbackup-sources.py" files --config "$CONFIG_FILE" --excludes "$exclude_file" --loxberry-home "$LBHOMEDIR" --report "$source_report" "${source_options[@]}" > "$source_list") 2>> "$log_file" || return 18
     [ -s "$source_list" ] || { log "ERROR: Source file list is empty" | tee -a "$log_file"; return 18; }
+    (umask 077; set -o noclobber; cat -- "$source_report" > "$control_dir/source-selection.json") || return 18
     if portable_snapshot; then
       python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); s=d.get("omitted_runtime_sockets",{}); print("Portable source selection: %s transient Unix sockets omitted (IPC endpoints, not persistent files); details in source-selection.json." % s.get("count",0))' "$source_report" | tee -a "$log_file"
     fi
@@ -3100,6 +3117,7 @@ create_backup() {
   task_state_write "$task" running copying "$log_file" "$$" ""
   set +e
   if portable_snapshot; then
+    copy_tool="restic"
     repository_candidate="$state_dir/repository-candidate.json"
     lineage="$(printf '%s' "$source_plan_json" | python3 -c 'import hashlib,json,sys; d=json.load(sys.stdin); print(hashlib.sha256(json.dumps(d["selection"],sort_keys=True).encode()).hexdigest())')"
     log "Creating portable repository snapshot; unchanged data blocks are reused" | tee -a "$log_file"
@@ -3108,16 +3126,23 @@ create_backup() {
     # stdout is a bounded machine receipt, not progress or secret material.
     [ "$rsync_status" -ne 0 ] || python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps(d["summary"]))' "$repository_candidate" | tee -a "$log_file"
   elif [ "$mode" = "portable-archive" ]; then
+    copy_tool="tar"
     portable_excludes="$target/tar-excludes.txt"
     sed 's#^/##; /^$/d' "$exclude_file" > "$portable_excludes"
     while IFS= read -r opt; do tar_opts+=("$opt"); done < <(tar_metadata_options)
     log "Creating portable root filesystem archive" | tee -a "$log_file"
     if [ "$selection_active" = true ]; then
       tar "${tar_opts[@]}" -C / -cpf "$target/rootfs.tar" --no-recursion --null --verbatim-files-from --files-from="$source_list" 2>&1 | tee -a "$log_file"
-      rsync_status=${PIPESTATUS[0]}
+      copy_pipeline=("${PIPESTATUS[@]}")
+      rsync_status=${copy_pipeline[0]}
     else
       tar "${tar_opts[@]}" --exclude-from="$portable_excludes" -C / -cpf "$target/rootfs.tar" . 2>&1 | tee -a "$log_file"
-      rsync_status=${PIPESTATUS[0]}
+      copy_pipeline=("${PIPESTATUS[@]}")
+      rsync_status=${copy_pipeline[0]}
+    fi
+    if [ "${copy_pipeline[1]}" -ne 0 ]; then
+      log "ERROR: TAR diagnostics could not be completely recorded" | tee -a "$log_file"
+      rsync_status=23
     fi
   else
     log "Starting rsync copy from / to $rootfs" | tee -a "$log_file"
@@ -3125,9 +3150,8 @@ create_backup() {
     if [ "$selection_active" = true ]; then
       rsync_opts+=(--from0 --files-from="$source_list" --no-recursive --dirs)
     fi
-    # Only separate, completely captured stderr can justify a narrow exit-24
-    # exception. No async tee/process substitution: classification must wait
-    # for every diagnostic byte. Progress on stdout remains live.
+    # Preserve complete diagnostics before source verification and cleanup.
+    # No async tee/process substitution; progress on stdout remains live.
     rsync_stderr="$state_dir/rsync-stderr.log"
     if (umask 077; set -o noclobber; : > "$rsync_stderr"); then
       LC_ALL=C rsync "${metadata_opts[@]}" --delete "${rsync_opts[@]}" --exclude-from="$exclude_file" / "$(rsync_destination "$mode" "$rootfs/")" 2> "$rsync_stderr" | tee -a "$log_file"
@@ -3144,25 +3168,29 @@ create_backup() {
         log "ERROR: rsync diagnostics/progress could not be completely recorded" | tee -a "$log_file"
         rsync_status=23
       fi
-      if [ "$rsync_status" -eq 24 ]; then
-        if command -v timeout >/dev/null 2>&1 && copy_diagnosis="$(timeout -k 2 15 python3 "$LBP_BINDIR/hostbackup-copy-diagnostics.py" --stderr "$rsync_stderr" --exit-code "$rsync_status" --loxberry-home "$LBHOMEDIR" 2>> "$log_file")"; then
-          runtime_logs_only=true
-          log "Known expendable runtime logs disappeared during copying; no backup warning required. Original rsync status remains 24." | tee -a "$log_file"
-        fi
-        printf 'rsync diagnostic classification: %s\n' "$copy_diagnosis" | tee -a "$log_file"
-      fi
+      # Managed volatile payload was omitted before enumeration. A vanished
+      # path still present in the frozen list is not silently declared harmless.
     else
       log "ERROR: Cannot create private rsync diagnostic file" | tee -a "$log_file"
       rsync_status=23
     fi
   fi
   set -e
+  copy_exit_status="$rsync_status"
   # Docker/service restart can legitimately change mounts, so verify the source
   # snapshot now, while the quiesced source state is still expected to match.
-  if [ "$selection_active" = true ] && ! python3 "$LBP_BINDIR/hostbackup-sources.py" verify --report "$source_report" >> "$log_file" 2>&1; then
+  if [ "$selection_active" = true ] && ! python3 "$LBP_BINDIR/hostbackup-sources.py" verify --report "$source_report" --verification-report "$state_dir/source-verification.json" >> "$log_file" 2>&1; then
     log "ERROR: Source mounts changed during the copy; backup cannot be accepted" | tee -a "$log_file"
+    source_verify_status=18
     rsync_status=18
   fi
+  if [ -f "$state_dir/source-verification.json" ]; then
+    (umask 077; set -o noclobber; cat -- "$state_dir/source-verification.json" > "$control_dir/source-verification.json") || rsync_status=18
+  fi
+  (umask 077; set -o noclobber; python3 -c 'import json,sys; print(json.dumps({"tool":sys.argv[1],"copy_exit_status":int(sys.argv[2]),"source_verification_status":int(sys.argv[3]),"effective_status":int(sys.argv[4])},sort_keys=True))' \
+    "$copy_tool" "$copy_exit_status" "$source_verify_status" "$rsync_status" > "$state_dir/copy-result.json") || return 18
+  (umask 077; set -o noclobber; cat -- "$state_dir/copy-result.json" > "$control_dir/copy-result.json") || return 18
+  log "Copy result: tool=$copy_tool copy_status=$copy_exit_status source_verification_status=$source_verify_status" | tee -a "$log_file"
   log "Backup copy finished with status $rsync_status" | tee -a "$log_file"
   log "Starting services and Docker containers again if they were stopped" | tee -a "$log_file"
   task_state_write "$task" running restarting_services "$log_file" "$$" ""
@@ -3183,12 +3211,12 @@ create_backup() {
   size="$(calculate_size "$target")"
   files="$(calculate_files "$target")"
 
-  if [ "$rsync_status" -eq 0 ] || [ "$rsync_status" -eq 24 ]; then
+  if [ "$rsync_status" -eq 0 ] || { [ "$copy_tool" = rsync ] && [ "$rsync_status" -eq 24 ]; }; then
     log "Root filesystem copy for backup $backup_id finished" | tee -a "$log_file"
   else
     write_manifest "$target" "$backup_id" "failed" "$started" "$finished" "$size" "$files"
-    log "Backup $backup_id failed with rsync status $rsync_status" | tee -a "$log_file"
-    notify_hostbackup "failure" 3 "LoxBerry Host Backup fehlgeschlagen" "Backup $backup_id ist fehlgeschlagen. rsync Status: $rsync_status." "$log_file"
+    log "Backup $backup_id failed: $copy_tool copy status $copy_exit_status; source verification status $source_verify_status; final status $rsync_status" | tee -a "$log_file"
+    notify_hostbackup "failure" 3 "LoxBerry Host Backup fehlgeschlagen" "Backup $backup_id ist fehlgeschlagen. Kopierwerkzeug: $copy_tool; Kopierstatus: $copy_exit_status; Quellenpruefung: $source_verify_status; Gesamtstatus: $rsync_status." "$log_file"
     exit "$rsync_status"
   fi
 

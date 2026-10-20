@@ -34,6 +34,7 @@ ID = re.compile(r"[0-9a-f]{64}\Z")
 TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
 CONTROLS = frozenset({"manifest.json", "rsync-excludes.txt", "source-selection.json",
                       "source-mounts.json", "mounts.txt", "metadata-probe.json",
+                      "source-verification.json", "copy-result.json",
                       "packages.txt", "services.txt", "package-list.txt", "systemd-services.txt",
                       "docker.json", "backup-validation.json"})
 

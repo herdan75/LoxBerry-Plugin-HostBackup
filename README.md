@@ -1,7 +1,8 @@
 # LoxBerry Host Backup
 
-**Version 1.2.3-beta · Vorabversion · 19.10.2026.**
-Programm- und Paketversion: `1.2.3`; Release-Tag: `v1.2.3-beta`.
+**Entwicklungsstand 1.2.4 · noch nicht veröffentlicht.**
+Programm- und Paketversion auf `develop`: `1.2.4`. Öffentlich bleibt
+**1.2.3-beta** die Vorabversion (Release-Tag `v1.2.3-beta`).
 Tag-Pipeline und öffentlicher ZIP-Download sind erfolgreich geprüft. Die
 Vorab-Kanaldatei dieses Aktivierungsstands verweist auf **1.2.3-beta**; der stabile
 Kanal und `main` bleiben auf **1.2.0**. Die Prüfung des Aktivierungscommits und
@@ -20,17 +21,25 @@ Auch eine Neuinstallation ist möglich, mit anschliessender Einrichtung und
 Vorprüfung des eigenen Backup-Ziels.
 
 > [!NOTE]
-> **Unveröffentlichte Änderung auf develop – noch nicht in 1.2.3-beta:**
-> Während der Kopie verschwundene, genau bekannte entbehrliche LoxBerry-Laufzeitlogs
-> sollen bei vollständig auswertbarer rsync-Diagnose keinen unnötigen Warnstatus
-> mehr erzeugen. Das betrifft ausschliesslich die drei bekannten Stats4Lox-Grabber-Logs,
-> zeitgestempelte miniserverbackup-ng-Cron- und LogMaintenance-Logs samt bekannter
-> Ramlog-Pfade. Nur wenn alle übrigen Prüfungen erfolgreich sind, bleibt der
-> Abschluss normal (`complete`, „Prüfung OK“); technische Details und der originale
-> rsync-Code 24 bleiben im Log. Unbekannte oder wichtige fehlende Dateien sowie
-> Berechtigungs-/E/A-Fehler bleiben Hinweise oder Fehler. Keine pauschale Ausnahme
-> für `.log` oder Code 24, keine Änderung alter Backup-Bewertungen und kein
-> zusätzlicher Sicherungsmodus. Ein erfolgreicher Abschluss belegt keinen Restore.
+> **Neu auf develop, noch nicht im öffentlichen 1.2.3-beta-Paket:**
+> Flüchtige Diagnoseinhalte in den verwalteten LoxBerry-Logbereichen werden
+> standardmässig bereits aus der gemeinsamen Dateiliste ausgelassen. Das gilt
+> für Linux-Dateisicherungen, portable Vollarchive und portable Sicherungsstände.
+> Rotierende Diagnoseprotokolle werden damit nicht nachträglich als Kopierfehler
+> ignoriert. Verzeichnisse, Rechte und Links bleiben erhalten; Daten, Konfigurationen
+> und dauerhafte Installationsnachweise werden nicht durch diese Regel ausgeschlossen.
+> Unter **Skripte und Ausschlüsse** lassen sich die Diagnoseprotokolle ausdrücklich
+> wieder einschliessen. Das ist ein geänderter Standard auch bei Updates.
+>
+> Die Mount-Prüfung vergleicht die eingefrorenen Sicherungsquellen samt ihren
+> Zugriffswegen. Änderungen an vollständig ausgeschlossenen Freigaben dürfen
+> den Lauf nicht blockieren; verschwundene, ersetzte oder neu überdeckte Quellen
+> bleiben Fehler. Neue Stände mit Hinweisen verdrängen bei der automatischen
+> Aufbewahrung nicht den letzten vollständig geprüften Stand derselben
+> Host-/Formatlinie. Keine neue Sicherungsart und keine Änderung alter Bewertungen.
+> Details und Testnachweise: [Entwicklungsstand 1.2.4](docs/DEVELOP-1.2.4-VALIDATION.md).
+> Ein erfolgreicher Abschluss belegt keinen System-Restore und keine
+> Anwendungskonsistenz laufender Datenbanken.
 
 > [!NOTE]
 > **Neu in 1.2.3-beta:** Veraltete
@@ -1558,7 +1567,7 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 Aktueller Entwicklungs- und Veröffentlichungsstand:
 
 - `main`: regulärer Hauptstand 1.2.0
-- `develop`: Paketstand 1.2.3 und Aktivierung des Vorabkanals 1.2.3-beta
+- `develop`: unveröffentlichter Paketstand 1.2.4; Vorabkanal weiterhin 1.2.3-beta
 - `pre-develop`: älterer Referenzstand; unverändert
 
 Öffentliche Update-Dateien und Freigabereihenfolge:

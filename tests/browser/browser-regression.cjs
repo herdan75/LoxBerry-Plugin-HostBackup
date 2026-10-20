@@ -81,12 +81,17 @@ print "Actual CGI portable settings gate passed\n";
 `;
 if(process.platform==='win32')execFileSync('C:/Program Files/Git/bin/bash.exe',['-s'],{cwd:repo,input:`perl -e ${quote(portableSettingsProgram)}\n`,encoding:'utf8'});
 else execFileSync('perl',['-e',portableSettingsProgram],{cwd:repo,encoding:'utf8'});
-function renderFixture(metadataMode) {
-  if (process.platform === 'win32') return execFileSync('C:/Program Files/Git/bin/bash.exe', ['-s'], {cwd:repo, input:`HOSTBACKUP_FIXTURE_METADATA=${quote(metadataMode)} PERL5LIB=${quote(perlLib)} LBPDATADIR=${quote(posix(temp))} REQUEST_METHOD=GET REMOTE_USER=fixture HTTP_USER_AGENT=fixture perl -MHostBackupFixture webfrontend/htmlauth/index.cgi\n`, encoding:'utf8'});
-  return execFileSync('perl',['-MHostBackupFixture','webfrontend/htmlauth/index.cgi'], {cwd:repo,env:{...process.env,HOSTBACKUP_FIXTURE_METADATA:metadataMode,PERL5LIB:perlLib,LBPDATADIR:temp,REQUEST_METHOD:'GET',REMOTE_USER:'fixture',HTTP_USER_AGENT:'fixture'},encoding:'utf8'});
+function renderFixture(metadataMode,runtimeLogs=null) {
+  const runtime=runtimeLogs===null?'':runtimeLogs?'1':'0';
+  if (process.platform === 'win32') return execFileSync('C:/Program Files/Git/bin/bash.exe', ['-s'], {cwd:repo, input:`HOSTBACKUP_FIXTURE_RUNTIME_LOGS=${quote(runtime)} HOSTBACKUP_FIXTURE_METADATA=${quote(metadataMode)} PERL5LIB=${quote(perlLib)} LBPDATADIR=${quote(posix(temp))} REQUEST_METHOD=GET REMOTE_USER=fixture HTTP_USER_AGENT=fixture perl -MHostBackupFixture webfrontend/htmlauth/index.cgi\n`, encoding:'utf8'});
+  return execFileSync('perl',['-MHostBackupFixture','webfrontend/htmlauth/index.cgi'], {cwd:repo,env:{...process.env,HOSTBACKUP_FIXTURE_RUNTIME_LOGS:runtime,HOSTBACKUP_FIXTURE_METADATA:metadataMode,PERL5LIB:perlLib,LBPDATADIR:temp,REQUEST_METHOD:'GET',REMOTE_USER:'fixture',HTTP_USER_AGENT:'fixture'},encoding:'utf8'});
 }
 let html=renderFixture('native-strict');
 const portableHtml=renderFixture('portable-archive');
+const runtimeEnabledHtml=renderFixture('native-strict',true);
+assert.match(html,/name="runtime_logs_present" value="1"/);
+assert.match(html,/name="include_runtime_logs" value="1">/,'Legacy config defaults to runtime payload omission');
+assert.match(runtimeEnabledHtml,/name="include_runtime_logs" value="1" checked/,'Persisted explicit runtime opt-in is rendered unchanged');
 // Render the real optional panels with read-only backend fixtures. No restore,
 // filesystem mutation or real subprocess is possible in this test process.
 const selectionProgram=`BEGIN { $0='webfrontend/htmlauth/index.cgi'; require HostBackupFixture; require CGI; my $original=\\&CORE::GLOBAL::readpipe; no warnings 'redefine'; *CORE::GLOBAL::readpipe=sub { my ($command)=@_; if ($command =~ /'preflight-restore'/) { $?=0; return '{"status":"ok","checks":[],"warnings":[]}'; } if ($command =~ /'browse'/) { $?=0; return '{"items":[{"name":"hostname","path":"etc/hostname","type":"file","size":128}]}'; } return $original->(@_); }; *CGI::param=sub { return ($_[1] || '') =~ /^(?:restore_id|browse_id)$/ ? 'fixture-ok' : ''; }; } do './webfrontend/htmlauth/index.cgi'; die $@ if $@;`;
@@ -163,6 +168,7 @@ let overviewIssues=false, overviewMissingRecovery=false, reportRequests=0, taskP
 let panelFlowFixture=false,reportDelay=0,failPanelReport=false;
 let actionWiring=false,verificationMode='available',configImportSuccess=false;
 const wiredRequests=[];
+const runtimeSettingPosts=[];
 const startedTasks={backup:'backup-fixture.log','start-export':'export-fixture.log',import:'import-fixture.log','restore-backup':'restore-fixture.log','restore-files':'restore-files-fixture.log','verify-backup':'verify-fixture.log'};
 let lastSavedSources, failSources=false, failBackupMetadata=false;
 let targetNoticeMode='http-error',targetNoticeRequests=0;
@@ -219,7 +225,7 @@ const server=http.createServer(async(req,res)=>{
         if(action==='repository-confirm-key') { assert.equal(repositoryState.key_exported,true);assert.equal(params.get('recovery_key_saved'),'1');repositoryState.key_confirmed=true;return json(res,{ok:true,data:repositoryState,message:'Sichere Aufbewahrung bestätigt.'}); }
         throw new Error('Unexpected repository action');
       }
-      if(action==='save-config') { assert.equal(params.has('recovery_key_saved'),false,'Repository acknowledgement must never be saved as a setting');for(const name of [...maintenanceFields,'policy_json'])assert.equal(params.has(name),false,'Main settings must not submit maintenance field '+name);lastSavedPath=params.get('backup_root');lastSavedSources=JSON.parse(params.get('source_selection_json')); await new Promise(resolve=>setTimeout(resolve,saveDelay)); return json(res,failSave?{ok:false,error:'Simulierter Speicherfehler'}:{ok:true,message:'Gespeichert'},failSave?400:200); }
+      if(action==='save-config') { assert.equal(params.has('recovery_key_saved'),false,'Repository acknowledgement must never be saved as a setting');for(const name of [...maintenanceFields,'policy_json'])assert.equal(params.has(name),false,'Main settings must not submit maintenance field '+name);lastSavedPath=params.get('backup_root');lastSavedSources=JSON.parse(params.get('source_selection_json'));runtimeSettingPosts.push({present:params.get('runtime_logs_present'),included:params.get('include_runtime_logs')}); await new Promise(resolve=>setTimeout(resolve,saveDelay)); return json(res,failSave?{ok:false,error:'Simulierter Speicherfehler'}:{ok:true,message:'Gespeichert'},failSave?400:200); }
       if(action==='maintenance-config') {
         assert.equal(params.has('backup_root'),false);assert.equal(params.has('source_selection_json'),false);
         const policy=JSON.parse(params.get('policy_json'));assert.deepEqual(Object.keys(policy).sort(),maintenanceFields.slice().sort(),'External form serializes all eight maintenance settings only');
@@ -295,6 +301,7 @@ const server=http.createServer(async(req,res)=>{
     if(url.pathname==='/system/images/icons/loxberryhostbackup/icon_64.png'){res.writeHead(200,{'Content-Type':'image/png'});res.end(fs.readFileSync(path.join(repo,'icons/icon_64.png')));return;}
     if(url.pathname.startsWith('/system/')){res.writeHead(204);res.end();return;}
     let pageHtml=url.searchParams.get('fixture')==='verify'?verifySelectionHtml:url.searchParams.get('fixture')==='selection'?selectionHtml:url.searchParams.get('fixture')==='portable'?portableHtml:html;
+    if(url.searchParams.get('fixture')==='runtime-enabled')pageHtml=runtimeEnabledHtml;
     const stopSelections={'no-stops':[],'alias-stops':['systemd:test-old.service'],'alias-draft':['systemd:test-old.service','systemd:test-other.service','systemd:test.service'],'protected-stops':['systemd:dbus-org.freedesktop.Avahi.service'],
       'literal-stops':literalStopNames.map(name=>'systemd:'+name).filter(value=>value!=='systemd:'+literalStopNames[4]).concat('systemd:'+literalStopAlias)};
     if(Object.hasOwn(stopSelections,url.searchParams.get('fixture')))pageHtml=pageHtml.replace(/(data-draft-stops=")[^"]*(")/,'$1'+JSON.stringify(stopSelections[url.searchParams.get('fixture')]).replace(/"/g,'&quot;')+'$2');
@@ -710,6 +717,36 @@ async function checkStopTargets(browser,base) {
     await page.close();
   }
 }
+async function checkRuntimeLogs(browser,base) {
+  const oldFailSave=failSave;failSave=false;
+  const page=await browser.newPage();page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
+  await page.goto(base);await configurationControls(page);
+  const checkbox=page.locator('[name="include_runtime_logs"]'),label=page.locator('label:has([name="include_runtime_logs"])');
+  assert.equal(await checkbox.isChecked(),false);assert.equal(await checkbox.evaluate(node=>node.form.id),'settings-save-form');
+  assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true');
+  const before=postCount,help=label.locator('.info-button'),bubble=label.locator('.info-bubble');
+  await help.click();await bubble.waitFor({state:'visible'});
+  for(const pattern of [/standardmässig/,/Verzeichnisse und Rechte/,/Installationsprotokolle/,/Logrotation/,/alle Sicherungsverfahren/])assert.match(await bubble.textContent(),pattern);
+  assert.equal(await checkbox.isChecked(),false,'Opening help must not toggle the nested checkbox');
+  assert.equal(postCount,before);await page.keyboard.press('Escape');
+  const submit=async()=>{
+    const response=page.waitForResponse(reply=>reply.request().method()==='POST'&&reply.url().includes('action=save-config'));
+    await page.locator('#settings-change-popup button[type="submit"]').click();await response;
+    await page.waitForFunction(()=>document.querySelector('#settings-change-popup').getAttribute('aria-hidden')==='true');
+  };
+  await checkbox.check();assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false');
+  await submit();assert.deepEqual(runtimeSettingPosts.at(-1),{present:'1',included:'1'});
+  await checkbox.uncheck();assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'false');
+  await submit();assert.deepEqual(runtimeSettingPosts.at(-1),{present:'1',included:null},'Unchecked checkbox still sends presence sentinel for backend false');
+  await page.goto(base+'?fixture=runtime-enabled');await configurationControls(page);
+  assert.equal(await checkbox.isChecked(),true);assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true','Saved runtime opt-in is a clean baseline');
+  await page.close();
+  const noScript=await browser.newPage({javaScriptEnabled:false});await noScript.goto(base);
+  const serialized=()=>noScript.locator('#settings-save-form').evaluate(form=>{const data=new FormData(form);return {present:data.get('runtime_logs_present'),included:data.get('include_runtime_logs')};});
+  assert.deepEqual(await serialized(),{present:'1',included:null});await noScript.locator('[name="include_runtime_logs"]').check();
+  assert.deepEqual(await serialized(),{present:'1',included:'1'});await noScript.close();failSave=oldFailSave;
+  receipts.push('Runtime-log policy defaults off with accessible scope/safety help; opt-in and opt-out mark drafts and submit explicit presence, saved true renders cleanly, and no-JS serialization preserves both choices');
+}
 async function checkMaintenance(browser,base) {
   const maintenanceActionStart=postActions.length;
   const page=await browser.newPage({viewport:{width:1440,height:1100}});page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
@@ -871,9 +908,10 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     const base='http://127.0.0.1:'+server.address().port+'/';
     const launch={headless:true};if(process.env.HOSTBACKUP_BROWSER_EXECUTABLE)launch.executablePath=process.env.HOSTBACKUP_BROWSER_EXECUTABLE;
     browser=await chromium.launch(launch);
-    if(['panels','actions','stops'].includes(process.env.HOSTBACKUP_BROWSER_FOCUS)) {
+    if(['panels','actions','stops','runtime'].includes(process.env.HOSTBACKUP_BROWSER_FOCUS)) {
       if(process.env.HOSTBACKUP_BROWSER_FOCUS==='actions'){await checkActionWiring(browser,base);const afterImport=await browser.newPage();await afterImport.close();}
       else if(process.env.HOSTBACKUP_BROWSER_FOCUS==='stops')await checkStopTargets(browser,base);
+      else if(process.env.HOSTBACKUP_BROWSER_FOCUS==='runtime')await checkRuntimeLogs(browser,base);
       else await checkResultPanels(browser,base);
       assert.deepEqual(errors,[]);
       const result={status:'passed',tests:receipts,artifacts:temp,renderer:'actual CGI with mocked backend; focused '+process.env.HOSTBACKUP_BROWSER_FOCUS,browser:await browser.version()};
@@ -1333,6 +1371,7 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     await checkActionWiring(browser,base);
     await checkStopTargets(browser,base);
     await checkMaintenance(browser,base);
+    await checkRuntimeLogs(browser,base);
     assert.deepEqual(errors,[]);
     const result={status:'passed',tests:receipts,artifacts:temp,renderer:'actual CGI with mocked backend; read-only mount discovery',browser:await browser.version()};
     fs.writeFileSync(path.join(temp,'receipt.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));

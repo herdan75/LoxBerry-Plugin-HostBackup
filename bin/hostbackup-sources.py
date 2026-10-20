@@ -19,12 +19,17 @@ import sys
 spec = importlib.util.spec_from_file_location("hostbackup_recovery", Path(__file__).with_name("hostbackup-recovery.py"))
 recovery = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(recovery)
+policy_spec = importlib.util.spec_from_file_location("hostbackup_runtime_policy", Path(__file__).with_name("hostbackup-runtime-policy.py"))
+runtime_policy_module = importlib.util.module_from_spec(policy_spec)
+policy_spec.loader.exec_module(runtime_policy_module)
 
 NETWORK_FS = {"cifs", "smb3", "smbfs", "nfs", "nfs4", "ncpfs", "afs", "openafs", "ceph", "9p", "glusterfs", "lustre", "davfs", "davfs2", "fuse"}
 SYSTEM_FS = {"proc", "sysfs", "devtmpfs", "devpts", "tmpfs", "cgroup", "cgroup2", "debugfs", "securityfs", "pstore", "tracefs", "configfs", "mqueue", "hugetlbfs", "fusectl", "rpc_pipefs", "binfmt_misc", "nsfs", "bpf"}
 MAX_SELECTION_BYTES = 65536
 MAX_OVERRIDES = 256
 MAX_SOCKET_REPORT_PATHS = 20
+MOUNT_VERIFICATION_VERSION = 2
+MAX_MOUNT_CHANGE_PATHS = 10
 SOCKET_OMISSION_REASON = "Unix-Sockets sind laufzeitgebundene Kommunikationsendpunkte und werden von den Diensten neu angelegt; portable Repository-Staende sichern sie nicht."
 
 
@@ -92,10 +97,18 @@ def read_mounts(path="/proc/self/mountinfo"):
             raise SourceError("Ungueltiger Eintrag im Mount-Inventar.")
         target = unescape_mount(fields[4])
         canonical_path(target, allow_root=True)
-        if not re.fullmatch(r"[0-9]+:[0-9]+", fields[2]):
+        if not re.fullmatch(r"[0-9]+:[0-9]+", fields[2]) or not fields[0].isdigit():
             raise SourceError("Ungueltige Geraetekennung im Mount-Inventar.")
-        mounts[target] = {"path": target, "fstype": tail[0], "kind": mount_kind(tail[0]),
-                          "device": fields[2], "mount_id": fields[0]}
+        mount_root = unescape_mount(fields[3])
+        canonical_path(mount_root, allow_root=True)
+        item = {"path": target, "fstype": tail[0], "kind": mount_kind(tail[0]),
+                "device": fields[2], "mount_id": fields[0], "root": mount_root}
+        if target in mounts:
+            previous = mounts[target]
+            stack = previous.get("stack", [{key: previous[key] for key in ("fstype", "device", "mount_id", "root")}])
+            item["stack"] = sorted(stack + [{key: item[key] for key in ("fstype", "device", "mount_id", "root")}],
+                                   key=lambda layer: (int(layer["mount_id"]), layer["root"]))
+        mounts[target] = item
     if "/" not in mounts:
         raise SourceError("Root-Dateisystem fehlt im Mount-Inventar.")
     return sorted(mounts.values(), key=lambda item: (item["path"].count("/"), item["path"]))
@@ -125,12 +138,15 @@ def read_excludes(path):
 
 
 class SourcePlan:
-    def __init__(self, selection, mounts, excludes=()):
+    def __init__(self, selection, mounts, excludes=(), loxberry_home=None, include_runtime_logs=False):
         self.selection = normalize_selection(selection)
         self.mounts = {item["path"]: dict(item) for item in mounts}
         if "/" not in self.mounts:
             raise SourceError("Root-Dateisystem fehlt im Mount-Inventar.")
         self.excludes = list(excludes)
+        self.runtime_policy = (runtime_policy_module.RuntimePolicy(loxberry_home, include_runtime_logs,
+                                                                  mounts=self.mounts.values(), overrides=self.selection["overrides"])
+                               if loxberry_home is not None else None)
         self.literal_excludes = []
         self.pattern_excludes = []
         for rule in self.excludes:
@@ -201,6 +217,9 @@ class SourcePlan:
                 if parent == "/":
                     break
                 parent = parent.rsplit("/", 1)[0] or "/"
+        for path, item in self.mounts.items():
+            if item.get("stack") and self.ambiguous_mount_relevant(path, item):
+                self.errors.append(f"Mehrere Einbindungen verdecken denselben Quellpfad: {display_path(path)}. Mount-Zuordnung vor dem Backup klaeren.")
 
     @lru_cache(maxsize=4096)
     def nearest_mount(self, path):
@@ -230,6 +249,38 @@ class SourcePlan:
         # namespace. This does not enumerate/activate unknown autofs children.
         return self.descendant_routes.get(path, ())
 
+    def mount_relevant(self, path):
+        """Evaluate against the frozen plan, never a fresh automatic selection.
+
+        Old disabled mount boundaries keep shielding their underlying folders
+        even after unmount. Ancestors of explicitly routed sources remain
+        relevant, while a new mount in a previously selected tree is relevant
+        regardless of its filesystem type or current automatic classification.
+        """
+        # A new mount may cover a regular file, not only a directory. A
+        # directory-only exclude is insufficient evidence to ignore that
+        # exact new boundary. Old excluded mounts still remain disabled via
+        # included(), and descendants of excluded directories remain excluded.
+        if self.excluded(path, False):
+            return False
+        return self.included(path) or bool(self.selected_descendants(path))
+
+    def ambiguous_mount_relevant(self, path, item):
+        if self.mount_relevant(path):
+            return True
+        # mountinfo order alone does not establish the visible layer. Do not
+        # let an arbitrarily last network/system layer hide a potentially
+        # selected local layer. Explicitly excluded stacks remain excluded.
+        base = [{key: value for key, value in mount.items() if key != "stack"}
+                for mount in self.mounts.values()]
+        for layer in item["stack"]:
+            alternative = [{**mount, **layer, "kind": mount_kind(layer["fstype"])} if mount["path"] == path else mount
+                           for mount in base]
+            candidate = SourcePlan(self.selection, alternative, self.excludes)
+            if candidate.mount_relevant(path):
+                return True
+        return False
+
     def report(self):
         volumes = []
         for path in sorted(self.mounts):
@@ -241,11 +292,15 @@ class SourcePlan:
                             "selectable": path != "/" and not forced_excluded and item["kind"] not in ("system", "automount")})
         report = {"selection": self.selection, "volumes": volumes, "notices": self.notices,
                   "errors": self.errors, "status": "error" if self.errors else "ok"}
+        if self.runtime_policy is not None:
+            report["runtime_content_policy"] = self.runtime_policy.report()
+            if report["runtime_content_policy"]["enabled"]:
+                report["notices"] = report["notices"] + [report["runtime_content_policy"]["reason"]]
         if self.omitted_runtime_sockets is not None:
             report["omitted_runtime_sockets"] = {**self.omitted_runtime_sockets,
                                                  "paths": list(self.omitted_runtime_sockets["paths"])}
             if self.omitted_runtime_sockets["count"]:
-                report["notices"] = self.notices + [
+                report["notices"] = report["notices"] + [
                     f"{self.omitted_runtime_sockets['count']} laufzeitgebundene Unix-Sockets fuer portable Repository-Sicherung ausgelassen; Details unter omitted_runtime_sockets."]
         return report
 
@@ -262,13 +317,27 @@ def enumerate_files(plan, root=Path("/"), omit_sockets=False):
     root = Path(root)
     plan.omitted_runtime_sockets = ({"count": 0, "paths": [], "reason": SOCKET_OMISSION_REASON}
                                     if omit_sockets else None)
+    if plan.runtime_policy is not None:
+        plan.runtime_policy = runtime_policy_module.RuntimePolicy(
+            plan.runtime_policy.home, plan.runtime_policy.include_runtime_logs,
+            mounts=plan.mounts.values(), overrides=plan.selection["overrides"])
 
-    def visit(logical, ancestors):
+    def visit(logical, ancestors, entry=None):
         included = plan.included(logical)
         descendants = plan.selected_descendants(logical)
         if not included and not descendants:
             return
+        # Rules that apply regardless of file type do not require lstat. This
+        # also keeps already-excluded rotating payload out of the race window.
+        if logical != "/" and plan.excluded(logical, False):
+            return
         if logical in plan.mounts and logical != "/" and plan.excluded(logical, True):
+            return
+        # Exclude confirmed regular diagnostic payload before its lstat can
+        # race with rotation. Unknown entries, mount boundaries, directories,
+        # links and special files still follow the ordinary strict path.
+        if (included and not descendants and logical not in plan.mounts and plan.runtime_policy is not None
+                and plan.runtime_policy.should_omit(logical, entry, root)):
             return
         physical = root if logical == "/" else root / logical.lstrip("/")
         try:
@@ -303,17 +372,19 @@ def enumerate_files(plan, root=Path("/"), omit_sockets=False):
         if included:
             try:
                 with os.scandir(physical) as entries:
-                    # Names only: DirEntry.is_dir/stat could enter an automount
-                    # before the selection decision has been made.
-                    names = sorted(entry.name for entry in entries)
+                    # No entry metadata yet: is_dir/stat could enter an
+                    # automount before the selection decision has been made.
+                    children = {entry.name: entry for entry in entries}
+                    names = sorted(children)
             except OSError as exc:
                 raise SourceError(f"Quellverzeichnis konnte nicht gelesen werden: {logical}: {exc.strerror or exc}") from exc
         else:
             prefix = logical.rstrip("/") + "/"
             names = sorted({path[len(prefix):].split("/", 1)[0] for path in descendants})
+            children = {}
         for name in names:
             child = logical.rstrip("/") + "/" + name
-            yield from visit(child, parents)
+            yield from visit(child, parents, children.get(name))
 
     yield from visit("/", set())
 
@@ -335,17 +406,113 @@ def write_report(path, report):
         os.fsync(handle.fileno())
 
 
-def mount_identity(mounts):
-    return [{key: item[key] for key in ("path", "fstype", "device", "mount_id")} for item in mounts]
+def mount_identity(mounts, legacy=False):
+    result = []
+    for item in mounts:
+        identity = {key: item[key] for key in ("path", "fstype", "device", "mount_id")}
+        if not legacy:
+            # Missing root is permitted only for old caller/fixture structures.
+            # Kernel mountinfo and version-2 persisted reports always include it.
+            identity["root"] = item.get("root", "/")
+            if item.get("stack"):
+                identity["stack"] = item["stack"]
+        result.append(identity)
+    return sorted(result, key=lambda item: (item["path"].count("/"), item["path"]))
 
 
-def verify_report(path):
+def display_path(path):
+    # Escape controls and cap unusual path names; never show mount sources or
+    # options, which may contain server credentials.
+    value = json.dumps(path, ensure_ascii=True)
+    return value if len(value) <= 220 else value[:217] + '..."'
+
+
+def mount_summary(item):
+    if item is None:
+        return None
+    return {**{key: item[key] for key in ("fstype", "device", "mount_id", "root")},
+            "stack_layers": len(item.get("stack", []))}
+
+
+def verify_mounts(plan, current_mounts, verification_path=None):
+    if plan.errors:
+        raise SourceError(" ".join(plan.errors))
+    before = {item["path"]: item for item in mount_identity(plan.mounts.values())}
+    after = {item["path"]: item for item in mount_identity(current_mounts)}
+    changes, ignored = [], []
+    for path in sorted(before.keys() | after.keys()):
+        if before.get(path) == after.get(path):
+            continue
+        action = "entfernt" if path not in after else "neu eingebunden" if path not in before else "ersetzt/geaendert"
+        record = {"path": path[:4096], "change": action,
+                  "before": mount_summary(before.get(path)), "after": mount_summary(after.get(path))}
+        (changes if plan.mount_relevant(path) else ignored).append(record)
+    result = {"version": MOUNT_VERIFICATION_VERSION, "status": "error" if changes else "ok",
+              "relevant_changes_count": len(changes), "ignored_changes_count": len(ignored),
+              "relevant_changes": changes[:MAX_MOUNT_CHANGE_PATHS], "ignored_changes": ignored[:MAX_MOUNT_CHANGE_PATHS],
+              "samples_truncated": len(changes) > MAX_MOUNT_CHANGE_PATHS or len(ignored) > MAX_MOUNT_CHANGE_PATHS}
+    if verification_path:
+        write_report(verification_path, result)
+    if changes:
+        details = "; ".join(f"{display_path(item['path'])} ({item['change']})" for item in changes[:MAX_MOUNT_CHANGE_PATHS])
+        if len(changes) > MAX_MOUNT_CHANGE_PATHS:
+            details += f"; weitere {len(changes) - MAX_MOUNT_CHANGE_PATHS} Pfade"
+        raise SourceError("Gesicherte Quellen oder ihre Zugriffswege wurden waehrend des Backups geaendert: "
+                          + details + ". Backup ist nicht vollstaendig bestaetigt; Quellen pruefen und erneut starten.")
+    return result
+
+
+def verification_report(plan):
+    return {**plan.report(), "mount_verification_version": MOUNT_VERIFICATION_VERSION,
+            "frozen_excludes": list(plan.excludes), "mount_identity": mount_identity(plan.mounts.values())}
+
+
+def verify_report(path, verification_path=None):
     report = json.loads(recovery.read_control(Path(path)))
     expected = report.get("mount_identity") if isinstance(report, dict) else None
     if not isinstance(expected, list) or not expected:
         raise SourceError("Mount-Identitaet fehlt im Quellenauswahl-Bericht.")
-    if expected != mount_identity(read_mounts()):
-        raise SourceError("Mount-Inventar hat sich waehrend des Backups geaendert. Backup ist nicht vollstaendig bestaetigt; Quellen pruefen und erneut starten.")
+    version = report.get("mount_verification_version")
+    if version is None:
+        # Earlier reports have no frozen excludes. Do not infer exclusions and
+        # accidentally bless a changed source; retain the old strict check.
+        legacy = not any("root" in item for item in expected if isinstance(item, dict))
+        changed = expected != mount_identity(read_mounts(), legacy=legacy)
+        if verification_path:
+            write_report(verification_path, {"version": 1, "status": "error" if changed else "ok",
+                                             "legacy_full_inventory_check": True})
+        if changed:
+            raise SourceError("Mount-Inventar hat sich waehrend des Backups geaendert. Backup ist nicht vollstaendig bestaetigt; Quellen pruefen und erneut starten.")
+        return
+    if type(version) is not int or version != MOUNT_VERIFICATION_VERSION or not isinstance(report.get("frozen_excludes"), list):
+        raise SourceError("Unbekannter oder unvollstaendiger Quellenauswahl-Bericht.")
+    paths = set()
+    for item in expected:
+        if not isinstance(item, dict) or set(item) - {"path", "fstype", "device", "mount_id", "root", "stack"}:
+            raise SourceError("Ungueltige eingefrorene Mount-Identitaet.")
+        for key in ("path", "fstype", "device", "mount_id", "root"):
+            if not isinstance(item.get(key), str):
+                raise SourceError("Unvollstaendige eingefrorene Mount-Identitaet.")
+        canonical_path(item["path"], allow_root=True)
+        canonical_path(item["root"], allow_root=True)
+        if item["path"] in paths or not re.fullmatch(r"[0-9]+:[0-9]+", item["device"]) or not item["mount_id"].isdigit():
+            raise SourceError("Ungueltige eingefrorene Mount-Identitaet.")
+        if "stack" in item:
+            if not isinstance(item["stack"], list) or len(item["stack"]) < 2:
+                raise SourceError("Ungueltige gestapelte Mount-Identitaet.")
+            for layer in item["stack"]:
+                if (not isinstance(layer, dict) or set(layer) != {"fstype", "device", "mount_id", "root"}
+                        or any(not isinstance(value, str) for value in layer.values())
+                        or not re.fullmatch(r"[0-9]+:[0-9]+", layer["device"]) or not layer["mount_id"].isdigit()):
+                    raise SourceError("Ungueltige gestapelte Mount-Identitaet.")
+                canonical_path(layer["root"], allow_root=True)
+        paths.add(item["path"])
+    excludes = report["frozen_excludes"]
+    if any(not isinstance(rule, str) or len(rule) > 4096 or "\x00" in rule or "\r" in rule or "\n" in rule for rule in excludes):
+        raise SourceError("Ungueltige eingefrorene Ausschlussregeln.")
+    if not isinstance(report.get("selection"), dict):
+        raise SourceError("Eingefrorene Quellenauswahl fehlt.")
+    return verify_mounts(SourcePlan(report["selection"], expected, excludes), read_mounts(), verification_path)
 
 
 def main(argv=None):
@@ -355,16 +522,20 @@ def main(argv=None):
     parser.add_argument("--excludes")
     parser.add_argument("--selection")
     parser.add_argument("--report", help="New private report file, only for files action")
+    parser.add_argument("--verification-report", help="New private result sidecar, only for verify action")
+    parser.add_argument("--loxberry-home", help="Explicit LoxBerry home enables the shared runtime-content policy")
     parser.add_argument("--omit-sockets", action="store_true",
                         help="For portable repository files only: omit lstat-confirmed Unix sockets; requires --report")
     args = parser.parse_args(argv)
     try:
         if args.omit_sockets and (args.action != "files" or not args.report):
             raise SourceError("--omit-sockets ist nur fuer files mit --report erlaubt.")
+        if args.verification_report and args.action != "verify":
+            raise SourceError("--verification-report ist nur fuer verify erlaubt.")
         if args.action == "verify":
             if not args.report:
                 raise SourceError("Quellenauswahl-Bericht fehlt.")
-            verify_report(args.report)
+            verify_report(args.report, args.verification_report)
             return 0
         if args.action == "validate":
             if args.selection is None or len(args.selection.encode("utf-8")) > MAX_SELECTION_BYTES:
@@ -378,18 +549,16 @@ def main(argv=None):
                 raise SourceError("Konfiguration fehlt.")
             config = read_config(args.config)
             mounts = read_mounts()
-            plan = SourcePlan(config.get("source_selection"), mounts, read_excludes(args.excludes))
+            plan = SourcePlan(config.get("source_selection"), mounts, read_excludes(args.excludes),
+                              loxberry_home=args.loxberry_home, include_runtime_logs=config.get("include_runtime_logs", False))
             if args.action == "files":
                 for path in enumerate_files(plan, omit_sockets=args.omit_sockets):
                     sys.stdout.buffer.write(os.fsencode(path) + b"\0")
                 # Detect source mounts changed while building the list, before
                 # its caller is allowed to start the actual copy.
-                if mounts != read_mounts():
-                    raise SourceError("Mount-Inventar hat sich waehrend der Quellenauswahl geaendert. Backup erneut starten.")
+                verify_mounts(plan, read_mounts())
                 if args.report:
-                    report = plan.report()
-                    report["mount_identity"] = mount_identity(mounts)
-                    write_report(args.report, report)
+                    write_report(args.report, verification_report(plan))
                 return 0
             result = plan.report()
         print(json.dumps(result, ensure_ascii=True, sort_keys=True))

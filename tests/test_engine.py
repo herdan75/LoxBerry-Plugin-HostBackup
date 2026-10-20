@@ -71,6 +71,7 @@ class EngineTests(unittest.TestCase):
             names = archive.namelist()
             for required in ('plugin.cfg', 'postroot.sh', 'bin/hostbackup-engine.py', 'bin/hostbackup-repository.py',
                              'bin/hostbackup-copy-diagnostics.py',
+                             'bin/hostbackup-runtime-policy.py',
                              'bin/hostbackup-portable.py', 'docs/PORTABLE-REPOSITORY.md', 'docs/RESTIC-LICENSE.txt'):
                 self.assertIn(required, names)
             for name in engine.HASHES:

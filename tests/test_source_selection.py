@@ -194,6 +194,204 @@ class SourceSelectionTests(unittest.TestCase):
                 sources.verify_report(report_path)
 
 
+class FrozenMountVerificationTests(unittest.TestCase):
+    def setUp(self):
+        self.mounts = [self.volume("/", "1"), self.volume("/boot", "2", "vfat"),
+                       self.volume("/media/smb", "3", "autofs"),
+                       self.volume("/media/smb/ignored", "4", "cifs"),
+                       self.volume("/run", "5", "tmpfs")]
+
+    @staticmethod
+    def volume(path, identifier, fstype="ext4", root="/"):
+        return {**mount(path, fstype), "device": "8:" + identifier, "mount_id": identifier, "root": root}
+
+    def verify(self, selection, current):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "report.json"
+            sources.write_report(path, sources.verification_report(selection))
+            with patch.object(sources, "read_mounts", return_value=current):
+                sources.verify_report(path)
+
+    def test_unselected_network_and_runtime_mount_churn_is_ignored(self):
+        selected = plan(mounts=self.mounts)
+        current = self.mounts[:2] + [self.volume("/media/smb", "30", "autofs"),
+                                  self.volume("/media/smb/new", "31", "cifs"),
+                                  self.volume("/run/private", "32", "tmpfs")]
+        self.verify(selected, current)
+
+    def test_new_network_mount_outside_old_excluded_boundary_shadows_selected_tree(self):
+        selected = plan(mounts=self.mounts)
+        for fstype in ["cifs", "tmpfs", "autofs", "ext4"]:
+            with self.subTest(fstype=fstype), self.assertRaisesRegex(sources.SourceError, "/etc.*neu eingebunden"):
+                self.verify(selected, self.mounts + [self.volume("/etc", "40", fstype)])
+
+    def test_directory_only_rule_does_not_hide_new_bind_over_required_regular_file(self):
+        selected = plan(mounts=self.mounts, excludes=["/etc/passwd/"])
+        self.assertFalse(selected.excluded("/etc/passwd", False))
+        with self.assertRaisesRegex(sources.SourceError, "/etc/passwd.*neu eingebunden"):
+            self.verify(selected, self.mounts + [self.volume("/etc/passwd", "40")])
+
+    def test_directory_only_rule_still_ignores_changes_beneath_excluded_directory(self):
+        selected = plan(mounts=self.mounts, excludes=["/cache/"])
+        self.verify(selected, self.mounts + [self.volume("/cache/child", "40")])
+
+    def test_selected_mount_disappearance_and_replacement_are_errors(self):
+        selected = plan(mounts=self.mounts)
+        for current in [self.mounts[:1] + self.mounts[2:],
+                        [self.mounts[0], self.volume("/boot", "21", "vfat")] + self.mounts[2:]]:
+            with self.assertRaisesRegex(sources.SourceError, "/boot"):
+                self.verify(selected, current)
+
+    def test_same_device_and_id_but_changed_bind_root_is_rejected(self):
+        selected = plan(mounts=self.mounts)
+        current = [dict(item) for item in self.mounts]
+        current[1]["root"] = "/another-folder"
+        with self.assertRaisesRegex(sources.SourceError, "/boot.*ersetzt/geaendert"):
+            self.verify(selected, current)
+
+    def test_selected_share_retains_ancestor_checks(self):
+        selected = plan(mounts=self.mounts, overrides={"/media/smb/ignored": True})
+        for index in [2, 3]:
+            with self.subTest(index=index), self.assertRaisesRegex(sources.SourceError, "/media/smb"):
+                self.verify(selected, self.mounts[:index] + self.mounts[index + 1:])
+
+    def test_new_mount_above_explicit_child_of_disabled_path_is_rejected(self):
+        mounts = self.mounts + [self.volume("/data/selected", "41", "cifs")]
+        selected = plan(mounts=mounts, overrides={"/data": False, "/data/selected": True})
+        with self.assertRaisesRegex(sources.SourceError, '/data.*neu eingebunden'):
+            self.verify(selected, mounts + [self.volume("/data", "42", "autofs")])
+
+    def test_frozen_user_excludes_and_disabled_absent_paths_ignore_mounts(self):
+        selected = plan(mounts=self.mounts, overrides={"/not-mounted": False}, excludes=["/backup", "/cache/***"])
+        current = self.mounts + [self.volume("/not-mounted", "51"), self.volume("/backup", "52", "cifs"),
+                                self.volume("/cache/any", "53")]
+        self.verify(selected, current)
+
+    def test_legacy_policy_still_requires_included_network_mount(self):
+        selected = plan(policy="legacy", mounts=self.mounts)
+        with self.assertRaisesRegex(sources.SourceError, "/media/smb/ignored"):
+            self.verify(selected, self.mounts[:3] + self.mounts[4:])
+
+    def test_excluded_mount_disappearing_does_not_include_underlying_directory(self):
+        selected = plan(mounts=self.mounts)
+        self.verify(selected, self.mounts[:3] + self.mounts[4:])
+        self.assertFalse(selected.included("/media/smb/ignored/local-data"))
+
+    def test_mount_inventory_order_is_not_a_change(self):
+        self.verify(plan(mounts=self.mounts), list(reversed(self.mounts)))
+
+    def test_mount_stack_is_not_silently_collapsed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "mountinfo"
+            path.write_text("1 0 8:1 / / rw - ext4 /dev/root rw\n"
+                            "2 1 8:1 /data /etc rw - ext4 /dev/root rw\n"
+                            "3 1 8:1 /secret /etc rw - ext4 /dev/root rw\n")
+            mounts = sources.read_mounts(path)
+            selected = plan(mounts=mounts)
+            self.assertEqual(len(mounts[1]["stack"]), 2)
+            self.assertEqual(selected.report()["status"], "error")
+            with self.assertRaisesRegex(sources.SourceError, "Mehrere Einbindungen"):
+                sources.verify_mounts(selected, mounts)
+            selected = plan(mounts=mounts, excludes=["/etc"])
+            self.assertEqual(selected.report()["status"], "ok")
+            sources.verify_mounts(selected, mounts[:1])
+
+    def test_new_stack_at_selected_path_is_rejected(self):
+        current = [dict(item) for item in self.mounts]
+        current[1]["stack"] = [{key: current[1][key] for key in ("fstype", "device", "mount_id", "root")}]
+        with self.assertRaisesRegex(sources.SourceError, "/boot"):
+            self.verify(plan(mounts=self.mounts), current)
+
+    def test_stack_order_cannot_hide_a_selected_local_layer_behind_network_classification(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "mountinfo"
+            path.write_text("1 0 8:1 / / rw - ext4 /dev/root rw\n"
+                            "2 1 8:2 / /data rw - ext4 /dev/data rw\n"
+                            "3 1 0:3 / /data rw - cifs //nas/data rw\n")
+            mounts = sources.read_mounts(path)
+            self.assertEqual(mounts[1]["fstype"], "cifs")
+            self.assertEqual(plan(mounts=mounts).report()["status"], "error")
+            self.assertEqual(plan(mounts=mounts, overrides={"/data": False}).report()["status"], "ok")
+
+    def test_old_reports_without_scope_remain_strict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "old.json"
+            path.write_text(json.dumps({"mount_identity": sources.mount_identity(self.mounts, legacy=True)}))
+            with patch.object(sources, "read_mounts", return_value=self.mounts):
+                sources.verify_report(path)
+            with patch.object(sources, "read_mounts", return_value=self.mounts[:3] + self.mounts[4:]), \
+                 self.assertRaisesRegex(sources.SourceError, "Mount-Inventar"):
+                sources.verify_report(path)
+
+    def test_invalid_frozen_reports_fail_closed(self):
+        original = sources.verification_report(plan(mounts=self.mounts))
+        malformed = []
+        for key in ["selection", "frozen_excludes", "mount_identity"]:
+            copy = json.loads(json.dumps(original))
+            copy.pop(key)
+            malformed.append(copy)
+        for version in [0, 3, "2", True, 2.0]:
+            malformed.append({**original, "mount_verification_version": version})
+        copy = json.loads(json.dumps(original))
+        copy["mount_identity"][0].pop("root")
+        malformed.append(copy)
+        copy = json.loads(json.dumps(original))
+        copy["mount_identity"].append(copy["mount_identity"][0])
+        malformed.append(copy)
+        malformed.append({**original, "frozen_excludes": [None]})
+        copy = json.loads(json.dumps(original))
+        copy["mount_identity"][0]["stack"] = {"not": "layers"}
+        malformed.append(copy)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "invalid.json"
+            for report in malformed:
+                path.write_text(json.dumps(report))
+                with self.subTest(report=report), patch.object(sources, "read_mounts", return_value=self.mounts), \
+                     self.assertRaises(sources.SourceError):
+                    sources.verify_report(path)
+
+    def test_mount_error_is_bounded_and_never_exports_sources_or_options(self):
+        current = self.mounts + [self.volume("/etc/folder" + str(i), str(100 + i), "cifs") for i in range(30)]
+        for item in current:
+            item["source"] = "//username:password@server/share"
+            item["options"] = "password=secret"
+        with self.assertRaises(sources.SourceError) as caught:
+            self.verify(plan(mounts=self.mounts), current)
+        message = str(caught.exception)
+        self.assertIn("weitere 20 Pfade", message)
+        self.assertNotIn("password", message)
+        self.assertNotIn("secret", message)
+        self.assertLess(len(message), 3000)
+
+    def test_verification_receipt_records_ignored_and_relevant_changes_on_failure(self):
+        selected = plan(mounts=self.mounts)
+        current = self.mounts[:3] + self.mounts[4:] + [self.volume("/etc", "60", "tmpfs")]
+        with tempfile.TemporaryDirectory() as tmp:
+            report_path = Path(tmp) / "plan.json"
+            receipt_path = Path(tmp) / "receipt.json"
+            sources.write_report(report_path, sources.verification_report(selected))
+            with patch.object(sources, "read_mounts", return_value=current), self.assertRaises(sources.SourceError):
+                sources.verify_report(report_path, receipt_path)
+            receipt = json.loads(receipt_path.read_text())
+            self.assertEqual(receipt["status"], "error")
+            self.assertEqual(receipt["relevant_changes_count"], 1)
+            self.assertEqual(receipt["ignored_changes_count"], 1)
+            self.assertEqual(receipt["relevant_changes"][0]["path"], "/etc")
+            self.assertEqual(receipt["ignored_changes"][0]["path"], "/media/smb/ignored")
+            self.assertIsNone(receipt["relevant_changes"][0]["before"])
+            self.assertEqual(receipt["relevant_changes"][0]["after"]["fstype"], "tmpfs")
+
+    def test_verification_receipt_records_success_without_turning_ignored_churn_into_warning(self):
+        selected = plan(mounts=self.mounts)
+        with tempfile.TemporaryDirectory() as tmp:
+            receipt_path = Path(tmp) / "receipt.json"
+            result = sources.verify_mounts(selected, self.mounts[:3] + self.mounts[4:], receipt_path)
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(json.loads(receipt_path.read_text()), result)
+            with self.assertRaises(FileExistsError):
+                sources.verify_mounts(selected, self.mounts, receipt_path)
+
+
 class EnumerationTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -215,6 +413,67 @@ class EnumerationTests(unittest.TestCase):
         for forbidden in ["media/smb", "nfs", "tmp", "media/usb/PI_Backup"]:
             self.assertFalse(any(value == forbidden or value.startswith(forbidden + "/") for value in entries))
         self.assertEqual(len(entries), len(set(entries)))
+
+    def test_runtime_payload_policy_keeps_directories_and_persistent_install_audit(self):
+        runtime_dir = self.root / "opt/loxberry/log/plugins/new-plugin"
+        runtime_dir.mkdir(parents=True)
+        (runtime_dir / "arbitrary-runtime-name.bin").write_text("diagnostic")
+        persistent = self.root / "opt/loxberry/log/system/install.log"
+        persistent.parent.mkdir(parents=True)
+        persistent.write_text("keep")
+        selected = sources.SourcePlan({"policy": "local", "overrides": {}}, self.mounts,
+                                      loxberry_home="/opt/loxberry")
+        for _ in range(2):
+            entries = list(sources.enumerate_files(selected, self.root))
+            self.assertIn("opt/loxberry/log/plugins/new-plugin", entries)
+            self.assertNotIn("opt/loxberry/log/plugins/new-plugin/arbitrary-runtime-name.bin", entries)
+            self.assertIn("opt/loxberry/log/system/install.log", entries)
+            self.assertEqual(selected.report()["runtime_content_policy"]["omitted_regular_files"], 1)
+            self.assertEqual(selected.report()["status"], "ok")
+
+    def test_runtime_policy_handles_known_regular_file_rotation_before_source_lstat(self):
+        runtime = self.root / "opt/loxberry/log/plugins/new-plugin/rotating.log"
+        runtime.parent.mkdir(parents=True)
+        runtime.write_text("diagnostic")
+        original = Path.lstat
+
+        def disappeared(path):
+            if path == runtime:
+                raise FileNotFoundError("rotated")
+            return original(path)
+
+        selected = sources.SourcePlan({"policy": "local", "overrides": {}}, self.mounts,
+                                      loxberry_home="/opt/loxberry")
+        with patch.object(Path, "lstat", disappeared):
+            entries = list(sources.enumerate_files(selected, self.root))
+        self.assertNotIn("opt/loxberry/log/plugins/new-plugin/rotating.log", entries)
+        self.assertEqual(selected.report()["runtime_content_policy"]["omitted_regular_files"], 1)
+        required = sources.SourcePlan({"policy": "local", "overrides": {}}, self.mounts,
+                                     loxberry_home="/opt/loxberry", include_runtime_logs=True)
+        with patch.object(Path, "lstat", disappeared), self.assertRaisesRegex(sources.SourceError, "rotating.log"):
+            list(sources.enumerate_files(required, self.root))
+
+    def test_runtime_policy_never_suppresses_missing_config_or_database(self):
+        original = Path.lstat
+        target = self.root / "etc/data.txt"
+
+        def disappeared(path):
+            if path == target:
+                raise FileNotFoundError("required data disappeared")
+            return original(path)
+
+        selected = sources.SourcePlan({"policy": "local", "overrides": {}}, self.mounts,
+                                      loxberry_home="/opt/loxberry")
+        with patch.object(Path, "lstat", disappeared), self.assertRaisesRegex(sources.SourceError, "/etc/data.txt"):
+            list(sources.enumerate_files(selected, self.root))
+
+    def test_runtime_policy_is_opt_in_for_legacy_python_callers(self):
+        runtime = self.root / "opt/loxberry/log/plugins/plugin/runtime.log"
+        runtime.parent.mkdir(parents=True)
+        runtime.write_text("diagnostic")
+        selected = self.selection()
+        self.assertIn("opt/loxberry/log/plugins/plugin/runtime.log", list(sources.enumerate_files(selected, self.root)))
+        self.assertNotIn("runtime_content_policy", selected.report())
 
     def test_socket_omission_is_opt_in_lstat_only_and_keeps_other_special_types(self):
         directory = self.root / "var/lib/fixture"
@@ -407,6 +666,19 @@ class EnumerationTests(unittest.TestCase):
 
         with patch.object(Path, "lstat", guarded):
             list(sources.enumerate_files(self.selection(), self.root))
+
+    def test_type_independent_excluded_file_is_not_statted_during_rotation(self):
+        original = Path.lstat
+
+        def vanished(path):
+            if path == self.root / "etc/data.txt":
+                raise FileNotFoundError("excluded rotating file")
+            return original(path)
+
+        selected = plan(mounts=self.mounts, excludes=["/etc/data.txt"])
+        with patch.object(Path, "lstat", vanished):
+            entries = list(sources.enumerate_files(selected, self.root))
+        self.assertNotIn("etc/data.txt", entries)
 
     def test_known_local_usb_under_autofs_is_routed_without_listing_namespace(self):
         self.mounts.append(mount("/media/usb", "autofs"))

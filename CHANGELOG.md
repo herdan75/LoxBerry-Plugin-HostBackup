@@ -12,24 +12,35 @@ Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
-## [Unreleased]
+## [Unreleased] - Entwicklungsstand 1.2.4
 
-- rsync-Code 24 nur bei vollständig auswertbarer Diagnose und ausschliesslich
-  genau bekannten, entbehrlichen LoxBerry-Laufzeitlogs ohne unnötigen Warnstatus
-  behandeln: die drei bekannten Stats4Lox-Grabber-Logs, zeitgestempelte miniserverbackup-ng-Cron- und
-  LogMaintenance-Logs unter `system_tmpfs` samt bekannter Ramlog-Pfade. Bestehen
-  auch alle übrigen Prüfungen, ist der Abschluss `complete` mit „Prüfung OK“;
-  technische Details und der originale rsync-Code 24 bleiben im Log erhalten.
-- Keine pauschale Ausnahme für `.log`-Dateien oder rsync-Code 24. Unvollständige
-  oder unklare Diagnosen, unbekannte/wichtige fehlende Dateien und echte
-  Berechtigungs-/E/A-Fehler bleiben als Hinweise oder Fehler sichtbar.
-  Quellvollständigkeit wird getrennt von der Metadatenprüfung bewertet.
-- Keine neue Einstellung oder Sicherungsart; keine rückwirkende Umschreibung
-  alter Backup-Bewertungen. Diese lokale Änderung ist noch nicht im öffentlichen
-  1.2.3-beta-Paket enthalten. Regressionstests für bekannte/unklare Diagnosen,
-  Dienstewiederanlauf, Abbruch und unveränderte Portable-Sicherungen ergänzt;
-  zwei zusätzliche Linux-Tests erzeugen Code 24 mit echtem rsync. Eine erfolgreiche
-  Pipeline bleibt Voraussetzung für die Freigabe und ersetzt keinen Hardware-Restore.
+- Gemeinsame Laufzeitdaten-Regel vor der Dateiaufzählung für rsync, TAR und
+  portable Repository-Sicherungen. Reguläre Diagnoseinhalte unter LoxBerry
+  `log/plugins`, `log/system_tmpfs` und den zugehörigen bekannten Ramlog-Pfaden
+  standardmässig auslassen; Verzeichnisstruktur und Metadaten, Links, Sonderdateien,
+  dauerhafte Installationsnachweise und Nutzdaten erhalten. Keine allgemeine
+  `.log`-Ausnahme, kein pauschales Ignorieren von Kopierfehlern.
+- Erweiterte Option `include_runtime_logs` mit sichtbarer Erklärung in Oberfläche,
+  Vorprüfung und Kurzanleitung. Auch bestehende Konfigurationen verwenden ohne
+  explizite Freigabe den neuen Standard; alte Speicheraufrufe erhalten eine bereits
+  gesetzte Option. Ungewöhnliche Bind-Mounts und ausdrücklich ausgewählte Teilquellen
+  bleiben in der normalen, strengen Verarbeitung.
+- Mount-Änderungen anhand des vor der Kopie eingefrorenen Quellenumfangs bewerten:
+  vollständig ausgeschlossene Freigaben dürfen verschwinden; Änderungen an
+  ausgewählten Quellen, erforderlichen Eltern und neu überdeckten Quellpfaden
+  bleiben blockierend. Begrenzte Diagnoseberichte nennen betroffene Pfade.
+  Verbindliche Quellengrenzen und Ausschlüsse liegen lokal im geschützten Journal,
+  nicht in veränderbaren Dateien auf dem NAS.
+- Kopierwerkzeug, Kopierstatus und anschliessende Quellenprüfung getrennt
+  dokumentieren. Ein TAR-Fehler wird nicht mehr als rsync-Fehler bezeichnet;
+  rsync-Code 24 ist keine allgemeine Freigabe für andere Kopierwerkzeuge.
+- Automatische Aufbewahrung erhält zusätzlich den letzten vollständig geprüften
+  Stand je Host-/Formatlinie, wenn ein neuerer Stand Hinweise enthält.
+- Regressionen und reale Linux-Simulationen für Logrotation, wichtige fehlende
+  Dateien, Metadaten-Restore, inkrementelle Wiederverwendung, private Mount-
+  Namensräume und Installations-/Wiederanlaufpfade. Prüfgrenzen und Ergebnisse
+  stehen in `docs/DEVELOP-1.2.4-VALIDATION.md`. Noch keine Veröffentlichung;
+  stabiles Release und Vorabkanal bleiben unverändert.
 
 ## [1.2.3-beta] - 2026-10-19
 

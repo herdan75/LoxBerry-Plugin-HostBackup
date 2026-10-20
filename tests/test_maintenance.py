@@ -492,6 +492,19 @@ class MaintenanceTests(unittest.TestCase):
         self.assertEqual(MAINT.retention(self.root, self.state, {"keep_backups": 1})["delete"], [])
         self.assertEqual(MAINT.cleanup_runtime(self.state, {})["files"], [])
 
+    def test_new_warning_does_not_displace_last_complete_backup(self):
+        self.backup("complete", "2026-08-01T00:00:00+00:00")
+        warning = self.backup("warning", "2026-09-01T00:00:00+00:00", status="complete_with_warnings")
+        (warning / "backup-validation.json").write_text(json.dumps({"status": "warning"}))
+        for config in ({"keep_backups": 1}, {"retention_mode": "gfs", "keep_daily": 1,
+                                           "keep_weekly": 0, "keep_monthly": 0}):
+            with self.subTest(config=config):
+                preview = MAINT.retention(self.root, self.state, config)
+                kept = {row["backup_id"]: row["reasons"] for row in preview["keep"]}
+                self.assertIn("latest-complete-format-host-backup", kept["complete"])
+                self.assertIn("warning", kept)
+                self.assertEqual(preview["delete"], [])
+
     def test_retention_deletes_only_bound_associated_exports(self):
         self.backup("old", "2026-08-01T00:00:00+00:00")
         self.backup("latest")

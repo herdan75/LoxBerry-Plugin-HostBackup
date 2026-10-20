@@ -820,6 +820,11 @@ def retention(root, state, config, apply=None, caller_pid=None):
         reasons[latest].append("latest-good-backup")
     for backup_id in newest_per_storage_line(good):
         reasons[backup_id].append("latest-good-format-host-backup")
+    # A newer warning must not displace the last fully validated copy, even if
+    # count/GFS retention otherwise regards both records as usable.
+    complete = [item for item in good if (item["status"], item["validation_status"]) == ("complete", "ok")]
+    for backup_id in newest_per_storage_line(complete):
+        reasons[backup_id].append("latest-complete-format-host-backup")
     for backup_id in protected:
         if backup_id in reasons:
             reasons[backup_id].append("user-protected")

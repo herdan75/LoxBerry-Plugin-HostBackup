@@ -1,4 +1,4 @@
-"""Conservative rsync-24 classification and actual validation/worker regressions.
+"""Historical rsync-24 classifier and current validation/worker regressions.
 
 All source/target data and commands are confined to temporary fixtures. No real
 rsync, service, Docker command, host-root backup, or NAS access is performed.
@@ -324,6 +324,16 @@ prune_old_backups() {
 rsync() {
   [ "${!#}" = "$TEST_ROOT/target/vanished-test/rootfs/" ] || return 94
   [ -f "$TEST_ROOT/services-stopped" ] && [ ! -f "$TEST_ROOT/services-restarted" ] || return 94
+  if [ "$MUTATE_PUBLIC_EXCLUDES" = true ]; then
+    printf '/etc\n' > "$TEST_ROOT/target/vanished-test/rsync-excludes.txt"
+    local option private_excludes=''
+    for option in "$@"; do
+      case "$option" in --exclude-from=*) private_excludes="${option#--exclude-from=}" ;; esac
+    done
+    [ "$private_excludes" = "$RESTART_JOURNAL_DIR/backup-vanished-test.log/source-excludes.txt" ] || return 94
+    [ "$(command cat "$private_excludes")" = $'/proc\n/sys\n/dev\n/run\n/tmp' ] || return 94
+    event private-excludes-used
+  fi
   event copy
   mkdir -p "$TEST_ROOT/target/vanished-test/rootfs/etc" "$TEST_ROOT/target/vanished-test/rootfs/opt/loxberry" "$TEST_ROOT/target/vanished-test/rootfs/var/lib"
   cp -- "$TEST_ROOT/source.txt" "$TEST_ROOT/target/vanished-test/rootfs/etc/fixture.txt"
@@ -354,8 +364,29 @@ python3() {
     "$VANISHED_PYTHON" "$@"
   elif [ "${1:-}" = "$LBP_BINDIR/hostbackup-sources.py" ]; then
     case "${2:-}" in
-      files) printf '.\0etc/fixture.txt\0' ;;
-      verify) event source-verify; return "$VERIFY_STATUS" ;;
+      files)
+        shift 2
+        while [ "$#" -gt 0 ]; do
+          if [ "$1" = --report ]; then
+            printf '%s\n' '{"status":"ok","selection":{"policy":"local","overrides":{}},"runtime_content_policy":{"version":1,"omitted_regular_files":1}}' > "$2"
+            break
+          fi
+          shift
+        done
+        printf '.\0etc/fixture.txt\0'
+        ;;
+      verify)
+        event source-verify
+        shift 2
+        while [ "$#" -gt 0 ]; do
+          if [ "$1" = --verification-report ]; then
+            printf '{"status":"%s","changed_paths":[]}\n' "$VERIFY_STATUS" > "$2"
+            break
+          fi
+          shift
+        done
+        return "$VERIFY_STATUS"
+        ;;
       *) event forbidden-python; return 95 ;;
     esac
   elif [ "${1:-}" = -c ]; then
@@ -385,7 +416,7 @@ tee() {
 class RsyncVanishedWorkerTests(unittest.TestCase):
     def worker(self, code=24, known=True, mode="full", profile="native-strict", verify=0, expected=0,
                malformed=False, capture_collision=False, tee_failure=False, cat_failure=False, helper_failure=False,
-               classifier_timeout=False):
+               classifier_timeout=False, mutate_public_excludes=False):
         temporary = tempfile.TemporaryDirectory(prefix="hostbackup-vanished-worker-")
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name).resolve()
@@ -406,6 +437,7 @@ class RsyncVanishedWorkerTests(unittest.TestCase):
                                      "CAPTURE_COLLISION": str(capture_collision).lower(), "TEE_COPY_FAILURE": str(tee_failure).lower(),
                                      "CAT_FAILURE": str(cat_failure).lower(), "HELPER_FAILURE": str(helper_failure).lower(),
                                      "CLASSIFIER_TIMEOUT": str(classifier_timeout).lower(),
+                                     "MUTATE_PUBLIC_EXCLUDES": str(mutate_public_excludes).lower(),
                                      "SELECTION": "local" if verify else "legacy"})
         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
         events = (root / "events").read_text().splitlines()
@@ -413,16 +445,14 @@ class RsyncVanishedWorkerTests(unittest.TestCase):
         manifest = json.loads((root / "target/vanished-test/manifest.json").read_bytes())
         return root, result, events, manifest
 
-    @unittest.skipUnless(os.name == "posix", "Accepted diagnostic classification needs real POSIX paths")
-    def test_actual_worker_known_logs_full_and_snapshot_complete_without_warning(self):
+    def test_worker_never_reclassifies_a_required_vanished_file_by_its_name(self):
         for mode, profile in (("full", "native-strict"), ("snapshot", "native-strict"),
                               ("full", "network-compatible"), ("snapshot", "network-compatible")):
             with self.subTest(mode=mode, profile=profile):
                 root, result, events, manifest = self.worker(mode=mode, profile=profile)
-                self.assertEqual(manifest["status"], "complete")
-                self.assertIn("notify:success", events)
+                self.assertEqual(manifest["status"], "complete_with_warnings")
                 self.assertNotIn("notify:failure", events)
-                self.assertEqual(events.count("classifier"), 1)
+                self.assertNotIn("classifier", events)
                 self.assertLess(events.index("services-stop"), events.index("copy"))
                 self.assertLess(events.index("copy"), events.index("services-start"))
                 self.assertLess(events.index("services-start"), events.index("retention"))
@@ -430,11 +460,14 @@ class RsyncVanishedWorkerTests(unittest.TestCase):
                 self.assertEqual((root / "target/vanished-test/rootfs/etc/fixture.txt").read_bytes(), (root / "source.txt").read_bytes())
                 capture = root / "state/journals/backup-vanished-test.log/rsync-stderr.log"
                 self.assertEqual(capture.read_bytes(), (root / "diagnostic.log").read_bytes())
-                self.assertNotIn(b"\r", capture.read_bytes(), "CR progress on stdout must not enter diagnostic classifier")
+                self.assertNotIn(b"\r", capture.read_bytes(), "CR progress on stdout must not enter stderr evidence")
                 if os.name == "posix":
                     self.assertEqual(stat.S_IMODE(capture.stat().st_mode), 0o600)
                 log = (root / "state/logs/backup-vanished-test.log").read_bytes()
                 self.assertIn((root / "diagnostic.log").read_bytes(), log)
+                receipt = json.loads((root / "target/vanished-test/copy-result.json").read_bytes())
+                self.assertEqual(receipt, {"tool": "rsync", "copy_exit_status": 24,
+                                          "source_verification_status": 0, "effective_status": 24})
 
     def test_unknown_or_incomplete_diagnostic_keeps_completed_warning(self):
         for known, malformed in ((False, False), (True, True)):
@@ -455,17 +488,26 @@ class RsyncVanishedWorkerTests(unittest.TestCase):
         self.assertNotIn("retention", events)
 
     def test_source_verification_failure_dominates_known_log_diagnostics(self):
-        _, _, events, manifest = self.worker(verify=18, expected=18)
+        root, _, events, manifest = self.worker(verify=18, expected=18)
         self.assertEqual(manifest["status"], "failed")
         self.assertIn("source-verify", events)
         self.assertIn("services-start", events)
         self.assertNotIn("retention", events)
         self.assertNotIn("notify:success", events)
+        receipt = json.loads((root / "target/vanished-test/copy-result.json").read_bytes())
+        self.assertEqual(receipt, {"tool": "rsync", "copy_exit_status": 24,
+                                  "source_verification_status": 18, "effective_status": 18})
 
     def test_successful_copy_does_not_invoke_exception_classifier(self):
         _, _, events, manifest = self.worker(code=0)
         self.assertEqual(manifest["status"], "complete")
         self.assertNotIn("classifier", events)
+
+    def test_public_nas_excludes_cannot_change_private_copy_boundaries(self):
+        root, _, events, manifest = self.worker(code=0, mutate_public_excludes=True)
+        self.assertEqual(manifest["status"], "complete")
+        self.assertIn("private-excludes-used", events)
+        self.assertTrue((root / "target/vanished-test/rootfs/etc/fixture.txt").is_file())
 
     def test_diagnostic_capture_collision_fails_without_overwriting_prior_evidence(self):
         root, _, events, manifest = self.worker(capture_collision=True, expected=23)
@@ -493,28 +535,29 @@ class RsyncVanishedWorkerTests(unittest.TestCase):
         self.assertIn("services-start", events)
         self.assertIn("notify:failure", events)
 
-    def test_classifier_failure_cannot_suppress_warning(self):
+    def test_obsolete_classifier_failure_cannot_suppress_warning(self):
         _, _, events, manifest = self.worker(helper_failure=True)
         self.assertEqual(manifest["status"], "complete_with_warnings")
-        self.assertIn("classifier", events)
+        self.assertNotIn("classifier", events)
         self.assertIn("services-start", events)
         self.assertIn("retention", events)
 
-    def test_classifier_timeout_preserves_warning_and_restarts_services(self):
+    def test_obsolete_classifier_timeout_is_not_part_of_current_worker(self):
         _, _, events, manifest = self.worker(classifier_timeout=True)
         self.assertEqual(manifest["status"], "complete_with_warnings")
-        self.assertIn("classifier-time-bound", events)
+        self.assertNotIn("classifier-time-bound", events)
         self.assertNotIn("classifier", events)
         self.assertIn("services-start", events)
         self.assertIn("retention", events)
 
     def test_portable_tar_does_not_use_rsync_log_exception(self):
-        for code, status in ((0, "complete"), (24, "complete_with_warnings")):
+        for code, status in ((0, "complete"), (24, "failed")):
             with self.subTest(code=code):
-                _, _, events, manifest = self.worker(code=code, profile="portable-archive")
+                root, _, events, manifest = self.worker(code=code, profile="portable-archive", expected=code)
                 self.assertEqual(manifest["status"], status)
                 self.assertIn("portable-copy", events)
                 self.assertNotIn("classifier", events)
+                self.assertEqual(json.loads((root / "target/vanished-test/copy-result.json").read_bytes())["tool"], "tar")
 
 
 @unittest.skipUnless(runtime.BASH and Path(runtime.BASH).exists(), "Bash/Perl required")

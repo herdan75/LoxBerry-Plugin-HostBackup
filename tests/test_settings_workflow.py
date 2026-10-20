@@ -12,7 +12,7 @@ from test_runtime_safety import BASH, ROOT, function
 
 @unittest.skipUnless(BASH, "Bash is required")
 class SettingsWorkflowTests(unittest.TestCase):
-    def run_save(self, metadata="native-strict", mode="full", schedule="false", weekdays="0", monthdays="1", months="*", selection=None, previous_selection=None, stop_targets=""):
+    def run_save(self, metadata="native-strict", mode="full", schedule="false", weekdays="0", monthdays="1", months="*", selection=None, previous_selection=None, stop_targets="", include_runtime_logs=None, previous_runtime_logs=None):
         with tempfile.TemporaryDirectory(prefix="hostbackup-settings-") as tmp:
             base = Path(tmp)
             original = {"backup_root": "", "keep_backups": 3, "metadata_mode": "native-strict",
@@ -21,11 +21,15 @@ class SettingsWorkflowTests(unittest.TestCase):
                         "log_retention_days": 60, "quarantine_retention_days": 21}
             if previous_selection is not None:
                 original["source_selection"] = previous_selection
+            if previous_runtime_logs is not None:
+                original["include_runtime_logs"] = previous_runtime_logs
             (base / "config.json").write_text(json.dumps(original), encoding="utf-8")
             args = ["", "/media/usb/PI_Backup", "false", "false", "5", schedule, "weekly" if schedule == "true" else "daily", "02:00", "0", "1", months, weekdays, monthdays, "", "", "true", mode, "", "false", "", "true", "true", "true", "true", metadata]
             args[17] = stop_targets
-            if selection is not None:
-                args.append(json.dumps(selection))
+            if selection is not None or include_runtime_logs is not None:
+                args.append(json.dumps(selection) if selection is not None else "")
+            if include_runtime_logs is not None:
+                args.append(str(include_runtime_logs).lower() if isinstance(include_runtime_logs, bool) else str(include_runtime_logs))
             source = r'''
 set -euo pipefail
 cd "$SETTINGS_TEST_DIR"
@@ -122,6 +126,44 @@ install_schedule() { printf installed > schedule-called; }
         self.assertEqual(saved, original)
         self.assertFalse(registered)
         self.assertFalse(scheduled)
+
+    def test_old_save_keeps_runtime_log_choice_and_defaults_old_installations(self):
+        for previous in (None, False, True):
+            with self.subTest(previous=previous):
+                result, saved, registered, scheduled, _ = self.run_save(previous_runtime_logs=previous)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIs(saved["include_runtime_logs"], previous if previous is not None else False)
+                self.assertTrue(registered)
+                self.assertTrue(scheduled)
+
+    def test_explicit_runtime_log_selection_persists_boolean_and_source_scope(self):
+        selection = {"policy": "local", "overrides": {"/mnt/nas": True}}
+        for selected in (True, False):
+            with self.subTest(selected=selected):
+                result, saved, registered, scheduled, _ = self.run_save(
+                    include_runtime_logs=selected, previous_runtime_logs=not selected,
+                    previous_selection=selection)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIs(saved["include_runtime_logs"], selected)
+                self.assertEqual(saved["source_selection"], selection)
+                self.assertTrue(registered)
+                self.assertTrue(scheduled)
+
+    def test_runtime_log_and_explicit_source_settings_can_be_saved_together(self):
+        selection = {"policy": "local", "overrides": {"/mnt/nas": False}}
+        result, saved, _, _, _ = self.run_save(selection=selection, include_runtime_logs=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIs(saved["include_runtime_logs"], True)
+        self.assertEqual(saved["source_selection"], selection)
+
+    def test_invalid_runtime_log_switch_is_rejected_before_registration_or_write(self):
+        for invalid in ("yes", "on", "FALSE", "0", "null", "true\n", "true; echo injected"):
+            with self.subTest(invalid=invalid):
+                result, saved, registered, scheduled, original = self.run_save(include_runtime_logs=invalid)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(saved, original)
+                self.assertFalse(registered)
+                self.assertFalse(scheduled)
 
 
 if __name__ == "__main__":

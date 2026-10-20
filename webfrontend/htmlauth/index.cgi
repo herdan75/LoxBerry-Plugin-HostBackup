@@ -772,7 +772,8 @@ if ($q->request_method eq 'POST') {
             $mail_notify_stopped,
             $mail_notify_restore,
             $metadata_mode,
-            $sources
+            $sources,
+            bool_arg($imported->{include_runtime_logs})
           )
         );
 
@@ -791,7 +792,7 @@ if ($q->request_method eq 'POST') {
     my $backup_mode = $q->param('backup_mode') || 'full';
     my $metadata_mode = $q->param('metadata_mode') || 'native-strict';
     my $keep_backups = $q->param('keep_backups') || '10';
-    my @source_args;
+    my @source_args = ('');
     if (defined $q->param('source_selection_json')) {
       my $sources = eval { source_selection_json(scalar $q->param('source_selection_json')) };
       if ($@) { $error = $@; } else { @source_args = ($sources); }
@@ -876,7 +877,8 @@ if ($q->request_method eq 'POST') {
         $mail_notify_stopped,
         $mail_notify_restore,
         $metadata_mode,
-        @source_args
+        @source_args,
+        (defined $q->param('runtime_logs_present') ? ($q->param('include_runtime_logs') ? 'true' : 'false') : '')
       )
     );
 
@@ -1137,6 +1139,8 @@ if ($action eq 'save-config' && $error && $config_loaded) {
     $config->{$name} = \@values;
   }
   $config->{rsync_extra_excludes} = [split /\r?\n/, ($q->param('rsync_extra_excludes') || '')];
+  $config->{include_runtime_logs} = $q->param('include_runtime_logs') ? JSON::PP::true : JSON::PP::false
+    if defined $q->param('runtime_logs_present');
   if (defined $q->param('source_selection_json')) {
     my $sources = eval { source_selection_json(scalar $q->param('source_selection_json')) };
     $config->{source_selection} = decode_json($sources) if defined $sources && !$@;
@@ -1209,6 +1213,7 @@ my $cfg_post_hook = escapeHTML($config->{post_backup_hook} || '');
 my $cfg_excludes = escapeHTML(join "\n", @{$config->{rsync_extra_excludes} || []});
 
 my $cfg_create_export = checked_attr($config->{create_export_after_backup});
+my $cfg_include_runtime_logs = checked_attr($config->{include_runtime_logs});
 my $cfg_mail_notify_enabled = checked_attr($config->{mail_notify_enabled});
 my $cfg_mail_notify_to = escapeHTML($config->{mail_notify_to} || '');
 my $cfg_mail_notify_success = checked_attr(exists $config->{mail_notify_success} ? $config->{mail_notify_success} : 1);
@@ -1272,6 +1277,7 @@ my $info_months = info_button('Nur bei monatlichen Backups relevant. Mit Alle Mo
 my $info_pre_hook = info_button('Optionales Skript, das direkt vor dem Backup ausgeführt wird. Sinnvoll für Datenbank-Dumps oder das Vorbereiten von Diensten. Das Skript muss absolut angegeben werden und wird aus Sicherheitsgründen nur ausgeführt, wenn es Root gehört und nicht durch andere Benutzer beschreibbar ist.');
 my $info_post_hook = info_button('Optionales Skript, das nach dem Backup ausgeführt wird. Sinnvoll zum Aufräumen, Dienste wieder in einen gewünschten Zustand zu bringen oder Benachrichtigungen auszuführen. Es gelten dieselben Sicherheitsregeln wie beim Skript vor dem Backup.');
 my $info_excludes = info_button('Hier kannst du Pfade vom rsync-Backup ausschliessen, je ein Pfad pro Zeile. Das ist sinnvoll für grosse Medienarchive, Netzwerkshares oder Daten, die separat gesichert werden. Zu viele Ausschlüsse können aber die Wiederherstellung unvollständig machen.');
+my $info_runtime_logs = info_button('Seit Paket 1.2.4 werden flüchtige Inhalte der verwalteten LoxBerry-Logbereiche log/plugins und log/system_tmpfs samt bekannten Ramlog-Spiegeln standardmässig ausgelassen. Verzeichnisse und Rechte bleiben erhalten. Daten, Konfigurationen und dauerhafte Installationsprotokolle bleiben enthalten. Aktivieren, wenn diese Diagnoseprotokolle ausdrücklich mitgesichert werden sollen; laufende Logrotation kann dann wieder Hinweise oder Fehler verursachen. Gilt für alle Sicherungsverfahren.');
 my $info_stop_targets = info_button('Wähle gezielt Docker-Container oder sicher steuerbare Dienste aus, die vor dem Backup angehalten und danach wieder gestartet werden. Laufende Dienste werden erkannt; zusätzlich werden LoxBerry-/Plugin-nahe Dienste angezeigt, auch wenn sie gerade inaktiv sind. Kritische LoxBerry-, Web-, SSH-, Netzwerk- und Backup-Dienste werden nicht angeboten und auch bei einer älteren gespeicherten Auswahl nicht gestoppt. Mehrere Namen desselben Dienstes werden zusammengefasst; die Auswahl über einen bisherigen Namen bleibt erhalten. LoxBerry-Plugins ohne eigenen Dienst werden nicht hart beendet; dafür sind Pre-/Post-Backup-Hooks der sichere Weg. Empfohlene Auswahl setzen ersetzt die aktuelle Auswahl durch die erkannten Empfehlungen. Auswahl leeren entfernt alle Häkchen. Beides stoppt noch keinen Dienst: Auswahl kontrollieren und zuerst speichern; wirksam wird sie beim nächsten Backup.');
 my $info_export = info_button('Erstellt nach jedem Backup zusätzlich ein komprimiertes tar.gz-Archiv. Das ist praktisch zum Download, Kopieren oder Archivieren, benötigt aber zusätzlichen Speicherplatz und Zeit. Bei portablen Repository-Sicherungsständen ist dieser automatische Export nicht verfügbar und muss ausdrücklich deaktiviert werden: Einzelne Standordner enthalten nicht alle gemeinsam gespeicherten Datenblöcke.');
 my $info_mail = info_button('Sendet Mailbenachrichtigungen über die zentrale LoxBerry-Benachrichtigung. SMTP-Zugangsdaten werden nicht im Plugin gespeichert.');
@@ -1981,6 +1987,7 @@ print <<HTML;
 <li><strong>Backup-Ziel wählen und speichern:</strong> Verwende einen separaten Datenträger oder ein geeignetes NAS-Ziel. Ein Backup auf der Systemkarte schützt nicht vor deren Ausfall. Übernimm den Zielpfad, bestätige die Root-Freigabe und speichere; erst danach kann das Plugin Dateisystem, Mount und freien Speicher prüfen.</li>
 <li><strong>Datenquellen verstehen und auswählen:</strong> <code>/</code> enthält die normalen System- und Datenordner, etwa <code>/etc</code>, <code>/opt</code> und <code>/home</code>, soweit nicht ausgeschlossen. Standard bei Neuinstallation ist „Lokale Laufwerke; Netzfreigaben einzeln (empfohlen)“: eingebundene lokale Boot-/Datenlaufwerke sind enthalten, gewünschte Netzfreigaben musst du einzeln auswählen. Bestehende Einstellungen und Ausnahmen bleiben bei Updates erhalten. Die Zahl unter „System- und technische Einbindungen“ zählt nur Einbindungen, nicht sämtliche gesicherten Ordner. Der Infobutton neben Datenquellen erklärt die Auswahl.</li>
 <li><strong>Doppelte Backups vermeiden:</strong> Der Backup-Zielordner wird automatisch ausgeschlossen, nicht unbedingt der gesamte Backup-Datenträger. Weitere alte Backups, Images und Archivordner bewusst ausschliessen. Beispiel: <code>/media/usb/PI_Backup</code> ausschliessen, Nutzdaten auf <code>/media/usb/USB_Loxberry</code> eingeschlossen lassen. Nicht pauschal <code>/media</code> ausschliessen, wenn dort Nutzdaten liegen. Virtuelle Systembereiche wie <code>/proc</code>, <code>/sys</code>, <code>/dev</code>, <code>/run</code> und <code>/tmp</code> bleiben ausgeschlossen; ihre Häkchen sind für einen Restore nicht nötig.</li>
+<li><strong>Flüchtige Diagnoseprotokolle:</strong> Ab 1.2.4 werden reguläre Inhalte der verwalteten LoxBerry-Logbereiche standardmässig ausgelassen, auch nach einem Update. Verzeichnisse, Rechte und Links bleiben erhalten. Daten, Konfigurationen und dauerhafte Installationsnachweise werden nicht durch diese Regel ausgeschlossen. Unter „Skripte und Ausschlüsse“ kannst du die Diagnoseprotokolle ausdrücklich mitsichern; dann können Änderungen während der Kopie wieder Hinweise oder Fehler auslösen. Die Vorprüfung zeigt die Regel für alle Sicherungsverfahren.</li>
 <li><strong>Sicherungsverfahren passend zum Ziel wählen:</strong> <em>Linux-Dateisicherung</em> ist Standard für geeignete lokale Linux-Ziele. <em>Portable Sicherung</em> speichert Linux-Metadaten innerhalb des Backupformats und ist für NAS mit eingeschränkten Dateirechten vorgesehen; die eigene Zielprüfung bleibt erforderlich. Die beiden Spezialverfahren unter <em>Erweiterte Einstellungen</em> sind keine allgemeine NAS-Lösung. Ihre Infobuttons erklären die Voraussetzungen. Bei einem Fehler die einzelnen Prüfschritte lesen; kein Verfahren wird automatisch umgestellt. Der System-Restore einer portablen Sicherung erfolgt offline.</li>
 <li><strong>Sicherungsart und freien Platz beachten:</strong> <em>Vollbackup</em> speichert jeden Stand vollständig neu; bei Portable Sicherung entsteht ein eigenständiges Vollarchiv. <em>Platzsparende Sicherungsstände</em> verwenden vorhandene Daten wieder: bei der Dateisicherung über Hardlinks, bei Portable Sicherung über gemeinsame Datenblöcke in einem verschlüsselten Repository. Der erste Stand benötigt eine vollständige Basiskopie. Ein portables Vollarchiv selbst bleibt nicht inkrementell.</li>
 <li class="quick-guide-portable"><strong>Portable Sicherungsstände einrichten (nur bei Bedarf):</strong> Für portable Vollbackups ist diese Einrichtung nicht erforderlich.
@@ -2284,6 +2291,13 @@ $backup_target_picker
 <span>Vom Backup ausschliessen $info_excludes</span>
 <textarea data-role="none" name="rsync_extra_excludes" rows="5">$cfg_excludes</textarea>
 </label>
+
+<input data-role="none" type="hidden" name="runtime_logs_present" value="1">
+<label class="checkline wide">
+<input data-role="none" type="checkbox" name="include_runtime_logs" value="1"$cfg_include_runtime_logs>
+<span>Flüchtige LoxBerry-Diagnoseprotokolle mitsichern $info_runtime_logs</span>
+</label>
+<p class="muted wide">Geänderter Standard ab 1.2.4: Flüchtige Diagnoseprotokolle werden ausgelassen. Daten und Konfigurationen bleiben gesichert. Der genaue Umfang steht unter „Nächstes Backup prüfen“.</p>
 
 </div>
 

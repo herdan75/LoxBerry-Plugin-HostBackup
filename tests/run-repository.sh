@@ -22,4 +22,5 @@ for helper in "$repo"/bin/*.py; do install -m 0755 "$helper" "$runtime/${helper#
 python3 "$runtime/hostbackup-engine.py" install "$engine_cache" "$runtime"
 HOSTBACKUP_RESTIC_BINARY="$runtime/restic" HOSTBACKUP_REQUIRE_REPOSITORY_INTEGRATION=1 python3 "$repo/tests/test_repository.py"
 HOSTBACKUP_PORTABLE_RUNTIME="$runtime" HOSTBACKUP_REQUIRE_PORTABLE_INTEGRATION=1 python3 "$repo/tests/test_portable.py"
+HOSTBACKUP_LIVE_SOURCE_TEST=1 HOSTBACKUP_RESTIC_BINARY="$runtime/restic" python3 "$repo/tests/test_live_source_integration.py"
 HOSTBACKUP_PORTABLE_RUNTIME="$runtime" HOSTBACKUP_RUN_CIFS_INTEGRATION=1 bash "$repo/tests/run-cifs.sh"

@@ -130,6 +130,7 @@
     mail_notify_restore: 'Mail bei Restore', stop_targets: 'Zu stoppende Dienste/Container', create_export_after_backup: 'Export nach dem Backup',
     retention_mode: 'Aufbewahrungsart', keep_daily: 'Tagesstände', keep_weekly: 'Wochenstände', keep_monthly: 'Monatsstände',
     source_selection_json: 'Laufwerke und Netzfreigaben',
+    include_runtime_logs: 'Flüchtige LoxBerry-Diagnoseprotokolle mitsichern',
     log_retention_days: 'Log-Aufbewahrung', quarantine_retention_days: 'Quarantäne-Aufbewahrung', integrity_enabled: 'Regelmässige Integritätsprüfung', integrity_interval_days: 'Prüfintervall'
   };
   function byId(id) { return document.getElementById(id); }
