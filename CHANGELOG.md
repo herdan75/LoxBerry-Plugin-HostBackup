@@ -36,6 +36,11 @@ validiert werden.
   rsync-Code 24 ist keine allgemeine Freigabe für andere Kopierwerkzeuge.
 - Automatische Aufbewahrung erhält zusätzlich den letzten vollständig geprüften
   Stand je Host-/Formatlinie, wenn ein neuerer Stand Hinweise enthält.
+- Aus Primärquellen abgeleitete Randfälle: Dateilisteneinträge mit führendem
+  `#` oder `;` verlustfrei an rsync übergeben und NUL-Dateilisten nicht mit
+  zeilengetrennten Ausschlusslisten vermischen. Eindeutig nachgewiesene
+  Automount-/Datenträger-Schichten am selben Pfad unterstützen; mehrdeutige
+  Überdeckungen bleiben gesperrt.
 - Regressionen und reale Linux-Simulationen für Logrotation, wichtige fehlende
   Dateien, Metadaten-Restore, inkrementelle Wiederverwendung, private Mount-
   Namensräume und Installations-/Wiederanlaufpfade. Prüfgrenzen und Ergebnisse

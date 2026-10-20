@@ -228,6 +228,13 @@ def selected_paths(path, source_root):
             relative = value.decode("utf-8", errors="strict")
         except UnicodeDecodeError as exc:
             raise RepositoryError("Quellname kann nicht verlustfrei als UTF-8 gesichert werden.") from exc
+        # The common list uses one literal './' prefix so rsync cannot mistake
+        # leading '#' / ';' names for comments. Retain support for older lists,
+        # but never broadly normalise repeated dots, empty paths or traversal.
+        if relative.startswith("./"):
+            relative = relative[2:]
+            if not relative or relative == ".":
+                fail("Quellenauswahl enthaelt einen unsicheren oder nicht normalisierten Pfad.")
         posix = PurePosixPath(relative)
         if not relative or posix.is_absolute() or ".." in posix.parts or relative not in (".", str(posix)):
             fail("Quellenauswahl enthaelt einen unsicheren oder nicht normalisierten Pfad.")

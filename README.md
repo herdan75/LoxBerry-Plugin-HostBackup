@@ -9,13 +9,13 @@ Kanal und `main` bleiben auf **1.2.0**. Die Prüfung des Aktivierungscommits und
 des live abgefragten Feeds erfolgt getrennt von der bereits bestätigten
 Paketfreigabe. Nachweise stehen in den [Release Notes](docs/RELEASE-1.2.3.md).
 
-Dieser gemeinsame Korrekturstand enthält den automatischen Umgang mit veralteten
+Die bereits veröffentlichten Korrekturen aus 1.2.3 enthalten den Umgang mit veralteten
 Docker-Wiederanläufen, sicherere Dienstempfehlungen und die Journal-Korrektur für
 konkrete systemd-Namen einschliesslich Instanzen, `:`, `-`, `_`, Punkten und
 wörtlichen Backslashes wie in `dienst@geraet\x2d1.service`.
 Gespeicherte ungültige Stop-Auswahlen werden vor dem ersten Stopp mit einer
 verständlichen Fehlermeldung abgewiesen. Keine neuen Sicherungsmodi oder
-zusätzlichen Einstellungen. Für bestehende Installationen genügt das Update
+zusätzlichen Einstellungen waren dafür nötig. Für bestehende Installationen genügt das Update
 ohne vorherige Deinstallation; aktive Vorgänge vorher beenden lassen.
 Auch eine Neuinstallation ist möglich, mit anschliessender Einrichtung und
 Vorprüfung des eigenen Backup-Ziels.

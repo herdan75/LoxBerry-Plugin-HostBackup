@@ -196,6 +196,41 @@ class RepositoryUnitTests(unittest.TestCase):
         self.assertIn("permission denied", str(error.exception))
         self.assertEqual(self.adapter.list_committed(), [])
 
+    def test_nas_and_source_failures_preserve_previous_committed_backup(self):
+        """Restic exit 1/3 must not publish a candidate or retire a good stand.
+
+        These are deterministic protocol-level failure injections, not proof
+        of a particular NAS firmware's disconnect or quota behaviour.
+        """
+        self.enable()
+        first = self.commit("known-good")
+        before = self.adapter.list_committed()
+        original = self.adapter.runner
+        for index, (code, diagnostic) in enumerate((
+                (1, b"write pack: no space left on device"),
+                (1, b"write pack: input/output error"),
+                (1, b"open repository: permission denied"),
+                (3, b"source file disappeared while reading"))):
+            with self.subTest(code=code, diagnostic=diagnostic):
+                backup_id = "failed-" + str(index)
+
+                def failing(argv, stdin=None):
+                    result = original(argv, stdin)
+                    if "--files-from-raw" in argv:
+                        return code, result[1], diagnostic
+                    return result
+
+                self.adapter.runner = failing
+                self.fake.calls.clear()
+                with self.assertRaisesRegex(repository.RepositoryError, "Exit " + str(code)):
+                    self.candidate(backup_id)
+                self.assertFalse((self.adapter.state / ("candidate-" + backup_id + ".json")).exists())
+                self.assertEqual(self.adapter.list_committed(), before)
+                self.assertIn(first["data_snapshot_id"], self.fake.nodes)
+                self.assertFalse(any("forget" in call[0] or "prune" in call[0]
+                                     for call in self.fake.calls))
+                self.assertFalse(list(self.adapter.state.glob("selection-*")))
+
     def test_candidate_is_invisible_until_commit(self):
         self.enable()
         result = self.candidate()
@@ -375,13 +410,39 @@ class RepositoryUnitTests(unittest.TestCase):
         source = self.base / "source"
         source.mkdir()
         file_list = self.base / "files.nul"
-        for raw in (b".\0../secret\0", b".\0/absolute\0", b".\0double//slash\0", b".\0.\0", b".\0file"):
+        for raw in (b".\0../secret\0", b".\0/absolute\0", b".\0double//slash\0", b".\0.\0", b".\0file",
+                    b".\0./../secret\0", b".\0.//absolute\0", b".\0./double//slash\0",
+                    b".\0././file\0", b".\0./\0", b".\0./.\0"):
             file_list.write_bytes(raw)
             with self.subTest(raw=raw), self.assertRaises(repository.RepositoryError):
                 repository.selected_paths(file_list, source)
         (source / "normal").write_text("data")
         file_list.write_bytes(b".\0normal\0")
         self.assertEqual(len(repository.selected_paths(file_list, source)), 2)
+        file_list.write_bytes(b".\0./normal\0")
+        self.assertEqual(len(repository.selected_paths(file_list, source)), 2)
+        file_list.write_bytes(b".\0normal\0./normal\0")
+        with self.assertRaisesRegex(repository.RepositoryError, "Doppelter"):
+            repository.selected_paths(file_list, source)
+
+    def test_selection_accepts_literal_comment_and_option_names(self):
+        source = self.base / "literal-source"
+        source.mkdir()
+        names = ("#required", ";required", "--required", "name with spaces")
+        for name in names:
+            (source / name).write_bytes(b"required")
+        file_list = self.base / "literal.nul"
+        file_list.write_bytes(b".\0" + b"".join(("./" + name).encode() + b"\0" for name in names))
+        selected = repository.selected_paths(file_list, source)
+        self.assertEqual(set(selected), {source.as_posix(), *((source / name).as_posix() for name in names)})
+
+    def test_selection_non_utf8_name_fails_explicitly_without_silent_omission(self):
+        source = self.base / "byte-source"
+        source.mkdir()
+        file_list = self.base / "byte.nul"
+        file_list.write_bytes(b".\0./nonutf8-\xff\0")
+        with self.assertRaisesRegex(repository.RepositoryError, "UTF-8"):
+            repository.selected_paths(file_list, source)
 
 
 class RealLinuxRepositoryTests(unittest.TestCase):

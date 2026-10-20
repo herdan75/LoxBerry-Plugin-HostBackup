@@ -235,6 +235,16 @@ class FrozenMountVerificationTests(unittest.TestCase):
         selected = plan(mounts=self.mounts, excludes=["/cache/"])
         self.verify(selected, self.mounts + [self.volume("/cache/child", "40")])
 
+    def test_confirmed_directory_excludes_are_frozen_as_literal_not_wildcard_paths(self):
+        for target in ("/cache/a*b", "/cache/a?b", "/cache/a[b", "/cache/a\\*b"):
+            selected = plan(mounts=self.mounts, excludes=["/cache/*/"])
+            selected.confirmed_directory_excludes.add(target)
+            report = sources.verification_report(selected)
+            frozen = plan(mounts=self.mounts, excludes=report["frozen_excludes"])
+            with self.subTest(target=target):
+                self.assertTrue(frozen.excluded(target, False))
+                self.assertFalse(frozen.excluded("/cache/axxb", False))
+
     def test_selected_mount_disappearance_and_replacement_are_errors(self):
         selected = plan(mounts=self.mounts)
         for current in [self.mounts[:1] + self.mounts[2:],
@@ -312,6 +322,83 @@ class FrozenMountVerificationTests(unittest.TestCase):
             self.assertEqual(mounts[1]["fstype"], "cifs")
             self.assertEqual(plan(mounts=mounts).report()["status"], "error")
             self.assertEqual(plan(mounts=mounts, overrides={"/data": False}).report()["status"], "ok")
+
+    def automount_fixture(self, reverse=False, fstype="cifs", upper_parent="20", lower_parent="1", extra=""):
+        lines = ["1 0 8:1 / / rw - ext4 /dev/root rw\n",
+                 f"20 {lower_parent} 0:20 / /data rw - autofs systemd-1 rw\n",
+                 f"21 {upper_parent} 0:21 / /data rw - {fstype} data-source rw\n"]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "mountinfo"
+            path.write_text("".join(reversed(lines) if reverse else lines) + extra)
+            return sources.read_mounts(path)
+
+    def test_direct_automount_data_stack_uses_parent_chain_not_table_order(self):
+        for fstype in ("cifs", "nfs4", "ext4"):
+            forward = self.automount_fixture(fstype=fstype)
+            reverse = self.automount_fixture(reverse=True, fstype=fstype)
+            self.assertEqual(forward, reverse)
+            selected = plan(mounts=forward, overrides={"/data": True})
+            self.assertEqual(selected.report()["status"], "ok", selected.errors)
+            self.assertTrue(selected.included("/data/required-file"))
+            self.assertEqual(selected.mounts["/data"]["fstype"], fstype)
+            self.assertEqual(selected.mounts["/data"]["parent_id"], "20")
+            self.verify(selected, reverse)
+
+    def test_direct_automount_is_not_implicitly_selected_as_network_source(self):
+        selected = plan(mounts=self.automount_fixture())
+        self.assertEqual(selected.report()["status"], "ok")
+        self.assertFalse(selected.included("/data/remote-file"))
+        self.assertTrue(plan(mounts=self.automount_fixture(fstype="ext4")).included("/data/local-file"))
+
+    def test_direct_automount_data_disappearance_replacement_and_reparenting_fail(self):
+        original = self.automount_fixture()
+        selected = plan(mounts=original, overrides={"/data": True})
+        lower = original[1]["stack"][0]
+        disappeared = [original[0], {"path": "/data", "kind": "automount", **lower}]
+        replaced = json.loads(json.dumps(original))
+        replaced[1]["mount_id"] = "22"
+        replaced[1]["stack"][1]["mount_id"] = "22"
+        for current in (disappeared, replaced, self.automount_fixture(upper_parent="1")):
+            with self.subTest(current=current), self.assertRaisesRegex(sources.SourceError, "/data"):
+                self.verify(selected, current)
+
+    def test_direct_automount_requires_one_proven_chain_and_one_data_layer(self):
+        cases = [self.automount_fixture(upper_parent="1"), self.automount_fixture(lower_parent="21"),
+                 self.automount_fixture(extra="22 21 8:2 / /data rw - ext4 /dev/other rw\n"),
+                 self.automount_fixture(fstype="tmpfs")]
+        old = self.automount_fixture()
+        old[1].pop("parent_id")
+        for layer in old[1]["stack"]:
+            layer.pop("parent_id")
+        cases.append(old)
+        for mounts in cases:
+            with self.subTest(mounts=mounts):
+                self.assertEqual(plan(mounts=mounts, overrides={"/data": True}).report()["status"], "error")
+
+    def test_parent_id_is_validated_in_kernel_inventory_and_frozen_receipt(self):
+        with self.assertRaises(sources.SourceError):
+            self.automount_fixture(upper_parent="invalid")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "selection.json"
+            for mutate_layer in (False, True):
+                report = sources.verification_report(plan(mounts=self.automount_fixture(), overrides={"/data": True}))
+                item = report["mount_identity"][1]
+                (item["stack"][1] if mutate_layer else item)["parent_id"] = "invalid"
+                path.write_text(json.dumps(report))
+                with self.assertRaises(sources.SourceError):
+                    sources.verify_report(path)
+
+    def test_older_receipts_without_parent_ids_retain_existing_identity_checks(self):
+        current = [{**item, "parent_id": "0" if item["path"] == "/" else "1"} for item in self.mounts]
+        self.verify(plan(mounts=self.mounts), current)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "old.json"
+            path.write_text(json.dumps({"mount_identity": sources.mount_identity(self.mounts)}))
+            with patch.object(sources, "read_mounts", return_value=current):
+                sources.verify_report(path)
+            current[1]["root"] = "/different"
+            with patch.object(sources, "read_mounts", return_value=current), self.assertRaises(sources.SourceError):
+                sources.verify_report(path)
 
     def test_old_reports_without_scope_remain_strict(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -408,11 +495,62 @@ class EnumerationTests(unittest.TestCase):
 
     def test_local_list_includes_boot_and_usb_data_without_network_or_backup_target(self):
         entries = list(sources.enumerate_files(self.selection(), self.root))
-        self.assertIn("boot/data.txt", entries)
-        self.assertIn("media/usb/USB_Loxberry/data.txt", entries)
-        for forbidden in ["media/smb", "nfs", "tmp", "media/usb/PI_Backup"]:
+        self.assertIn("./boot/data.txt", entries)
+        self.assertIn("./media/usb/USB_Loxberry/data.txt", entries)
+        for forbidden in ["./media/smb", "./nfs", "./tmp", "./media/usb/PI_Backup"]:
             self.assertFalse(any(value == forbidden or value.startswith(forbidden + "/") for value in entries))
         self.assertEqual(len(entries), len(set(entries)))
+
+    def test_exact_list_prefixes_comment_and_option_names_without_directory_expansion(self):
+        names = ("#comment-looking-file", ";comment-looking-file", "--literal-option", "name with spaces")
+        for name in names:
+            (self.root / name).write_bytes(b"required payload")
+        (self.root / "#directory").mkdir()
+        (self.root / "#directory/required").write_bytes(b"nested payload")
+        entries = list(sources.enumerate_files(self.selection(), self.root))
+        self.assertEqual(entries.count("."), 1)
+        self.assertNotIn("./", entries)
+        self.assertTrue(all(entry == "." or entry.startswith("./") for entry in entries))
+        self.assertFalse(any(entry.endswith("/") for entry in entries))
+        for name in (*names, "#directory", "#directory/required"):
+            self.assertIn("./" + name, entries)
+        self.assertNotIn("./tmp/data.txt", entries)
+        self.assertNotIn("./media/usb/PI_Backup/data.txt", entries)
+
+    def test_files_cli_emits_only_literal_prefixed_nul_records(self):
+        (self.root / "#required").write_text("payload")
+        (self.root / ";required").write_text("payload")
+        enumerate_original = sources.enumerate_files
+        info = self.root.stat()
+        device = f"{os.major(info.st_dev)}:{os.minor(info.st_dev)}" if os.name == "posix" else "1:1"
+        mounts = [{**value, "device": device, "mount_id": str(index + 1)} for index, value in enumerate(self.mounts)]
+        selection = sources.SourcePlan({"policy": "local", "overrides": {}}, mounts)
+        output = io.BytesIO()
+        report = self.root / "frozen-report.json"
+        with patch.object(sources, "read_config", return_value={}), \
+             patch.object(sources, "read_mounts", return_value=mounts), \
+             patch.object(sources, "SourcePlan", return_value=selection), \
+             patch.object(sources, "enumerate_files", side_effect=lambda plan, omit_sockets=False: enumerate_original(plan, self.root, omit_sockets)), \
+             patch.object(sources.sys, "stdout", SimpleNamespace(buffer=output)):
+            result = sources.main(["files", "--config", "/fixture", "--report", str(report)])
+        self.assertEqual(result, 0)
+        self.assertEqual(output.getvalue()[-1:], b"\0")
+        entries = output.getvalue()[:-1].split(b"\0")
+        self.assertIn(b"./#required", entries)
+        self.assertIn(b"./;required", entries)
+        self.assertEqual(entries.count(b"."), 1)
+        self.assertTrue(all(entry == b"." or entry.startswith(b"./") for entry in entries))
+
+    @unittest.skipUnless(os.name == "posix", "POSIX filename bytes required")
+    def test_exact_list_preserves_newlines_and_non_utf8_filename_bytes(self):
+        names = (b"line\nname", b"carriage\rname", b"tab\tname", b"nonutf8-\xff", b" space ")
+        for name in names:
+            descriptor = os.open(os.fsencode(self.root) + b"/" + name, os.O_CREAT | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        entries = list(sources.enumerate_files(self.selection(), self.root))
+        encoded = b"".join(os.fsencode(value) + b"\0" for value in entries)
+        for name in names:
+            self.assertIn(b"./" + name, encoded.split(b"\0"))
 
     def test_runtime_payload_policy_keeps_directories_and_persistent_install_audit(self):
         runtime_dir = self.root / "opt/loxberry/log/plugins/new-plugin"
@@ -425,9 +563,9 @@ class EnumerationTests(unittest.TestCase):
                                       loxberry_home="/opt/loxberry")
         for _ in range(2):
             entries = list(sources.enumerate_files(selected, self.root))
-            self.assertIn("opt/loxberry/log/plugins/new-plugin", entries)
-            self.assertNotIn("opt/loxberry/log/plugins/new-plugin/arbitrary-runtime-name.bin", entries)
-            self.assertIn("opt/loxberry/log/system/install.log", entries)
+            self.assertIn("./opt/loxberry/log/plugins/new-plugin", entries)
+            self.assertNotIn("./opt/loxberry/log/plugins/new-plugin/arbitrary-runtime-name.bin", entries)
+            self.assertIn("./opt/loxberry/log/system/install.log", entries)
             self.assertEqual(selected.report()["runtime_content_policy"]["omitted_regular_files"], 1)
             self.assertEqual(selected.report()["status"], "ok")
 
@@ -446,7 +584,7 @@ class EnumerationTests(unittest.TestCase):
                                       loxberry_home="/opt/loxberry")
         with patch.object(Path, "lstat", disappeared):
             entries = list(sources.enumerate_files(selected, self.root))
-        self.assertNotIn("opt/loxberry/log/plugins/new-plugin/rotating.log", entries)
+        self.assertNotIn("./opt/loxberry/log/plugins/new-plugin/rotating.log", entries)
         self.assertEqual(selected.report()["runtime_content_policy"]["omitted_regular_files"], 1)
         required = sources.SourcePlan({"policy": "local", "overrides": {}}, self.mounts,
                                      loxberry_home="/opt/loxberry", include_runtime_logs=True)
@@ -472,7 +610,7 @@ class EnumerationTests(unittest.TestCase):
         runtime.parent.mkdir(parents=True)
         runtime.write_text("diagnostic")
         selected = self.selection()
-        self.assertIn("opt/loxberry/log/plugins/plugin/runtime.log", list(sources.enumerate_files(selected, self.root)))
+        self.assertIn("./opt/loxberry/log/plugins/plugin/runtime.log", list(sources.enumerate_files(selected, self.root)))
         self.assertNotIn("runtime_content_policy", selected.report())
 
     def test_socket_omission_is_opt_in_lstat_only_and_keeps_other_special_types(self):
@@ -498,9 +636,9 @@ class EnumerationTests(unittest.TestCase):
             original_entries = list(sources.enumerate_files(selection, self.root))
             self.assertNotIn("omitted_runtime_sockets", selection.report())
             filtered = list(sources.enumerate_files(selection, self.root, omit_sockets=True))
-        self.assertEqual(set(original_entries) - set(filtered), {"var/lib/fixture/runtime.sock"})
+        self.assertEqual(set(original_entries) - set(filtered), {"./var/lib/fixture/runtime.sock"})
         for name in kinds.keys() - {"runtime.sock"}:
-            self.assertIn("var/lib/fixture/" + name, filtered)
+            self.assertIn("./var/lib/fixture/" + name, filtered)
         omitted = selection.report()["omitted_runtime_sockets"]
         self.assertEqual(omitted["count"], 1)
         self.assertEqual(omitted["paths"], ["/var/lib/fixture/runtime.sock"])
@@ -612,11 +750,11 @@ class EnumerationTests(unittest.TestCase):
             os.mkfifo(directory / "fifo")
             (directory / "socket-link").symlink_to("runtime.sock")
             selection = self.selection()
-            self.assertIn("var/lib/fixture/runtime.sock", list(sources.enumerate_files(selection, self.root)))
+            self.assertIn("./var/lib/fixture/runtime.sock", list(sources.enumerate_files(selection, self.root)))
             entries = list(sources.enumerate_files(selection, self.root, omit_sockets=True))
-        self.assertNotIn("var/lib/fixture/runtime.sock", entries)
-        self.assertIn("var/lib/fixture/fifo", entries)
-        self.assertIn("var/lib/fixture/socket-link", entries)
+        self.assertNotIn("./var/lib/fixture/runtime.sock", entries)
+        self.assertIn("./var/lib/fixture/fifo", entries)
+        self.assertIn("./var/lib/fixture/socket-link", entries)
         self.assertEqual(selection.report()["omitted_runtime_sockets"]["paths"], ["/var/lib/fixture/runtime.sock"])
 
     def test_selected_share_does_not_scan_autofs_parent_or_siblings(self):
@@ -632,7 +770,7 @@ class EnumerationTests(unittest.TestCase):
 
         with patch.object(sources.os, "scandir", side_effect=guarded):
             entries = list(sources.enumerate_files(self.selection({"/media/smb/nas": True}), self.root))
-        self.assertIn("media/smb/nas/data.txt", entries)
+        self.assertIn("./media/smb/nas/data.txt", entries)
         self.assertNotIn("media/smb/other", scanned)
         self.assertNotIn("media/smb", scanned)
 
@@ -648,8 +786,8 @@ class EnumerationTests(unittest.TestCase):
         selected_plan = plan(overrides={"/shares/4": True}, mounts=mounts, excludes=["/media/usb/PI_Backup", "/tmp"])
         default_entries = list(sources.enumerate_files(default_plan, self.root))
         selected_entries = list(sources.enumerate_files(selected_plan, self.root))
-        self.assertFalse(any(path.startswith("shares/") for path in default_entries))
-        self.assertEqual([path for path in selected_entries if path.startswith("shares/")], ["shares/4", "shares/4/payload.bin"])
+        self.assertFalse(any(path.startswith("./shares/") for path in default_entries))
+        self.assertEqual([path for path in selected_entries if path.startswith("./shares/")], ["./shares/4", "./shares/4/payload.bin"])
 
         def byte_count(entries):
             return sum((self.root / path).stat().st_size for path in entries if (self.root / path).is_file())
@@ -667,6 +805,55 @@ class EnumerationTests(unittest.TestCase):
         with patch.object(Path, "lstat", guarded):
             list(sources.enumerate_files(self.selection(), self.root))
 
+    def test_existing_regular_file_bind_is_not_hidden_by_directory_only_exclude(self):
+        mounts = self.mounts + [mount("/etc/data.txt")]
+        selected = plan(mounts=mounts, excludes=["/etc/data.txt/"])
+        original = Path.lstat
+
+        def guarded(path):
+            if path == self.root / "media/smb":
+                raise AssertionError("Default-denied automount must remain untouched")
+            return original(path)
+
+        with patch.object(Path, "lstat", guarded):
+            entries = list(sources.enumerate_files(selected, self.root))
+        self.assertIn("./etc/data.txt", entries)
+        self.assertTrue(selected.included("/etc/data.txt"))
+        self.assertNotIn("/etc/data.txt", selected.confirmed_directory_excludes)
+
+    def test_actual_directory_mount_exclude_is_confirmed_without_listing_and_frozen(self):
+        target = "/media/usb/USB_Loxberry"
+        device = (f"{os.major(self.root.stat().st_dev)}:{os.minor(self.root.stat().st_dev)}"
+                  if os.name == "posix" else "8:1")
+        mounts = [{**item, "device": device, "mount_id": str(index + 1), "root": "/"}
+                  for index, item in enumerate(self.mounts + [mount("/media/usb", "autofs")])]
+        selected = plan(mounts=mounts, excludes=[target + "/", "/media/usb/PI_Backup"])
+        self.assertTrue(selected.selected_descendants("/media/usb"))
+        original = os.scandir
+
+        def guarded(path):
+            if Path(path) == self.root / target.lstrip("/"):
+                raise AssertionError("An excluded directory must not be enumerated")
+            return original(path)
+
+        with patch.object(sources.os, "scandir", side_effect=guarded):
+            entries = list(sources.enumerate_files(selected, self.root))
+        self.assertFalse(any(entry.startswith("." + target) for entry in entries))
+        self.assertIn(target, selected.confirmed_directory_excludes)
+        self.assertFalse(selected.included(target))
+        self.assertFalse(selected.selected_descendants("/media/usb"))
+        current = [item for item in mounts if item["path"] not in (target, "/media/usb")]
+        sources.verify_mounts(selected, current)
+        report = sources.verification_report(selected)
+        self.assertIn(target, report["frozen_excludes"])
+        volume = next(item for item in report["volumes"] if item["path"] == target)
+        self.assertFalse(volume["included"])
+        self.assertTrue(volume["forced_excluded"])
+        report_path = self.root / "directory-exclude-report.json"
+        sources.write_report(report_path, report)
+        with patch.object(sources, "read_mounts", return_value=current):
+            sources.verify_report(report_path)
+
     def test_type_independent_excluded_file_is_not_statted_during_rotation(self):
         original = Path.lstat
 
@@ -678,7 +865,7 @@ class EnumerationTests(unittest.TestCase):
         selected = plan(mounts=self.mounts, excludes=["/etc/data.txt"])
         with patch.object(Path, "lstat", vanished):
             entries = list(sources.enumerate_files(selected, self.root))
-        self.assertNotIn("etc/data.txt", entries)
+        self.assertNotIn("./etc/data.txt", entries)
 
     def test_known_local_usb_under_autofs_is_routed_without_listing_namespace(self):
         self.mounts.append(mount("/media/usb", "autofs"))
@@ -691,8 +878,8 @@ class EnumerationTests(unittest.TestCase):
 
         with patch.object(sources.os, "scandir", side_effect=guarded):
             entries = list(sources.enumerate_files(self.selection(), self.root))
-        self.assertIn("media/usb/USB_Loxberry/data.txt", entries)
-        self.assertNotIn("media/usb/PI_Backup", entries)
+        self.assertIn("./media/usb/USB_Loxberry/data.txt", entries)
+        self.assertNotIn("./media/usb/PI_Backup", entries)
 
     def test_unreadable_directory_fails_instead_of_silent_incomplete_backup(self):
         original = os.scandir
@@ -721,8 +908,8 @@ class EnumerationTests(unittest.TestCase):
     def test_symlinks_are_listed_but_never_followed(self):
         (self.root / "etc/link").symlink_to(self.root / "nfs", target_is_directory=True)
         entries = list(sources.enumerate_files(self.selection(), self.root))
-        self.assertIn("etc/link", entries)
-        self.assertFalse(any(value.startswith("etc/link/") for value in entries))
+        self.assertIn("./etc/link", entries)
+        self.assertFalse(any(value.startswith("./etc/link/") for value in entries))
 
     @unittest.skipUnless(os.name == "posix", "Real symlinks required")
     def test_selected_share_reached_through_symlink_is_rejected(self):
@@ -745,6 +932,10 @@ class EnumerationTests(unittest.TestCase):
         os.mkfifo(self.root / "etc/fifo")
         selection = self.selection({"/media/smb/nas": True})
         entries = list(sources.enumerate_files(selection, self.root))
+        # Frozen membership, not a later recursive rescan: newly created root
+        # files and selected-directory siblings must remain outside this copy.
+        (self.root / "late-root-file").write_text("not in frozen selection")
+        (self.root / "etc/late-sibling").write_text("not in frozen selection")
         with tempfile.TemporaryDirectory() as output:
             output = Path(output)
             file_list = output / "files.list"
@@ -759,16 +950,20 @@ class EnumerationTests(unittest.TestCase):
             self.assertTrue((destination / "media/smb/nas/data.txt").is_file())
             self.assertFalse((destination / "media/smb/other").exists())
             self.assertFalse((destination / "media/usb/PI_Backup").exists())
+            self.assertFalse((destination / "late-root-file").exists())
+            self.assertFalse((destination / "etc/late-sibling").exists())
             archive = output / "rootfs.tar"
             subprocess.run(["tar", "--no-recursion", "--null", "-C", str(self.root), "-cpf", str(archive), "--files-from=" + str(file_list)], check=True, capture_output=True)
             with tarfile.open(archive) as handle:
                 names = handle.getnames()
                 self.assertEqual(len(names), len(set(names)))
-                self.assertIn("media/smb/nas/data.txt", names)
-                self.assertNotIn("media/smb/other", names)
-                self.assertTrue(handle.getmember("etc/hardlink").islnk())
-                self.assertTrue(handle.getmember("etc/symlink").issym())
-                self.assertTrue(handle.getmember("etc/fifo").isfifo())
+                self.assertIn("./media/smb/nas/data.txt", names)
+                self.assertNotIn("./media/smb/other", names)
+                self.assertNotIn("./late-root-file", names)
+                self.assertNotIn("./etc/late-sibling", names)
+                self.assertTrue(handle.getmember("./etc/hardlink").islnk())
+                self.assertTrue(handle.getmember("./etc/symlink").issym())
+                self.assertTrue(handle.getmember("./etc/fifo").isfifo())
 
 
 if __name__ == "__main__":

@@ -231,8 +231,8 @@ for included in (False, True):
     name = "selected" if included else "local-only"
     plan = sources.SourcePlan({"policy": "local", "overrides": {"/network": True} if included else {}}, mounts)
     paths = list(sources.enumerate_files(plan, root=source))
-    assert "local.txt" in paths, paths
-    assert ("network/cifs-sentinel.txt" in paths) == included, paths
+    assert "./local.txt" in paths, paths
+    assert ("./network/cifs-sentinel.txt" in paths) == included, paths
     listing = base / (name + ".nul")
     listing.write_bytes(b"".join(os.fsencode(path) + b"\0" for path in paths))
     destination = base / (name + "-copy")
@@ -246,6 +246,6 @@ for included in (False, True):
                     "--verbatim-files-from", "--files-from=" + str(listing)], check=True)
     with tarfile.open(archive_path) as container:
         names = container.getnames()
-    assert ("network/cifs-sentinel.txt" in names) == included, names
+    assert ("./network/cifs-sentinel.txt" in names) == included, names
 print(json.dumps({"cifs_integration": "passed", "source_selection_real_cifs": "passed", "network_compatible": network, "portable_archive": archive}, indent=2))
 PY

@@ -13,6 +13,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import stat
 import subprocess
@@ -109,6 +110,16 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
         # Large enough for concurrent mutations without wasting network bandwidth.
         self.payload = self.source / "000-payload.bin"
         self.payload.write_bytes(b"live-source-fixture\n" * (1024 * 1024))
+        # These are ROOT-level names: rsync treats leading # and ; in an
+        # unprefixed files-from list as comments even when --from0 is present.
+        self.edge_files = {}
+        for name in ("#file", ";file", "--option-looking", "--checkpoint-action=exec=false",
+                     " leading and trailing whitespace ", "line\nbreak\tname"):
+            path = self.source / name
+            payload = b"required filename edge: " + os.fsencode(name) + b"\n"
+            path.write_bytes(payload)
+            path.chmod(0o640)
+            self.edge_files[path] = payload
         self.file_list = self.base / "selection.nul"
         self.plan = None
         self.names = None
@@ -170,10 +181,16 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
             loxberry_home="/opt/loxberry", include_runtime_logs=include_runtime_logs)
         if enumerate_during_rotation:
             with self.rotating_logs():
-                self.names = list(sources.enumerate_files(self.plan, root=self.source))
+                raw_names = list(sources.enumerate_files(self.plan, root=self.source))
         else:
-            self.names = list(sources.enumerate_files(self.plan, root=self.source))
-        self.file_list.write_bytes(b"".join(os.fsencode(path) + b"\0" for path in self.names))
+            raw_names = list(sources.enumerate_files(self.plan, root=self.source))
+        self.assertIn(".", raw_names)
+        self.assertNotIn("./", raw_names)  # rsync would expand trailing-slash directories.
+        self.assertTrue(all(name == "." or name.startswith("./") for name in raw_names), raw_names)
+        self.names = [name[2:] if name.startswith("./") else name for name in raw_names]
+        self.file_list.write_bytes(b"".join(os.fsencode(path) + b"\0" for path in raw_names))
+        for path in self.edge_files:
+            self.assertIn("./" + str(path.relative_to(self.source)), raw_names)
         self.assertIn(str(self.important.relative_to(self.source)), self.names)
         self.assertIn(str(self.audit.relative_to(self.source)), self.names)
         self.assertIn(str(self.runtime.relative_to(self.source)), self.names)
@@ -225,11 +242,17 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
                 raise errors[0]
             self.assertGreaterEqual(len(iterations), 1)
 
-    def tar_backup(self):
+    def add_non_utf8_filename(self):
+        path = self.source / os.fsdecode(b"raw-\xff-required-name")
+        payload = b"required byte-name content\n"
+        path.write_bytes(payload)
+        self.edge_files[path] = payload
+
+    def tar_backup(self, extra_options=()):
         archive = self.base / "rootfs.tar"
         result = command([
             "tar", "--format=pax", "--numeric-owner", "--acls", "--xattrs", "--xattrs-include=*",
-            "--selinux", "--sparse", "-C", self.source, "-cpf", archive,
+            "--selinux", "--sparse", *extra_options, "-C", self.source, "-cpf", archive,
             "--no-recursion", "--null", "--verbatim-files-from", "--files-from=" + str(self.file_list),
         ], check=False)
         return result, archive
@@ -255,6 +278,8 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
         for current, dirs, files in os.walk(restored, followlinks=False):
             actual.update(str((Path(current) / name).relative_to(restored)) for name in dirs + files)
         self.assertEqual(actual, expected)
+        for original, payload in self.edge_files.items():
+            self.assertEqual((restored / original.relative_to(self.source)).read_bytes(), payload)
         for original in (self.important, self.audit, self.capability, self.payload, self.sparse):
             target = restored / original.relative_to(self.source)
             self.assertEqual(target.read_bytes(), original.read_bytes())
@@ -278,6 +303,7 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
                          {restored / self.link.relative_to(self.source)})
 
     def test_gnu_tar_rotation_copy_and_metadata_restore(self):
+        self.add_non_utf8_filename()
         self.freeze(enumerate_during_rotation=True)
         with self.rotating_logs():
             result, archive = self.tar_backup()
@@ -291,6 +317,7 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
         self.assert_restored(restored)
 
     def test_rsync_rotation_copy_and_metadata_restore(self):
+        self.add_non_utf8_filename()
         self.freeze(enumerate_during_rotation=True)
         with self.rotating_logs():
             result, destination = self.rsync_backup()
@@ -309,6 +336,67 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
         for original in (self.important, self.payload, self.audit):
             relative = original.relative_to(self.source)
             self.assertEqual((first / relative).stat().st_ino, (second / relative).stat().st_ino)
+
+    def test_rsync_incremental_changes_preserve_previous_data_mode_and_acl(self):
+        self.freeze()
+        result, first = self.rsync_backup("first")
+        self.assert_success(result)
+        relative = self.important.relative_to(self.source)
+        first_file = first / relative
+        first_content = first_file.read_bytes()
+        first_mode = stat.S_IMODE(first_file.stat().st_mode)
+        first_acl = command(["getfacl", "-cpn", first_file]).stdout
+        first_xattrs = {key: os.getxattr(first_file, key) for key in os.listxattr(first_file)}
+        self.important.write_bytes(b"new required persistent database content after first snapshot\n")
+        self.important.chmod(0o600)
+        command(["setfacl", "-m", "u:65534:rw-", self.important])
+        self.freeze()
+        with self.rotating_logs():
+            result, second = self.rsync_backup("second", first)
+        self.assert_success(result)
+        self.assert_restored(second)
+        self.assertNotEqual((second / relative).stat().st_ino, first_file.stat().st_ino)
+        self.assertEqual(first_file.read_bytes(), first_content)
+        self.assertEqual(stat.S_IMODE(first_file.stat().st_mode), first_mode)
+        self.assertEqual(command(["getfacl", "-cpn", first_file]).stdout, first_acl)
+        self.assertEqual({key: os.getxattr(first_file, key) for key in os.listxattr(first_file)}, first_xattrs)
+        for unchanged in (self.payload, self.audit, *self.edge_files):
+            name = unchanged.relative_to(self.source)
+            self.assertEqual((first / name).stat().st_ino, (second / name).stat().st_ino)
+
+    def test_gnu_tar_required_file_changed_during_read_is_not_accepted(self):
+        # The first substantial regular file is 32 MiB. Checkpoint 1024 is at
+        # 10 MiB of archive output, so the mutation happens during its read,
+        # not before enumeration/open or after the file has been copied.
+        changing = self.source / "000!-changing-required.data"
+        changing.write_bytes(b"persistent-changing-data\n" * (1400 * 1024))
+        marker = self.base / "checkpoint-mutation.json"
+        script = self.base / "checkpoint-mutation.py"
+        script.write_text(
+            "import json, os, pathlib, sys\n"
+            "target, marker = map(pathlib.Path, sys.argv[1:])\n"
+            "if not marker.exists():\n"
+            "    before = target.stat()\n"
+            "    with target.open('ab') as handle:\n"
+            "        handle.write(b'changed during required-data read\\n')\n"
+            "        handle.flush()\n"
+            "        os.fsync(handle.fileno())\n"
+            "    os.utime(target, ns=(before.st_atime_ns, before.st_mtime_ns + 3000000000))\n"
+            "    marker.write_text(json.dumps({'checkpoint': os.environ.get('TAR_CHECKPOINT'), "
+            "'before': before.st_size, 'after': target.stat().st_size}))\n",
+            encoding="utf-8")
+        self.freeze()
+        prior = self.names[:self.names.index(changing.name)]
+        self.assertLess(sum((self.source / name).stat().st_size for name in prior
+                            if (self.source / name).is_file()), 1024 * 1024)
+        action = "exec=" + " ".join(shlex.quote(str(path)) for path in (sys.executable, script, changing, marker))
+        result, _ = self.tar_backup(("--checkpoint=1024", "--checkpoint-action=" + action))
+        self.assertEqual(result.returncode, 1, result.stderr.decode(errors="replace"))
+        self.assertIn(b"000!-changing-required.data", result.stderr)
+        self.assertIn(b"file changed as we read it", result.stderr)
+        mutation = json.loads(marker.read_text())
+        self.assertEqual(mutation["checkpoint"], "1024")
+        self.assertGreater(mutation["after"], mutation["before"])
 
     def test_gnu_tar_missing_persistent_data_is_not_accepted(self):
         self.freeze()
@@ -392,6 +480,17 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
         self.assertEqual(adapter.list_committed(), [])
         self.assertFalse((adapter.state / "candidate-missing.json").exists())
 
+    def test_repository_non_utf8_required_name_fails_explicitly_without_publication(self):
+        # Repository manifests intentionally require lossless UTF-8 names.
+        # Unlike tar/rsync, do not claim byte-name support or silently omit data.
+        self.add_non_utf8_filename()
+        self.freeze()
+        adapter = self.repository_fixture()
+        with self.assertRaisesRegex(repository.RepositoryError, "UTF-8"):
+            adapter.backup("byte-name", self.file_list, "live-source-fixture", self.source)
+        self.assertEqual(adapter.list_committed(), [])
+        self.assertFalse((adapter.state / "candidate-byte-name.json").exists())
+
 
 def mount_worker(scenario):
     """Runs only after unshare; namespace teardown is the final safety net."""
@@ -424,14 +523,42 @@ def mount_worker(scenario):
 
         excluded = scenario.startswith("excluded-")
         mount(backing, target)
+        if scenario == "selected-existing-file-directory-exclude":
+            mount(replacement / "content", target / "content")
+        peer = None
+        if scenario == "selected-propagated-from-excluded-peer":
+            # Shared propagation is created ONLY inside the private namespace.
+            # A mount below an excluded alias must still fail if it propagates
+            # onto a selected alias of the same backing tree.
+            command(["mount", "--make-shared", target])
+            peer = fixture / "excluded-peer"
+            peer.mkdir()
+            mount(target, peer)
         initial = sources.read_mounts()
         info = next(item for item in initial if item["path"] == str(target))
         if info["kind"] != "local":
             raise AssertionError("Mount fixture must reside on a local filesystem: " + str(info))
         selection = {"policy": "local", "overrides": {str(target): not excluded}}
-        plan = sources.SourcePlan(selection, initial)
+        if peer is not None:
+            selection["overrides"][str(peer)] = False
+        directory_exclude_scenarios = {"selected-file-directory-exclude", "selected-existing-file-directory-exclude"}
+        excludes = [str(target / "content") + "/"] if scenario in directory_exclude_scenarios else []
+        plan = sources.SourcePlan(selection, initial, excludes=excludes)
         if plan.errors:
             raise AssertionError(plan.errors)
+        if excludes and plan.excluded(str(target / "content"), False):
+            raise AssertionError("A directory-only exclude incorrectly excluded required regular data")
+        if scenario == "selected-existing-file-directory-exclude":
+            if not plan.included(str(target / "content")):
+                raise AssertionError("Existing required file bind was incorrectly omitted")
+            # Translate only the two fixture mount paths for a real filesystem
+            # walk rooted at target. The test must never enumerate host /.
+            file_mount = next(item for item in initial if item["path"] == str(target / "content"))
+            walk_plan = sources.SourcePlan({"policy": "local", "overrides": {}},
+                                          [{**info, "path": "/"}, {**file_mount, "path": "/content"}],
+                                          excludes=["/content/"])
+            if "./content" not in list(sources.enumerate_files(walk_plan, root=target)):
+                raise AssertionError("Directory-only exclude silently removed a real bound regular file")
         report = fixture / "selection.json"
         report.write_text(json.dumps(sources.verification_report(plan)))
         sources.verify_report(report)
@@ -445,10 +572,18 @@ def mount_worker(scenario):
             mount(replacement, nested)
         elif scenario in {"excluded-stacked", "selected-stacked"}:
             mount(replacement, target)
-        elif scenario != "selected-unchanged":
+        elif scenario in {"selected-file-shadow", "selected-file-directory-exclude"}:
+            mount(replacement / "content", target / "content")
+        elif scenario == "selected-propagated-from-excluded-peer":
+            mount(replacement, peer / "nested")
+            propagated = [item for item in sources.read_mounts() if item["path"] == str(nested)]
+            if not propagated:
+                raise AssertionError("Fixture did not produce real shared-peer mount propagation")
+            mounted.append(nested)
+        elif scenario not in {"selected-unchanged", "selected-existing-file-directory-exclude"}:
             raise AssertionError("Unknown mount test scenario")
 
-        if excluded or scenario == "selected-unchanged":
+        if excluded or scenario in {"selected-unchanged", "selected-existing-file-directory-exclude"}:
             sources.verify_report(report)
             if excluded:
                 if plan.included(str(target / "content")):
@@ -462,6 +597,9 @@ def mount_worker(scenario):
             else:
                 raise AssertionError("Relevant source mount change was accepted: " + scenario)
     finally:
+        # Break fixture-only shared peers before unmounting each recorded alias.
+        # Otherwise unmount propagation could invalidate a later cleanup entry.
+        command(["mount", "--make-rprivate", "/"])
         clean = True
         for destination in reversed(mounted):
             result = command(["umount", "--", destination], check=False)
@@ -506,6 +644,18 @@ class LiveMountScopeIntegrationTests(OptInLinuxCase):
 
     def test_stacked_selected_mount_is_rejected(self):
         self.scenario("selected-stacked")
+
+    def test_file_bind_shadowing_required_regular_file_is_rejected(self):
+        self.scenario("selected-file-shadow")
+
+    def test_directory_only_exclude_cannot_hide_file_bind_shadow(self):
+        self.scenario("selected-file-directory-exclude")
+
+    def test_existing_file_bind_is_not_omitted_by_directory_only_exclude(self):
+        self.scenario("selected-existing-file-directory-exclude")
+
+    def test_excluded_peer_propagating_over_selected_data_is_rejected(self):
+        self.scenario("selected-propagated-from-excluded-peer")
 
 
 class LiveRamlogCopyIntegrationTests(OptInLinuxCase):

@@ -216,7 +216,9 @@ assert_mock_copy_scope() {
   done
   [ "$from0:$recursive:$dirs" = true:true:true ] || return 99
   [[ "$files" == "$RESTART_JOURNAL_DIR/backup-"*.log/source-files.nul ]] || return 99
-  [ "$excludes" = "${files%/source-files.nul}/source-excludes.txt" ] || return 99
+  # Selection already applied the private newline-delimited exclusions.
+  # --from0 must not reinterpret that file as a single NUL-delimited rule.
+  [ -z "$excludes" ] || return 99
   cmp -- "$files" <(printf '.\0fixture.txt\0') || return 99
 }
 current_mount_value() { echo ext4; }

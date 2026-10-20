@@ -326,13 +326,21 @@ rsync() {
   [ -f "$TEST_ROOT/services-stopped" ] && [ ! -f "$TEST_ROOT/services-restarted" ] || return 94
   if [ "$MUTATE_PUBLIC_EXCLUDES" = true ]; then
     printf '/etc\n' > "$TEST_ROOT/target/vanished-test/rsync-excludes.txt"
-    local option private_excludes=''
+    local option private_excludes='' files='' from0=false no_recursive=false dirs=false
     for option in "$@"; do
-      case "$option" in --exclude-from=*) private_excludes="${option#--exclude-from=}" ;; esac
+      case "$option" in
+        --exclude-from=*) private_excludes="${option#--exclude-from=}" ;;
+        --files-from=*) files="${option#--files-from=}" ;;
+        --from0) from0=true ;;
+        --no-recursive) no_recursive=true ;;
+        --dirs) dirs=true ;;
+      esac
     done
-    [ "$private_excludes" = "$RESTART_JOURNAL_DIR/backup-vanished-test.log/source-excludes.txt" ] || return 94
-    [ "$(command cat "$private_excludes")" = $'/proc\n/sys\n/dev\n/run\n/tmp' ] || return 94
-    event private-excludes-used
+    [ -z "$private_excludes" ] && [ "$from0:$no_recursive:$dirs" = true:true:true ] || return 94
+    [ "$files" = "$RESTART_JOURNAL_DIR/backup-vanished-test.log/source-files.nul" ] || return 94
+    cmp -- "$files" <(printf '.\0./etc/fixture.txt\0') || return 94
+    [ "$(command cat "$RESTART_JOURNAL_DIR/backup-vanished-test.log/source-excludes.txt")" = $'/proc\n/sys\n/dev\n/run\n/tmp' ] || return 94
+    event private-frozen-list-used
   fi
   event copy
   mkdir -p "$TEST_ROOT/target/vanished-test/rootfs/etc" "$TEST_ROOT/target/vanished-test/rootfs/opt/loxberry" "$TEST_ROOT/target/vanished-test/rootfs/var/lib"
@@ -366,14 +374,22 @@ python3() {
     case "${2:-}" in
       files)
         shift 2
+        local private_excludes=''
         while [ "$#" -gt 0 ]; do
+          if [ "$1" = --excludes ]; then
+            private_excludes="$2"
+            [ "$private_excludes" = "$RESTART_JOURNAL_DIR/backup-vanished-test.log/source-excludes.txt" ] || return 94
+            [ "$(command cat "$private_excludes")" = $'/proc\n/sys\n/dev\n/run\n/tmp' ] || return 94
+          fi
           if [ "$1" = --report ]; then
             printf '%s\n' '{"status":"ok","selection":{"policy":"local","overrides":{}},"runtime_content_policy":{"version":1,"omitted_regular_files":1}}' > "$2"
             break
           fi
           shift
         done
-        printf '.\0etc/fixture.txt\0'
+        [ -n "$private_excludes" ] || return 94
+        event private-source-excludes-used
+        printf '.\0./etc/fixture.txt\0'
         ;;
       verify)
         event source-verify
@@ -506,7 +522,8 @@ class RsyncVanishedWorkerTests(unittest.TestCase):
     def test_public_nas_excludes_cannot_change_private_copy_boundaries(self):
         root, _, events, manifest = self.worker(code=0, mutate_public_excludes=True)
         self.assertEqual(manifest["status"], "complete")
-        self.assertIn("private-excludes-used", events)
+        self.assertIn("private-source-excludes-used", events)
+        self.assertIn("private-frozen-list-used", events)
         self.assertTrue((root / "target/vanished-test/rootfs/etc/fixture.txt").is_file())
 
     def test_diagnostic_capture_collision_fails_without_overwriting_prior_evidence(self):

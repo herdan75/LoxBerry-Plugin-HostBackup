@@ -3149,12 +3149,17 @@ create_backup() {
     log "rsync live output follows. Large files or slow storage can keep one line active for a while." | tee -a "$log_file"
     if [ "$selection_active" = true ]; then
       rsync_opts+=(--from0 --files-from="$source_list" --no-recursive --dirs)
+      # Selection/excludes were already applied to this frozen exact list.
+      # --from0 also changes --exclude-from parsing to NUL; feeding the saved
+      # newline audit copy again would silently change its filter semantics.
+    else
+      rsync_opts+=(--exclude-from="$exclude_file")
     fi
     # Preserve complete diagnostics before source verification and cleanup.
     # No async tee/process substitution; progress on stdout remains live.
     rsync_stderr="$state_dir/rsync-stderr.log"
     if (umask 077; set -o noclobber; : > "$rsync_stderr"); then
-      LC_ALL=C rsync "${metadata_opts[@]}" --delete "${rsync_opts[@]}" --exclude-from="$exclude_file" / "$(rsync_destination "$mode" "$rootfs/")" 2> "$rsync_stderr" | tee -a "$log_file"
+      LC_ALL=C rsync "${metadata_opts[@]}" --delete "${rsync_opts[@]}" / "$(rsync_destination "$mode" "$rootfs/")" 2> "$rsync_stderr" | tee -a "$log_file"
       copy_pipeline=("${PIPESTATUS[@]}")
       rsync_status=${copy_pipeline[0]}
       log "rsync process exit status: $rsync_status" | tee -a "$log_file"
