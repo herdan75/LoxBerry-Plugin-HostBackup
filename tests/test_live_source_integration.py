@@ -660,6 +660,12 @@ def mount_worker(scenario):
 
         excluded = scenario.startswith("excluded-")
         mount(backing, target)
+        namespace_target = target / "namespace-handle"
+        if scenario == "nsfs-excluded-churn":
+            namespace_target.write_bytes(b"")
+            # Binding a namespace handle does not change that namespace. Its
+            # mount exists only in this already-private mount namespace.
+            mount("/proc/self/ns/net", namespace_target)
         if scenario == "selected-existing-file-directory-exclude":
             mount(replacement / "content", target / "content")
         peer = None
@@ -683,6 +689,14 @@ def mount_worker(scenario):
         plan = sources.SourcePlan(selection, initial, excludes=excludes)
         if plan.errors:
             raise AssertionError(plan.errors)
+        if scenario == "nsfs-excluded-churn":
+            namespace = next(item for item in initial if item["path"] == str(namespace_target))
+            if namespace["fstype"] != "nsfs" or namespace["kind"] != "system":
+                raise AssertionError("Fixture did not produce a real nsfs mount: " + str(namespace))
+            if namespace["root"] != os.readlink("/proc/self/ns/net"):
+                raise AssertionError("Opaque kernel namespace identity was not preserved: " + str(namespace))
+            if not namespace["root"].startswith("net:[") or plan.included(str(namespace_target)):
+                raise AssertionError("Namespace handle must retain its identity and remain excluded")
         if excludes and plan.excluded(str(target / "content"), False):
             raise AssertionError("A directory-only exclude incorrectly excluded required regular data")
         if scenario == "selected-existing-file-directory-exclude":
@@ -698,6 +712,11 @@ def mount_worker(scenario):
                 raise AssertionError("Directory-only exclude silently removed a real bound regular file")
         report = fixture / "selection.json"
         report.write_text(json.dumps(sources.verification_report(plan)))
+        if scenario == "nsfs-excluded-churn":
+            saved = next(item for item in json.loads(report.read_text())["mount_identity"]
+                         if item["path"] == str(namespace_target))
+            if saved["root"] != namespace["root"] or saved["mount_id"] != namespace["mount_id"]:
+                raise AssertionError("Private report lost the nsfs identity")
         sources.verify_report(report)
 
         if scenario in {"excluded-unmount", "selected-unmount"}:
@@ -711,6 +730,22 @@ def mount_worker(scenario):
             mount(replacement, target)
         elif scenario in {"selected-file-shadow", "selected-file-directory-exclude"}:
             mount(replacement / "content", target / "content")
+        elif scenario == "selected-nsfs-file-shadow":
+            mount("/proc/self/ns/net", target / "content")
+            changed = next(item for item in sources.read_mounts() if item["path"] == str(target / "content"))
+            if changed["fstype"] != "nsfs" or changed["root"] != os.readlink("/proc/self/ns/net"):
+                raise AssertionError("Selected-file test must produce a real kernel nsfs identity")
+        elif scenario == "nsfs-excluded-churn":
+            unmount(namespace_target)
+            sources.verify_report(report)
+            # A different opaque namespace root and new mount ID must not
+            # invalidate data selection when the handle was already excluded.
+            # Use another non-mount namespace: binding this mount namespace
+            # into itself would create a reference cycle rejected by Linux.
+            mount("/proc/self/ns/uts", namespace_target)
+            changed = next(item for item in sources.read_mounts() if item["path"] == str(namespace_target))
+            if changed["root"] != os.readlink("/proc/self/ns/uts") or changed["root"] == namespace["root"]:
+                raise AssertionError("Namespace fixture did not change its opaque root identity")
         elif scenario == "selected-propagated-from-excluded-peer":
             mount(replacement, peer / "nested")
             propagated = [item for item in sources.read_mounts() if item["path"] == str(nested)]
@@ -720,8 +755,10 @@ def mount_worker(scenario):
         elif scenario not in {"selected-unchanged", "selected-existing-file-directory-exclude"}:
             raise AssertionError("Unknown mount test scenario")
 
-        if excluded or scenario in {"selected-unchanged", "selected-existing-file-directory-exclude"}:
+        if excluded or scenario in {"selected-unchanged", "selected-existing-file-directory-exclude", "nsfs-excluded-churn"}:
             sources.verify_report(report)
+            if scenario == "nsfs-excluded-churn" and plan.included(str(namespace_target)):
+                raise AssertionError("Excluded namespace handle became part of the frozen selection")
             if excluded:
                 if plan.included(str(target / "content")):
                     raise AssertionError("Frozen excluded volume became included")
@@ -793,6 +830,12 @@ class LiveMountScopeIntegrationTests(OptInLinuxCase):
 
     def test_excluded_peer_propagating_over_selected_data_is_rejected(self):
         self.scenario("selected-propagated-from-excluded-peer")
+
+    def test_real_nsfs_opaque_root_roundtrip_and_excluded_churn(self):
+        self.scenario("nsfs-excluded-churn")
+
+    def test_real_nsfs_mount_shadowing_selected_file_is_rejected(self):
+        self.scenario("selected-nsfs-file-shadow")
 
 
 class LiveRamlogCopyIntegrationTests(OptInLinuxCase):

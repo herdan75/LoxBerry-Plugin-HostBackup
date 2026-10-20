@@ -40,6 +40,9 @@ Vorprüfung des eigenen Backup-Ziels.
 > bleiben Fehler. Neue Stände mit Hinweisen verdrängen bei der automatischen
 > Aufbewahrung nicht den letzten vollständig geprüften Stand derselben
 > Host-/Formatlinie. Keine neue Sicherungsart und keine Änderung alter Bewertungen.
+> Die im ersten 1.2.4-Testpaket aufgetretene Fehlermeldung „Quellpfad muss ein
+> absoluter Pfad sein“ bei gültigen Docker-Namespace-Einbindungen ist korrigiert;
+> dafür müssen weder Backup-Ziel noch Sicherungsverfahren geändert werden.
 > Details und Testnachweise: [Entwicklungsstand 1.2.4](docs/DEVELOP-1.2.4-VALIDATION.md).
 > Ein erfolgreicher Abschluss belegt keinen System-Restore und keine
 > Anwendungskonsistenz laufender Datenbanken.
@@ -896,7 +899,9 @@ Automount und das Speichern. Längere Hinweise sind scrollbar, auch per Tastatur
 - **Nächstes Backup prüfen** zeigt den gespeicherten Umfang. Beim Backup wird die
   Dateiliste nach dem Dienst-Stopp erfasst und ohne rekursives Nachladen kopiert.
   Dies verhindert, dass ausgeschlossene Netzfreigaben nachträglich betreten
-  werden. Änderungen der Mount-Tabelle führen vorsichtshalber zum Fehler.
+  werden. Verschwundene, ersetzte oder überdeckte Quellen bleiben Fehler;
+  Änderungen vollständig ausgeschlossener Einbindungen dürfen den Lauf nicht
+  blockieren.
 - Ohne gespeichertes Backup-Ziel startet kein Backup mehr in einem lokalen
   Standardverzeichnis. Ein separates Ziel auswählen und zuerst speichern.
 

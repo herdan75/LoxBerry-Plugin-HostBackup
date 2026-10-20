@@ -1476,6 +1476,87 @@ source_info() {
   return "$status"
 }
 
+checked_source_info() {
+  # A failed helper can legitimately produce only stderr, not a JSON report.
+  # Keep both streams separate, validate before any consumer reads selection,
+  # and never turn an unsuccessful helper exit into a successful source plan.
+  local capture helper_status=0 result result_status=0
+  if ! capture="$(mktemp -d "$ROOT_STATE_DIR/.source-check.XXXXXX" 2>/dev/null)"; then
+    printf '%s\n' '{"status":"error","errors":["Datenquellen konnten nicht sicher geprueft werden: temporaere Pruefdateien konnten nicht angelegt werden."],"notices":[],"volumes":[]}'
+    return 18
+  fi
+  (umask 077; source_info > "$capture/stdout" 2> "$capture/stderr") || helper_status=$?
+  result="$(python3 -c '
+import json, pathlib, re, sys
+
+fallback = "Datenquellen konnten nicht sicher ermittelt werden."
+data = None
+reason = ""
+diagnostic = ""
+helper_status = int(sys.argv[3])
+try:
+    raw = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+    with open(sys.argv[2], "rb") as stream:
+        stream.seek(0, 2)
+        stream.seek(max(0, stream.tell() - 8192))
+        lines = stream.read().decode("utf-8", "replace").splitlines()
+    lines = [line.strip() for line in lines if line.strip()]
+    if lines:
+        diagnostic = re.sub(r"^(?:[A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception)): *", "", lines[-1])
+        diagnostic = " ".join(diagnostic.split())[:2000]
+    if not raw.strip():
+        reason = "Quellenpruefung hat kein Ergebnis geliefert."
+    else:
+        def invalid_constant(value):
+            raise ValueError("non-JSON number")
+        data = json.loads(raw, parse_constant=invalid_constant)
+        if not isinstance(data, dict) or data.get("status") not in ("ok", "error"):
+            raise ValueError("source report must contain a supported status")
+        for key in ("errors", "notices"):
+            if not isinstance(data.get(key, []), list) or any(not isinstance(value, str) for value in data.get(key, [])):
+                raise ValueError("source messages must be string lists")
+            data.setdefault(key, [])
+        if not isinstance(data.get("volumes", []), list):
+            raise ValueError("source volumes must be a list")
+        data.setdefault("volumes", [])
+        if data["status"] == "ok":
+            selection = data.get("selection")
+            if not isinstance(selection, dict) or selection.get("policy") not in ("legacy", "local"):
+                raise ValueError("source selection is missing or invalid")
+            overrides = selection.get("overrides")
+            if not isinstance(overrides, dict) or any(not isinstance(key, str) or not isinstance(value, bool) for key, value in overrides.items()):
+                raise ValueError("source overrides are invalid")
+        if data["status"] == "error" or data["errors"]:
+            reason = "; ".join(data["errors"]) or fallback
+except (OSError, UnicodeError, ValueError, RecursionError):
+    data = None
+    reason = "Quellenpruefung hat kein gueltiges Pruefergebnis geliefert."
+
+if helper_status or reason:
+    # Prefer an actionable domain error to parser details or traceback frames.
+    if diagnostic and (not isinstance(data, dict) or not data.get("errors")):
+        reason = diagnostic
+    reason = reason or fallback
+    if helper_status:
+        reason = "%s (Quellenpruefung fehlgeschlagen, Exit-Code %d.)" % (reason, helper_status)
+    if not isinstance(data, dict):
+        data = {"volumes": [], "notices": []}
+    data["status"] = "error"
+    data["errors"] = [reason]
+    print(json.dumps(data, ensure_ascii=True))
+    sys.exit(18)
+print(json.dumps(data, ensure_ascii=True))
+' "$capture/stdout" "$capture/stderr" "$helper_status")" || result_status=$?
+  rm -f -- "$capture/stdout" "$capture/stderr"
+  rmdir -- "$capture"
+  if [ -z "$result" ]; then
+    printf '%s\n' '{"status":"error","errors":["Datenquellen konnten nicht sicher geprueft werden: Auswertung des Pruefergebnisses fehlgeschlagen."],"notices":[],"volumes":[]}'
+    return 18
+  fi
+  printf '%s\n' "$result"
+  return "$result_status"
+}
+
 run_hook() {
   local hook="$1"
   [ -n "$hook" ] || return 0
@@ -2689,12 +2770,8 @@ preflight_backup() {
   elif target_message="$(verify_backup_target "$root" true 2>&1)"; then
     target_ok=true
   fi
-  if ! source_json="$(source_info)"; then source_ok=false; fi
-  if ! source_message="$(printf '%s' "$source_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("; ".join(d.get("errors",[]))); sys.exit(0 if d.get("status")=="ok" else 1)')"; then
-    source_ok=false
-    [ -n "$source_message" ] || source_message="Datenquellen konnten nicht sicher ermittelt werden."
-    source_json="{\"status\":\"error\",\"errors\":[$(json_escape "$source_message")]}"
-  fi
+  if ! source_json="$(checked_source_info)"; then source_ok=false; fi
+  source_message="$(printf '%s' "$source_json" | python3 -c 'import json,sys; print("; ".join(json.load(sys.stdin)["errors"]))')"
   if [ "$source_ok" = true ]; then
     while IFS= read -r notice; do notices+=("$notice"); done < <(printf '%s' "$source_json" | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin).get("notices",[])))')
   fi
@@ -3082,7 +3159,10 @@ create_backup() {
 
   # Enumerate only after services are quiesced, so newly created database files
   # are not missed. Any enumeration failure uses the normal restart EXIT trap.
-  source_plan_json="$(source_info)" || return 18
+  if ! source_plan_json="$(checked_source_info)"; then
+    log "ERROR: $(printf '%s' "$source_plan_json" | python3 -c 'import json,sys; print("; ".join(json.load(sys.stdin)["errors"]))')" | tee -a "$log_file"
+    return 18
+  fi
   # Legacy still selects its original volumes, but uses the same frozen,
   # non-recursive list and runtime-content policy as every other configuration.
   selection_active=true
@@ -4857,7 +4937,7 @@ case "$action" in
   preflight-restore) shift; acquire_operation_lock shared || exit $?; preflight_restore "${1:?BACKUP_ID required}" ;;
   config) show_config ;;
   target-info) backup_target_info ;;
-  source-info) source_info ;;
+  source-info) checked_source_info ;;
   repository-status) repository_action status ;;
   repository-init) repository_action init ;;
   repository-key-export) repository_action key-export ;;

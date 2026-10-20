@@ -613,6 +613,18 @@ td .muted {
   grid-column: 1 / -1;
 }
 
+#hostbackup-app .runtime-logs-note {
+  grid-column: 1 / -1;
+  color: #526173;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .mail-settings {
   margin-top: 8px;
 }

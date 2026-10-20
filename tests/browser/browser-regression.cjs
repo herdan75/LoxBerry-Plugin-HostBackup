@@ -97,7 +97,7 @@ let html=renderFixture('native-strict');
 const portableHtml=renderFixture('portable-archive');
 const runtimeEnabledHtml=renderFixture('native-strict',true);
 assert.match(html,/name="runtime_logs_present" value="1"/);
-assert.match(html,/name="include_runtime_logs" value="1">/,'Legacy config defaults to runtime payload omission');
+assert.match(html,/name="include_runtime_logs" value="1" aria-describedby="runtime-logs-note">/,'Legacy config defaults to runtime payload omission');
 assert.match(runtimeEnabledHtml,/name="include_runtime_logs" value="1" checked/,'Persisted explicit runtime opt-in is rendered unchanged');
 // Render the real optional panels with read-only backend fixtures. No restore,
 // filesystem mutation or real subprocess is possible in this test process.
@@ -731,6 +731,23 @@ async function checkRuntimeLogs(browser,base) {
   const checkbox=page.locator('[name="include_runtime_logs"]'),label=page.locator('label:has([name="include_runtime_logs"])');
   assert.equal(await checkbox.isChecked(),false);assert.equal(await checkbox.evaluate(node=>node.form.id),'settings-save-form');
   assert.equal(await page.locator('#settings-change-popup').getAttribute('aria-hidden'),'true');
+  const note=page.locator('label:has([name="include_runtime_logs"]) + p');
+  assert.equal(await checkbox.getAttribute('aria-describedby'),'runtime-logs-note');
+  assert.match(await note.textContent(),/Standardmässig ausgeschaltet.*Nur zur Fehlersuche.*Logdateien während des Backups.*abbrechen/);
+  await page.addStyleTag({content:'p { font-size: 44px; font-weight: bold; letter-spacing: 3px; }'});
+  for(const [view,width,height] of [['wide-desktop',1920,1080],['desktop',1440,1100],['mobile',390,844]]) {
+    await page.setViewportSize({width,height});
+    const typography=await note.evaluate(node=>{const style=getComputedStyle(node),rect=node.getBoundingClientRect();return {size:parseFloat(style.fontSize),weight:parseInt(style.fontWeight,10),spacing:style.letterSpacing,border:parseFloat(style.borderBottomWidth),left:rect.left,right:rect.right,height:rect.height,overflow:node.scrollWidth-node.clientWidth};});
+    assert.equal(typography.size,13,view+' runtime note must not inherit LoxBerry wide typography: '+JSON.stringify(typography));
+    assert.equal(typography.weight,400);assert.ok(['normal','0px'].includes(typography.spacing));assert.equal(typography.border,0);
+    assert.ok(typography.left>=0&&typography.right<=width+1&&typography.overflow<=1,view+' runtime note stays in viewport');
+    assert.ok(typography.height<=(view==='mobile'?80:40),view+' runtime note remains compact');
+    const labelStyle=await label.evaluate(node=>({size:parseFloat(getComputedStyle(node).fontSize),border:parseFloat(getComputedStyle(node).borderBottomWidth)}));
+    assert.equal(labelStyle.size,14);assert.equal(labelStyle.border,0,'Runtime opt-in is not a legacy wide separator');
+    await label.locator('xpath=ancestor::fieldset[1]').screenshot({path:path.join(temp,'runtime-logs-'+view+'.png')});
+  }
+  await page.setViewportSize({width:1440,height:1100});
+  assert.equal(await checkbox.isChecked(),false,'Layout checks must not enable diagnostic payload');
   const before=postCount,help=label.locator('.info-button'),bubble=label.locator('.info-bubble');
   await help.click();await bubble.waitFor({state:'visible'});
   for(const pattern of [/standardmässig/,/Verzeichnisse und Rechte/,/Installationsprotokolle/,/Logrotation/,/alle Sicherungsverfahren/])assert.match(await bubble.textContent(),pattern);
@@ -752,7 +769,7 @@ async function checkRuntimeLogs(browser,base) {
   const serialized=()=>noScript.locator('#settings-save-form').evaluate(form=>{const data=new FormData(form);return {present:data.get('runtime_logs_present'),included:data.get('include_runtime_logs')};});
   assert.deepEqual(await serialized(),{present:'1',included:null});await noScript.locator('[name="include_runtime_logs"]').check();
   assert.deepEqual(await serialized(),{present:'1',included:'1'});await noScript.close();failSave=oldFailSave;
-  receipts.push('Runtime-log policy defaults off with accessible scope/safety help; opt-in and opt-out mark drafts and submit explicit presence, saved true renders cleanly, and no-JS serialization preserves both choices');
+  receipts.push('Runtime-log policy defaults off with compact 13px desktop/mobile help unaffected by LoxBerry wide typography; opt-in and opt-out mark drafts and submit explicit presence, saved true renders cleanly, and no-JS serialization preserves both choices');
 }
 async function checkMaintenance(browser,base) {
   const maintenanceActionStart=postActions.length;

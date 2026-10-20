@@ -49,6 +49,19 @@ def canonical_path(value, allow_root=False):
     return value
 
 
+def validate_mount_root(value, fstype):
+    """Mount roots are identities, not necessarily paths in our namespace.
+
+    Linux nsfs.show_path emits names such as net:[4026531992] for namespace
+    bind mounts. Keep these opaque identities (including the namespace ID)
+    without relaxing source paths or mount targets, or dropping the mount.
+    """
+    if (fstype == "nsfs" and isinstance(value, str) and len(value) <= 4096
+            and re.fullmatch(r"[a-z][a-z0-9_]*:\[[0-9]+\]", value)):
+        return value
+    return canonical_path(value, allow_root=True)
+
+
 def normalize_selection(value):
     if value is None:
         return {"policy": "legacy", "overrides": {}}
@@ -121,7 +134,7 @@ def read_mounts(path="/proc/self/mountinfo"):
         if not re.fullmatch(r"[0-9]+:[0-9]+", fields[2]) or not fields[0].isdigit() or not fields[1].isdigit():
             raise SourceError("Ungueltige Geraetekennung im Mount-Inventar.")
         mount_root = unescape_mount(fields[3])
-        canonical_path(mount_root, allow_root=True)
+        validate_mount_root(mount_root, tail[0])
         item = {"path": target, "fstype": tail[0], "kind": mount_kind(tail[0]),
                 "device": fields[2], "mount_id": fields[0], "parent_id": fields[1], "root": mount_root}
         if target in mounts:
@@ -590,7 +603,7 @@ def verify_report(path, verification_path=None):
             if not isinstance(item.get(key), str):
                 raise SourceError("Unvollstaendige eingefrorene Mount-Identitaet.")
         canonical_path(item["path"], allow_root=True)
-        canonical_path(item["root"], allow_root=True)
+        validate_mount_root(item["root"], item["fstype"])
         if item["path"] in paths or not re.fullmatch(r"[0-9]+:[0-9]+", item["device"]) or not item["mount_id"].isdigit():
             raise SourceError("Ungueltige eingefrorene Mount-Identitaet.")
         if "parent_id" in item and (not isinstance(item["parent_id"], str) or not item["parent_id"].isdigit()):
@@ -605,7 +618,7 @@ def verify_report(path, verification_path=None):
                         or not re.fullmatch(r"[0-9]+:[0-9]+", layer["device"]) or not layer["mount_id"].isdigit()
                         or "parent_id" in layer and not layer["parent_id"].isdigit()):
                     raise SourceError("Ungueltige gestapelte Mount-Identitaet.")
-                canonical_path(layer["root"], allow_root=True)
+                validate_mount_root(layer["root"], layer["fstype"])
         paths.add(item["path"])
     excludes = report["frozen_excludes"]
     if any(not isinstance(rule, str) or len(rule) > 4096 or "\x00" in rule or "\r" in rule or "\n" in rule for rule in excludes):

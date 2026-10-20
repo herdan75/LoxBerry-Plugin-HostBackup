@@ -28,7 +28,7 @@ ENABLED = bool(TARGET) and sys.platform.startswith("linux") and os.geteuid() == 
 FUNCTIONS = (
     "json_escape", "current_mount_value", "metadata_mode", "portable_snapshot",
     "portable_helper", "metadata_capability_probe", "require_root_permission_ack",
-    "baseline_space_requirement_mb", "backup_inode_status", "preflight_backup",
+    "checked_source_info", "baseline_space_requirement_mb", "backup_inode_status", "preflight_backup",
 )
 
 

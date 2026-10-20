@@ -125,6 +125,47 @@ class SourceSelectionTests(unittest.TestCase):
             self.assertNotIn("secret", json.dumps(result))
             self.assertNotIn("user", json.dumps(result))
 
+    def test_namespace_mount_roots_are_kept_as_system_mount_identities(self):
+        for namespace in ("net", "mnt", "uts", "ipc", "user", "pid", "cgroup", "time",
+                          "pid_for_children", "time_for_children"):
+            identity = namespace + ":[4026531992]"
+            content = ("23 1 8:1 / / rw - ext4 /dev/sda1 rw\n"
+                       f"24 23 0:4 {identity} /run/docker/netns/default rw - nsfs nsfs rw\n")
+            with self.subTest(namespace=namespace), patch.object(Path, "read_text", return_value=content):
+                mounts = sources.read_mounts()
+                self.assertEqual(len(mounts), 2)
+                self.assertEqual(mounts[1]["root"], identity)
+                self.assertEqual(mounts[1]["kind"], "system")
+                result = plan(mounts=mounts).report()
+                self.assertEqual(result["status"], "ok")
+                self.assertFalse(result["volumes"][1]["included"])
+
+    def test_namespace_identity_does_not_relax_source_paths_or_mount_targets(self):
+        with self.assertRaises(sources.SourceError):
+            plan(overrides={"net:[4026531992]": True})
+        content = ("23 1 8:1 / / rw - ext4 /dev/sda1 rw\n"
+                   "24 23 0:4 net:[4026531992] net:[4026531992] rw - nsfs nsfs rw\n")
+        with patch.object(Path, "read_text", return_value=content), self.assertRaises(sources.SourceError):
+            sources.read_mounts()
+
+    def test_invalid_namespace_and_other_relative_mount_roots_are_rejected(self):
+        cases = [(value, "nsfs") for value in (
+            "relative", "net:[]", "net:[-1]", "net:[1]/tail", "net:[1]extra", "net:[one]",
+            "net:[1]\\012", "net:[1]\\040extra", "net:[１２]", "../net:[1]",
+            "net:[" + "1" * 4096 + "]")]
+        cases += [("net:[4026531992]", fstype) for fstype in ("ext4", "tmpfs", "cifs")]
+        for identity, fstype in cases:
+            content = ("23 1 8:1 / / rw - ext4 /dev/sda1 rw\n"
+                       f"24 23 0:4 {identity} /run/example rw - {fstype} source rw\n")
+            with self.subTest(identity=identity[:50], fstype=fstype), \
+                 patch.object(Path, "read_text", return_value=content), self.assertRaises(sources.SourceError):
+                sources.read_mounts()
+        for value in (None, 123, "", "/path/../other", "/path//other"):
+            with self.subTest(value=value), self.assertRaises(sources.SourceError):
+                sources.validate_mount_root(value, "nsfs")
+        self.assertEqual(sources.validate_mount_root("/", "nsfs"), "/")
+        self.assertEqual(sources.validate_mount_root("/bound/file", "ext4"), "/bound/file")
+
     def test_invalid_or_rootless_mount_inventory_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             inventory = Path(tmp) / "mountinfo"
@@ -218,6 +259,60 @@ class FrozenMountVerificationTests(unittest.TestCase):
                                   self.volume("/media/smb/new", "31", "cifs"),
                                   self.volume("/run/private", "32", "tmpfs")]
         self.verify(selected, current)
+
+    def test_frozen_namespace_identity_roundtrip_and_excluded_churn(self):
+        namespace = self.volume("/run/docker/netns/default", "41", "nsfs", "net:[4026531992]")
+        mounts = self.mounts + [namespace]
+        selected = plan(mounts=mounts)
+        self.assertEqual(sources.verification_report(selected)["mount_identity"][-1]["root"], "net:[4026531992]")
+        self.verify(selected, mounts)
+        self.verify(selected, self.mounts)
+        self.verify(selected, self.mounts + [{**namespace, "root": "net:[4026531993]"}])
+        self.verify(selected, self.mounts + [self.volume("/run/docker/netns/new", "42", "nsfs", "net:[4026531994]")])
+
+    def test_new_namespace_mount_cannot_hide_previously_selected_data(self):
+        selected = plan(mounts=self.mounts)
+        namespace = self.volume("/etc/required-file", "41", "nsfs", "net:[4026531992]")
+        with self.assertRaisesRegex(sources.SourceError, "/etc/required-file.*neu eingebunden"):
+            self.verify(selected, self.mounts + [namespace])
+
+    def test_namespace_replacement_cannot_hide_previously_selected_mount(self):
+        original = self.volume("/namespace", "41", "ext4", "/")
+        selected = plan(mounts=self.mounts + [original])
+        self.verify(selected, self.mounts + [original])
+        with self.assertRaisesRegex(sources.SourceError, "/namespace.*ersetzt/geaendert"):
+            self.verify(selected, self.mounts + [{**original, "fstype": "nsfs", "root": "mnt:[4026531993]"}])
+
+    def test_namespace_stack_roots_roundtrip_without_dropping_layers(self):
+        content = ("1 0 8:1 / / rw - ext4 /dev/root rw\n"
+                   "2 1 0:2 / /run rw - tmpfs tmpfs rw\n"
+                   "3 2 0:4 net:[4026531992] /run/ns rw - nsfs nsfs rw\n"
+                   "4 3 0:4 net:[4026531993] /run/ns rw - nsfs nsfs rw\n")
+        with patch.object(Path, "read_text", return_value=content):
+            mounts = sources.read_mounts()
+        self.assertEqual([layer["root"] for layer in mounts[-1]["stack"]],
+                         ["net:[4026531992]", "net:[4026531993]"])
+        self.verify(plan(mounts=mounts), mounts)
+
+    def test_invalid_namespace_roots_in_frozen_items_and_stack_layers_are_rejected(self):
+        namespace = self.volume("/run/ns", "41", "nsfs", "net:[4026531992]")
+        namespace["stack"] = [{key: namespace[key] for key in ("fstype", "device", "mount_id", "root")},
+                              {"fstype": "nsfs", "device": "8:42", "mount_id": "42", "root": "net:[4026531993]"}]
+        mounts = self.mounts + [namespace]
+        original = sources.verification_report(plan(mounts=mounts))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "report.json"
+            for change_layer in (False, True):
+                for identity, fstype in (("net:[]", "nsfs"), ("net:[1]/other", "nsfs"),
+                                         ("net:[1]", "ext4")):
+                    report = json.loads(json.dumps(original))
+                    item = next(item for item in report["mount_identity"] if item["path"] == "/run/ns")
+                    target = item["stack"][0] if change_layer else item
+                    target.update(root=identity, fstype=fstype)
+                    path.write_text(json.dumps(report))
+                    with self.subTest(layer=change_layer, identity=identity, fstype=fstype), \
+                         patch.object(sources, "read_mounts", return_value=mounts), self.assertRaises(sources.SourceError):
+                        sources.verify_report(path)
 
     def test_new_network_mount_outside_old_excluded_boundary_shadows_selected_tree(self):
         selected = plan(mounts=self.mounts)

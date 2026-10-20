@@ -470,7 +470,7 @@ class RsyncVanishedWorkerTests(unittest.TestCase):
         data = diagnostic([paths[0].as_posix() if known else "/etc/important.conf"])
         (root / "diagnostic.log").write_bytes(data[:-1] if malformed else data)
         script = WORKER_FIXTURE + "\n" + "\n".join(runtime.function(name) for name in
-                    ("validate_completed_backup", "backup_cleanup_on_exit", "create_backup")) + "\ncreate_backup vanished-test\n"
+                    ("checked_source_info", "validate_completed_backup", "backup_cleanup_on_exit", "create_backup")) + "\ncreate_backup vanished-test\n"
         result = subprocess.run([runtime.BASH, "--noprofile", "--norc", "-s"], input=script,
                                 text=True, encoding="utf-8", capture_output=True, check=False,
                                 timeout=90 if os.name == "nt" else 60,

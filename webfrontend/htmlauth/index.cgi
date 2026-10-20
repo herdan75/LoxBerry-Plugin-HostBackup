@@ -2303,11 +2303,11 @@ $backup_target_picker
 </label>
 
 <input data-role="none" type="hidden" name="runtime_logs_present" value="1">
-<label class="checkline wide">
-<input data-role="none" type="checkbox" name="include_runtime_logs" value="1"$cfg_include_runtime_logs>
+<label class="checkline">
+<input data-role="none" type="checkbox" name="include_runtime_logs" value="1"$cfg_include_runtime_logs aria-describedby="runtime-logs-note">
 <span>Flüchtige LoxBerry-Diagnoseprotokolle mitsichern $info_runtime_logs</span>
 </label>
-<p class="muted wide">Geänderter Standard ab 1.2.4: Flüchtige Diagnoseprotokolle werden ausgelassen. Daten und Konfigurationen bleiben gesichert. Der genaue Umfang steht unter „Nächstes Backup prüfen“.</p>
+<p id="runtime-logs-note" class="runtime-logs-note">Standardmässig ausgeschaltet. Nur zur Fehlersuche aktivieren: Ändern sich z. B. Logdateien während des Backups, kann die Sicherung abbrechen.</p>
 
 </div>
 

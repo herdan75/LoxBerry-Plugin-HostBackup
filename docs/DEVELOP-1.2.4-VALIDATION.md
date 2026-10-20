@@ -84,6 +84,31 @@ Die zusätzlichen Linux-Tests sind bei ausdrücklicher Aktivierung verpflichtend
 Fehlende Werkzeuge oder Namespace-Rechte sind Fehler, keine stillen Skips.
 Windows führt die portablen Tests aus; Linux-/Root-Prüfungen laufen in CI.
 
+## Nachprüfung: Docker-Namespace-Mounts und Fehlerausgabe
+
+Das erste Testpaket enthielt eine Regression in der erweiterten Mount-Prüfung:
+Nicht nur Mount-Ziele, sondern auch Mount-Identitäten wurden als absolute Pfade
+geprüft. Linux erzeugt für `nsfs` jedoch absichtlich Kennungen wie `net:[123]`
+([Kernel-Implementierung](https://raw.githubusercontent.com/torvalds/linux/v6.12/fs/nsfs.c)).
+Solche Einbindungen kommen unter anderem bei Docker vor. Der Fehler war mit
+einer gültigen Mount-Tabelle reproduzierbar; die bisherigen grünen Läufe hatten
+diese Kombination noch nicht abgedeckt.
+
+Eine getrennte Prüfung akzeptiert diese begrenzten Kennungen ausschliesslich
+für `nsfs`, sowohl beim Einlesen als auch beim Vergleich gespeicherter Berichte
+einschliesslich mehrerer Mount-Schichten. Benutzerpfade und Mount-Ziele bleiben
+absolute Pfade. Namespace-Einträge werden nicht versteckt: Eine neue Einbindung,
+die gesicherte Dateien überdeckt, muss weiterhin zum Fehler führen.
+
+Zusätzliche Regressionen prüfen gültige und ungültige Namespace-Kennungen,
+Berichts-Roundtrips, ausgeschlossene Änderungen und überdeckte Daten. Ein echter
+Namespace-Bind-Mount wird zusätzlich in der isolierten Linux-Integration geprüft.
+Die Shell-Vorprüfung behandelt fehlgeschlagene, leere oder ungültige
+Quellenantworten kontrolliert als Fehler, ohne einen zusätzlichen JSON-Traceback
+in Oberfläche oder Log. Alte Logdateien bleiben unverändert als Nachweis erhalten.
+Der nachfolgende Commit benötigt seinen eigenen vollständigen CI-Lauf; die
+bisherigen älteren Läufe gelten nicht als Nachweis dieser Korrektur.
+
 ## Internetrecherche und abgeleitete Sonderfälle
 
 Es wurden Primärquellen mit den tatsächlichen Kopieroptionen und Prüfungen

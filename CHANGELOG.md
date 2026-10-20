@@ -14,6 +14,16 @@ validiert werden.
 
 ## [Unreleased] - Entwicklungsstand 1.2.4
 
+- Regression der neuen Quellenprüfung korrigiert: gültige Docker-/Linux-
+  Namespace-Einbindungen mit Kennungen wie `net:[123]` werden als Mount-Identität
+  erkannt und nicht mehr als ungültiger Quellpfad abgewiesen. Benutzerpfade,
+  Mount-Ziele und der Schutz gegen überdeckte Sicherungsquellen bleiben strikt.
+  Fehlgeschlagene oder unlesbare Quellenantworten werden ohne nachfolgenden
+  JSON-Traceback als verständlicher Vorprüfungsfehler ausgegeben.
+- Hinweis zur optionalen Mitsicherung flüchtiger Diagnoseprotokolle kompakt und
+  in normaler Schrift darstellen; keine Kollision mit LoxBerrys globaler
+  `wide`-Typografie. Standard bleibt aus, Einsatzzweck Fehlersuche und mögliche
+  Logrotationsfehler werden kurz erklärt. Desktop-/Handy-Layouttest ergänzt.
 - Gemeinsame Laufzeitdaten-Regel vor der Dateiaufzählung für rsync, TAR und
   portable Repository-Sicherungen. Reguläre Diagnoseinhalte unter LoxBerry
   `log/plugins`, `log/system_tmpfs` und den zugehörigen bekannten Ramlog-Pfaden

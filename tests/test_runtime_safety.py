@@ -31,7 +31,7 @@ def function(name):
 COMMON_FUNCTIONS = (
     "log", "manifest_field", "json_escape", "valid_task_name", "task_state_path",
     "task_state_write", "task_state_value", "prepare_log_file", "write_control_marker",
-    "task_failure_on_exit", "install_task_failure_trap",
+    "task_failure_on_exit", "install_task_failure_trap", "checked_source_info",
 )
 JOURNAL_FUNCTIONS = (
     "restart_journal_path_is_safe", "restart_journal_update", "restart_journal_create",
