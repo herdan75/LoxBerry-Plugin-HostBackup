@@ -28,6 +28,9 @@ Vorprüfung des eigenen Backup-Ziels.
 > Rotierende Diagnoseprotokolle werden damit nicht nachträglich als Kopierfehler
 > ignoriert. Verzeichnisse, Rechte und Links bleiben erhalten; Daten, Konfigurationen
 > und dauerhafte Installationsnachweise werden nicht durch diese Regel ausgeschlossen.
+> TAR-Meldungen über diese rotierenden Verzeichnisse werden nur nach zusätzlichem
+> Vergleich von Identität, Rechten und Archivmetadaten als unkritisch behandelt.
+> Echte Dateifehler und gemischte Fehlermeldungen bleiben sichtbar.
 > Unter **Skripte und Ausschlüsse** lassen sich die Diagnoseprotokolle ausdrücklich
 > wieder einschliessen. Das ist ein geänderter Standard auch bei Updates.
 >

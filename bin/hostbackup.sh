@@ -1841,7 +1841,7 @@ restart_journal_finish() {
     [ -e "$entry" ] || [ -L "$entry" ] || continue
     case "${entry##*/}" in
       repository-controls) ;;
-      journal.json|selected-stop-targets.tsv|docker-to-stop.tsv|post-hook.started|post-hook.done|restart.done|source-files.nul|source-excludes.txt|source-selection.json|source-verification.json|copy-result.json|repository-candidate.json|rsync-stderr.log|rsync-stderr.logged)
+      journal.json|selected-stop-targets.tsv|docker-to-stop.tsv|post-hook.started|post-hook.done|restart.done|source-files.nul|source-excludes.txt|source-selection.json|source-verification.json|copy-result.json|tar-result.json|repository-candidate.json|rsync-stderr.log|rsync-stderr.logged|tar-stderr.log|tar-stderr.logged)
         [ -f "$entry" ] && [ ! -L "$entry" ] || return 20 ;;
       *) return 20 ;;
     esac
@@ -1849,12 +1849,14 @@ restart_journal_finish() {
   # A signal/process interruption may precede the normal stderr append. Do not erase
   # the only diagnostic evidence when recovering a completed service journal.
   # A failed append retains the journal/file for retry, not a successful result.
-  if [ -f "$state_dir/rsync-stderr.log" ] && [ ! -f "$state_dir/rsync-stderr.logged" ]; then
-    local recovery_log="$TASK_LOG_DIR/${state_dir##*/}"
-    prepare_log_file "$recovery_log" append || return 20
-    printf '\nRecovered rsync diagnostics after interrupted recording:\n' >> "$recovery_log" || return 20
-    cat -- "$state_dir/rsync-stderr.log" >> "$recovery_log" || return 20
-  fi
+  local diagnostic_kind recovery_log="$TASK_LOG_DIR/${state_dir##*/}"
+  for diagnostic_kind in rsync tar; do
+    if [ -f "$state_dir/$diagnostic_kind-stderr.log" ] && [ ! -f "$state_dir/$diagnostic_kind-stderr.logged" ]; then
+      prepare_log_file "$recovery_log" append || return 20
+      printf '\nRecovered %s diagnostics after interrupted recording:\n' "$diagnostic_kind" >> "$recovery_log" || return 20
+      cat -- "$state_dir/$diagnostic_kind-stderr.log" >> "$recovery_log" || return 20
+    fi
+  done
   # Portable workers keep recovery controls private until publication. Remove
   # only these known temporary files, never repository keys or unknown data.
   control="$state_dir/repository-controls"
@@ -1871,7 +1873,7 @@ restart_journal_finish() {
   [ ! -L "$state_dir/repository-candidate.json" ] && { [ ! -e "$state_dir/repository-candidate.json" ] || [ -f "$state_dir/repository-candidate.json" ]; } || return 20
   rm -f -- "$state_dir/repository-candidate.json" || return 20
   # Remove only the known local control files; retain unexpected data for diagnosis.
-  rm -f -- "$state_dir/journal.json" "$state_dir/selected-stop-targets.tsv" "$state_dir/docker-to-stop.tsv" "$state_dir/post-hook.started" "$state_dir/post-hook.done" "$state_dir/restart.done" "$state_dir/source-files.nul" "$state_dir/source-excludes.txt" "$state_dir/source-selection.json" "$state_dir/source-verification.json" "$state_dir/copy-result.json" "$state_dir/rsync-stderr.log" "$state_dir/rsync-stderr.logged" || return 20
+  rm -f -- "$state_dir/journal.json" "$state_dir/selected-stop-targets.tsv" "$state_dir/docker-to-stop.tsv" "$state_dir/post-hook.started" "$state_dir/post-hook.done" "$state_dir/restart.done" "$state_dir/source-files.nul" "$state_dir/source-excludes.txt" "$state_dir/source-selection.json" "$state_dir/source-verification.json" "$state_dir/copy-result.json" "$state_dir/tar-result.json" "$state_dir/rsync-stderr.log" "$state_dir/rsync-stderr.logged" "$state_dir/tar-stderr.log" "$state_dir/tar-stderr.logged" || return 20
   rmdir -- "$state_dir" || return 20
 }
 
@@ -2982,7 +2984,7 @@ create_backup() {
   local mode task validation_status final_status post_hook pre_hook rsync_status export_status portable_excludes state_dir preflight_json preflight_status cleanup_trap
   local source_list="" selection_active=false source_plan_json repository_candidate="" repository_validation="" lineage=""
   local control_dir="" source_report="" copy_tool="rsync" copy_exit_status=0 source_verify_status=0
-  local rsync_stderr="" runtime_logs_only=false
+  local rsync_stderr="" runtime_logs_only=false tar_raw_exit_status="" tar_receipt="" tar_diagnostics_recorded=false
   local -a copy_pipeline=()
   local -a rsync_opts=() metadata_opts=() tar_opts=()
   root="$(backup_root)"
@@ -3136,9 +3138,22 @@ create_backup() {
     while IFS= read -r opt; do tar_opts+=("$opt"); done < <(tar_metadata_options)
     log "Creating portable root filesystem archive" | tee -a "$log_file"
     if [ "$selection_active" = true ]; then
-      tar "${tar_opts[@]}" -C / -cpf "$target/rootfs.tar" --no-recursion --null --verbatim-files-from --files-from="$source_list" 2>&1 | tee -a "$log_file"
+      tar_receipt="$state_dir/tar-result.json"
+      python3 "$LBP_BINDIR/hostbackup-tar.py" --archive "$target/rootfs.tar" --files-from "$source_list" \
+        --source-report "$source_report" --state-dir "$state_dir" --receipt "$tar_receipt" 2>&1 | tee -a "$log_file"
       copy_pipeline=("${PIPESTATUS[@]}")
       rsync_status=${copy_pipeline[0]}
+      if [ -f "$tar_receipt" ] && [ ! -L "$tar_receipt" ]; then
+        if tar_raw_exit_status="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); raw=d["raw_exit_status"]; effective=d["effective_exit_status"]; assert type(raw) is int and 0 <= raw <= 255 and type(effective) is int and effective == int(sys.argv[2]); print(raw)' "$tar_receipt" "$rsync_status")"; then
+          tar_diagnostics_recorded=true
+        else
+          rsync_status=23
+        fi
+        (umask 077; set -o noclobber; cat -- "$tar_receipt" > "$control_dir/tar-result.json") || rsync_status=23
+      else
+        log "ERROR: TAR result receipt is missing" | tee -a "$log_file"
+        rsync_status=23
+      fi
     else
       tar "${tar_opts[@]}" --exclude-from="$portable_excludes" -C / -cpf "$target/rootfs.tar" . 2>&1 | tee -a "$log_file"
       copy_pipeline=("${PIPESTATUS[@]}")
@@ -3147,6 +3162,8 @@ create_backup() {
     if [ "${copy_pipeline[1]}" -ne 0 ]; then
       log "ERROR: TAR diagnostics could not be completely recorded" | tee -a "$log_file"
       rsync_status=23
+    elif [ "$tar_diagnostics_recorded" = true ] && [ -f "$state_dir/tar-stderr.log" ]; then
+      write_control_marker "$state_dir/tar-stderr.logged" || rsync_status=23
     fi
   else
     log "Starting rsync copy from / to $rootfs" | tee -a "$log_file"
@@ -3186,6 +3203,7 @@ create_backup() {
   fi
   set -e
   copy_exit_status="$rsync_status"
+  [ -z "$tar_raw_exit_status" ] || copy_exit_status="$tar_raw_exit_status"
   # Docker/service restart can legitimately change mounts, so verify the source
   # snapshot now, while the quiesced source state is still expected to match.
   if [ "$selection_active" = true ] && ! python3 "$LBP_BINDIR/hostbackup-sources.py" verify --report "$source_report" --verification-report "$state_dir/source-verification.json" >> "$log_file" 2>&1; then
@@ -3199,7 +3217,7 @@ create_backup() {
   (umask 077; set -o noclobber; python3 -c 'import json,sys; print(json.dumps({"tool":sys.argv[1],"copy_exit_status":int(sys.argv[2]),"source_verification_status":int(sys.argv[3]),"effective_status":int(sys.argv[4])},sort_keys=True))' \
     "$copy_tool" "$copy_exit_status" "$source_verify_status" "$rsync_status" > "$state_dir/copy-result.json") || return 18
   (umask 077; set -o noclobber; cat -- "$state_dir/copy-result.json" > "$control_dir/copy-result.json") || return 18
-  log "Copy result: tool=$copy_tool copy_status=$copy_exit_status source_verification_status=$source_verify_status" | tee -a "$log_file"
+  log "Copy result: tool=$copy_tool copy_status=$copy_exit_status source_verification_status=$source_verify_status effective_status=$rsync_status" | tee -a "$log_file"
   log "Backup copy finished with status $rsync_status" | tee -a "$log_file"
   log "Starting services and Docker containers again if they were stopped" | tee -a "$log_file"
   task_state_write "$task" running restarting_services "$log_file" "$$" ""

@@ -370,6 +370,32 @@ python3() {
     event classifier
     [ "$HELPER_FAILURE" != true ] || return 70
     "$VANISHED_PYTHON" "$@"
+  elif [ "${1:-}" = "$LBP_BINDIR/hostbackup-tar.py" ]; then
+    shift
+    local archive='' receipt='' state='' files='' report='' raw="$COPY_CODE"
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --archive) archive="$2" ;;
+        --receipt) receipt="$2" ;;
+        --state-dir) state="$2" ;;
+        --files-from) files="$2" ;;
+        --source-report) report="$2" ;;
+        *) return 95 ;;
+      esac
+      shift 2
+    done
+    [ "$archive" = "$TEST_ROOT/target/vanished-test/rootfs.tar" ] || return 94
+    [ "$state" = "$RESTART_JOURNAL_DIR/backup-vanished-test.log" ] || return 94
+    [ "$files" = "$state/source-files.nul" ] && [ "$report" = "$state/source-selection.json" ] || return 94
+    [ "$receipt" = "$state/tar-result.json" ] || return 94
+    event portable-copy
+    command tar -C "$TEST_ROOT/portable-source" -cf "$archive" . || return $?
+    printf 'fixture TAR diagnostics\n' > "$state/tar-stderr.log"
+    [ "$TAR_RECEIPT_MISSING" != true ] || return 18
+    [ "$TAR_DIRECTORY_VERIFIED" != true ] || raw=1
+    printf '{"raw_exit_status":%s,"effective_exit_status":%s}\n' "$raw" "$COPY_CODE" > "$receipt"
+    printf 'fixture TAR diagnostics\n'
+    return "$COPY_CODE"
   elif [ "${1:-}" = "$LBP_BINDIR/hostbackup-sources.py" ]; then
     case "${2:-}" in
       files)
@@ -432,7 +458,8 @@ tee() {
 class RsyncVanishedWorkerTests(unittest.TestCase):
     def worker(self, code=24, known=True, mode="full", profile="native-strict", verify=0, expected=0,
                malformed=False, capture_collision=False, tee_failure=False, cat_failure=False, helper_failure=False,
-               classifier_timeout=False, mutate_public_excludes=False):
+               classifier_timeout=False, mutate_public_excludes=False, tar_directory_verified=False,
+               tar_receipt_missing=False):
         temporary = tempfile.TemporaryDirectory(prefix="hostbackup-vanished-worker-")
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name).resolve()
@@ -454,6 +481,8 @@ class RsyncVanishedWorkerTests(unittest.TestCase):
                                      "CAT_FAILURE": str(cat_failure).lower(), "HELPER_FAILURE": str(helper_failure).lower(),
                                      "CLASSIFIER_TIMEOUT": str(classifier_timeout).lower(),
                                      "MUTATE_PUBLIC_EXCLUDES": str(mutate_public_excludes).lower(),
+                                     "TAR_DIRECTORY_VERIFIED": str(tar_directory_verified).lower(),
+                                     "TAR_RECEIPT_MISSING": str(tar_receipt_missing).lower(),
                                      "SELECTION": "local" if verify else "legacy"})
         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
         events = (root / "events").read_text().splitlines()
@@ -576,6 +605,36 @@ class RsyncVanishedWorkerTests(unittest.TestCase):
                 self.assertNotIn("classifier", events)
                 self.assertEqual(json.loads((root / "target/vanished-test/copy-result.json").read_bytes())["tool"], "tar")
 
+    def test_portable_verified_directory_result_keeps_raw_status_and_restarts_services(self):
+        root, _, events, manifest = self.worker(code=0, profile="portable-archive", tar_directory_verified=True)
+        self.assertEqual(manifest["status"], "complete")
+        receipt = json.loads((root / "target/vanished-test/copy-result.json").read_bytes())
+        self.assertEqual((receipt["tool"], receipt["copy_exit_status"], receipt["effective_status"]), ("tar", 1, 0))
+        self.assertEqual(json.loads((root / "target/vanished-test/tar-result.json").read_bytes())["raw_exit_status"], 1)
+        self.assertLess(events.index("portable-copy"), events.index("source-verify"))
+        self.assertLess(events.index("source-verify"), events.index("services-start"))
+        self.assertLess(events.index("services-start"), events.index("retention"))
+
+    def test_portable_directory_receipt_cannot_override_changed_source_mount(self):
+        root, _, events, manifest = self.worker(code=0, profile="portable-archive", verify=18,
+                                               expected=18, tar_directory_verified=True)
+        self.assertEqual(manifest["status"], "failed")
+        receipt = json.loads((root / "target/vanished-test/copy-result.json").read_bytes())
+        self.assertEqual((receipt["copy_exit_status"], receipt["source_verification_status"],
+                          receipt["effective_status"]), (1, 18, 18))
+        self.assertIn("services-start", events)
+        self.assertNotIn("retention", events)
+
+    def test_missing_tar_receipt_fails_and_retains_unrecorded_private_diagnostics(self):
+        root, _, events, manifest = self.worker(code=0, profile="portable-archive",
+                                               expected=23, tar_receipt_missing=True)
+        self.assertEqual(manifest["status"], "failed")
+        journal = root / "state/journals/backup-vanished-test.log"
+        self.assertTrue((journal / "tar-stderr.log").is_file())
+        self.assertFalse((journal / "tar-stderr.logged").exists())
+        self.assertIn("services-start", events)
+        self.assertNotIn("retention", events)
+
 
 @unittest.skipUnless(runtime.BASH and Path(runtime.BASH).exists(), "Bash/Perl required")
 class RsyncVanishedJournalCleanupTests(unittest.TestCase):
@@ -610,6 +669,19 @@ backup_cleanup_on_exit 143 "$TEST_ROOT/missing-backup" "$TASK_LOG_DIR/backup-tes
         self.assertEqual(log.count("diagnostics captured before TERM"), 1)
         task = json.loads((self.root / "state/tasks/backup-test.log.json").read_bytes())
         self.assertEqual((task["state"], task["phase"]), ("failed", "failed"))
+
+    def test_interrupted_tar_recording_recovers_diagnostics_and_cleans_only_known_receipts(self):
+        self.run_shell(r'''
+state_dir="$(restart_journal_create backup-test.log)"
+printf 'TAR diagnostics captured before TERM\n' > "$state_dir/tar-stderr.log"
+printf '{"raw_exit_status":1,"effective_exit_status":1}\n' > "$state_dir/tar-result.json"
+printf 'earlier task output\n' > "$TASK_LOG_DIR/backup-test.log"
+backup_cleanup_on_exit 143 "$TEST_ROOT/missing-backup" "$TASK_LOG_DIR/backup-test.log" true '' backup-test.log "$state_dir"
+''', (*self.functions, "backup_cleanup_on_exit"))
+        self.assertFalse((self.root / "state/restart-journals/backup-test.log").exists())
+        log = (self.root / "state/logs/backup-test.log").read_text()
+        self.assertIn("Recovered tar diagnostics", log)
+        self.assertEqual(log.count("TAR diagnostics captured before TERM"), 1)
 
     def test_failed_recovery_append_retains_capture_and_journal_for_later_process(self):
         self.run_shell(r'''

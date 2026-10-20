@@ -34,6 +34,11 @@ validiert werden.
 - Kopierwerkzeug, Kopierstatus und anschliessende Quellenprüfung getrennt
   dokumentieren. Ein TAR-Fehler wird nicht mehr als rsync-Fehler bezeichnet;
   rsync-Code 24 ist keine allgemeine Freigabe für andere Kopierwerkzeuge.
+- TAR berücksichtigt auch die Metadaten rotierender Diagnoseverzeichnisse:
+  Nur eindeutig zugeordnete Verzeichnisänderungen mit unveränderter Identität,
+  Eigentümern, Rechten, ACLs und xattrs sowie passenden Archivmetadaten dürfen
+  als unkritisch gelten. Originalstatus und Bewertungsbeleg bleiben erhalten;
+  wichtige Dateien, gemischte Fehler und unbekannte Meldungen bleiben Fehler.
 - Automatische Aufbewahrung erhält zusätzlich den letzten vollständig geprüften
   Stand je Host-/Formatlinie, wenn ein neuerer Stand Hinweise enthält.
 - Aus Primärquellen abgeleitete Randfälle: Dateilisteneinträge mit führendem

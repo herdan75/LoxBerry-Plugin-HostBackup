@@ -36,7 +36,14 @@ Die Mount-Prüfung verwendet unveränderliche lokale Quellengrenzen. Sie ignorie
 nur Änderungen ausserhalb des gesicherten Umfangs. Verlust, Ersatz oder
 Überdeckung einer ausgewählten Quelle und ihrer notwendigen Zugriffswege
 bleiben Fehler. `source-verification.json` und `copy-result.json` trennen
-Kopierergebnis und Mount-Prüfung. Der letzte vollständig geprüfte Stand je
+Kopierergebnis und Mount-Prüfung. `tar-result.json` bewahrt zusätzlich den
+Originalstatus und die gezielte Verzeichnisbewertung. Für eine Freigabe müssen
+Identität und wiederherstellbare Metadaten des betroffenen verwalteten
+Diagnoseverzeichnisses vor und nach dem Kopieren sowie sein Archivheader passen.
+Nur Zeitstempel beziehungsweise Verzeichnisgrösse dürfen sich durch die Rotation
+ändern. Vollständige, eindeutig quotierte TAR-Diagnosen werden privat erfasst;
+unbekannte oder gemischte Fehler erlauben keine Freigabe.
+Der letzte vollständig geprüfte Stand je
 Host-/Formatlinie bleibt vor automatischer Verdrängung durch neuere Stände
 mit Hinweisen geschützt.
 
@@ -86,6 +93,7 @@ abgeglichen. Allgemeine Erfahrungsberichte allein dienen nicht als Nachweis.
 | --- | --- |
 | [rsync-Dateilisten](https://download.samba.org/pub/rsync/rsync.1): Führende `#` und `;` können trotz NUL-Trennung Kommentare sein; `--from0` gilt auch für Ausschlussdateien. `--dirs` erweitert den Eintrag `.` um neue Wurzeleinträge. | Explizite relative Namen erhalten `./`; rsync bekommt keinen expliziten `.`-Eintrag. Wurzelmetadaten werden separat im tatsächlichen Kopiertest geprüft. Die eingefrorene Auswahl wird nicht nochmals als anders getrennte Ausschlussliste interpretiert. Tests für Sonderzeichen, Leerzeichen, Zeilenumbrüche und erst nach der Auswahl entstandene Dateien. |
 | [GNU TAR: sich ändernde beziehungsweise nicht lesbare Dateien](https://www.gnu.org/software/tar/manual/html_node/Ignore-Failed-Read.html). | Kein pauschales `--ignore-failed-read`. Relevante fehlende oder während des Lesens veränderte Daten bleiben sichtbar. Ein deterministischer Checkpoint-Test ergänzt die Rotationstests. |
+| [GNU-TAR-Quellcode 1.35](https://ftp.gnu.org/gnu/tar/tar-1.35.tar.xz), `src/create.c`: `--no-recursion` verhindert nicht die Änderungsprüfung des Verzeichnisses selbst. | Die verschärften Rotationstests haben diesen zusätzlichen Abbruch tatsächlich reproduziert. Eine gezielte Behandlung muss echte Verzeichnisidentität und unveränderte Eigentümer, Rechte und erweiterte Metadaten nachweisen; wichtige Dateiänderungen und gemischte Fehler bleiben strikt. Das blosse Unterdrücken der Warnmeldung genügt nicht. |
 | [rsync `--link-dest`](https://download.samba.org/pub/rsync/rsync.1): Wiederverwendung darf frühere Stände nicht verändern. | Zweiter Stand mit geändertem Inhalt, Modus und ACL; der erste Stand bleibt unverändert. Unveränderte Dateien werden weiterhin wiederverwendet. |
 | [Restic-Dateilisten und Fehlercodes](https://restic.readthedocs.io/en/stable/040_backup.html): Direkte Pfade umgehen Ausschlüsse; Exit 3 kann einen unvollständigen Snapshot hinterlassen. | NUL-Liste, unterdrückte zusätzliche Rekursion und exakter Inventarvergleich. Kein Freigabebeleg bei Exit 1/3 oder Metadatenwarnungen; vorherige veröffentlichte Stände bleiben erhalten. |
 | [Restic auf älteren Linux/CIFS-Kombinationen](https://restic.readthedocs.io/en/stable/030_preparing_a_new_repo.html). | Das schon vorhandene `GODEBUG=asyncpreemptoff=1` bleibt fest gesetzt und gegen Umgebungsüberschreibung getestet. Reales CIFS wird mit einem isolierten Samba-Testziel geprüft. |
@@ -101,6 +109,27 @@ Verbindungsausfalltest jeder NAS-/Kernel-/SMB-Kombination. Eine Strukturprüfung
 ist ausserdem nicht mit einer vollständigen Datenprüfung oder einem System-Restore
 gleichzusetzen ([Restic-Datenprüfung](https://restic.readthedocs.io/en/stable/045_working_with_repos.html)).
 
+## Frühere Fehlermeldungen bleiben im Regressionsumfang
+
+Die CI entdeckt weiterhin sämtliche `tests/test_*.py` und führt zusätzlich die
+vollständigen Browser- und Linux-/CIFS-Integrationen aus. Der neue Schwerpunkt
+ersetzt keine bisherigen Prüfungen.
+
+| Frühere Meldung | Gezielte Regressionen |
+| --- | --- |
+| NAS meldet `0/0/0` Inodes | `test_runtime_safety.py`, `test_preflight_cifs.py`: unbekannte Werte zulassen; bekannte Erschöpfung und andere echte Vorprüfungsfehler weiterhin blockieren. |
+| Ungeeignete SMB-Metadaten / portable Sicherung | `test_metadata_probe.py` und echte portable CIFS-Roundtrips: feste Rechte und fehlende Metadaten nicht als Erfolg ausgeben; portable Wiederherstellung gesondert prüfen. |
+| Diensteliste und Zeitüberschreitung | `test_stop_targets.py`, Browser `checkStopTargets`: grosse Listen, gemeinsame Zeitgrenze, verzögerte Antwort, Wiederholung und Erhalt der Eingaben. |
+| Squeezelite-Instanzen, Sonderzeichen und falsche Empfehlungen | `test_systemd_stop_safety.py`, `test_stop_targets_web.py`: gültige Namen wörtlich übertragen, Aliase kanonisch behandeln, unsichere Stopps abweisen; tatsächlichen Backup-Worker ausführen. |
+| Verschwundene Docker-ID / wiederholte Mails | `test_docker_recovery.py`: bestätigte obsolete IDs archivieren, keine Ersatzcontainer nach Namen starten; echte Startfehler weiter behandeln und unveränderte Meldungen nicht endlos versenden. |
+| Blockierte Altinstallation | `test_install_hooks.py`: tatsächliches Update ohne vorherige Deinstallation, erhaltene Einstellungen und Journale, anschliessende Recovery sowie Deinstallation und Neuinstallation. Schutz bei aktiven Aufgaben und ungesicherten Repository-Schlüsseln bleibt bestehen. |
+| Prüfbericht mit HTTP 500 | `test_verification_report.py`, `test_validation_display.py`, Browser `checkActionWiring`: fehlende, beschädigte und gültige Berichte sowie Belegung und echte HTTP-Fehler unterscheiden. |
+| Nicht schliessbare Bereiche / parallele Bedienung | Browser `checkResultPanels`, `test_preflight_concurrency.py`: schliessen und wieder öffnen, verspätete Antworten, Scrollposition, Polling, aktive Aufgaben und echte Sperren prüfen. |
+
+Ein fremder Anwendungs-Watchdog wird dadurch nicht automatisch mit dem Backup
+koordiniert. Der geprüfte Wiederanlauf behandelt verschwundene Container sicher;
+für eine anwendungskonsistente Sicherung bleibt ein abgestimmter Stopp nötig.
+
 ## Ergebnisse
 
 Bestätigter vollständiger Referenzlauf vor den zusätzlichen Internet-Sonderfällen:
@@ -112,7 +141,7 @@ ist erfolgreich. Er umfasst 626 Tests im allgemeinen Linux-Lauf
 Browser-Regressionen sowie acht Paketprüfungen. Syntax-, ShellCheck-,
 sudoers- und PHP-Prüfungen sowie der ZIP-Build sind ebenfalls erfolgreich.
 
-Die anschliessende Erweiterung enthält 26 verpflichtende Live-Quellen-Tests
+Die anschliessende Erweiterung enthält 28 verpflichtende Live-Quellen-Tests
 und zusätzliche Quellen-/Repository-Regressionen für die oben dokumentierten
 Sonderfälle. Lokale Windows-Prüfungen bestätigen die portablen Anteile;
 Linux-spezifische Skips werden nicht als lokale Ausführungsnachweise gezählt.

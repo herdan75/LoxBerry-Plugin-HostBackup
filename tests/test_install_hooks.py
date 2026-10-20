@@ -71,7 +71,7 @@ class InstallHookTests(unittest.TestCase):
     def test_legacy_recovery_fixture_and_installer_sources_match_1_2_2(self) -> None:
         self.assertEqual(set(legacy_recovery_functions()), set(LEGACY_RECOVERY_HASHES))
         # These files retain v1.2.2-beta/9322736's installer behaviour, with
-        # POSTROOT's two new mandatory source-policy helpers checked before
+        # POSTROOT's new mandatory source/archive helpers checked before
         # activation. Undo only those exact additions for historical identity;
         # any other installer change still requires an explicit fixture review.
         # Hash Git's LF-normalized blob without requiring checkout history.
@@ -85,7 +85,8 @@ class InstallHookTests(unittest.TestCase):
             with self.subTest(source=name):
                 source = (ROOT / name).read_text(encoding="utf-8")
                 if name == "postroot.sh":
-                    for helper in ("hostbackup-sources.py", "hostbackup-runtime-policy.py"):
+                    for helper in ("hostbackup-sources.py", "hostbackup-runtime-policy.py",
+                                   "hostbackup-tar.py", "hostbackup-tar-headers.py"):
                         required_token = ' "$SOURCE_BIN/' + helper + '"'
                         self.assertEqual(source.count(required_token), 1)
                         source = source.replace(required_token, "", 1)
@@ -155,7 +156,8 @@ class InstallHookTests(unittest.TestCase):
     def test_postroot_requires_complete_source_policy_before_runtime_activation(self) -> None:
         required_check = POSTROOT.index('for required_file in ')
         required_end = POSTROOT.index('\ndone', required_check)
-        for helper in ('hostbackup-sources.py', 'hostbackup-runtime-policy.py'):
+        for helper in ('hostbackup-sources.py', 'hostbackup-runtime-policy.py',
+                       'hostbackup-tar.py', 'hostbackup-tar-headers.py'):
             self.assertIn('"$SOURCE_BIN/' + helper + '"', POSTROOT[required_check:required_end])
         self.assertLess(required_end, POSTROOT.index('mv -fT -- "$pointer" "$TRUST_ROOT/current"'))
 
@@ -456,8 +458,9 @@ for action in (lambda: p.write_text('injected'), lambda: p.unlink(),
 
         # A new shared source-policy dependency must be present before an
         # interrupted/partial platform copy can replace the working runtime.
-        # Exercise both missing modules against the actual POSTROOT hook.
-        for number, missing in enumerate(("hostbackup-sources.py", "hostbackup-runtime-policy.py")):
+        # Exercise every missing module against the actual POSTROOT hook.
+        for number, missing in enumerate(("hostbackup-sources.py", "hostbackup-runtime-policy.py",
+                                          "hostbackup-tar.py", "hostbackup-tar-headers.py")):
             active = (trusted / "current").resolve()
             saved_config = config.read_bytes()
             args = [f"source-policy-{number}", "", "loxberryhostbackup", "", str(home)]

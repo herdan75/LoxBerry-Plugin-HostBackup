@@ -36,6 +36,7 @@ def helper(name):
 
 sources = helper("hostbackup-sources")
 repository = helper("hostbackup-repository")
+tar_engine = helper("hostbackup-tar")
 
 
 def command(argv, *, timeout=60, check=True):
@@ -126,9 +127,12 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
             path.chmod(0o640)
             self.edge_files[path] = payload
         self.file_list = self.base / "selection.nul"
+        self.source_report = self.base / "selection-report.json"
         self.plan = None
         self.names = None
-        self.fixture_mounts = [{"path": "/", "fstype": "ext4", "kind": "local", "mount_id": "fixture"}]
+        device = self.source.stat().st_dev
+        self.fixture_mounts = [{"path": "/", "fstype": "ext4", "kind": "local", "mount_id": "fixture",
+                               "device": "%d:%d" % (os.major(device), os.minor(device)), "root": "/"}]
         if getattr(self, "ramlog_namespace_fixture", False):
             self.install_ramlog_fixture()
 
@@ -195,6 +199,8 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
         self.raw_names = raw_names
         self.names = [name[2:] if name.startswith("./") else name for name in raw_names]
         self.file_list.write_bytes(b"".join(os.fsencode(path) + b"\0" for path in raw_names))
+        self.source_report.write_text(json.dumps(sources.verification_report(self.plan)), encoding="utf-8")
+        self.source_report.chmod(0o600)
         for path in self.edge_files:
             self.assertIn("./" + str(path.relative_to(self.source)), raw_names)
         self.assertIn(str(self.important.relative_to(self.source)), self.names)
@@ -280,12 +286,27 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
 
     def tar_backup(self, extra_options=()):
         archive = self.base / "rootfs.tar"
-        result = command([
-            "tar", "--format=pax", "--numeric-owner", "--acls", "--xattrs", "--xattrs-include=*",
-            "--selinux", "--sparse", *extra_options, "-C", self.source, "-cpf", archive,
-            "--no-recursion", "--null", "--verbatim-files-from", "--files-from=" + str(self.file_list),
-        ], check=False)
+        state = self.base / "tar-state"
+        state.mkdir(mode=0o700)
+        self.tar_receipt = tar_engine.create_archive(
+            archive, self.file_list, self.source_report, state,
+            source_root=self.source, extra_options=extra_options)
+        stderr = Path(self.tar_receipt["stderr_path"]).read_bytes()
+        result = subprocess.CompletedProcess(["hostbackup-tar"],
+                                             self.tar_receipt["effective_exit_status"], b"", stderr)
         return result, archive
+
+    def assert_tar_success(self, result):
+        self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+        self.assertEqual(self.tar_receipt["effective_exit_status"], 0)
+        self.assertIn(self.tar_receipt["raw_exit_status"], (0, 1))
+        if self.tar_receipt["raw_exit_status"] == 0:
+            self.assertEqual(result.stderr, b"")
+        else:
+            # Real GNU tar diagnostics remain observable in the private
+            # receipt, despite the tightly scoped directory-only success.
+            self.assertTrue(result.stderr)
+            self.assertGreater(self.tar_receipt["directory_metadata_verified_count"], 0)
 
     def rsync_backup(self, name="rsync-backup", reference=None):
         destination = self.base / name
@@ -345,7 +366,7 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
         self.freeze(enumerate_during_rotation=True)
         with self.late_unlisted_files(), self.rotating_logs():
             result, archive = self.tar_backup()
-        self.assert_success(result)
+        self.assert_tar_success(result)
         restored = self.base / "tar-restored"
         restored.mkdir(mode=0o700)
         self.assert_success(command([
@@ -436,6 +457,80 @@ class LiveSourceCopyIntegrationTests(OptInLinuxCase):
         self.assertIn(b"file changed as we read it", result.stderr)
         mutation = json.loads(marker.read_text())
         self.assertEqual(mutation["checkpoint"], "1024")
+        self.assertGreater(mutation["after"], mutation["before"])
+
+    def directory_checkpoint_options(self, changing=None):
+        """Create real child churn while tar writes each 512-byte header record."""
+        script = self.base / "directory-checkpoint.py"
+        marker = self.base / "directory-checkpoint.json"
+        script.write_text(
+            "import json, os, pathlib, sys\n"
+            "directory, marker = map(pathlib.Path, sys.argv[1:3])\n"
+            "checkpoint = int(os.environ['TAR_CHECKPOINT'])\n"
+            "evidence = json.loads(marker.read_text()) if marker.exists() else {}\n"
+            "temporary = directory / 'checkpoint-runtime.log'\n"
+            "temporary.write_bytes(b'disposable runtime child churn\\n')\n"
+            "temporary.unlink()\n"
+            "info = directory.stat()\n"
+            "os.utime(directory, ns=(info.st_atime_ns, info.st_mtime_ns + 1))\n"
+            "if len(sys.argv) == 4 and checkpoint == 16:\n"
+            "    changing = pathlib.Path(sys.argv[3])\n"
+            "    before = changing.stat()\n"
+            "    with changing.open('ab') as handle:\n"
+            "        handle.write(b'important data changed during reading\\n')\n"
+            "        handle.flush()\n"
+            "        os.fsync(handle.fileno())\n"
+            "    os.utime(changing, ns=(before.st_atime_ns, before.st_mtime_ns + 3000000000))\n"
+            "    evidence['changed_at_checkpoint'] = checkpoint\n"
+            "    evidence['before'] = before.st_size\n"
+            "    evidence['after'] = changing.stat().st_size\n"
+            "evidence['last_checkpoint'] = checkpoint\n"
+            "marker.write_text(json.dumps(evidence))\n",
+            encoding="utf-8")
+        args = [sys.executable, script, self.runtime, marker]
+        if changing is not None:
+            args.append(changing)
+        action = "exec=" + " ".join(shlex.quote(str(path)) for path in args)
+        return ("--blocking-factor=1", "--checkpoint=1", "--checkpoint-action=" + action), marker
+
+    def test_gnu_tar_only_runtime_directory_churn_has_verified_success_receipt(self):
+        # Keep the checkpoint-per-record test small. The runtime directory's
+        # PAX ACL/xattr header spans multiple records, placing real child churn
+        # between GNU tar's before/after directory metadata observations.
+        self.payload.write_bytes(b"small deterministic checkpoint fixture\n")
+        options, marker = self.directory_checkpoint_options()
+        self.freeze()
+        with self.late_unlisted_files():
+            result, archive = self.tar_backup(options)
+        self.assert_tar_success(result)
+        self.assertEqual(self.tar_receipt["raw_exit_status"], 1, result.stderr.decode(errors="replace"))
+        self.assertGreater(self.tar_receipt["directory_metadata_verified_count"], 0)
+        self.assertIn(b"opt/loxberry/log/plugins/audioserver4home", result.stderr)
+        self.assertIn(b"file changed as we read it", result.stderr)
+        self.assertGreater(json.loads(marker.read_text())["last_checkpoint"], 1)
+        restored = self.base / "checkpoint-restored"
+        restored.mkdir(mode=0o700)
+        self.assert_success(command([
+            "tar", "--numeric-owner", "--same-owner", "--same-permissions", "--acls", "--xattrs",
+            "--xattrs-include=*", "--selinux", "--sparse", "-C", restored, "-xpf", archive,
+        ], check=False))
+        self.assert_restored(restored)
+
+    def test_gnu_tar_runtime_directory_and_required_file_changes_remain_failure(self):
+        self.payload.write_bytes(b"small deterministic mixed checkpoint fixture\n")
+        # Sort this file before all existing members except root itself.
+        changing = self.source / " 0-changing-required.data"
+        changing.write_bytes(b"required persistent bytes\n" * 4096)
+        options, marker = self.directory_checkpoint_options(changing)
+        self.freeze()
+        self.assertEqual(self.names[:2], [".", changing.name])
+        result, _ = self.tar_backup(options)
+        self.assertEqual(self.tar_receipt["raw_exit_status"], 1, result.stderr.decode(errors="replace"))
+        self.assertEqual(result.returncode, 1, "Mixed real file changes must never be normalized to success")
+        self.assertIn(b"0-changing-required.data", result.stderr)
+        self.assertIn(b"opt/loxberry/log/plugins/audioserver4home", result.stderr)
+        mutation = json.loads(marker.read_text())
+        self.assertEqual(mutation["changed_at_checkpoint"], 16)
         self.assertGreater(mutation["after"], mutation["before"])
 
     def test_gnu_tar_missing_persistent_data_is_not_accepted(self):
