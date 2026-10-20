@@ -52,6 +52,7 @@ RESTART_JOURNAL_DIR="$ROOT_STATE_DIR/restart-journals"
 LOCK_DIR="$ROOT_STATE_DIR/locks"
 LBHOMEDIR="$TEST_ROOT/loxberry"
 LBP_BINDIR="$TEST_ROOT/bin"
+CONFIG_FILE="$TEST_ROOT/config.json"
 mkdir -p "$TASK_DIR" "$TASK_LOG_DIR" "$RESTART_JOURNAL_DIR" "$LOCK_DIR" "$TEST_ROOT/target"
 require_root_for_write() { :; }
 require_root_permission_ack() { :; }
@@ -157,6 +158,67 @@ portable_helper() {
 }
 metadata_capability_probe() { :; }
 source_info() { printf '%s\n' '{"status":"ok","selection":{"policy":"legacy","overrides":{}},"volumes":[],"notices":[],"errors":[]}'; }
+# Worker tests exercise the production frozen-list orchestration without ever
+# loading its real host-root enumerator. Only this exact helper is intercepted;
+# ordinary -c receipts still use the test runner's Python interpreter.
+python3() {
+  if [ "${1:-}" = "$LBP_BINDIR/hostbackup-sources.py" ]; then
+    shift
+    local action="$1" report="" verification="" excludes="" home="" config=""
+    shift
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --report) report="$2"; shift 2 ;;
+        --verification-report) verification="$2"; shift 2 ;;
+        --excludes) excludes="$2"; shift 2 ;;
+        --loxberry-home) home="$2"; shift 2 ;;
+        --config) config="$2"; shift 2 ;;
+        --omit-sockets) shift ;;
+        *) return 99 ;;
+      esac
+    done
+    local private_dir="${report%/source-selection.json}"
+    [[ "$private_dir" == "$RESTART_JOURNAL_DIR/backup-"*.log ]] || return 99
+    [ "$report" = "$private_dir/source-selection.json" ] || return 99
+    [ -d "$private_dir" ] && [ ! -L "$private_dir" ] || return 99
+    case "$action" in
+      files)
+        [ "$config" = "$CONFIG_FILE" ] && [ "$home" = "$LBHOMEDIR" ] || return 99
+        [ "$excludes" = "$private_dir/source-excludes.txt" ] || return 99
+        grep -Fxq /proc "$excludes" || return 99
+        printf '%s\n' '{"mount_verification_version":2,"status":"ok","fixture":true}' > "$report"
+        printf '.\0fixture.txt\0'
+        ;;
+      verify)
+        [ "$verification" = "$private_dir/source-verification.json" ] || return 99
+        grep -q '"fixture":true' "$report" || return 99
+        printf '%s\n' '{"version":2,"status":"ok","relevant_changes_count":0}' > "$verification"
+        ;;
+      *) return 99 ;;
+    esac
+  elif [ "${1:-}" = -c ]; then
+    "$RUNTIME_PYTHON" "$@"
+  else
+    echo 'Unexpected Python script; host enumeration forbidden' >&2
+    return 99
+  fi
+}
+assert_mock_copy_scope() {
+  local arg files="" excludes="" from0=false recursive=false dirs=false
+  for arg in "$@"; do
+    case "$arg" in
+      --from0) from0=true ;;
+      --no-recursive) recursive=true ;;
+      --dirs) dirs=true ;;
+      --files-from=*) files="${arg#--files-from=}" ;;
+      --exclude-from=*) excludes="${arg#--exclude-from=}" ;;
+    esac
+  done
+  [ "$from0:$recursive:$dirs" = true:true:true ] || return 99
+  [[ "$files" == "$RESTART_JOURNAL_DIR/backup-"*.log/source-files.nul ]] || return 99
+  [ "$excludes" = "${files%/source-files.nul}/source-excludes.txt" ] || return 99
+  cmp -- "$files" <(printf '.\0fixture.txt\0') || return 99
+}
 current_mount_value() { echo ext4; }
 latest_complete_backup() { echo "${REFERENCE:-}"; }
 latest_sized_complete_backup() { [ "${NO_ESTIMATE:-false}" = true ] || echo "$TEST_ROOT/historical"; }
@@ -199,7 +261,8 @@ class RuntimeSafetyTests(unittest.TestCase):
         source = SETUP + "\n" + windows_setup + "\n".join(function(n) for n in (*COMMON_FUNCTIONS, *names)) + "\n" + script
         result = subprocess.run(
             [BASH, "-s"], input=source, text=True, encoding="utf-8", capture_output=True,
-            env={**os.environ, "RUNTIME_TEST_DIR": self.root.as_posix(), **(env or {})},
+            env={**os.environ, "RUNTIME_TEST_DIR": self.root.as_posix(),
+                 "RUNTIME_PYTHON": Path(sys.executable).as_posix(), **(env or {})},
             # Journal fixtures spawn many real Bash/Perl processes; Windows
             # process startup under concurrent validation can exceed 30 seconds.
             # Keep a finite bound without altering any production timeout.
@@ -699,7 +762,10 @@ rsync_live_options() { :; }
 rsync_metadata_options() { :; }
 rsync_destination() { printf '%s\n' "$2"; }
 # No actual filesystem copy or deletion is performed by this fixture.
-rsync() { [[ "${!#}" == "$TEST_ROOT/target/test-$PRUNE_STATUS/rootfs/" ]]; }
+rsync() {
+  assert_mock_copy_scope "$@" || return 99
+  [[ "${!#}" == "$TEST_ROOT/target/test-$PRUNE_STATUS/rootfs/" ]]
+}
 calculate_size() { echo 12; }
 calculate_files() { echo 1; }
 validate_completed_backup() { cp "$TASK_DIR/backup-test-$PRUNE_STATUS.log.json" "$TEST_ROOT/validation-state.json"; }

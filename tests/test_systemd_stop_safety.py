@@ -177,6 +177,7 @@ rsync_destination() { printf '%s\n' "$2"; }
 rsync() {
   # Never copy the host /. The production worker runs unchanged, but its copy
   # dependency is restricted to one known disposable source and destination.
+  assert_mock_copy_scope "$@" || return 99
   [[ "${!#}" == "$TEST_ROOT/target/test/rootfs/" ]] || return 99
   for unit in mosquitto.service squeezelite-lbp-mixer.service squeezelite-lbp@inst_bad.service squeezelite-lbp@inst_wozi_k_che.service; do
     [ ! -f "$TEST_ROOT/active-$unit" ] || return 98
@@ -207,6 +208,9 @@ create_backup test
         task = json.loads((self.root / "state/tasks/backup-test.log.json").read_text())
         manifest = json.loads((self.root / "target/test/manifest.json").read_text())
         self.assertEqual((task["state"], task["phase"], manifest["status"]), ("finished", "complete", "complete"))
+        receipt = json.loads((self.root / "target/test/copy-result.json").read_text())
+        self.assertEqual(receipt, {"tool": "rsync", "copy_exit_status": 0,
+                                  "source_verification_status": 0, "effective_status": 0})
         copy_journal = json.loads((self.root / "copy-journal.json").read_text())
         self.assertEqual([(entry["type"], entry["id"], entry["phase"]) for entry in copy_journal["entries"]],
                          [("systemd", name, "stopped") for name in SQUEEZELITE_SERVICES]

@@ -394,6 +394,14 @@ sub bool_arg {
   return $value ? 'true' : 'false';
 }
 
+sub runtime_logs_import_arg {
+  my ($config) = @_;
+  return 'false' unless exists $config->{include_runtime_logs};
+  die "include_runtime_logs muss ein JSON-Wahrheitswert sein.\n"
+    unless JSON::PP::is_bool($config->{include_runtime_logs});
+  return $config->{include_runtime_logs} ? 'true' : 'false';
+}
+
 sub array_csv {
   my ($value, $default) = @_;
   return $default unless ref($value) eq 'ARRAY' && @$value;
@@ -743,6 +751,8 @@ if ($q->request_method eq 'POST') {
         my $mail_notify_restore = exists $imported->{mail_notify_restore} ? bool_arg($imported->{mail_notify_restore}) : 'true';
         my $sources = eval { source_selection_json(encode_json(exists $imported->{source_selection} ? $imported->{source_selection} : { policy => 'legacy', overrides => {} })) };
         $error = escapeHTML($@) if $@;
+        my $runtime_logs = eval { runtime_logs_import_arg($imported) };
+        $error = escapeHTML($@) if $@;
 
         my ($status, $out) = $error ? (1, $error) : run_shell(
           backend_cmd(
@@ -773,7 +783,7 @@ if ($q->request_method eq 'POST') {
             $mail_notify_restore,
             $metadata_mode,
             $sources,
-            bool_arg($imported->{include_runtime_logs})
+            $runtime_logs
           )
         );
 

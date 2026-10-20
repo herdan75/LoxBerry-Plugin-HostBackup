@@ -283,7 +283,10 @@ rsync_metadata_options() { :; }
 rsync_destination() { printf '%s\n' "$2"; }
 # Only the copy/validation/storage dependencies are simulated. The production
 # backup worker and its complete service/journal lifecycle run unchanged.
-rsync() { [[ "${!#}" == "$TEST_ROOT/target/"*"/rootfs/" ]]; }
+rsync() {
+  assert_mock_copy_scope "$@" || return 99
+  [[ "${!#}" == "$TEST_ROOT/target/"*"/rootfs/" ]]
+}
 calculate_size() { echo 12; }
 calculate_files() { echo 1; }
 validate_completed_backup() { :; }
@@ -298,6 +301,9 @@ MOCK_TASK_NAME=backup-second.log create_backup second
             manifest = json.loads((self.root / f"target/{name}/manifest.json").read_text())
             self.assertEqual((task["state"], task["phase"]), ("finished", "complete"))
             self.assertEqual(manifest["status"], "complete")
+            receipt = json.loads((self.root / f"target/{name}/copy-result.json").read_text())
+            self.assertEqual(receipt, {"tool": "rsync", "copy_exit_status": 0,
+                                      "source_verification_status": 0, "effective_status": 0})
         self.assertEqual(self.starts(), [FULL_ID])
         self.assertEqual((self.root / "docker-stops").read_text().splitlines(), [FULL_ID])
         self.assertEqual(list((self.root / "state/restart-journals").iterdir()), [])

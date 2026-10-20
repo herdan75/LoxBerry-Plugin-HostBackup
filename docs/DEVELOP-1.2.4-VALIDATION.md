@@ -17,6 +17,10 @@ unter folgenden bekannten Bereichen werden standardmässig ausgelassen:
 Verzeichnisse und ihre Metadaten, Symlinks, Sonderdateien sowie dauerhafte
 Installationsnachweise unter `log/system` bleiben normale Quellen. Es gibt keine
 allgemeine Ausnahme für `.log`-Dateien, Docker-Volumes oder Datenbankdateien.
+Die Einordnung stützt sich auf den dokumentierten Zweck dieser Logbereiche,
+nicht auf eine inhaltliche Analyse jeder Datei. Falls ein fremdes Plugin dort
+entgegen dieser Konvention dauerhafte Nutzdaten ablegt, muss die ausdrückliche
+Mitsicherung aktiviert bleiben beziehungsweise dieser Teilbereich ausgewählt werden.
 Ungewöhnliche Mounts und ausdrücklich eingeschlossene Teilquellen werden nicht
 als entbehrlicher Inhalt klassifiziert. Die erweiterte Einstellung
 `include_runtime_logs=true` schaltet die Auslassung aus. Ein alter Speicheraufruf

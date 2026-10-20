@@ -15,9 +15,16 @@ const quote = value => "'" + value.replace(/'/g, "'\\''") + "'";
 const perlLib = ['tests/browser/perl','tests/perl-stub','tests/perl'].join(':');
 const cgiSource=fs.readFileSync(path.join(repo,'webfrontend/htmlauth/index.cgi'),'utf8');
 const sourceValidator=cgiSource.match(/^sub source_selection_json \{[\s\S]*?^\}/m)[0];
+const runtimeLogsValidator=cgiSource.match(/^sub runtime_logs_import_arg \{[\s\S]*?^\}/m)[0];
 const publicRepositoryStatus=cgiSource.match(/^sub repository_public_status \{[\s\S]*?^\}/m)[0];
 const portableSettingsValidator=cgiSource.match(/^sub portable_settings_error \{[\s\S]*?^\}/m)[0];
-const validatorProgram='use strict; use warnings; use JSON::PP;\n'+sourceValidator+'\n'+publicRepositoryStatus+'\n'+String.raw`
+const validatorProgram='use strict; use warnings; use JSON::PP;\n'+sourceValidator+'\n'+runtimeLogsValidator+'\n'+publicRepositoryStatus+'\n'+String.raw`
+die "legacy runtime import default" unless runtime_logs_import_arg({}) eq 'false';
+die "runtime true changed" unless runtime_logs_import_arg({include_runtime_logs=>JSON::PP::true}) eq 'true';
+die "runtime false changed" unless runtime_logs_import_arg({include_runtime_logs=>JSON::PP::false}) eq 'false';
+for my $bad ('false', 'true', 0, 1, undef, [], {}) {
+  eval { runtime_logs_import_arg({include_runtime_logs=>$bad}) }; die "invalid runtime flag accepted" unless $@;
+}
 my $public=repository_public_status({initialized=>JSON::PP::true,key_confirmed=>JSON::PP::false,key_exported=>JSON::PP::true,available=>JSON::PP::true,repository_id=>'fixture',engine_version=>'0.19.1',secret=>'NEVER-PUBLIC',password=>'NEVER-PUBLIC',message=>'NEVER-PUBLIC'});
 die "repository status leaks extra fields" unless join(',',sort keys %$public) eq 'available,engine_version,initialized,key_confirmed,key_exported,repository_id';
 die "repository status booleans changed" unless $public->{initialized} && !$public->{key_confirmed};

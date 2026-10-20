@@ -70,8 +70,11 @@ def stage_installer_helper(package_root, sandbox, rewrite):
 class InstallHookTests(unittest.TestCase):
     def test_legacy_recovery_fixture_and_installer_sources_match_1_2_2(self) -> None:
         self.assertEqual(set(legacy_recovery_functions()), set(LEGACY_RECOVERY_HASHES))
-        # These files are byte-identical to v1.2.2-beta/9322736. Hash Git's
-        # LF-normalized blob directly, without requiring checkout history.
+        # These files retain v1.2.2-beta/9322736's installer behaviour, with
+        # POSTROOT's two new mandatory source-policy helpers checked before
+        # activation. Undo only those exact additions for historical identity;
+        # any other installer change still requires an explicit fixture review.
+        # Hash Git's LF-normalized blob without requiring checkout history.
         originals = {
             "preroot.sh": "94c927def2f0c1d27b63eb54684047ec98588f93",
             "postroot.sh": "b32029a1178a9b9609187db4eec2925d20eb9da5",
@@ -80,7 +83,13 @@ class InstallHookTests(unittest.TestCase):
         }
         for name, digest in originals.items():
             with self.subTest(source=name):
-                data = (ROOT / name).read_text(encoding="utf-8").encode()
+                source = (ROOT / name).read_text(encoding="utf-8")
+                if name == "postroot.sh":
+                    for helper in ("hostbackup-sources.py", "hostbackup-runtime-policy.py"):
+                        required_token = ' "$SOURCE_BIN/' + helper + '"'
+                        self.assertEqual(source.count(required_token), 1)
+                        source = source.replace(required_token, "", 1)
+                data = source.encode()
                 blob = f"blob {len(data)}\0".encode() + data
                 self.assertEqual(hashlib.sha1(blob).hexdigest(), digest)
 
@@ -142,6 +151,13 @@ class InstallHookTests(unittest.TestCase):
             '"$LAUNCHER_TARGET" install-schedule',
         ):
             self.assertIn(required, POSTROOT)
+
+    def test_postroot_requires_complete_source_policy_before_runtime_activation(self) -> None:
+        required_check = POSTROOT.index('for required_file in ')
+        required_end = POSTROOT.index('\ndone', required_check)
+        for helper in ('hostbackup-sources.py', 'hostbackup-runtime-policy.py'):
+            self.assertIn('"$SOURCE_BIN/' + helper + '"', POSTROOT[required_check:required_end])
+        self.assertLess(required_end, POSTROOT.index('mv -fT -- "$pointer" "$TRUST_ROOT/current"'))
 
     def test_postroot_is_packaged_and_linted(self) -> None:
         self.assertIn("preroot.sh", PACKAGE_SH)
@@ -234,18 +250,20 @@ class InstallHookTests(unittest.TestCase):
                 self.assertIn(f"## [{tag[1:]}]", CHANGELOG)
         self.assertIn("prerelease: ${{ contains(github.ref_name, '-') }}", WORKFLOW)
 
-    def test_prerelease_package_version_is_numeric_and_matches_release_notes(self) -> None:
+    def test_develop_package_version_is_numeric_and_not_published(self) -> None:
         plugin = configparser.ConfigParser()
         plugin.read_string(PLUGIN_CFG)
         version = plugin["PLUGIN"]["VERSION"]
-        self.assertEqual(version, "1.2.3")
-        notes = (ROOT / "docs" / f"RELEASE-{version}.md").read_text(encoding="utf-8")
-        self.assertTrue(notes.startswith(f"# LoxBerry Host Backup {version}-beta\n"))
-        self.assertIn(f"**Version {version}-beta", README)
-        self.assertIn(f"## [{version}-beta]", CHANGELOG)
+        self.assertEqual(version, "1.2.4")
+        notes = (ROOT / "docs" / f"DEVELOP-{version}-VALIDATION.md").read_text(encoding="utf-8")
+        self.assertIn(version, notes)
+        self.assertIn(f"**Entwicklungsstand {version}", README)
+        self.assertIn(f"## [Unreleased] - Entwicklungsstand {version}", CHANGELOG)
         self.assertNotIn(f"VERSION={version}-beta", PLUGIN_CFG)
-        self.assertIn(f"LoxBerryHostBackup_{version}.zip", notes)
-        self.assertIn(f"v{version}-beta", notes)
+        self.assertNotIn(f"## [{version}-beta]", CHANGELOG)
+        channel = configparser.ConfigParser()
+        channel.read_string(PRERELEASE_CFG)
+        self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.3")
         stable = configparser.ConfigParser()
         stable.read_string(RELEASE_CFG)
         self.assertEqual(stable["AUTOUPDATE"]["VERSION"], "1.2.0")
@@ -435,6 +453,29 @@ for action in (lambda: p.write_text('injected'), lambda: p.unlink(),
         assert run(dispatcher, "recover-services", "--scheduled", success=False).returncode != 0
         assert run(dispatcher, "restore", "anything", success=False).returncode != 0
         assert run(dispatcher, "config", "extra", success=False).returncode != 0
+
+        # A new shared source-policy dependency must be present before an
+        # interrupted/partial platform copy can replace the working runtime.
+        # Exercise both missing modules against the actual POSTROOT hook.
+        for number, missing in enumerate(("hostbackup-sources.py", "hostbackup-runtime-policy.py")):
+            active = (trusted / "current").resolve()
+            saved_config = config.read_bytes()
+            args = [f"source-policy-{number}", "", "loxberryhostbackup", "", str(home)]
+            run(preroot, *args)
+            install_sources("source-policy-retry")
+            (bindir / missing).unlink()
+            failed = run(postroot, *args, success=False)
+            assert failed.returncode != 0 and "Required installed file is missing" in failed.stderr
+            assert missing in failed.stderr
+            assert (trusted / "current").resolve() == active
+            assert (active / missing).is_file()
+            assert config.read_bytes() == saved_config
+            assert run(dispatcher, "config").returncode == 0
+            install_sources("source-policy-retry")
+            run(postroot, *args)
+            assert (trusted / "current").resolve() != active
+            assert ((trusted / "current").resolve() / missing).is_file()
+            assert config.read_bytes() == saved_config
 
 
 def platform_upgrade_integration():

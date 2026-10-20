@@ -81,7 +81,7 @@ fi
 # It takes precedence over a freshly copied package default.
 python3 -I "$INSTALL_SAFETY" restore "$LBHOMEDIR" "$PLUGIN_FOLDER"
 
-for required_file in "$BACKEND" "$DISPATCHER_SOURCE" "$LAUNCHER_SOURCE" "$SOURCE_BIN/validate-import-archive.py" "$SOURCE_BIN/hostbackup-install-safety.py" "$CGI" "$RESTORE" "$NOTIFY" "$CONFIG"; do
+for required_file in "$BACKEND" "$DISPATCHER_SOURCE" "$LAUNCHER_SOURCE" "$SOURCE_BIN/validate-import-archive.py" "$SOURCE_BIN/hostbackup-install-safety.py" "$SOURCE_BIN/hostbackup-sources.py" "$SOURCE_BIN/hostbackup-runtime-policy.py" "$CGI" "$RESTORE" "$NOTIFY" "$CONFIG"; do
   if [ ! -f "$required_file" ] || [ -L "$required_file" ]; then
     echo "Required installed file is missing or unsafe: $required_file" >&2
     exit 1
