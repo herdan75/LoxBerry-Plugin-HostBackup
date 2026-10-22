@@ -220,6 +220,26 @@ Dateizugriff. Am Windows-Arbeitsplatz sind diese Linux-Tests ausdrücklich
 ausgelassen; die tatsächliche Linux-Ausführung muss der neue GitHub-Lauf belegen.
 Andreas' System und ein vollständiger Restore bleiben gesonderte Praxistests.
 
+Die zusätzliche Bedienkorrektur speichert erkannte Containerprobleme strukturiert
+beim Vorgang, nicht nur im begrenzten Logausschnitt. Die aufklappbare Meldung im
+Live-Status nennt den ursprünglichen Containernamen und die unveränderliche ID,
+trennt Wiederstart, fehlenden Container und nicht prüfbaren Docker-Zustand und
+gibt konkrete nächste Schritte. Der Name stammt aus dem lokalen Stoppjournal
+und wird niemals zur Auswahl eines Ersatzcontainers verwendet. Fehlt er in
+einem alten Journal, bleibt die ID sichtbar. Ein möglicher Watchdog wird nicht
+als bewiesener Verursacher bezeichnet. Die Diagnose soll Statuswechsel,
+Wiederanlauf und Seitenreload überstehen; Polling darf einen vom Nutzer
+zugeklappten Hinweis nicht wieder öffnen. Backend- und Browsertests prüfen diese
+Fälle und die getrennte Anzeige verschiedener Vorgänge. Diese Erweiterung
+benötigt ihren eigenen vollständigen CI-Nachweis nach dem nächsten Commit.
+Die lokalen Diagnoseprüfungen umfassen elf echte Journal-/Task-API-Tests,
+zehn Zustandsprüfungen und die Übersichtssuite (13 ausgeführt, ein
+Linux-`/proc`-Skip unter Windows). Der fokussierte CGI-/Browsertest wurde auf
+Desktop und Mobil erfolgreich ausgeführt: getrennte Ursachen und Selbsthilfe,
+vollständige IDs, langes Log, Reload, Aufgabenwechsel, sichere Textdarstellung
+und schliessbare Hinweise. Eine Beobachtung verändert weder Docker noch das
+Wiederanlauf-Journal; auch dies wird geprüft.
+
 Lokal ausgeführt: 27 Helfer-Testmethoden (19 ausgeführt, acht Linux-Skips),
 19 Koordinations-Testmethoden (neun ausgeführt mit zusätzlichen Tabellenfällen,
 zehn Linux-/Signal-Skips) sowie zehn Zustands-/Journal-Tests ohne Skips.

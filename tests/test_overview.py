@@ -86,6 +86,29 @@ class OverviewTests(unittest.TestCase):
             self.assertEqual(result["last_failure"]["state"], "failed")
             self.assertIsNone(result["last_success"])
 
+    def test_container_issue_is_preserved_in_last_failure_and_tasks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp)
+            (state / "tasks").mkdir()
+            issue = {"id": "ab" * 32, "name": "loxpanel", "state": "running", "stage": "after_copy"}
+            (state / "tasks/backup-container.log.json").write_text(json.dumps({
+                "task": "backup-container.log", "state": "failed", "phase": "failed",
+                "updated_at": 20, "container_issues": [issue],
+            }))
+            result = overview.overview({}, None, state)
+            self.assertEqual(result["last_failure"]["container_issues"], [issue])
+            self.assertEqual(result["tasks"][0]["container_issues"], [issue])
+
+    def test_container_issue_display_schema_is_bounded_and_untrusted_text_is_rejected(self):
+        valid = {"id": "ab" * 32, "name": "loxpanel", "state": "missing", "stage": "before_copy"}
+        invalid = [None, [], "bad", {**valid, "name": "x\ny"}, {**valid, "name": "ä"},
+                   {**valid, "id": "loxpanel"}, {**valid, "state": "stopped"},
+                   {**valid, "stage": "other"}, {**valid, "name": {"html": "<b>"}}]
+        self.assertEqual(overview.container_issues(invalid), [])
+        self.assertEqual(overview.container_issues({"bad": valid}), [])
+        result = overview.container_issues(invalid + [{**valid, "private": "not exposed"}] * 105)
+        self.assertEqual(result, [valid] * 100)
+
     def test_preview_excludes_backup_stick_not_other_usb_data(self):
         mounted = {"filesystems": [{"target": "/", "fstype": "ext4"}, {"target": "/media/usb/PI_Backup", "fstype": "ext4"}, {"target": "/media/usb/USB_Loxberry", "fstype": "ext4"}]}
         with patch.object(overview.subprocess, "run", return_value=type("Result", (), {"stdout": json.dumps(mounted)})()):

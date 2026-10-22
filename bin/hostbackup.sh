@@ -991,31 +991,103 @@ process_start_ticks() {
 
 task_state_write() {
   local task="$1" state="$2" phase="$3" log_file="$4" pid="${5:-$$}" exit_status="${6:-}" expected_state="${7:-}"
+  local issue_id="${8:-}" issue_name="${9:-}" issue_state="${10:-}" issue_stage="${11:-}"
   local path start_ticks
   path="$(task_state_path "$task")" || return 1
   start_ticks="$(process_start_ticks "$pid")"
   perl -MJSON::PP -MFile::Basename=dirname -MFile::Temp=tempfile -MFcntl=:DEFAULT,:flock -MIO::Handle -e '
-    my ($file, $task, $state, $phase, $log, $pid, $ticks, $exit_status, $expected_state) = @ARGV;
+    my ($file, $task, $state, $phase, $log, $pid, $ticks, $exit_status, $expected_state,
+        $issue_id, $issue_name, $issue_state, $issue_stage) = @ARGV;
+    my $valid_issue = sub {
+      my ($item) = @_;
+      return ref($item) eq "HASH" &&
+        !(grep { !defined($item->{$_}) || ref($item->{$_}) } qw(id name state stage)) &&
+        $item->{id} =~ /\A[a-f0-9]{12,64}\z/ &&
+        $item->{name} =~ /\A[A-Za-z0-9][A-Za-z0-9_.-]{0,254}\z/ &&
+        $item->{state} =~ /\A(?:running|missing|unavailable)\z/ &&
+        $item->{stage} =~ /\A(?:before_copy|after_copy)\z/;
+    };
     sysopen(my $lock, "$file.lock", O_WRONLY | O_CREAT | O_NOFOLLOW, 0600) or die $!;
     flock($lock, LOCK_EX) or die $!;
+    my $previous = {};
+    if (lstat($file)) {
+      sysopen(my $current, $file, O_RDONLY | O_NOFOLLOW | O_NONBLOCK) or die $!;
+      die "Unsafe task state\n" unless -f $current && -s $current <= 1048576;
+      local $/; $previous = eval { decode_json(<$current>) }; close $current or die $!;
+      $previous = {} unless ref($previous) eq "HASH" && ($previous->{task} // "") eq $task;
+    }
     if (length($expected_state // "")) {
-      sysopen(my $current, $file, O_RDONLY | O_NOFOLLOW) or die $!;
-      local $/; my $previous = decode_json(<$current>); close $current or die $!;
       exit 0 unless ($previous->{state} // "") eq $expected_state;
     }
-    my $data = {
+    my @issues;
+    # Only the narrow public schema survives subsequent task/cleanup updates.
+    # Labels are display data, never a replacement for an immutable Docker ID.
+    if (ref($previous->{container_issues}) eq "ARRAY") {
+      for my $item (@{$previous->{container_issues}}) {
+        next unless $valid_issue->($item);
+        push @issues, {map { $_ => $item->{$_} } qw(id name state stage)};
+        last if @issues >= 100;
+      }
+    }
+    my $record_only = length($issue_id // "");
+    if ($record_only) {
+      die "Task state missing for container issue\n" unless ($previous->{task} // "") eq $task;
+      my $item = {id => $issue_id, name => $issue_name, state => $issue_state, stage => $issue_stage};
+      die "Invalid container issue\n" unless $valid_issue->($item);
+      push @issues, $item if @issues < 100 && !grep {
+        $_->{id} eq $issue_id && $_->{state} eq $issue_state && $_->{stage} eq $issue_stage
+      } @issues;
+    }
+    my $data = $record_only ? $previous : {
       task => $task, state => $state, phase => $phase, log_file => $log,
       pid => 0 + ($pid || 0), process_start_ticks => $ticks || "",
       updated_at => time(),
     };
-    $data->{exit_status} = 0 + $exit_status if defined($exit_status) && length($exit_status);
+    $data->{exit_status} = 0 + $exit_status if !$record_only && defined($exit_status) && length($exit_status);
+    @issues = () if !$record_only && $state eq "queued";
+    delete $data->{container_issues};
+    $data->{container_issues} = \@issues if @issues;
     my ($fh, $tmp) = tempfile(".task-XXXXXX", DIR => dirname($file), UNLINK => 0);
     chmod 0600, $tmp;
     print $fh JSON::PP->new->ascii->canonical->pretty->encode($data) or die $!;
     $fh->flush or die $!;
     close $fh or die $!;
     rename $tmp, $file or die $!;
-  ' "$path" "$task" "$state" "$phase" "$log_file" "$pid" "$start_ticks" "$exit_status" "$expected_state"
+  ' "$path" "$task" "$state" "$phase" "$log_file" "$pid" "$start_ticks" "$exit_status" "$expected_state" \
+    "$issue_id" "$issue_name" "$issue_state" "$issue_stage"
+}
+
+task_container_issue_record() {
+  local task="$1" identity="$2" name="$3" state="$4" stage="$5"
+  # Reuse the task lock/atomic writer without changing process state or phase.
+  [[ "$identity" =~ ^[a-f0-9]{12,64}$ ]] || return 20
+  task_state_write "$task" "" "" "" 0 "" "" "$identity" "$name" "$state" "$stage"
+}
+
+task_container_issues() {
+  local path
+  path="$(task_state_path "$1")" || return 1
+  perl -MJSON::PP -MFcntl=:DEFAULT -e '
+    my ($file, $task) = @ARGV;
+    my @issues;
+    my $in;
+    if (sysopen($in, $file, O_RDONLY | O_NOFOLLOW | O_NONBLOCK) && -f $in && -s $in <= 1048576) {
+      local $/; my $data = eval { decode_json(<$in>) }; close $in;
+      if (ref($data) eq "HASH" && ($data->{task} // "") eq $task && ref($data->{container_issues}) eq "ARRAY") {
+        for my $item (@{$data->{container_issues}}) {
+          next unless ref($item) eq "HASH" &&
+            !(grep { !defined($item->{$_}) || ref($item->{$_}) } qw(id name state stage)) &&
+            $item->{id} =~ /\A[a-f0-9]{12,64}\z/ &&
+            $item->{name} =~ /\A[A-Za-z0-9][A-Za-z0-9_.-]{0,254}\z/ &&
+            $item->{state} =~ /\A(?:running|missing|unavailable)\z/ &&
+            $item->{stage} =~ /\A(?:before_copy|after_copy)\z/;
+          push @issues, {map { $_ => $item->{$_} } qw(id name state stage)};
+          last if @issues >= 100;
+        }
+      }
+    }
+    print JSON::PP->new->ascii->canonical->encode(\@issues);
+  ' "$path" "$1"
 }
 
 task_state_value() {
@@ -1839,6 +1911,17 @@ restart_journal_update() {
       }
       exit 0;
     }
+    if ($action eq "container-name") {
+      die "Invalid Docker identity\n" unless $type eq "docker" && $id =~ /\A[a-f0-9]{12,64}\z/;
+      my ($entry) = grep { $_->{type} eq $type && $_->{id} eq $id } @{$data->{entries}};
+      die "Container is not in the restart journal\n" unless $entry;
+      # Original name only: the container may already have disappeared. Older
+      # journals have no label; invalid display data must not enter logs/UI.
+      my $name = $entry->{label};
+      $name = $id unless defined($name) && !ref($name) && $name =~ /\A[A-Za-z0-9][A-Za-z0-9_.-]{0,254}\z/;
+      print "$name\n";
+      exit 0;
+    }
     my $notification = "";
     if ($action eq "notification") {
       # Stable state, not timestamped command output: identical failures still
@@ -2035,7 +2118,12 @@ verify_stopped_docker_targets() {
   # Recheck only containers this operation actually stopped. Host mounts may
   # remain unchanged when an external controller starts a volume-only container.
   # This is observation only: recovery owns all starts and journal mutations.
-  local state_dir="$1" pending type identity phase extra state failed=0
+  local state_dir="$1" task="${2:-}" stage="${3:-before_copy}"
+  local pending type identity phase extra state name failed=0
+  if [ -n "$task" ]; then
+    valid_task_name "$task" || return 20
+    case "$stage" in before_copy|after_copy) ;; *) return 20 ;; esac
+  fi
   if ! pending="$(restart_journal_update "$state_dir" pending)"; then
     log "ERROR: Cannot read the restart journal to verify stopped Docker containers"
     return 20
@@ -2049,18 +2137,28 @@ verify_stopped_docker_targets() {
       return 20
     fi
     state="$(docker_recovery_state "$identity")" || state=unavailable
+    [ "$state" != stopped ] || continue
+    case "$state" in running|missing) ;; *) state=unavailable ;; esac
+    name="$(restart_journal_update "$state_dir" container-name docker "$identity")" || name="$identity"
+    if [[ ! "$name" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$ ]]; then name="$identity"; fi
+    if [ -n "$task" ]; then
+      task_container_issue_record "$task" "$identity" "$name" "$state" "$stage" || \
+        log "ERROR: Container problem could not be saved in the task status; details remain in this log"
+    fi
     case "$state" in
-      stopped) ;;
       running)
-        log "ERROR: Docker container $identity was started again during the backup pause, possibly by another controller; source consistency cannot be confirmed"
+        log "ERROR: Docker container $identity was started again during the backup pause; source consistency cannot be confirmed"
+        log "FEHLER: Docker-Container '$name' (ID: $identity) laeuft wieder, obwohl er fuer dieses Backup gestoppt wurde. Der Ausloeser ist unbekannt. Automatische Ueberwachung, eine andere Containerverwaltung oder ein manueller Start kommen infrage. Bitte die Anwendung ueber ihre eigene Oberflaeche pausieren, sofern moeglich, waehrend des Backups keine Updates/Neustarts ausfuehren und danach erneut sichern."
         failed=20
         ;;
       missing)
         log "ERROR: Docker container $identity was removed during the backup pause; no replacement is accepted as the stopped source"
+        log "FEHLER: Docker-Container '$name' (ID: $identity) ist nicht mehr vorhanden. Ein Ersatzcontainer wurde nicht automatisch ausgewaehlt; eine Neuerstellung ist damit nicht bewiesen. Bitte in der zustaendigen Anwendung pruefen, ob der Container entfernt oder neu erstellt wurde, und die Sicherung nach Klaerung erneut starten."
         failed=20
         ;;
       *)
         log "ERROR: Cannot verify that Docker container $identity remains stopped; Docker state is unavailable"
+        log "FEHLER: Der Zustand von Docker-Container '$name' (ID: $identity) konnte nicht ermittelt werden. Das beweist weder einen Neustart noch eine Loeschung. Bitte Docker-Erreichbarkeit und Containerstatus in der zustaendigen Anwendung pruefen und das Backup danach erneut starten."
         failed=20
         ;;
     esac
@@ -3285,7 +3383,7 @@ create_backup() {
   watchdog_guard_start >> "$log_file" 2>&1
   stop_backup_targets "$state_dir" 2>&1 | tee -a "$log_file"
   watchdog_guard_check >> "$log_file" 2>&1
-  verify_stopped_docker_targets "$state_dir" >> "$log_file" 2>&1
+  verify_stopped_docker_targets "$state_dir" "$task" before_copy >> "$log_file" 2>&1
 
   # Enumerate only after services are quiesced, so newly created database files
   # are not missed. Any enumeration failure uses the normal restart EXIT trap.
@@ -3419,7 +3517,7 @@ create_backup() {
     source_verify_status=20
     rsync_status=20
   fi
-  if ! verify_stopped_docker_targets "$state_dir" >> "$log_file" 2>&1; then
+  if ! verify_stopped_docker_targets "$state_dir" "$task" after_copy >> "$log_file" 2>&1; then
     source_verify_status=20
     rsync_status=20
   fi
@@ -3739,7 +3837,7 @@ show_task_log() {
 task_status() {
   local task="$1"
   local lines="${2:-400}"
-  local max_bytes path size mtime state content_b64 recent_log backup_id info status message now state_file phase state_value
+  local max_bytes path size mtime state content_b64 recent_log backup_id info status message now state_file phase state_value container_issues
   path="$(task_log_path "$task")"
   if [ ! -f "$path" ] || [ -L "$path" ] || [ ! -r "$path" ]; then
     case "$task" in
@@ -3828,11 +3926,13 @@ EOF
     state="stale"
   fi
   content_b64="$(tail -c "$max_bytes" "$path" | tail -n "$lines" | base64 -w 0)"
+  container_issues="$(task_container_issues "$task")" || container_issues='[]'
   cat <<EOF
 {
   "task": $(json_escape "$task"),
   "state": $(json_escape "$state"),
   "phase": $(json_escape "$phase"),
+  "container_issues": $container_issues,
   "size": $size,
   "mtime": $mtime,
   "now": $(date +%s),

@@ -68,6 +68,37 @@
   }
   function logViewport(scrollTop, clientHeight, scrollHeight) { return scrollHeight - scrollTop - clientHeight < 40; }
   function phaseLabel(phase) { return ({ retention: 'Aufbewahrung prüfen und alte Backups bereinigen', selecting_sources: 'Ausgewählte Datenquellen erfassen' })[phase] || phase; }
+  function containerIssueMessages(issues) {
+    if (!Array.isArray(issues)) return [];
+    return issues.slice(0, 100).filter(function (issue) {
+      return issue && typeof issue.id === 'string' && /^[a-f0-9]{12,64}(?![\s\S])/.test(issue.id) &&
+        typeof issue.state === 'string' && /^(running|missing|unavailable)(?![\s\S])/.test(issue.state);
+    }).map(function (issue) {
+      var name = validStopTargetName('docker', issue.name) ? issue.name : issue.id;
+      var when = ({ before_copy: 'vor dem Kopieren', after_copy: 'nach dem Kopieren' })[issue.stage] || 'im Sicherungsablauf';
+      var messages = {
+        running: {
+          title: 'Container „' + name + '“ wurde unerwartet wieder gestartet',
+          short: name + ' — läuft trotz Backup-Stopp wieder',
+          explanation: 'Bei der Kontrolle ' + when + ' lief der für dieses Backup gestoppte Container wieder. Die Konsistenz der Sicherung konnte deshalb nicht bestätigt werden.',
+          advice: 'Mögliche Auslöser sind eine automatische Überwachung, eine andere Containerverwaltung oder ein manueller Start; der genaue Auslöser ist nicht bekannt. Bitte die Anwendung über ihre eigene Oberfläche pausieren bzw. ihren Wartungsmodus verwenden, falls vorhanden. Erneut prüfen und sichern, dabei keine Updates oder Neustarts ausführen. Nach dem Backup die pausierte Anwendung wieder freigeben.'
+        },
+        missing: {
+          title: 'Container „' + name + '“ ist unter seiner ursprünglichen ID nicht mehr vorhanden',
+          short: name + ' — ursprünglicher Container nicht mehr vorhanden',
+          explanation: 'Bei der Kontrolle ' + when + ' war der zuvor gestoppte Container entfernt. Eine Neuerstellung ist möglich, aber damit nicht nachgewiesen. Ein Ersatzcontainer wurde nicht automatisch ausgewählt.',
+          advice: 'Bitte in der zugehörigen Anwendung oder Containerverwaltung prüfen, ob ein Update oder eine automatische Neuerstellung erfolgt ist. Diese Vorgänge für die Sicherungszeit pausieren; danach die Stoppauswahl kontrollieren, erneut prüfen und sichern.'
+        },
+        unavailable: {
+          title: 'Docker-Zustand von „' + name + '“ konnte nicht geprüft werden',
+          short: name + ' — Docker-Zustand nicht ermittelbar',
+          explanation: 'Die Kontrolle ' + when + ' konnte den gestoppten Zustand nicht bestätigen. Dies ist kein Nachweis für einen Neustart oder eine Löschung.',
+          advice: 'Bitte prüfen, ob Docker erreichbar ist und die Containerübersicht geladen werden kann. Nach Behebung erneut prüfen und sichern; bleibt der Fehler bestehen, das vollständige Backup-Log zur Diagnose verwenden.'
+        }
+      };
+      return Object.assign({ id: issue.id }, messages[issue.state]);
+    });
+  }
   function metadataLabel(mode) { return ({ 'native-strict': 'Linux-Dateisicherung', 'portable-archive': 'Portable Sicherung', 'network-compatible': 'Dateisicherung mit reduzierten Metadaten', 'fake-super': 'Metadaten in Dateiattributen speichern' })[mode] || String(mode || 'Unbekannt'); }
   function backupModeLabel(mode) { return ({ full: 'Vollbackup', snapshot: 'Platzsparende Sicherungsstände' })[mode] || String(mode || 'Unbekannt'); }
   function advancedMetadata(mode) { return mode === 'network-compatible' || mode === 'fake-super'; }
@@ -106,7 +137,7 @@
     var allSourcesNotice = 'Alle eingebundenen Quellen: Auch Netzfreigaben werden mitgesichert. Fuer einen begrenzten Umfang lokale Laufwerke waehlen und Netzfreigaben einzeln aktivieren.';
     return (notices || []).filter(function (notice) { return notice !== legacyNotice && notice !== allSourcesNotice; }).concat(errors || []);
   }
-  var core = { normalizeLogForDisplay: normalizeLogForDisplay, controlState: controlState, validStopTargetName: validStopTargetName, validStopTargetValue: validStopTargetValue, stopTargetSelection: stopTargetSelection, validateSettings: validateSettings, updateDirty: updateDirty, logViewport: logViewport, phaseLabel: phaseLabel, metadataLabel: metadataLabel, backupModeLabel: backupModeLabel, advancedMetadata: advancedMetadata, sourceSelection: sourceSelection, sourceIncluded: sourceIncluded, sourceDisplayGroup: sourceDisplayGroup, sourceNotices: sourceNotices };
+  var core = { normalizeLogForDisplay: normalizeLogForDisplay, controlState: controlState, validStopTargetName: validStopTargetName, validStopTargetValue: validStopTargetValue, stopTargetSelection: stopTargetSelection, validateSettings: validateSettings, updateDirty: updateDirty, logViewport: logViewport, phaseLabel: phaseLabel, containerIssueMessages: containerIssueMessages, metadataLabel: metadataLabel, backupModeLabel: backupModeLabel, advancedMetadata: advancedMetadata, sourceSelection: sourceSelection, sourceIncluded: sourceIncluded, sourceDisplayGroup: sourceDisplayGroup, sourceNotices: sourceNotices };
   if (typeof module !== 'undefined' && module.exports) module.exports = core;
   if (!root.document) return;
   var document = root.document;
@@ -658,11 +689,25 @@
     focusView(target);
   }
   function taskName(task) { return ({ backup: 'Backup', restore: 'Restore', export: 'Export', import: 'Import', verify: 'Integritätsprüfung' })[(task || '').split('-')[0]] || 'Vorgang'; }
+  function renderContainerIssues(issues) {
+    var panel = byId('task-container-issues'); if (!panel) return;
+    var messages = containerIssueMessages(issues), key = JSON.stringify(messages);
+    if (panel.dataset.issuesKey === key) return; // Preserve the user's collapsed state while polling.
+    panel.dataset.issuesKey = key; panel.replaceChildren(); panel.hidden = !messages.length;
+    if (!messages.length) { panel.open = false; return; }
+    panel.append(el('summary', 'Fehlerursache: Containerprüfung'));
+    messages.forEach(function (message) {
+      var item = el('div'); item.append(el('strong', message.title), el('p', 'Ursprüngliche Container-ID: ' + message.id, 'muted'), el('p', message.explanation), el('p', message.advice)); panel.append(item);
+    });
+    panel.append(el('p', 'Dies beschreibt den Zustand bei der Sicherungsprüfung, nicht zwingend den aktuellen Zustand. Den Schutz nicht durch Abwählen wichtiger Dienste umgehen: Eine laufende Datenbank ist nicht automatisch konsistent gesichert.', 'muted'));
+    panel.open = true;
+  }
   function selectTask(task, explicit) {
     if (!task) return;
     if (explicit) { userSelectedTask = true; setView('task-monitor', true, true); }
     if (task === currentTask) return;
     currentTask = task; finalTask = ''; followLog = true; byId('task-log').textContent = 'Log wird geladen...';
+    renderContainerIssues([]);
     syncActiveTaskLinks(app);
     var input = byId('stop-task-form').querySelector('[name="task"]'); input.value = task; pollTask();
   }
@@ -672,6 +717,8 @@
       var data = await request('task-overview'), target = byId('overview-values'), details = byId('overview-detail-values');
       var active = data.active_task && typeof data.active_task === 'object' ? data.active_task.task : data.active_task;
       var failure = data.last_failure ? data.last_failure.task + ' · ' + data.last_failure.state : '';
+      var failureIssues = containerIssueMessages(data.last_failure && data.last_failure.container_issues);
+      if (failureIssues.length) failure += ' · ' + failureIssues.map(function (issue) { return issue.short; }).join('; ') + '. Details im Live-Status dieses Vorgangs.';
       if (data.last_failure && data.last_failure.phase === 'recovery_missing_containers') {
         failure += ' · Frühere Docker-Container sind nicht mehr vorhanden. Nicht wieder gestartet; im Log dokumentiert. Diese veralteten Einträge blockieren keine weiteren Vorgänge.';
       }
@@ -709,6 +756,7 @@
       byId('task-state').className = 'task-state state-' + state;
       byId('task-state').textContent = taskName(task) + ' ' + ({ running: 'läuft', starting: 'startet', queued: 'wartet', finished: 'abgeschlossen', failed: 'fehlgeschlagen', cleanup_failed: 'fehlgeschlagen; Wiederanlauf unvollständig', stopped: 'gestoppt', interrupted: 'unterbrochen', stale: 'ohne neue Ausgabe', error: 'Status nicht verfügbar' }[state] || state);
       byId('task-heartbeat').textContent = (data.phase ? 'Phase: ' + phaseLabel(data.phase) + '. ' : '') + (terminal ? 'Die Eingaben auf dieser Seite bleiben erhalten.' : 'Letzte Log-Aktualisierung vor ' + Math.max(0, Number(data.now || 0) - Number(data.mtime || 0)) + ' Sekunden.');
+      renderContainerIssues(data.container_issues);
       var content = ''; try { content = new TextDecoder().decode(Uint8Array.from(root.atob(data.content_b64 || ''), function (char) { return char.charCodeAt(0); })); } catch (ignore) { content = data.content || ''; }
       var log = byId('task-log'), left = log.scrollLeft, top = log.scrollTop, atEnd = followLog && logViewport(log.scrollTop, log.clientHeight, log.scrollHeight);
       var normalized = normalizeLogForDisplay(content) || data.error || 'Noch keine Logausgabe vorhanden.';

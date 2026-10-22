@@ -2059,6 +2059,7 @@ $csrf_html
 <button data-role="none" class="danger" type="submit">Backup stoppen</button>$action_help{'stop-backup'}
 </form>
 </div>
+<details class="notice error" id="task-container-issues" hidden></details>
 <pre class="terminal" id="task-log">Noch keine Live-Ausgabe vorhanden.</pre>
 <div class="task-actions"><button data-role="none" type="button" id="log-follow">Zum Ende des Logs</button><a data-ajax="false" class="button-link" id="download-task-log" hidden>Vollständiges Log herunterladen</a></div>
 <p class="muted">Die Live-Ansicht zeigt den letzten Log-Ausschnitt. Das vollständige Original steht als Download bereit. Beim Hochscrollen bleibt deine Leseposition erhalten.</p>

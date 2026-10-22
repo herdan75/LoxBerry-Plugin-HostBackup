@@ -173,6 +173,16 @@ const verificationReport={backup_id:'fixture-ok',status:'verified',checked_files
 let failSave=true, taskFinished=false, tokenNumber=0, postCount=0, htmlCount=0, statusCount=0, tokenDelay=0, saveDelay=0, lastSavedPath='';
 let overviewIssues=false, overviewMissingRecovery=false, reportRequests=0, taskPhase='copying';
 let panelFlowFixture=false,reportDelay=0,failPanelReport=false;
+let containerIssueFixture=false;
+const cleanContainerTask='backup-clean-fixture.log';
+const containerIssueData=[
+  {id:'a'.repeat(64),name:'loxpanel',state:'running',stage:'after_copy'},
+  {id:'b'.repeat(64),name:'sonn-core',state:'missing',stage:'before_copy'},
+  {id:'c'.repeat(64),name:'database_1',state:'unavailable',stage:'after_copy'},
+  {id:'d'.repeat(64),name:'<img src=x onerror="window.unsafeContainer=true">',state:'running',stage:'after_copy'},
+  {id:'<img src=x onerror="window.unsafeContainer=true">',name:'invalid-id',state:'running',stage:'after_copy'},
+  {id:'e'.repeat(64),name:'invalid-state',state:'<script>window.unsafeContainer=true</script>',stage:'after_copy'}
+];
 let actionWiring=false,verificationMode='available',configImportSuccess=false;
 const wiredRequests=[];
 const runtimeSettingPosts=[];
@@ -257,9 +267,13 @@ const server=http.createServer(async(req,res)=>{
     if(action==='csrf-token'){await new Promise(resolve=>setTimeout(resolve,tokenDelay));return json(res,{csrf_token:'fresh-'+(++tokenNumber),expires_at:Date.now()/1000+3600});}
     if(action==='repository-status')return json(res,repositoryState);
     if(action==='source-info')return json(res,failSources?{ok:false,error:'Mountliste momentan nicht erreichbar'}:{selection:savedSources,volumes:sourceVolumes,notices:['Netzfreigaben bewusst auswählen.']},failSources?500:200);
-    if(action==='task-overview')return json(res,{tasks:[{task,state:taskFinished?'finished':'running'},...(panelFlowFixture?[{task:'export-panel-fixture.log',state:'finished'}]:[])],active_task:taskFinished?null:task,last_success:{backup_id:overviewBackupId,finished_at:overviewFinishedAt},next_run:{local:'14.09.2026 02:00'},last_failure:overviewIssues?{task:'backup-old-failure.log',state:'failed',phase:overviewMissingRecovery?'recovery_missing_containers':'cleanup_failed'}:null,pending_service_recovery:overviewIssues&&!overviewMissingRecovery?1:0,target:{configured:true,readable:true,path:overviewTarget,available_mb:20000}});
+    if(action==='task-overview')return json(res,{tasks:containerIssueFixture?[{task,state:'failed'},{task:cleanContainerTask,state:'finished'}]:[{task,state:taskFinished?'finished':'running'},...(panelFlowFixture?[{task:'export-panel-fixture.log',state:'finished'}]:[])],active_task:containerIssueFixture?null:taskFinished?null:task,last_success:{backup_id:overviewBackupId,finished_at:overviewFinishedAt},next_run:{local:'14.09.2026 02:00'},last_failure:containerIssueFixture?{task,state:'failed',phase:'copying',container_issues:containerIssueData}:overviewIssues?{task:'backup-old-failure.log',state:'failed',phase:overviewMissingRecovery?'recovery_missing_containers':'cleanup_failed'}:null,pending_service_recovery:overviewIssues&&!overviewMissingRecovery?1:0,target:{configured:true,readable:true,path:overviewTarget,available_mb:20000}});
     if(['backup-preview','storage-info','runtime-cleanup-preview','diagnostics','inspect-backup','verification-report','recovery-sheet'].includes(action)){reportRequests++;if(reportDelay)await new Promise(resolve=>setTimeout(resolve,reportDelay));}
-    if(action==='task-status'){statusCount++;return json(res,{state:taskFinished?'finished':'running',phase:taskFinished?'complete':taskPhase,now:100,mtime:99,content_b64:Buffer.from(longLog()).toString('base64')});}
+    if(action==='task-status'){
+      statusCount++;
+      if(containerIssueFixture){const failed=url.searchParams.get('task')===task;return json(res,{state:failed?'failed':'finished',phase:failed?'copying':'complete',now:100,mtime:99,container_issues:failed?containerIssueData:[],content_b64:Buffer.from(longLog()).toString('base64')});}
+      return json(res,{state:taskFinished?'finished':'running',phase:taskFinished?'complete':taskPhase,now:100,mtime:99,content_b64:Buffer.from(longLog()).toString('base64')});
+    }
     if(action==='target-notice'){
       targetNoticeRequests++;
       if(targetNoticeMode==='pending')return; // Real browser AbortController timeout, no shortened production timer.
@@ -308,6 +322,9 @@ const server=http.createServer(async(req,res)=>{
     if(url.pathname==='/system/images/icons/loxberryhostbackup/icon_64.png'){res.writeHead(200,{'Content-Type':'image/png'});res.end(fs.readFileSync(path.join(repo,'icons/icon_64.png')));return;}
     if(url.pathname.startsWith('/system/')){res.writeHead(204);res.end();return;}
     let pageHtml=url.searchParams.get('fixture')==='verify'?verifySelectionHtml:url.searchParams.get('fixture')==='selection'?selectionHtml:url.searchParams.get('fixture')==='portable'?portableHtml:html;
+    // Mirror the CGI's separately tested active_task attribute for a persisted
+    // failed task; the production markup, JS, CSS and poll protocol stay real.
+    if(url.searchParams.get('fixture')==='container-issues')pageHtml=pageHtml.replace('data-active-task=""','data-active-task="'+task+'"');
     if(url.searchParams.get('fixture')==='runtime-enabled')pageHtml=runtimeEnabledHtml;
     const stopSelections={'no-stops':[],'alias-stops':['systemd:test-old.service'],'alias-draft':['systemd:test-old.service','systemd:test-other.service','systemd:test.service'],'protected-stops':['systemd:dbus-org.freedesktop.Avahi.service'],
       'literal-stops':literalStopNames.map(name=>'systemd:'+name).filter(value=>value!=='systemd:'+literalStopNames[4]).concat('systemd:'+literalStopAlias)};
@@ -328,6 +345,54 @@ async function configurationControls(page) {
   try { await page.locator('#stop-targets-list [name="stop_targets_loaded"]').waitFor({state:'attached'}); }
   catch (error) { throw new Error(error.message+'; stop-target state: '+JSON.stringify(await page.evaluate(()=>({status:document.querySelector('#stop-targets-status')?.textContent,list:document.querySelector('#stop-targets-list')?.innerHTML,saved:document.querySelector('#hostbackup-app')?.dataset.draftStops})))); }
   return page.evaluate(()=>Array.from(document.getElementById('settings-save-form').elements).filter(node=>node.name&&node.name!=='csrf_token').map(node=>[node.name,node.value,node.checked||false]));
+}
+async function checkContainerIssues(browser,base) {
+  containerIssueFixture=true;
+  try {
+    for(const [view,width,height] of [['desktop',1440,1100],['mobile',390,844]]) {
+      const page=await browser.newPage({viewport:{width,height}});page.on('pageerror',error=>errors.push(error.message));
+      try {
+        const postsBefore=postCount;
+        await page.goto(base+'?fixture=container-issues&active_task='+task);
+        const panel=page.locator('#task-container-issues'),items=panel.locator(':scope > div'),summary=panel.locator(':scope > summary');
+        await visible(page,'#task-container-issues');
+        assert.equal(await panel.evaluate(node=>node.open),true,'New container diagnosis opens automatically');
+        assert.equal(await items.count(),4,'Multiple valid issues are shown; invalid IDs/states are discarded');
+        const running=await items.nth(0).innerText(),missing=await items.nth(1).innerText(),unavailable=await items.nth(2).innerText();
+        assert.match(running,/Container „loxpanel“ wurde unerwartet wieder gestartet/);assert.ok(running.includes('a'.repeat(64)));assert.match(running,/nach dem Kopieren/);assert.match(running,/eigene Oberfläche.*Wartungsmodus/);assert.match(running,/genaue Auslöser ist nicht bekannt/);
+        assert.match(missing,/Container „sonn-core“ ist unter seiner ursprünglichen ID nicht mehr vorhanden/);assert.ok(missing.includes('b'.repeat(64)));assert.match(missing,/vor dem Kopieren/);assert.match(missing,/Neuerstellung ist möglich, aber damit nicht nachgewiesen/);assert.match(missing,/Stoppauswahl kontrollieren/);
+        assert.match(unavailable,/Docker-Zustand von „database_1“ konnte nicht geprüft werden/);assert.ok(unavailable.includes('c'.repeat(64)));assert.match(unavailable,/kein Nachweis für einen Neustart oder eine Löschung/);assert.match(unavailable,/Docker erreichbar/);
+        assert.ok((await items.nth(3).innerText()).includes('d'.repeat(64)),'Unsafe container name falls back to the immutable ID');
+        assert.doesNotMatch(await panel.innerText(),/invalid-id|invalid-state|<img|<script>/);assert.equal(await panel.locator('img,script').count(),0);assert.equal(await page.evaluate(()=>window.unsafeContainer),undefined);
+        assert.match(await panel.innerText(),/nicht zwingend den aktuellen Zustand/);assert.match(await panel.innerText(),/laufende Datenbank ist nicht automatisch konsistent/);
+        const diagnosis=await panel.innerText();
+        assert.ok((await page.locator('#task-log').textContent()).length>10000,'A long log tail cannot replace the structured diagnosis');
+        assert.doesNotMatch(await page.locator('#task-log').textContent(),/loxpanel|sonn-core|database_1/,'Diagnosis is not recovered from a lucky match in the visible log tail');
+        const layout=await panel.evaluate(node=>({beforeLog:!!(node.compareDocumentPosition(document.querySelector('#task-log'))&Node.DOCUMENT_POSITION_FOLLOWING),right:node.getBoundingClientRect().right,overflow:node.scrollWidth-node.clientWidth}));
+        assert.ok(layout.beforeLog&&layout.right<=width+1&&layout.overflow<=1,view+' diagnosis precedes the log and stays readable in the viewport '+JSON.stringify(layout));
+        assert.match(await page.locator('#overview-last-failure').innerText(),/loxpanel.*läuft trotz Backup-Stopp wieder/);
+        await panel.screenshot({path:path.join(temp,'container-issues-'+view+'.png')});
+        await summary.focus();await page.keyboard.press('Enter');assert.equal(await panel.evaluate(node=>node.open),false);
+        await page.waitForResponse(response=>new URL(response.url()).searchParams.get('action')==='task-status',{timeout:15000});
+        await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+        assert.equal(await panel.evaluate(node=>node.open),false,'Identical polling respects an explicitly collapsed diagnosis');
+        await summary.focus();await page.keyboard.press('Enter');assert.equal(await panel.innerText(),diagnosis);
+        await page.reload();await visible(page,'#task-container-issues');assert.equal(await panel.innerText(),diagnosis,'Persisted backend issues survive page reload independently of the live log tail');
+        await page.locator('#task-history').selectOption(cleanContainerTask);await panel.waitFor({state:'hidden'});
+        await page.waitForFunction(()=>document.querySelector('#task-state').textContent.includes('abgeschlossen'));
+        assert.equal(await panel.textContent(),'','Selecting a successful task clears the old diagnosis completely');
+        await page.locator('#task-history').selectOption(task);await visible(page,'#task-container-issues');assert.equal(await panel.innerText(),diagnosis);
+        await page.locator('[data-close-view="task-monitor"]').click();assert.equal(await panel.isVisible(),false);assert.equal(await page.locator('#task-state').isVisible(),true);
+        await page.waitForResponse(response=>new URL(response.url()).searchParams.get('action')==='task-status',{timeout:15000});
+        await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+        assert.equal(await page.locator('#task-monitor-content').isVisible(),false,'Polling never reopens the closed live view because a diagnosis exists');
+        await page.locator('#task-monitor-toggle').focus();await page.keyboard.press('Enter');assert.equal(await panel.innerText(),diagnosis);assert.equal(await panel.isVisible(),true);
+        assert.equal(postCount,postsBefore,'Reading, reloading and closing error details never changes settings or starts/stops a container or backup');
+        assert.equal(await page.evaluate(()=>window.unsafeContainer),undefined);
+        receipts.push(view+': persisted container diagnoses show names, full IDs, distinct restart/missing/unavailable causes and self-help above a long log; unsafe fields cannot inject HTML, reload preserves evidence, clean-task selection removes stale issues, and both diagnosis/live views remain keyboard-closable without writes');
+      } finally {await page.close();}
+    }
+  } finally {containerIssueFixture=false;}
 }
 async function checkResultPanels(browser,base) {
   const previousTaskFinished=taskFinished,previousPhase=taskPhase;
@@ -932,10 +997,11 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     const base='http://127.0.0.1:'+server.address().port+'/';
     const launch={headless:true};if(process.env.HOSTBACKUP_BROWSER_EXECUTABLE)launch.executablePath=process.env.HOSTBACKUP_BROWSER_EXECUTABLE;
     browser=await chromium.launch(launch);
-    if(['panels','actions','stops','runtime'].includes(process.env.HOSTBACKUP_BROWSER_FOCUS)) {
+    if(['panels','actions','stops','runtime','container-issues'].includes(process.env.HOSTBACKUP_BROWSER_FOCUS)) {
       if(process.env.HOSTBACKUP_BROWSER_FOCUS==='actions'){await checkActionWiring(browser,base);const afterImport=await browser.newPage();await afterImport.close();}
       else if(process.env.HOSTBACKUP_BROWSER_FOCUS==='stops')await checkStopTargets(browser,base);
       else if(process.env.HOSTBACKUP_BROWSER_FOCUS==='runtime')await checkRuntimeLogs(browser,base);
+      else if(process.env.HOSTBACKUP_BROWSER_FOCUS==='container-issues')await checkContainerIssues(browser,base);
       else await checkResultPanels(browser,base);
       assert.deepEqual(errors,[]);
       const result={status:'passed',tests:receipts,artifacts:temp,renderer:'actual CGI with mocked backend; focused '+process.env.HOSTBACKUP_BROWSER_FOCUS,browser:await browser.version()};
@@ -1396,6 +1462,7 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     await checkStopTargets(browser,base);
     await checkMaintenance(browser,base);
     await checkRuntimeLogs(browser,base);
+    await checkContainerIssues(browser,base);
     assert.deepEqual(errors,[]);
     const result={status:'passed',tests:receipts,artifacts:temp,renderer:'actual CGI with mocked backend; read-only mount discovery',browser:await browser.version()};
     fs.writeFileSync(path.join(temp,'receipt.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));

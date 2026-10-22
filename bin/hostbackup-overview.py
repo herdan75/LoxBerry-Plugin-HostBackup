@@ -58,6 +58,25 @@ def next_run(config, now=None):
     return None
 
 
+def container_issues(value):
+    """Expose only bounded display data; names never become Docker targets."""
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value:
+        if not isinstance(item, dict) or not all(isinstance(item.get(key), str) for key in ("id", "name", "state", "stage")):
+            continue
+        if (not re.fullmatch(r"[a-f0-9]{12,64}", item["id"])
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,254}", item["name"])
+                or item["state"] not in ("running", "missing", "unavailable")
+                or item["stage"] not in ("before_copy", "after_copy")):
+            continue
+        result.append({key: item[key] for key in ("id", "name", "state", "stage")})
+        if len(result) >= 100:
+            break
+    return result
+
+
 def tasks(state):
     result = []
     for file in (state / "tasks").glob("*.log.json"):
@@ -69,6 +88,9 @@ def tasks(state):
         name = file.name[:-5]
         item = {key: data.get(key) for key in ("state", "phase", "updated_at", "exit_status")}
         item["task"] = name
+        issues = container_issues(data.get("container_issues")) if data.get("task") == name else []
+        if issues:
+            item["container_issues"] = issues
         item["mtime"] = data.get("updated_at", 0)
         if item["state"] in ("running", "starting", "queued"):
             try:

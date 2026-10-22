@@ -289,6 +289,11 @@ body.is-loading .loading-overlay {
   background: #fff0f0;
 }
 
+#hostbackup-app #task-container-issues { font-size: inherit; overflow-wrap: anywhere; }
+#hostbackup-app #task-container-issues > summary { cursor: pointer; font-size: inherit; font-weight: 700; }
+#hostbackup-app #task-container-issues p { font-size: inherit; letter-spacing: normal; margin: 8px 0; }
+#hostbackup-app #task-container-issues > div + div { border-top: 1px solid #d78989; margin-top: 12px; padding-top: 4px; }
+
 .notice.warning {
   background: #fff4df;
   border-color: #d69a35;

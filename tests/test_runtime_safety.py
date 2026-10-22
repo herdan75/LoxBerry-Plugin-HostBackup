@@ -30,7 +30,7 @@ def function(name):
 
 COMMON_FUNCTIONS = (
     "log", "manifest_field", "json_escape", "valid_task_name", "task_state_path",
-    "task_state_write", "task_state_value", "prepare_log_file", "write_control_marker",
+    "task_state_write", "task_state_value", "task_container_issue_record", "task_container_issues", "prepare_log_file", "write_control_marker",
     "task_failure_on_exit", "install_task_failure_trap", "checked_source_info",
     "watchdog_guard_start", "watchdog_guard_check", "watchdog_guard_release",
 )

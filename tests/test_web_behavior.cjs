@@ -1,6 +1,33 @@
 'use strict';
 const assert = require('node:assert/strict');
 const ui = require('../webfrontend/htmlauth/assets/hostbackup.js');
+const stoppedContainerId = 'ab'.repeat(32);
+const runningIssue = ui.containerIssueMessages([{id:stoppedContainerId,name:'sonn-core',state:'running',stage:'after_copy'}])[0];
+assert.match(runningIssue.title, /sonn-core.*wieder gestartet/);
+assert.match(runningIssue.explanation, /nach dem Kopieren/);
+assert.match(runningIssue.advice, /genaue Auslöser ist nicht bekannt/);
+assert.match(runningIssue.advice, /eigene Oberfläche/);
+assert.equal(runningIssue.id, stoppedContainerId);
+const beforeCopyIssue = ui.containerIssueMessages([{id:stoppedContainerId,name:'loxpanel',state:'running',stage:'before_copy'}])[0];
+assert.match(beforeCopyIssue.explanation, /vor dem Kopieren/);
+const missingIssue = ui.containerIssueMessages([{id:stoppedContainerId,name:'loxpanel',state:'missing'}])[0];
+assert.match(missingIssue.title, /nicht mehr vorhanden/);
+assert.match(missingIssue.explanation, /Neuerstellung ist möglich, aber damit nicht nachgewiesen/);
+const unavailableIssue = ui.containerIssueMessages([{id:stoppedContainerId,name:'loxpanel',state:'unavailable'}])[0];
+assert.match(unavailableIssue.title, /konnte nicht geprüft werden/);
+assert.match(unavailableIssue.explanation, /kein Nachweis für einen Neustart oder eine Löschung/);
+for (const name of [undefined, '', '<img src=x onerror=alert(1)>', 'bad\nlabel', {}]) {
+  const issue = ui.containerIssueMessages([{id:stoppedContainerId,name,state:'running'}])[0];
+  assert.match(issue.title, new RegExp(stoppedContainerId));
+  assert.doesNotMatch(issue.title, /<img|bad\n/);
+}
+for (const invalid of [null, {}, 'running', [null], [{id:'bad',state:'running'}],
+  [{id:stoppedContainerId+'\n',state:'running'}], [{id:stoppedContainerId,state:'running\n'}],
+  [{id:stoppedContainerId,state:'invented'}], [{id:stoppedContainerId,state:{}}]]) {
+  assert.deepEqual(ui.containerIssueMessages(invalid), []);
+}
+assert.equal(ui.containerIssueMessages(Array(101).fill({id:stoppedContainerId,name:'test',state:'running'})).length, 100);
+assert.deepEqual(ui.containerIssueMessages([]), [], 'A clean task cannot inherit diagnostics from another task');
 assert.equal(ui.normalizeLogForDisplay('a\rb\r\nc\u001b[31md\u001b[0m'), 'a\nb\ncd');
 assert.equal(ui.controlState([{type:'radio',value:'native',checked:false},{type:'radio',value:'network',checked:true}]), 'network');
 assert.equal(ui.controlState([{type:'checkbox',name:'stop_targets',value:'docker:x',checked:true}]), 'docker:x');

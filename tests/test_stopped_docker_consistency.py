@@ -28,6 +28,15 @@ set -euo pipefail
 cd -- "$DOCKER_CHECK_TEST_DIR"
 log() { printf '%s\n' "$*"; }
 restart_journal_update() {
+  if [ "${2:-}" = container-name ]; then
+    [ "$#:$1:$3" = '4:/private/journal:docker' ] || return 91
+    case "$4" in
+      ab*) printf '%s\n' "${FIRST_NAME:-$4}" ;;
+      cd*) printf '%s\n' "${SECOND_NAME:-$4}" ;;
+      *) return 92 ;;
+    esac
+    return 0
+  fi
   [ "$#:$1:$2" = '2:/private/journal:pending' ] || return 91
   printf 'journal-pending\n' >> calls
   [ "${JOURNAL_STATUS:-0}" = 0 ] || return "$JOURNAL_STATUS"

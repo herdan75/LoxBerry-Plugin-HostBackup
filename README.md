@@ -26,6 +26,12 @@ Zusätzlich werden tatsächlich gestoppte Docker-Container vor und nach der Kopi
 auf unerwarteten Wiederanlauf geprüft. Keine neue Einstellung. Dies ersetzt nicht
 die gesonderte Abstimmung mit AudioServer4Home oder anderen Überwachungen;
 [Umfang und Prüfgrenzen](docs/DEVELOP-1.2.4-VALIDATION.md#nachbesserung-watchdogs-und-containerzustand).
+Bei einem erkannten Containerproblem erklärt **„Fehlerursache: Containerprüfung“**
+im Live-Status den ursprünglichen Namen, die ID, den beobachteten Zustand und
+den nächsten Schritt. Wiederstart, entfernte ID und nicht erreichbares Docker
+werden getrennt behandelt. Die aufklappbare Diagnose bleibt nach dem Wiederanlauf
+und Neuladen erhalten; sie behauptet keinen unbekannten Verursacher. Änderungen
+zwischen zwei abgeschlossenen Backups lösen diese Prüfung nicht aus.
 
 > [!NOTE]
 > **Neu auf develop, noch nicht im öffentlichen 1.2.3-beta-Paket:**

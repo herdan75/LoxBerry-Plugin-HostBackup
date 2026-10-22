@@ -14,6 +14,12 @@ validiert werden.
 
 ## [Unreleased] - Entwicklungsstand 1.2.4
 
+- Containerprobleme verständlich anzeigen: Unerwarteter Wiederstart, entfernte
+  Container und nicht prüfbarer Docker-Zustand erhalten getrennte Erklärungen
+  mit ursprünglichem Containernamen, ID und nächsten Schritten. Die Diagnose
+  bleibt beim Vorgang gespeichert und im Live-Status aufklappbar, auch nach
+  Cleanup, langem Log oder Seitenreload. Ein unbekannter Verursacher wird nicht
+  als bewiesener Watchdog-Fehler ausgegeben; keine neue Einstellung nötig.
 - Nachbesserung für LoxPanel: Beim ausgewählten Container die vorhandene
   Watchdog-Sperre vor dem Stopp erwerben und bis nach dem Wiederanlauf halten.
   Kein neuer Modus, keine dauerhafte Abschaltung, keine Container-Neuerstellung
