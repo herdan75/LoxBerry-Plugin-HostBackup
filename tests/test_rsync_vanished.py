@@ -308,6 +308,7 @@ write_control_marker() { : > "$1"; }
 run_hook() { :; }
 notify_hostbackup() { event "notify:$1"; }
 stop_backup_targets() { event services-stop; : > "$TEST_ROOT/services-stopped"; }
+verify_stopped_docker_targets() { :; }
 start_backup_targets_if_needed() { event services-start; : > "$TEST_ROOT/services-restarted"; }
 source_info() { printf '{"status":"ok","selection":{"policy":"%s","overrides":{}}}\n' "$SELECTION"; }
 rsync_live_options() { :; }
@@ -470,7 +471,8 @@ class RsyncVanishedWorkerTests(unittest.TestCase):
         data = diagnostic([paths[0].as_posix() if known else "/etc/important.conf"])
         (root / "diagnostic.log").write_bytes(data[:-1] if malformed else data)
         script = WORKER_FIXTURE + "\n" + "\n".join(runtime.function(name) for name in
-                    ("checked_source_info", "validate_completed_backup", "backup_cleanup_on_exit", "create_backup")) + "\ncreate_backup vanished-test\n"
+                    ("checked_source_info", "watchdog_guard_start", "watchdog_guard_check", "watchdog_guard_release",
+                     "validate_completed_backup", "backup_cleanup_on_exit", "create_backup")) + "\ncreate_backup vanished-test\n"
         result = subprocess.run([runtime.BASH, "--noprofile", "--norc", "-s"], input=script,
                                 text=True, encoding="utf-8", capture_output=True, check=False,
                                 timeout=90 if os.name == "nt" else 60,

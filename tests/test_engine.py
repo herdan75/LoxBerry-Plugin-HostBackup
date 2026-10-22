@@ -72,6 +72,7 @@ class EngineTests(unittest.TestCase):
             for required in ('plugin.cfg', 'postroot.sh', 'bin/hostbackup-engine.py', 'bin/hostbackup-repository.py',
                              'bin/hostbackup-copy-diagnostics.py',
                              'bin/hostbackup-runtime-policy.py',
+                             'bin/hostbackup-watchdog.py',
                              'bin/hostbackup-tar.py', 'bin/hostbackup-tar-headers.py',
                              'bin/hostbackup-portable.py', 'docs/PORTABLE-REPOSITORY.md', 'docs/RESTIC-LICENSE.txt'):
                 self.assertIn(required, names)

@@ -155,6 +155,83 @@ Ein fremder Anwendungs-Watchdog wird dadurch nicht automatisch mit dem Backup
 koordiniert. Der geprüfte Wiederanlauf behandelt verschwundene Container sicher;
 für eine anwendungskonsistente Sicherung bleibt ein abgestimmter Stopp nötig.
 
+## Nachbesserung: Watchdogs und Containerzustand
+
+Stand 22.10.2026: **Entwicklungsstand, kein neues Release oder Vorabkanal-Update**.
+Nach den lokalen Prüfungen ist der eigene GitHub-Lauf dieses Commits massgebend.
+Ein früherer grüner GitHub-Lauf bestätigt diese zusätzlichen Änderungen nicht.
+
+Der gemeldete Lauf vom 21.10. hatte einen erfolgreichen TAR-Kopierstatus, aber
+eine neu erschienene Docker-Overlay-Einbindung während der Kopierphase. Der
+Quellenfehler darf nicht pauschal als harmlos gelten: Ein gestoppter Container
+kann durch eine fremde Überwachung wieder starten und Daten verändern.
+
+LoxPanels [bestehende Steuerung](https://github.com/Lenardo1/Loxpanel/blob/61bfd1d82e86f6feb06162e11e41e3fca7944bf6/loxberry-plugin/bin/loxpanel-ctl.sh)
+verwendet für `check`, Backup und Restore eine gemeinsame `flock`-Sperre.
+HostBackup nutzt diese Sperre beim ausgewählten LoxPanel-Container vor dem Stopp
+bis nach dem Wiederanlaufversuch. Der Helfer läuft ausserhalb der
+`stop_backup_targets | tee`-Pipeline, damit die Sperre nicht bereits mit dem
+Ende dieser Subshell freigegeben wird.
+
+- Nur das erkannte Sperrprotokoll wird verwendet; keine Ausführung des fremden
+  Controllers als root, keine Änderung der Docker-Restart-Policy, kein
+  `compose down`, Image-Pull oder automatischer Ersatz eines Containers.
+- Bestehende Sperrdateien werden nicht überschrieben, gelöscht oder umberechtigt.
+  Eine neue Sperrdatei ist auch bei root-Umask 077 für den Watchdog lesbar.
+  Ein kurzer, unprivilegierter Leseversuch prüft tatsächliche Zugriffsrechte
+  einschliesslich Elternverzeichnissen und ACLs.
+- Erfolg, Kopierfehler und Cleanup lösen die Sperre nach dem Wiederanlaufversuch.
+  EOF oder Ende des zugehörigen Worker-Prozesses beenden den Helfer; es bleibt
+  kein dauerhafter Abschaltmarker. Eine belegte oder verlorene Sperre wird nicht
+  als erfolgreiche Koordination ausgegeben.
+- Der gemeinsame Worker kontrolliert zusätzlich die im lokalen Journal als
+  gestoppt vermerkten Docker-IDs vor und nach der Kopie. Unerwartet laufende,
+  entfernte oder nicht überprüfbare Container führen zu einem konkreten Fehler.
+  Nicht ausgewählte oder schon vorher gestoppte Container werden dadurch nicht
+  gestartet. Die bestehenden Quellen- und Dateiprüfungen bleiben aktiv.
+
+### Weitere Programme und bewährte Muster
+
+| Programm / Primärquelle | Befund und Konsequenz |
+| --- | --- |
+| [AudioServer4Home](https://github.com/mschlenstedt/LoxBerry-Plugin-Audioserver4Home/blob/master/bin/as_watchdog.pl) | Eigene Überwachung und bewusster Stoppmarker; Wiederanlauf kann `compose down`, Pull und Neuerstellung enthalten. Die LoxPanel-Sperre ist nicht übertragbar. Vorerst über die eigene Plugin-Oberfläche abgestimmt stoppen bzw. passende Hooks verwenden; nicht als automatisch behoben ausgeben. |
+| [Watchtower](https://github.com/containrrr/watchtower/blob/main/docs/arguments.md) | `include-stopped` und `revive-stopped` können gestoppte Container aktualisieren bzw. starten; beide sind standardmässig aus. Keine pauschale Abschaltung aller Installationen. |
+| [Autoheal](https://github.com/willfarrell/docker-autoheal/blob/main/docker-entrypoint) | Reagiert auf `unhealthy`, nicht allgemein auf jeden gestoppten Container. Kein belegter Auslöser dieses konkreten Falls. |
+| [Offen docker-volume-backup](https://offen.github.io/docker-volume-backup/how-tos/use-with-docker-swarm.html) | Koordiniert bei Swarm den übergeordneten Dienst, beispielsweise durch vorübergehend null Replikate, statt gegen dessen automatische Wiederherstellung zu arbeiten. |
+| [Borgmatic](https://torsion.org/borgmatic/how-to/add-preparation-and-cleanup-steps-to-backups/) / [Duplicati](https://docs.duplicati.com/automation-and-integration/scripts) | Vorbereitungs- und Aufräumschritte koordinieren Anwendungen; Fehlerpfade müssen den Wartungszustand ebenfalls aufheben. Keine allgemeine automatische Unterstützung beliebiger Watchdogs. |
+
+Ein gewöhnlicher manueller Docker-Stopp unterdrückt zunächst Dockers eigene
+[Restart-Policy](https://docs.docker.com/engine/containers/start-containers-automatically/).
+Zusätzliche Host-Manager sind ein anderer Mechanismus; globale Policy-Änderungen
+wären deshalb weder nötig noch ausreichend.
+
+**Grenzen:** Explizite LoxPanel-Bedienaktionen wie Start oder Update benutzen
+nicht zwingend die Watchdog-Sperre. Während des Backups keine solchen Aktionen
+ausführen. Zwei Zustandsabgleiche sind keine lückenlose Ereignisüberwachung:
+Ein zwischenzeitlicher Start mit erneutem Stopp kann zwischen den Abfragen
+liegen. Die Lösung bestätigt nicht pauschal die Anwendungskonsistenz laufender
+Datenbanken und ist kein vollständiger Restore-Nachweis.
+
+Die neuen Tests umfassen Sperrprotokoll, Namens-/ID-Auswahl, sichere Dateipfade,
+Kopier-/Stop-/Wiederanlauffehler, verlorene Helfer und die Reihenfolge von Stopp,
+Kopie, Quellenprüfung und Wiederanlauf. Linux-spezifische Tests verwenden echte
+Sperren und prüfen zusätzlich Signalbehandlung, Besitzerende und unprivilegierten
+Dateizugriff. Am Windows-Arbeitsplatz sind diese Linux-Tests ausdrücklich
+ausgelassen; die tatsächliche Linux-Ausführung muss der neue GitHub-Lauf belegen.
+Andreas' System und ein vollständiger Restore bleiben gesonderte Praxistests.
+
+Lokal ausgeführt: 27 Helfer-Testmethoden (19 ausgeführt, acht Linux-Skips),
+19 Koordinations-Testmethoden (neun ausgeführt mit zusätzlichen Tabellenfällen,
+zehn Linux-/Signal-Skips) sowie zehn Zustands-/Journal-Tests ohne Skips.
+ShellCheck 0.11.0 für die geänderten Shell-Dateien, Bash-Syntax, JavaScript-
+Verhaltenstest und acht Prüfungen des neu gebauten Installationspakets sind
+erfolgreich. Diese Zahlen sind keine Behauptung einer lokalen Linux-Ausführung.
+Zusätzlich wurden 22 bestehende portable/TAR-/rsync-Worker-Testmethoden sowie
+die beiden vollständigen simulierten Abläufe mit Squeezelite/SONN und einer
+zwischen Backups entfernten Docker-Anwendung erfolgreich erneut ausgeführt.
+In der verpflichtenden Linux-CI führen fehlendes Bash, flock oder benötigte
+Root-Rechte bei den neuen Koordinationstests zu Fehlern, nicht zu stillen Skips.
+
 ## Ergebnisse
 
 Bestätigter vollständiger Referenzlauf vor den zusätzlichen Internet-Sonderfällen:

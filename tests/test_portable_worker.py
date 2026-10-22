@@ -81,6 +81,7 @@ write_control_marker() { : > "$1"; }
 run_hook() { :; }
 notify_hostbackup() { event "notify:$1"; }
 stop_backup_targets() { event services-stop; : > "$TEST_ROOT/services-stopped"; }
+verify_stopped_docker_targets() { :; }
 start_backup_targets_if_needed() { event services-start; : > "$TEST_ROOT/services-restarted"; }
 source_info() { printf '%s\n' '{"status":"ok","selection":{"policy":"legacy","overrides":{}}}'; }
 rsync_live_options() { :; }
@@ -198,7 +199,8 @@ class PortableWorkerTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         script = FIXTURE + '\n' + '\n'.join(function(name) for name in (
-            'portable_snapshot', 'checked_source_info', 'backup_cleanup_on_exit', 'create_backup'))
+            'portable_snapshot', 'checked_source_info', 'watchdog_guard_start',
+            'watchdog_guard_check', 'watchdog_guard_release', 'backup_cleanup_on_exit', 'create_backup'))
         script += '\ncreate_backup portable-test\n'
         result = subprocess.run([BASH, '-s'], input=script, text=True, encoding='utf-8',
                                 capture_output=True, check=False, timeout=60,

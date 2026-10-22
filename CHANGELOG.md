@@ -14,6 +14,18 @@ validiert werden.
 
 ## [Unreleased] - Entwicklungsstand 1.2.4
 
+- Nachbesserung für LoxPanel: Beim ausgewählten Container die vorhandene
+  Watchdog-Sperre vor dem Stopp erwerben und bis nach dem Wiederanlauf halten.
+  Kein neuer Modus, keine dauerhafte Abschaltung, keine Container-Neuerstellung
+  und kein Image-Update. Fehler- und Abbruchpfade geben die Sperre ebenfalls frei.
+  Lesbarkeit für den LoxBerry-Benutzer, Sperrdatei und unterstütztes
+  Controller-Protokoll werden geprüft; fremder Plugin-Code wird nicht ausgeführt.
+- Tatsächlich gestoppte Docker-Container vor und nach dem Kopieren anhand des
+  lokalen Journals prüfen. Fremder Wiederanlauf, fehlende ID oder eine nicht
+  verfügbare Docker-Abfrage bleiben konkrete Konsistenzfehler; Ersatzcontainer
+  werden nicht automatisch übernommen. AudioServer4Home und andere Überwachungen
+  sind dadurch nicht automatisch koordiniert. Diese Nachbesserung gehört zum
+  Entwicklungsstand; der veröffentlichte Vorabkanal bleibt unverändert.
 - Regression der neuen Quellenprüfung korrigiert: gültige Docker-/Linux-
   Namespace-Einbindungen mit Kennungen wie `net:[123]` werden als Mount-Identität
   erkannt und nicht mehr als ungültiger Quellpfad abgewiesen. Benutzerpfade,

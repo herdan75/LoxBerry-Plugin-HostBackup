@@ -2031,6 +2031,43 @@ docker_recovery_state() {
   if [ "$found" = false ]; then printf 'missing\n'; else printf 'unavailable\n'; fi
 }
 
+verify_stopped_docker_targets() {
+  # Recheck only containers this operation actually stopped. Host mounts may
+  # remain unchanged when an external controller starts a volume-only container.
+  # This is observation only: recovery owns all starts and journal mutations.
+  local state_dir="$1" pending type identity phase extra state failed=0
+  if ! pending="$(restart_journal_update "$state_dir" pending)"; then
+    log "ERROR: Cannot read the restart journal to verify stopped Docker containers"
+    return 20
+  fi
+  while IFS=$'\t' read -r type identity phase extra; do
+    [ "$type" = docker ] && [ "$phase" = stopped ] || continue
+    # Current stops record full IDs. Keep historical short immutable IDs valid,
+    # but never let a container name silently resolve to a replacement.
+    if [[ ! "$identity" =~ ^[a-f0-9]{12,64}$ ]] || [ -n "$extra" ]; then
+      log "ERROR: Invalid stopped Docker identity in the restart journal; source consistency cannot be confirmed"
+      return 20
+    fi
+    state="$(docker_recovery_state "$identity")" || state=unavailable
+    case "$state" in
+      stopped) ;;
+      running)
+        log "ERROR: Docker container $identity was started again during the backup pause, possibly by another controller; source consistency cannot be confirmed"
+        failed=20
+        ;;
+      missing)
+        log "ERROR: Docker container $identity was removed during the backup pause; no replacement is accepted as the stopped source"
+        failed=20
+        ;;
+      *)
+        log "ERROR: Cannot verify that Docker container $identity remains stopped; Docker state is unavailable"
+        failed=20
+        ;;
+    esac
+  done <<< "$pending"
+  return "$failed"
+}
+
 restart_journal_retry_type() {
   local state_dir="$1" requested_type="$2" pending type identity phase state failed=0
   pending="$(restart_journal_update "$state_dir" pending)" || return 20
@@ -2305,6 +2342,89 @@ stop_selected_docker_targets() {
   return "$failed"
 }
 
+watchdog_guard_start() {
+  # This must run in the worker shell, NOT inside the stop-targets | tee
+  # pipeline. The helper coordinates with the plugin's existing flock only;
+  # it never runs plugin-owned code or changes its persistent stop setting.
+  local controller="$LBHOMEDIR/bin/plugins/loxpanel/loxpanel-ctl.sh"
+  local data="$LBHOMEDIR/data/plugins/loxpanel"
+  local targets legacy=false ready="" owner_pid="$BASHPID" original_read original_write
+  [ -z "${HB_WATCHDOG_PID:-}" ] || { log "ERROR: Watchdog coordination is already active"; return 20; }
+  if [ ! -e "$controller" ] && [ ! -L "$controller" ] && [ ! -e "$data" ] && [ ! -L "$data" ]; then
+    return 0
+  fi
+  targets="$(selected_stop_targets)" || return 20
+  if [ -z "$targets" ]; then legacy="$(json_get_bool stop_docker_before_backup)"; fi
+  coproc HB_WATCHDOG_PROCESS {
+    exec python3 "$LBP_BINDIR/hostbackup-watchdog.py" hold --home "$LBHOMEDIR" \
+      --owner-pid "$owner_pid" --targets "$targets" --legacy "$legacy"
+  }
+  HB_WATCHDOG_PID=$HB_WATCHDOG_PROCESS_PID
+  original_read=${HB_WATCHDOG_PROCESS[0]}
+  original_write=${HB_WATCHDOG_PROCESS[1]}
+  # Duplicates survive Bash removing the coprocess variables on helper exit.
+  exec {HB_WATCHDOG_READ}<&"$original_read"
+  exec {HB_WATCHDOG_WRITE}>&"$original_write"
+  exec {original_read}<&-
+  exec {original_write}>&-
+  if ! IFS= read -r -t 20 ready <&"$HB_WATCHDOG_READ"; then
+    log "ERROR: Watchdog coordination could not be established; no backup services were stopped"
+    watchdog_guard_release || true
+    return 20
+  fi
+  case "$ready" in
+    'READY loxpanel')
+      log "LoxPanel watchdog coordinated: automatic restart paused until service recovery; no container recreation or update"
+      ;;
+    SKIP) watchdog_guard_release ;;
+    *)
+      log "ERROR: Watchdog coordination failed: $ready"
+      watchdog_guard_release || true
+      return 20
+      ;;
+  esac
+}
+
+watchdog_guard_check() {
+  local reply=""
+  [ -n "${HB_WATCHDOG_PID:-}" ] || return 0
+  # A dead helper may close its pipe. Isolate SIGPIPE from the worker so its
+  # EXIT cleanup can still restart the stopped services.
+  if ! (printf 'CHECK\n' >&"$HB_WATCHDOG_WRITE") 2>/dev/null \
+      || ! IFS= read -r -t 5 reply <&"$HB_WATCHDOG_READ" || [ "$reply" != OK ]; then
+    log "ERROR: LoxPanel watchdog coordination was lost; source consistency cannot be confirmed${reply:+: $reply}"
+    return 20
+  fi
+}
+
+watchdog_guard_release() {
+  local pid="${HB_WATCHDOG_PID:-}" reply="" read_status=0 result=0
+  [ -n "$pid" ] || return 0
+  if [ -n "${HB_WATCHDOG_WRITE:-}" ]; then
+    (printf 'RELEASE\n' >&"$HB_WATCHDOG_WRITE") 2>/dev/null || true
+    exec {HB_WATCHDOG_WRITE}>&-
+    unset HB_WATCHDOG_WRITE
+  fi
+  if [ -n "${HB_WATCHDOG_READ:-}" ]; then
+    IFS= read -r -t 5 reply <&"$HB_WATCHDOG_READ" || read_status=$?
+    if [ "$read_status" -gt 128 ]; then
+      # A child which has not closed its output must not hold the plugin lock
+      # forever. Only this worker's still-running coprocess may be terminated.
+      if jobs -pr | grep -Fxq -- "$pid"; then kill -KILL "$pid" 2>/dev/null || true; fi
+      result=20
+    elif [ -n "$reply" ] && [ "$reply" != RELEASED ]; then
+      log "ERROR: Watchdog coordination ended unexpectedly: $reply"
+      result=20
+    fi
+    exec {HB_WATCHDOG_READ}<&-
+    unset HB_WATCHDOG_READ
+  fi
+  wait "$pid" || result=20
+  unset HB_WATCHDOG_PID
+  [ "$result" -eq 0 ] || log "ERROR: Watchdog coordination helper did not finish normally"
+  return "$result"
+}
+
 stop_backup_targets() {
   local state_dir="$1"
   local targets_file="$state_dir/selected-stop-targets.tsv"
@@ -2448,6 +2568,13 @@ backup_cleanup_on_exit() {
       start_backup_targets_if_needed "$state_dir" || cleanup_failed=1
     fi
     if [ "$cleanup_failed" -eq 0 ]; then write_control_marker "$state_dir/restart.done" || cleanup_failed=1; fi
+  fi
+  # Always release after the recovery attempt, including failed recovery.
+  # There is no persistent watchdog-disable marker left for the next boot.
+  if [ -n "$log_file" ]; then
+    watchdog_guard_release >> "$log_file" 2>&1 || cleanup_failed=1
+  else
+    watchdog_guard_release || cleanup_failed=1
   fi
   if [ -d "$state_dir" ] && [ ! -e "$state_dir/post-hook.started" ] && [ ! -e "$state_dir/post-hook.done" ]; then
     write_control_marker "$state_dir/post-hook.started" || cleanup_failed=1
@@ -3155,7 +3282,10 @@ create_backup() {
   run_hook "$pre_hook" 2>&1 | tee -a "$log_file"
   log "Stopping selected services and Docker containers if configured" | tee -a "$log_file"
   task_state_write "$task" running stopping_services "$log_file" "$$" ""
+  watchdog_guard_start >> "$log_file" 2>&1
   stop_backup_targets "$state_dir" 2>&1 | tee -a "$log_file"
+  watchdog_guard_check >> "$log_file" 2>&1
+  verify_stopped_docker_targets "$state_dir" >> "$log_file" 2>&1
 
   # Enumerate only after services are quiesced, so newly created database files
   # are not missed. Any enumeration failure uses the normal restart EXIT trap.
@@ -3285,6 +3415,14 @@ create_backup() {
   set -e
   copy_exit_status="$rsync_status"
   [ -z "$tar_raw_exit_status" ] || copy_exit_status="$tar_raw_exit_status"
+  if ! watchdog_guard_check >> "$log_file" 2>&1; then
+    source_verify_status=20
+    rsync_status=20
+  fi
+  if ! verify_stopped_docker_targets "$state_dir" >> "$log_file" 2>&1; then
+    source_verify_status=20
+    rsync_status=20
+  fi
   # Docker/service restart can legitimately change mounts, so verify the source
   # snapshot now, while the quiesced source state is still expected to match.
   if [ "$selection_active" = true ] && ! python3 "$LBP_BINDIR/hostbackup-sources.py" verify --report "$source_report" --verification-report "$state_dir/source-verification.json" >> "$log_file" 2>&1; then
@@ -3307,6 +3445,7 @@ create_backup() {
   # shellcheck disable=SC2034
   HB_BACKUP_RESTART_DONE=true
   write_control_marker "$state_dir/restart.done"
+  watchdog_guard_release >> "$log_file" 2>&1
   log "Running post-backup hook if configured" | tee -a "$log_file"
   task_state_write "$task" running post_hook "$log_file" "$$" ""
   write_control_marker "$state_dir/post-hook.started"

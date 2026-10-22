@@ -20,6 +20,13 @@ ohne vorherige Deinstallation; aktive Vorgänge vorher beenden lassen.
 Auch eine Neuinstallation ist möglich, mit anschliessender Einrichtung und
 Vorprüfung des eigenen Backup-Ziels.
 
+**Zusätzliche Korrektur im Entwicklungsstand, noch nicht veröffentlicht:** LoxPanels vorhandene
+Watchdog-Sperre wird für einen ausgewählten Container während des Backups genutzt.
+Zusätzlich werden tatsächlich gestoppte Docker-Container vor und nach der Kopie
+auf unerwarteten Wiederanlauf geprüft. Keine neue Einstellung. Dies ersetzt nicht
+die gesonderte Abstimmung mit AudioServer4Home oder anderen Überwachungen;
+[Umfang und Prüfgrenzen](docs/DEVELOP-1.2.4-VALIDATION.md#nachbesserung-watchdogs-und-containerzustand).
+
 > [!NOTE]
 > **Neu auf develop, noch nicht im öffentlichen 1.2.3-beta-Paket:**
 > Flüchtige Diagnoseinhalte in den verwalteten LoxBerry-Logbereichen werden

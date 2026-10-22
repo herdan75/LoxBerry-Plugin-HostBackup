@@ -32,10 +32,11 @@ COMMON_FUNCTIONS = (
     "log", "manifest_field", "json_escape", "valid_task_name", "task_state_path",
     "task_state_write", "task_state_value", "prepare_log_file", "write_control_marker",
     "task_failure_on_exit", "install_task_failure_trap", "checked_source_info",
+    "watchdog_guard_start", "watchdog_guard_check", "watchdog_guard_release",
 )
 JOURNAL_FUNCTIONS = (
     "restart_journal_path_is_safe", "restart_journal_update", "restart_journal_create",
-    "restart_journal_archive", "restart_journal_finish", "docker_recovery_state",
+    "restart_journal_archive", "restart_journal_finish", "docker_recovery_state", "verify_stopped_docker_targets",
     "restart_journal_retry_type", "recover_restart_journals",
     "systemd_stop_identity", "stop_selected_systemd_targets", "stop_selected_docker_targets", "stop_docker_if_requested",
     "stop_backup_targets", "start_docker_if_needed", "start_systemd_if_needed",
@@ -57,6 +58,7 @@ mkdir -p "$TASK_DIR" "$TASK_LOG_DIR" "$RESTART_JOURNAL_DIR" "$LOCK_DIR" "$TEST_R
 require_root_for_write() { :; }
 require_root_permission_ack() { :; }
 portable_snapshot() { return 1; }
+verify_stopped_docker_targets() { :; }
 require_backup_id() { :; }
 process_start_ticks() { if [ "${1:-0}" -gt 1 ]; then printf '123\n'; fi; }
 task_process_is_current() { return 1; }
