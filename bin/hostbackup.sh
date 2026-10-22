@@ -2440,15 +2440,65 @@ stop_selected_docker_targets() {
   return "$failed"
 }
 
-watchdog_guard_start() {
-  # This must run in the worker shell, NOT inside the stop-targets | tee
-  # pipeline. The helper coordinates with the plugin's existing flock only;
-  # it never runs plugin-owned code or changes its persistent stop setting.
+watchdog_guard_probe() {
+  # Read-only capability check, shared by the public preview and worker gate.
+  # Do not inspect Docker at all on systems without this plugin integration.
   local controller="$LBHOMEDIR/bin/plugins/loxpanel/loxpanel-ctl.sh"
   local data="$LBHOMEDIR/data/plugins/loxpanel"
+  local config="$LBHOMEDIR/config/plugins/loxpanel"
+  local targets legacy=false report="" helper_status=0
+  if [ ! -e "$controller" ] && [ ! -L "$controller" ] && [ ! -e "$data" ] && [ ! -L "$data" ] \
+      && [ ! -e "$config" ] && [ ! -L "$config" ]; then
+    printf '%s\n' '{"ok":true,"applicable":false,"mode":"skip","details":"Keine LoxPanel-Watchdog-Koordination erforderlich."}'
+    return 0
+  fi
+  if ! targets="$(selected_stop_targets)"; then
+    printf '%s\n' '{"ok":false,"applicable":true,"mode":"error","details":"Die ausgewaehlten Stop-Ziele konnten fuer die Watchdog-Pruefung nicht gelesen werden. Einstellungen pruefen und erneut pruefen."}'
+    return 0
+  fi
+  if [ -z "$targets" ]; then legacy="$(json_get_bool stop_docker_before_backup)"; fi
+  if command -v timeout >/dev/null 2>&1; then
+    report="$(timeout -k 2 45 python3 "$LBP_BINDIR/hostbackup-watchdog.py" probe --home "$LBHOMEDIR" \
+      --targets "$targets" --legacy "$legacy" 2>/dev/null)" || helper_status=$?
+  else
+    report="$(python3 "$LBP_BINDIR/hostbackup-watchdog.py" probe --home "$LBHOMEDIR" \
+      --targets "$targets" --legacy "$legacy" 2>/dev/null)" || helper_status=$?
+  fi
+  # Never let a helper crash, mixed output or a malformed optimistic response
+  # turn into a green preview. Only the bounded, typed display schema is public.
+  printf '%s' "$report" | perl -MJSON::PP -e '
+    my $status = shift; local $/; my $raw = <STDIN> // "";
+    my $fallback = {ok => JSON::PP::false, applicable => JSON::PP::true, mode => "error",
+      details => "Die Docker-Watchdog-Pruefung konnte nicht verlaesslich abgeschlossen werden. Bitte erneut pruefen; bei wiederholtem Fehler das HostBackup-Log zur Diagnose verwenden."};
+    my $result = eval {
+      die "helper failure" if $status != 0 || length($raw) > 16384;
+      my $d = decode_json($raw);
+      die "schema" unless ref($d) eq "HASH" && JSON::PP::is_bool($d->{ok})
+        && JSON::PP::is_bool($d->{applicable}) && !ref($d->{mode})
+        && ($d->{mode} // "") =~ /\A(?:skip|lock|manual-stop|unsupported|error)\z/
+        && defined($d->{details}) && !ref($d->{details}) && length($d->{details}) > 0
+        && length($d->{details}) <= 4000 && $d->{details} !~ /[\x00-\x08\x0b-\x1f\x7f]/;
+      die "inconsistent" if ($d->{ok} && $d->{mode} =~ /\A(?:unsupported|error)\z/)
+        || (!$d->{ok} && $d->{mode} !~ /\A(?:unsupported|error)\z/)
+        || (!$d->{applicable} && $d->{mode} ne "skip")
+        || ($d->{mode} eq "skip" && (!$d->{ok} || $d->{applicable}));
+      +{map { $_ => $d->{$_} } qw(ok applicable mode details)};
+    };
+    print encode_json($result // $fallback), "\n";
+  ' "$helper_status"
+}
+
+watchdog_guard_start() {
+  # This must run in the worker shell, NOT inside the stop-targets | tee
+  # pipeline. The helper holds the plugin's supported flock or observes an
+  # existing manual stop; it never runs plugin-owned code or changes that stop.
+  local controller="$LBHOMEDIR/bin/plugins/loxpanel/loxpanel-ctl.sh"
+  local data="$LBHOMEDIR/data/plugins/loxpanel"
+  local config="$LBHOMEDIR/config/plugins/loxpanel"
   local targets legacy=false ready="" owner_pid="$BASHPID" original_read original_write
   [ -z "${HB_WATCHDOG_PID:-}" ] || { log "ERROR: Watchdog coordination is already active"; return 20; }
-  if [ ! -e "$controller" ] && [ ! -L "$controller" ] && [ ! -e "$data" ] && [ ! -L "$data" ]; then
+  if [ ! -e "$controller" ] && [ ! -L "$controller" ] && [ ! -e "$data" ] && [ ! -L "$data" ] \
+      && [ ! -e "$config" ] && [ ! -L "$config" ]; then
     return 0
   fi
   targets="$(selected_stop_targets)" || return 20
@@ -2465,7 +2515,7 @@ watchdog_guard_start() {
   exec {HB_WATCHDOG_WRITE}>&"$original_write"
   exec {original_read}<&-
   exec {original_write}>&-
-  if ! IFS= read -r -t 20 ready <&"$HB_WATCHDOG_READ"; then
+  if ! IFS= read -r -t 45 ready <&"$HB_WATCHDOG_READ"; then
     log "ERROR: Watchdog coordination could not be established; no backup services were stopped"
     watchdog_guard_release || true
     return 20
@@ -2473,6 +2523,9 @@ watchdog_guard_start() {
   case "$ready" in
     'READY loxpanel')
       log "LoxPanel watchdog coordinated: automatic restart paused until service recovery; no container recreation or update"
+      ;;
+    'READY loxpanel manual-stop')
+      log "LoxPanel ist bewusst ueber seine eigene Oberflaeche gestoppt; HostBackup prueft diesen Zustand waehrend der Sicherung. LoxPanel nach dem Backup dort manuell wieder einschalten."
       ;;
     SKIP) watchdog_guard_release ;;
     *)
@@ -2489,7 +2542,7 @@ watchdog_guard_check() {
   # A dead helper may close its pipe. Isolate SIGPIPE from the worker so its
   # EXIT cleanup can still restart the stopped services.
   if ! (printf 'CHECK\n' >&"$HB_WATCHDOG_WRITE") 2>/dev/null \
-      || ! IFS= read -r -t 5 reply <&"$HB_WATCHDOG_READ" || [ "$reply" != OK ]; then
+      || ! IFS= read -r -t 25 reply <&"$HB_WATCHDOG_READ" || [ "$reply" != OK ]; then
     log "ERROR: LoxPanel watchdog coordination was lost; source consistency cannot be confirmed${reply:+: $reply}"
     return 20
   fi
@@ -2972,6 +3025,7 @@ preflight_backup() {
   local total_inodes inode_result inode_status inode_check_value inode_space_ok=true inode_informational=false
   local -a notices=()
   local source_json source_ok=true source_message="" repository_ok=true repository_message="" repository_status repository_lineage
+  local watchdog_json watchdog_ok=false watchdog_applicable=true watchdog_mode=error watchdog_message=""
   METADATA_PROBE_JSON='{}'
   METADATA_PROBE_MESSAGE=""
   require_root_permission_ack
@@ -3078,6 +3132,12 @@ preflight_backup() {
     docker_running="$(docker ps -q 2>/dev/null | wc -l | tr -d ' ')"
   fi
   excludes_count="$(backup_excludes "$root" | wc -l | tr -d ' ')"
+  watchdog_json="$(watchdog_guard_probe)" || watchdog_json='{"ok":false,"applicable":true,"mode":"error","details":"Die Docker-Watchdog-Pruefung ist fehlgeschlagen. Bitte erneut pruefen."}'
+  read -r watchdog_ok watchdog_applicable watchdog_mode < <(printf '%s' "$watchdog_json" | perl -MJSON::PP -e 'local $/; my $d=decode_json(<STDIN>); print(($d->{ok} ? "true" : "false"), " ", ($d->{applicable} ? "true" : "false"), " ", $d->{mode}, "\n");')
+  watchdog_message="$(printf '%s' "$watchdog_json" | perl -MJSON::PP -e 'local $/; print decode_json(<STDIN>)->{details};')"
+  if [ "$watchdog_ok" = true ] && [ "$watchdog_mode" = manual-stop ]; then
+    notices+=("$watchdog_message")
+  fi
   status="ok"
   warnings_json="[]"
   notices_json="[]"
@@ -3110,6 +3170,12 @@ preflight_backup() {
     status="warning"
     warnings_json='["Docker-Container laufen. Fuer konsistente Datenbanken ggf. einzelne Container in den Stop-Zielen auswaehlen oder Hooks konfigurieren."]'
   fi
+  # A valid target/metadata probe cannot compensate for an unsafe service pause.
+  # Keep other failures, but always expose this blocking cause in the checklist.
+  if [ "$watchdog_ok" != true ]; then
+    status="error"
+    warnings_json="$(printf '%s' "$warnings_json" | perl -MJSON::PP -e 'local $/; my $d=decode_json(<STDIN>); push @$d, $ARGV[0]; print encode_json($d);' "$watchdog_message")"
+  fi
   if [ "$mode" = "network-compatible" ]; then
     notices+=("Hinweis: Network Compatible laesst xattrs und File Capabilities bewusst aus. Dies ist der konfigurierte Normalbetrieb fuer CIFS-/NFS-Ziele und behindert den Backup-Start nicht.")
   fi
@@ -3127,6 +3193,7 @@ preflight_backup() {
   {"name":"Speicher fuer Snapshot-Basiskopie","ok":$baseline_space_ok,"value":$(json_escape "$baseline_check_value")},
   {"name":"Freie Inodes","ok":$inode_space_ok,"value":$(json_escape "$inode_check_value"),"informational":$inode_informational},
   {"name":"Docker verfuegbar","ok":$docker_available,"value":"running=$docker_running"},
+  {"name":"Docker-Watchdog-Koordination","ok":$watchdog_ok,"value":$(json_escape "$watchdog_mode"),"details":$(json_escape "$watchdog_message"),"informational":$([ "$watchdog_applicable" = false ] && echo true || echo false)},
   {"name":"Exclude-Regeln","ok":true,"value":"$excludes_count"}
 ]
 EOF

@@ -28,7 +28,7 @@ ENABLED = bool(TARGET) and sys.platform.startswith("linux") and os.geteuid() == 
 FUNCTIONS = (
     "json_escape", "current_mount_value", "metadata_mode", "portable_snapshot",
     "portable_helper", "metadata_capability_probe", "require_root_permission_ack",
-    "checked_source_info", "baseline_space_requirement_mb", "backup_inode_status", "preflight_backup",
+    "checked_source_info", "baseline_space_requirement_mb", "backup_inode_status", "watchdog_guard_probe", "preflight_backup",
 )
 
 
@@ -164,6 +164,7 @@ class CifsPreflightIntegrationTests(unittest.TestCase):
             (EXHAUSTED_INODES if exhausted else "") + "\npreflight_backup\n",
             text=True, encoding="utf-8", capture_output=True, timeout=240, check=False,
             env={**os.environ, "TEST_TARGET": str(self.target), "ROOT_STATE_DIR": str(self.state),
+                 "LBHOMEDIR": str(Path(self.local.name) / "absent-loxberry"),
                  "LBP_BINDIR": RUNTIME or str(ROOT / "bin"), "TEST_METADATA_MODE": mode,
                  "TEST_BACKUP_MODE": backup_mode},
         )

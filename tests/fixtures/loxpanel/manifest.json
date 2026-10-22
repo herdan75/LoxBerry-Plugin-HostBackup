@@ -1,0 +1,130 @@
+{
+  "upstream": "https://github.com/Lenardo1/Loxpanel",
+  "checked_on": "2026-10-22",
+  "license": "PolyForm Noncommercial License 1.0.0",
+  "license_url": "https://polyformproject.org/licenses/noncommercial/1.0.0",
+  "required_notice": "Copyright © 2025–2026 Lenardo1 and LoxPanel contributors (https://github.com/Lenardo1/Loxpanel)",
+  "sources": [
+    {
+      "path": "loxberry-plugin/bin/loxpanel-ctl.sh",
+      "ref": "22c1705c020e414977ce486e581f09b9743208ad",
+      "version": "0.2.7",
+      "sha256": "7a6973d2699171f0ac393f94e3aeb56fb00fbf0d11500e41d43ee534672d1e16",
+      "git_blob": "c9313efaab7d780990d6fcda70ee4fa9b0a1c17d",
+      "kind": "pinned_source",
+      "fixture": "loxpanel-controller-released.sh",
+      "expected_mode": "manual-stop",
+      "url": "https://github.com/Lenardo1/Loxpanel/blob/22c1705c020e414977ce486e581f09b9743208ad/loxberry-plugin/bin/loxpanel-ctl.sh"
+    },
+    {
+      "path": "loxberry-plugin/bin/loxpanel-ctl.sh",
+      "ref": "v0.2.8",
+      "sha256": "7a6973d2699171f0ac393f94e3aeb56fb00fbf0d11500e41d43ee534672d1e16",
+      "kind": "pinned_source",
+      "git_blob": "c9313efaab7d780990d6fcda70ee4fa9b0a1c17d",
+      "fixture": "loxpanel-controller-released.sh",
+      "expected_mode": "manual-stop",
+      "url": "https://github.com/Lenardo1/Loxpanel/blob/v0.2.8/loxberry-plugin/bin/loxpanel-ctl.sh"
+    },
+    {
+      "path": "loxberry-plugin/bin/loxpanel-ctl.sh",
+      "ref": "v0.2.9",
+      "sha256": "7a6973d2699171f0ac393f94e3aeb56fb00fbf0d11500e41d43ee534672d1e16",
+      "kind": "pinned_source",
+      "git_blob": "c9313efaab7d780990d6fcda70ee4fa9b0a1c17d",
+      "fixture": "loxpanel-controller-released.sh",
+      "expected_mode": "manual-stop",
+      "url": "https://github.com/Lenardo1/Loxpanel/blob/v0.2.9/loxberry-plugin/bin/loxpanel-ctl.sh"
+    },
+    {
+      "kind": "release_asset",
+      "sha256": "7a6973d2699171f0ac393f94e3aeb56fb00fbf0d11500e41d43ee534672d1e16",
+      "ref": "v0.3.0",
+      "asset_sha256": "e69e94e71df8b23f986407ce6044c798f707be57ffde925bb127c6e5826eb0da",
+      "path": "bin/loxpanel-ctl.sh",
+      "fixture": "loxpanel-controller-released.sh",
+      "expected_mode": "manual-stop",
+      "url": "https://github.com/Lenardo1/Loxpanel/releases/download/v0.3.0/loxpanel-plugin.zip"
+    },
+    {
+      "kind": "release_asset",
+      "sha256": "7a6973d2699171f0ac393f94e3aeb56fb00fbf0d11500e41d43ee534672d1e16",
+      "ref": "v0.3.1",
+      "asset_sha256": "9d3228122fa4f6fa15e286130a8b07eafa543fcf235b0126e9ccb305626b1445",
+      "path": "bin/loxpanel-ctl.sh",
+      "fixture": "loxpanel-controller-released.sh",
+      "expected_mode": "manual-stop",
+      "url": "https://github.com/Lenardo1/Loxpanel/releases/download/v0.3.1/loxpanel-plugin.zip"
+    },
+    {
+      "kind": "release_asset",
+      "sha256": "7a6973d2699171f0ac393f94e3aeb56fb00fbf0d11500e41d43ee534672d1e16",
+      "ref": "v0.3.2",
+      "asset_sha256": "e3034338785fbdea8995406a58572921ee6494818acf399edcf626ebc1442499",
+      "path": "bin/loxpanel-ctl.sh",
+      "fixture": "loxpanel-controller-released.sh",
+      "expected_mode": "manual-stop",
+      "url": "https://github.com/Lenardo1/Loxpanel/releases/download/v0.3.2/loxpanel-plugin.zip"
+    },
+    {
+      "kind": "release_asset",
+      "sha256": "7a6973d2699171f0ac393f94e3aeb56fb00fbf0d11500e41d43ee534672d1e16",
+      "ref": "v0.3.3",
+      "asset_sha256": "2a9c9659d9ffad1cfdbe524005e55d56f9ec1bf53f7a1891e0bfc8a4692b3481",
+      "path": "bin/loxpanel-ctl.sh",
+      "fixture": "loxpanel-controller-released.sh",
+      "expected_mode": "manual-stop",
+      "url": "https://github.com/Lenardo1/Loxpanel/releases/download/v0.3.3/loxpanel-plugin.zip"
+    },
+    {
+      "kind": "release_asset",
+      "sha256": "7a6973d2699171f0ac393f94e3aeb56fb00fbf0d11500e41d43ee534672d1e16",
+      "ref": "v0.4.0",
+      "asset_sha256": "4f63726d9c9e3d31fc0238c2dbd1dd789d33d2c60d5de9277afb0b9a31711236",
+      "path": "bin/loxpanel-ctl.sh",
+      "fixture": "loxpanel-controller-released.sh",
+      "expected_mode": "manual-stop",
+      "url": "https://github.com/Lenardo1/Loxpanel/releases/download/v0.4.0/loxpanel-plugin.zip"
+    },
+    {
+      "kind": "release_asset",
+      "sha256": "7a6973d2699171f0ac393f94e3aeb56fb00fbf0d11500e41d43ee534672d1e16",
+      "ref": "v0.5.0",
+      "asset_sha256": "230c6a9dbebd5d9fd84709b1b2bd975d2479c516d8d613cba9fff95305f57135",
+      "path": "bin/loxpanel-ctl.sh",
+      "fixture": "loxpanel-controller-released.sh",
+      "expected_mode": "manual-stop",
+      "url": "https://github.com/Lenardo1/Loxpanel/releases/download/v0.5.0/loxpanel-plugin.zip"
+    },
+    {
+      "kind": "release_asset",
+      "sha256": "7a6973d2699171f0ac393f94e3aeb56fb00fbf0d11500e41d43ee534672d1e16",
+      "ref": "v0.6.0",
+      "asset_sha256": "b1411331f3817237d299d72c7f9a9881f927cab8aa1134a99c7d9b0937a5bcc1",
+      "path": "bin/loxpanel-ctl.sh",
+      "fixture": "loxpanel-controller-released.sh",
+      "expected_mode": "manual-stop",
+      "url": "https://github.com/Lenardo1/Loxpanel/releases/download/v0.6.0/loxpanel-plugin.zip"
+    },
+    {
+      "kind": "release_asset",
+      "sha256": "7a6973d2699171f0ac393f94e3aeb56fb00fbf0d11500e41d43ee534672d1e16",
+      "ref": "v0.7.0",
+      "asset_sha256": "1855ccd318b7fa1680424da164ce68c86e7858b2c39a17d9e39017454816002c",
+      "path": "bin/loxpanel-ctl.sh",
+      "fixture": "loxpanel-controller-released.sh",
+      "expected_mode": "manual-stop",
+      "url": "https://github.com/Lenardo1/Loxpanel/releases/download/v0.7.0/loxpanel-plugin.zip"
+    },
+    {
+      "path": "loxberry-plugin/bin/loxpanel-ctl.sh",
+      "ref": "61bfd1d82e86f6feb06162e11e41e3fca7944bf6",
+      "sha256": "8b8fe0e914b17441d60e94bd550580b8db0fb5094f2425bca90e9d78b83899c2",
+      "kind": "pinned_source",
+      "git_blob": "15b10e21c09c8c585083d39d11af262e25357053",
+      "fixture": "loxpanel-controller-lock.sh",
+      "expected_mode": "lock",
+      "url": "https://github.com/Lenardo1/Loxpanel/blob/61bfd1d82e86f6feb06162e11e41e3fca7944bf6/loxberry-plugin/bin/loxpanel-ctl.sh"
+    }
+  ]
+}

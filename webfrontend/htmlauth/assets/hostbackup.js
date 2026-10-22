@@ -435,12 +435,26 @@
     }
     target.append(panel);
   }
+  function renderPreflightChecks(target, preflight, failedOnly) {
+    if (!preflight || typeof preflight !== 'object') return;
+    var checks = Array.isArray(preflight.checks) ? preflight.checks : [];
+    checks.filter(function (check) { return check && typeof check === 'object' && (!failedOnly || check.ok === false); }).forEach(function (check) {
+      var label = typeof check.name === 'string' ? check.name : 'Vorprüfung';
+      var value = typeof check.value === 'string' || typeof check.value === 'number' ? String(check.value) : '';
+      var detail = typeof check.details === 'string' ? check.details : '';
+      var line = el('p'), status = check.ok === false ? 'Nicht erfüllt' : check.ok === true ? 'OK' : 'Nicht bestätigt';
+      line.append(el('strong', label + ': ' + status));
+      if (detail || value) line.append(document.createTextNode(' – ' + (detail || value)));
+      target.append(line);
+    });
+    if (!failedOnly && Array.isArray(preflight.notices)) preflight.notices.filter(function (notice) { return typeof notice === 'string'; }).forEach(function (notice) { target.append(el('p', notice)); });
+  }
   function renderRequestError(error, opener) {
     if (!error.data || (!error.data.metadata_probe && !error.data.preflight)) return;
     var target = prepareReport(opener);
     target.append(el('h3', 'Backup nicht gestartet'));
     var preflight = error.data.preflight || {};
-    (preflight.checks || []).filter(function (check) { return check.ok === false; }).forEach(function (check) { target.append(el('p', check.name + ': ' + (check.value || 'Prüfung fehlgeschlagen'))); });
+    renderPreflightChecks(target, preflight, true);
     renderMetadataProbe(target, error.data.metadata_probe || preflight.metadata_probe);
     var details = el('details'); details.append(el('summary', 'Vollständige Vorprüfung'), el('pre', JSON.stringify(preflight, null, 2))); target.append(details);
     focusView(target);
@@ -640,6 +654,8 @@
     var target = prepareReport(opener);
     if (action === 'backup-preview') {
       target.append(el('h3', 'Vorschau des nächsten Backups'), el('p', 'Gespeicherter Stand: ' + backupModeLabel(data.backup_mode) + ' / ' + metadataLabel(data.metadata_mode)));
+      if (data.preflight && data.preflight.status === 'error') target.append(el('p', 'Backup noch nicht möglich: Bitte die folgenden Prüfergebnisse beachten.'));
+      renderPreflightChecks(target, data.preflight, false);
       target.append(el('p', data.full_baseline_required ? 'Neue vollständige Basiskopie erforderlich. Der erste Lauf benötigt erneut Platz für alle ausgewählten Daten; erst danach können passende Snapshots Platz teilen.' : 'Inkrementelle Referenz: ' + (data.reference_id || 'keine')));
       target.append(el('p', 'Verfügbar: ' + byteLabel(data.available_mb == null ? null : data.available_mb * 1048576) + ' · geschätzte Basiskopie: ' + byteLabel(data.baseline_estimate_mb == null ? null : data.baseline_estimate_mb * 1048576)));
       reportRows(target, ['Datenquelle', 'Im Backup', 'Grund'], (data.source_volumes || []).map(function (volume) { return [volume.path, volume.included ? 'Ja' : 'Nein', volume.reason]; }));

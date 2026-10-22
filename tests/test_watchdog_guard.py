@@ -111,11 +111,23 @@ class WatchdogValidationTests(unittest.TestCase):
             original.replace('    running || start', '    start'),
             original + '\nDATADIR="/different"\n',
             original + '\nSPERRE="/different"\n',
+            original + '\n_sperre() {\n    :\n}\n',
+            original + '\ncheck)\n    start\n;;\n',
             original + '\x00',
         )
         for index, source in enumerate(variants):
             with self.subTest(index=index), self.assertRaises(watchdog.GuardError):
                 watchdog.validate_controller(source, "/fixture/loxberry")
+
+    def test_shell_expansions_in_installation_path_are_not_interpreted(self):
+        for home in ('/fixture/$user', '/fixture/`id`', '/fixture/"quoted"', '/fixture/back\\slash'):
+            with self.subTest(home=home), self.assertRaises(watchdog.GuardError):
+                watchdog.controller_profile(controller(home), home)
+
+    def test_metadata_only_observation_cannot_create_a_marker(self):
+        with patch.object(watchdog, "open_directory", side_effect=AssertionError("Must not open or mutate")):
+            with self.assertRaises(watchdog.GuardError):
+                watchdog.open_regular("/fixture/marker", create=True, metadata_only=True)
 
     def test_process_identity_handles_parentheses_in_name(self):
         text = "123 (worker (backup)) S " + " ".join(["0"] * 18 + ["987654", "0", "0"])
@@ -137,6 +149,7 @@ class WatchdogValidationTests(unittest.TestCase):
 
     def test_uninstalled_or_unselected_plugin_skips_without_lock(self):
         with patch.object(watchdog, "read_text", side_effect=FileNotFoundError()), \
+                patch.object(watchdog, "safe_path_present", return_value=False), \
                 patch.object(watchdog, "docker_inventory", return_value=[("ab" * 32, "loxpanel")]), \
                 patch.object(watchdog, "LockGuard", side_effect=AssertionError("Should skip")), \
                 patch.object(sys, "stdout", new_callable=io.StringIO) as out:
@@ -147,7 +160,7 @@ class WatchdogValidationTests(unittest.TestCase):
                 patch.object(sys, "stdout", new_callable=io.StringIO) as out:
             watchdog.hold("/fixture/loxberry", 1234, "docker\tother", False)
             self.assertEqual(out.getvalue(), "SKIP\n")
-        with patch.object(watchdog, "read_text", side_effect=AssertionError("Unselected plugin must not be read")), \
+        with patch.object(watchdog, "read_text", side_effect=AssertionError("Unrelated selected ID must not read LoxPanel")), \
                 patch.object(watchdog, "docker_inventory", return_value=[("cd" * 32, "loxpanel")]), \
                 patch.object(sys, "stdout", new_callable=io.StringIO) as out:
             watchdog.hold("/fixture/loxberry", 1234, "docker\t" + "ab" * 32, False)
@@ -168,23 +181,53 @@ class WatchdogValidationTests(unittest.TestCase):
             guard.return_value.close.assert_called_once_with()
             inventory.assert_called_once_with()
 
-    def test_confirmed_absent_selection_and_legacy_skip_even_unsupported_controller(self):
-        for targets, legacy in (("docker\tloxpanel", False), ("", True), ("docker\t" + "ab" * 32, False)):
+    def test_absent_selected_container_still_requires_supported_installed_controller(self):
+        for targets, legacy in (("docker\tloxpanel", False), ("", True)):
             for inventory_value in ([], [("cd" * 32, "another")]):
                 with self.subTest(targets=targets, legacy=legacy, inventory=inventory_value), \
                         patch.object(watchdog, "docker_inventory", return_value=inventory_value) as inventory, \
-                        patch.object(watchdog, "read_text", side_effect=AssertionError("Absent LoxPanel needs no controller protocol")), \
-                        patch.object(watchdog, "LockGuard", side_effect=AssertionError("Absent LoxPanel needs no guard")), \
+                        patch.object(watchdog, "read_text", return_value="unsupported installed controller"), \
+                        patch.object(watchdog, "LockGuard", side_effect=AssertionError("Unsupported controller must not be guarded")), \
                         patch.object(sys, "stdout", new_callable=io.StringIO) as out:
-                    watchdog.hold("/fixture/loxberry", 1234, targets, legacy)
-                    self.assertEqual(out.getvalue(), "SKIP\n")
+                    with self.assertRaises(watchdog.UnsupportedController):
+                        watchdog.hold("/fixture/loxberry", 1234, targets, legacy)
+                    self.assertNotIn("SKIP", out.getvalue())
                     inventory.assert_called_once_with()
+
+    def test_stale_selected_id_does_not_guard_an_unrelated_replacement_by_name(self):
+        for inventory_value in ([], [("cd" * 32, "loxpanel")]):
+            with self.subTest(inventory=inventory_value), \
+                    patch.object(watchdog, "docker_inventory", return_value=inventory_value), \
+                    patch.object(watchdog, "read_text", return_value="unsupported installed controller"), \
+                    patch.object(watchdog, "LockGuard", side_effect=AssertionError("No name-based replacement")), \
+                    patch.object(sys, "stdout", new_callable=io.StringIO) as out:
+                watchdog.hold("/fixture/loxberry", 1234, "docker\t" + "ab" * 32, False)
+                self.assertEqual(out.getvalue(), "SKIP\n")
+
+    def test_missing_controller_with_remaining_plugin_data_is_not_uninstalled(self):
+        with patch.object(watchdog, "read_text", side_effect=FileNotFoundError()), \
+                patch.object(watchdog, "safe_path_present", return_value=True), \
+                patch.object(watchdog, "LockGuard", side_effect=AssertionError("Incomplete plugin")):
+            with self.assertRaises(watchdog.UnsupportedController):
+                watchdog.hold("/fixture/loxberry", 1234, "docker\tloxpanel", False)
+
+    def test_unrelated_hex_selection_skips_missing_or_broken_loxpanel_installation(self):
+        identity = "ab" * 32
+        for controller_error in (FileNotFoundError(), PermissionError("broken controller")):
+            with self.subTest(error=type(controller_error).__name__), \
+                    patch.object(watchdog, "docker_inventory", return_value=[(identity, "other")]) as inventory, \
+                    patch.object(watchdog, "read_text", side_effect=controller_error) as reader, \
+                    patch.object(watchdog, "safe_path_present", side_effect=AssertionError("Unrelated app")):
+                result = watchdog.resolve_coordination("/fixture/loxberry", "docker\t" + identity, False)
+                self.assertEqual(result, {"mode": "skip"})
+                inventory.assert_called_once_with()
+                reader.assert_not_called()
 
     def test_inventory_failure_is_not_treated_as_absent(self):
         for targets, legacy in (("docker\tloxpanel", False), ("", True)):
             with self.subTest(targets=targets), \
                     patch.object(watchdog, "docker_inventory", side_effect=watchdog.GuardError("Docker unavailable")), \
-                    patch.object(watchdog, "read_text", side_effect=AssertionError("Must fail before reading controller")), \
+                    patch.object(watchdog, "read_text", return_value=controller()), \
                     patch.object(sys, "stdout", new_callable=io.StringIO) as out:
                 with self.assertRaisesRegex(watchdog.GuardError, "Docker unavailable"):
                     watchdog.hold("/fixture/loxberry", 1234, targets, legacy)

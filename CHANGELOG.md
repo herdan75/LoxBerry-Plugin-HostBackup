@@ -14,6 +14,13 @@ validiert werden.
 
 ## [Unreleased] - Entwicklungsstand 1.2.4
 
+- LoxPanel-Kompatibilität anhand echter veröffentlichter Plugin-Pakete korrigieren:
+  Die Versionen 0.3.0 bis 0.7.0 verwenden einen bewussten Stoppmarker statt der
+  erst später hinzugefügten Watchdog-Sperre. Vorprüfung und Worker unterscheiden
+  diese Verfahren; ein bestätigter manueller Stopp bleibt erhalten und wird
+  nicht von HostBackup aufgehoben. Ungeeignete oder noch laufende Konfigurationen
+  werden bereits vor Anlage eines Backup-Verzeichnisses verständlich gemeldet.
+  Neue Tests verwenden die veröffentlichten Controller mit Herkunfts-/Hashbeleg.
 - Containerprobleme verständlich anzeigen: Unerwarteter Wiederstart, entfernte
   Container und nicht prüfbarer Docker-Zustand erhalten getrennte Erklärungen
   mit ursprünglichem Containernamen, ID und nächsten Schritten. Die Diagnose

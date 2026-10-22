@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Coordinate a selected LoxPanel container with its existing watchdog lock.
+"""Coordinate selected LoxPanel containers using their installed protocol.
 
 This helper never executes LoxPanel code, edits its configuration, or starts a
 container. The parent worker remains responsible for immutable-ID recovery.
@@ -7,10 +7,13 @@ Protocol on stdout/stdin: SKIP (exit), READY loxpanel, CHECK -> OK,
 RELEASE -> RELEASED (exit). Errors are one readable ERROR line and exit 20.
 The parent must retain its control pipe through copying and service recovery.
 EOF/owner death releases the kernel lock; no persistent stopped flag is left.
+Older releases have no lock. Their existing deliberate-stop marker is only
+observed, never created, removed or changed by HostBackup.
 """
 
 import argparse
 import errno
+import json
 import os
 from pathlib import PurePosixPath
 import re
@@ -31,9 +34,15 @@ MAX_TEXT = 131072
 LOCK_NAME = ".loxpanel-ctl.lock"
 CONTROLLER_SUFFIX = "/bin/plugins/loxpanel/loxpanel-ctl.sh"
 DATA_SUFFIX = "/data/plugins/loxpanel"
+CONFIG_SUFFIX = "/config/plugins/loxpanel"
+STOP_NAME = "loxpanel_stopped.cfg"
 
 
 class GuardError(Exception):
+    pass
+
+
+class UnsupportedController(GuardError):
     pass
 
 
@@ -63,12 +72,14 @@ def open_directory(path):
         raise
 
 
-def open_regular(path, create=False):
-    """Open read-only without following links, blocking on FIFOs, or truncating."""
+def open_regular(path, create=False, metadata_only=False):
+    """Open read-only (or O_PATH metadata) without following links or truncating."""
     absolute_path(path)
+    if create and metadata_only:
+        raise GuardError("Metadata-only watchdog checks must not create files.")
     parent, name = path.rsplit("/", 1)
     directory = open_directory(parent)
-    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+    flags = (os.O_PATH if metadata_only else os.O_RDONLY) | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
     fd = None
     try:
         try:
@@ -162,6 +173,76 @@ def selected_loxpanel(targets, legacy, inventory_reader=docker_inventory):
                for identity, name in inventory for candidate in identities if candidate not in named)
 
 
+def container_state(identity):
+    """Inspect an immutable ID, never a mutable/reused container name."""
+    if not re.fullmatch(r"[0-9a-f]{64}", identity):
+        raise GuardError("LoxPanel: ungueltige Container-ID; Status nicht bestaetigt.")
+    try:
+        result = subprocess.run(
+            ["docker", "inspect", "--type", "container", "--format", "{{json .State}}", identity],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5,
+            env=dict(os.environ, LC_ALL="C"), check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise GuardError("LoxPanel: Docker-Status nicht erreichbar. Docker pruefen und erneut versuchen.") from exc
+    if result.returncode or len(result.stdout) > MAX_TEXT:
+        raise GuardError("LoxPanel: Container-Status konnte nicht sicher gelesen werden. Erneut pruefen.")
+    try:
+        state = json.loads(result.stdout.decode("utf-8", errors="strict"))
+    except (UnicodeError, ValueError) as exc:
+        raise GuardError("LoxPanel: ungueltige Docker-Statusantwort.") from exc
+    if (not isinstance(state, dict) or type(state.get("Running")) is not bool
+            or state.get("Status") not in ("created", "running", "paused", "restarting", "removing", "exited", "dead")
+            or ("Restarting" in state and type(state["Restarting"]) is not bool)):
+        raise GuardError("LoxPanel: unvollstaendige Docker-Statusantwort.")
+    if state["Status"] == "dead":
+        raise GuardError("LoxPanel: Docker meldet einen defekten Containerzustand (dead). Docker pruefen und erneut versuchen.")
+    return "stopped" if (state["Status"] in ("created", "exited")
+                          and not state["Running"] and not state.get("Restarting", False)) else "running"
+
+
+def controller_stop_path(text, home):
+    """Recognise only the fixed installed stop-marker path; no shell evaluation."""
+    lines = [line.strip() for line in text.splitlines()
+             if line.strip() and not line.lstrip().startswith("#")]
+    config = home + CONFIG_SUFFIX
+    stopped = [line for line in lines if line.startswith("STOPPED=")]
+    if stopped == ['STOPPED="' + config + '/' + STOP_NAME + '"']:
+        return config + "/" + STOP_NAME
+    configs = [line for line in lines if line.startswith("CONFIGDIR=")]
+    if (stopped == ['STOPPED="$CONFIGDIR/' + STOP_NAME + '"']
+            and configs in (['CONFIGDIR="' + config + '"'],
+                            ['CONFIGDIR="${LOXPANEL_CTL_CONFIGDIR:-' + config + '}"'])):
+        return config + "/" + STOP_NAME
+    return None
+
+
+def controller_profile(text, home):
+    """Identify the published legacy marker protocol or the later flock protocol."""
+    absolute_path(home)
+    if re.search(r'[$`"\\]', home):
+        raise UnsupportedController("LoxPanel: Installationspfad benoetigt eine nicht unterstuetzte Shell-Ersetzung.")
+    if len(text) > MAX_TEXT or "\x00" in text:
+        raise UnsupportedController("LoxPanel: Steuerdatei ist ungueltig oder nicht unterstuetzt.")
+    try:
+        path = validate_controller(text, home)
+        return {"mode": "lock", "path": path, "stop_path": controller_stop_path(text, home)}
+    except GuardError:
+        pass
+    lines = [line.strip() for line in text.splitlines()
+             if line.strip() and not line.lstrip().startswith("#")]
+    code = "\n".join(lines)
+    stop_path = controller_stop_path(text, home)
+    checks = list(re.finditer(r"(?:^|\n)check\)\s*\n(.*?)\n;;", code, re.S))
+    check_lines = checks[0].group(1).splitlines() if len(checks) == 1 else []
+    if (stop_path and len(check_lines) == 2
+            and re.fullmatch(r'\[ -f "\$STOPPED" \] && exit 0(?:\s+#.*)?', check_lines[0])
+            and check_lines[1] == "running || start"):
+        return {"mode": "manual-stop", "path": stop_path, "stop_path": stop_path}
+    raise UnsupportedController(
+        "LoxPanel: Diese Steuerdatei bietet keine unterstuetzte Backup-Koordination. "
+        "LoxPanel-Version und Installation pruefen; die Sicherheitspruefung nicht umgehen.")
+
+
 def validate_controller(text, home):
     """Recognise the installed controller's narrow, existing lock contract.
 
@@ -169,6 +250,8 @@ def validate_controller(text, home):
     modified/older implementation must be reviewed instead of guessed safe.
     """
     absolute_path(home)
+    if re.search(r'[$`"\\]', home):
+        raise GuardError("Unsupported shell expansion in LoxPanel installation path.")
     if len(text) > MAX_TEXT or "\x00" in text:
         raise GuardError("Unsupported LoxPanel watchdog controller.")
     lines = [line.strip() for line in text.splitlines()
@@ -181,12 +264,12 @@ def validate_controller(text, home):
         raise GuardError("LoxPanel watchdog data directory is unsupported; stop LoxPanel in its own interface before backup.")
     if [line for line in lines if line.startswith("SPERRE=")] != ['SPERRE="$DATADIR/' + LOCK_NAME + '"']:
         raise GuardError("LoxPanel does not expose the supported watchdog lock; stop it in its own interface before backup.")
-    match = re.search(r"(?:^|\n)_sperre\(\)\s*\{\s*\n(.*?)\n\}", code, re.S)
+    matches = list(re.finditer(r"(?:^|\n)_sperre\(\)\s*\{\s*\n(.*?)\n\}", code, re.S))
     expected = ('[ -e "$SPERRE" ] || : >"$SPERRE"',
                 'exec 9<"$SPERRE" || return 2', 'flock -n 9 || return 1')
-    body = tuple(line.strip() for line in match.group(1).splitlines()) if match else ()
-    check = re.search(r"(?:^|\n)check\)\s*\n(.*?)\n;;", code, re.S)
-    check_lines = check.group(1).splitlines() if check else []
+    body = tuple(line.strip() for line in matches[0].group(1).splitlines()) if len(matches) == 1 else ()
+    checks = list(re.finditer(r"(?:^|\n)check\)\s*\n(.*?)\n;;", code, re.S))
+    check_lines = checks[0].group(1).splitlines() if len(checks) == 1 else []
     if check_lines and re.fullmatch(r'\[ -f "\$STOPPED" \] && exit 0(?:\s+#.*)?', check_lines[0]):
         check_lines = check_lines[1:]
     if (body != expected or len(check_lines) != 3 or check_lines[0] != "_sperre"
@@ -235,12 +318,14 @@ def watchdog_account():
     return user.pw_uid, user.pw_gid, groups
 
 
-def probe_watchdog_access(path, identity, timeout=2):
-    """Prove actual read access, including parent traversal and ACL semantics.
+def probe_watchdog_access(path, identity, timeout=2, directory=False, metadata_only=False):
+    """Prove actual watchdog access, including traversal and ACL semantics.
 
     The child drops to the real non-root watchdog user, opens read-only, checks
-    the locked inode and exits. It never imports/executes another plugin. Mode
-    bits alone are insufficient (owner/group precedence and named ACLs matter).
+    the locked inode and exits. A legacy marker only needs the equivalent of
+    shell [ -f ], not content-read permission: O_PATH verifies its type and
+    identity while still requiring real parent traversal by the watchdog user.
+    It never imports/executes another plugin. Mode bits alone are insufficient.
     """
     uid, gid, groups = watchdog_account()
     pid = os.fork()
@@ -254,10 +339,14 @@ def probe_watchdog_access(path, identity, timeout=2):
             if (os.geteuid() != uid or os.getegid() != gid
                     or set(os.getgroups()) | {gid} != set(groups) | {gid}):
                 os._exit(1)
-            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+            flags = ((os.O_PATH | os.O_DIRECTORY) if directory else
+                     (os.O_PATH if metadata_only else os.O_RDONLY))
+            fd = os.open(path, flags | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
             info = os.fstat(fd)
             os.close(fd)
-            os._exit(0 if stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+            valid = (stat.S_ISDIR(info.st_mode) and os.access(path, os.X_OK, effective_ids=True)) if directory else (
+                stat.S_ISREG(info.st_mode) and info.st_nlink == 1)
+            os._exit(0 if valid
                      and (info.st_dev, info.st_ino) == identity else 1)
         except BaseException:
             os._exit(1)
@@ -321,6 +410,169 @@ class LockGuard:
             self.fd = None
 
 
+def safe_path_present(path):
+    """Existence without following links, including dangling links as present."""
+    parent, name = absolute_path(path).rsplit("/", 1)
+    try:
+        directory = open_directory(parent)
+    except FileNotFoundError:
+        return False
+    try:
+        try:
+            os.stat(name, dir_fd=directory, follow_symlinks=False)
+            return True
+        except FileNotFoundError:
+            return False
+    finally:
+        os.close(directory)
+
+
+def marker_fingerprint(path):
+    try:
+        fd = open_regular(path, metadata_only=True)
+    except FileNotFoundError as exc:
+        raise GuardError(
+            "LoxPanel hat noch keine bestaetigte manuelle Stopppause. "
+            "LoxPanel in seiner eigenen Oberflaeche stoppen (nicht nur den Docker-Container), "
+            "danach erneut pruefen. Nach dem Backup dort wieder starten.") from exc
+    try:
+        info = os.fstat(fd)
+        identity = (info.st_dev, info.st_ino)
+        try:
+            probe_watchdog_access(path, identity, metadata_only=True)
+        except GuardError as exc:
+            raise GuardError(
+                "LoxPanel kann seine Stopppause als Benutzer loxberry nicht erkennen. "
+                "LoxPanel-Installation und Berechtigungen pruefen; HostBackup hat nichts geaendert.") from exc
+        return identity + (info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    finally:
+        os.close(fd)
+
+
+def loxpanel_identity(inventory):
+    matches = [identity for identity, name in inventory if name == "loxpanel"]
+    if len(matches) > 1:
+        raise GuardError("LoxPanel: mehrdeutige Docker-Inventarliste; Status nicht bestaetigt.")
+    return matches[0] if matches else None
+
+
+class ManualStopGuard:
+    """Observe a pre-existing user stop; never acquire ownership of that stop."""
+    def __init__(self, path, expected_id):
+        self.path = path
+        self.expected_id = expected_id
+        self.fingerprint = marker_fingerprint(path)
+        self.check()
+
+    def check(self):
+        if marker_fingerprint(self.path) != self.fingerprint:
+            raise GuardError(
+                "LoxPanel: Die manuelle Stopppause wurde waehrend des Backups veraendert. "
+                "LoxPanel erst nach dem Backup wieder starten und die Sicherung erneut ausfuehren.")
+        identity = loxpanel_identity(docker_inventory())
+        if identity != self.expected_id:
+            raise GuardError(
+                "LoxPanel: Der Container wurde waehrend der bestaetigten Stopppause entfernt oder neu erstellt. "
+                "Keine Updates oder Starts waehrend des Backups ausfuehren; anschliessend erneut sichern.")
+        if identity and container_state(identity) != "stopped":
+            raise GuardError(
+                "LoxPanel laeuft trotz gesetzter Stopppause. In der LoxPanel-Oberflaeche stoppen, "
+                "auf den Abschluss warten und erneut pruefen. Waehrend des Backups nicht wieder starten.")
+
+    def close(self):
+        # A pre-existing user stop belongs to the user, on success and failure.
+        pass
+
+
+def resolve_coordination(home, targets_text, legacy):
+    """One read-only resolver for both preflight and the actual worker."""
+    absolute_path(home)
+    targets = parse_targets(targets_text)
+    possible = (not targets and legacy) or any(
+        kind == "docker" and (name == "loxpanel" or re.fullmatch(r"[a-f0-9]{12,64}", name))
+        for kind, name in targets)
+    if not possible:
+        return {"mode": "skip"}
+    # A hexadecimal selection may belong to a completely different app. Resolve
+    # its immutable ID before reading leftover/broken LoxPanel installation
+    # files, so an unrelated selection cannot acquire a new dependency on them.
+    inventory = None
+    direct = (not targets and legacy) or ("docker", "loxpanel") in targets
+    if not direct:
+        inventory = docker_inventory()
+        if not selected_loxpanel(targets, legacy, lambda: inventory):
+            return {"mode": "skip"}
+    controller_path = home + CONTROLLER_SUFFIX
+    try:
+        controller = read_text(controller_path)
+    except FileNotFoundError:
+        if safe_path_present(home + DATA_SUFFIX) or safe_path_present(home + CONFIG_SUFFIX):
+            raise UnsupportedController(
+                "LoxPanel: Plugin-Daten sind vorhanden, aber die Steuerdatei fehlt. "
+                "LoxPanel-Installation pruefen; automatische Koordination ist nicht bestaetigt.")
+        return {"mode": "skip"}
+    if inventory is None:
+        inventory = docker_inventory()
+    if not selected_loxpanel(targets, legacy, lambda: inventory):
+        return {"mode": "skip"}
+    profile = controller_profile(controller, home)
+    identity = loxpanel_identity(inventory)
+    return dict(profile, controller_path=controller_path, controller=controller, identity=identity)
+
+
+def probe_lock(path):
+    """Check an existing lock read-only; absent locks are not created by preflight."""
+    parent = path.rsplit("/", 1)[0]
+    directory = open_directory(parent)
+    try:
+        info = os.fstat(directory)
+        probe_watchdog_access(parent, (info.st_dev, info.st_ino), directory=True)
+    finally:
+        os.close(directory)
+    try:
+        fd = open_regular(path)
+    except FileNotFoundError:
+        return
+    try:
+        info = os.fstat(fd)
+        probe_watchdog_access(path, (info.st_dev, info.st_ino))
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            if exc.errno in (errno.EAGAIN, errno.EACCES):
+                raise GuardError(
+                    "LoxPanel fuehrt gerade einen eigenen Vorgang aus. Nach dessen Abschluss erneut pruefen.") from exc
+            raise
+    finally:
+        os.close(fd)
+
+
+def probe(home, targets_text, legacy):
+    """Bounded JSON-safe public receipt; negative compatibility is not a crash."""
+    try:
+        profile = resolve_coordination(home, targets_text, legacy)
+        mode = profile["mode"]
+        if mode == "skip":
+            details = "Keine ausgewaehlte installierte LoxPanel-Watchdog-Koordination erforderlich."
+        elif mode == "manual-stop":
+            guard = ManualStopGuard(profile["path"], profile["identity"])
+            guard.close()
+            details = ("LoxPanel ist in seiner eigenen Oberflaeche bewusst gestoppt. "
+                       "Die Stopppause bleibt unveraendert; nach dem Backup dort wieder starten.")
+        else:
+            probe_lock(profile["path"])
+            details = ("LoxPanel unterstuetzt die automatische Watchdog-Pause. "
+                       "HostBackup prueft und haelt diese beim Backup; keine Updates oder manuellen Starts waehrenddessen.")
+        if mode != "skip" and read_text(profile["controller_path"]) != profile["controller"]:
+            raise GuardError("LoxPanel-Steuerdatei hat sich waehrend der Pruefung geaendert. Erneut pruefen.")
+        return {"ok": True, "applicable": mode != "skip", "mode": mode, "details": details}
+    except (GuardError, OSError, UnicodeError, ValueError) as exc:
+        message = " ".join(str(exc).split())[:600]
+        return {"ok": False, "applicable": True,
+                "mode": "unsupported" if isinstance(exc, UnsupportedController) else "error",
+                "details": message or "LoxPanel-Koordination konnte nicht geprueft werden."}
+
+
 def close_inherited_descriptors():
     # In particular, do not retain the worker's operation/backup locks (8/9).
     for name in os.listdir("/proc/self/fd"):
@@ -331,8 +583,8 @@ def close_inherited_descriptors():
                 pass
 
 
-def serve(guard, owner, controller_path, controller):
-    print("READY loxpanel", flush=True)
+def serve(guard, owner, controller_path, controller, ready="READY loxpanel"):
+    print(ready, flush=True)
     pending = b""
     while owner.alive():
         ready, _, _ = select.select([0], [], [], 0.25)
@@ -360,48 +612,33 @@ def serve(guard, owner, controller_path, controller):
 
 
 def hold(home, owner_pid, targets_text, legacy):
-    absolute_path(home)
-    targets = parse_targets(targets_text)
-    possible = (not targets and legacy) or any(
-        kind == "docker" and (name == "loxpanel" or re.fullmatch(r"[a-f0-9]{12,64}", name))
-        for kind, name in targets)
-    if not possible:
+    profile = resolve_coordination(home, targets_text, legacy)
+    if profile["mode"] == "skip":
         print("SKIP", flush=True)
         return
-    # LoxPanel's own stop performs compose down, removing its container. A
-    # saved selection (or the legacy all-Docker option) must not require an old
-    # controller's lock protocol when no LoxPanel container remains. Only a
-    # successful, validated full inventory establishes absence; daemon errors
-    # must never be mistaken for a stopped/removed application.
-    inventory = docker_inventory()
-    if (not any(name == "loxpanel" for _, name in inventory)
-            or not selected_loxpanel(targets, legacy, lambda: inventory)):
-        print("SKIP", flush=True)
-        return
-    controller_path = home + CONTROLLER_SUFFIX
-    try:
-        controller = read_text(controller_path)
-    except FileNotFoundError:
-        print("SKIP", flush=True)
-        return
-    path = validate_controller(controller, home)
     owner = Owner(owner_pid)
     # A group stop signal reaches both worker and helper. Keep the guard while
     # the worker's EXIT trap restarts services; owner identity/EOF is the lease.
     for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(signum, signal.SIG_IGN)
-    guard = LockGuard(path, owner)
+    guard = (ManualStopGuard(profile["path"], profile["identity"])
+             if profile["mode"] == "manual-stop" else LockGuard(profile["path"], owner))
     try:
-        serve(guard, owner, controller_path, controller)
+        if not owner.alive():
+            raise GuardError("Backup worker exited before watchdog coordination.")
+        if profile["mode"] == "manual-stop":
+            serve(guard, owner, profile["controller_path"], profile["controller"], "READY loxpanel manual-stop")
+        else:
+            serve(guard, owner, profile["controller_path"], profile["controller"])
     finally:
         guard.close()
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("hold",))
+    parser.add_argument("action", choices=("hold", "probe"))
     parser.add_argument("--home", required=True)
-    parser.add_argument("--owner-pid", required=True, type=int)
+    parser.add_argument("--owner-pid", type=int)
     parser.add_argument("--targets", required=True, help="Selected targets as literal TYPE<TAB>NAME lines")
     parser.add_argument("--legacy", choices=("true", "false"), required=True)
     args = parser.parse_args()
@@ -409,12 +646,20 @@ def main():
         if sys.platform != "linux" or fcntl is None:
             raise GuardError("Watchdog coordination requires Linux file locks.")
         close_inherited_descriptors()
+        if args.action == "probe":
+            print(json.dumps(probe(args.home, args.targets, args.legacy == "true"), ensure_ascii=True), flush=True)
+            return 0
+        if args.owner_pid is None:
+            raise GuardError("Backup worker PID is required for watchdog coordination.")
         hold(args.home, args.owner_pid, args.targets, args.legacy == "true")
         return 0
     except (GuardError, OSError, UnicodeError, ValueError) as exc:
         message = " ".join(str(exc).split())[:600]
         try:
-            print("ERROR " + message, flush=True)
+            if args.action == "probe":
+                print(json.dumps({"ok": False, "applicable": True, "mode": "error", "details": message}), flush=True)
+            else:
+                print("ERROR " + message, flush=True)
         except BrokenPipeError:
             pass
         return 20

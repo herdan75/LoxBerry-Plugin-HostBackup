@@ -188,6 +188,11 @@ const wiredRequests=[];
 const runtimeSettingPosts=[];
 const startedTasks={backup:'backup-fixture.log','start-export':'export-fixture.log',import:'import-fixture.log','restore-backup':'restore-fixture.log','restore-files':'restore-files-fixture.log','verify-backup':'verify-fixture.log'};
 let lastSavedSources, failSources=false, failBackupMetadata=false;
+let watchdogPreviewMode=null;
+function watchdogPreflightFixture() {
+  const blocked=watchdogPreviewMode==='blocked';
+  return {status:blocked?'error':'ok',checks:[{name:'Docker-Watchdog-Koordination',ok:!blocked,value:blocked?'error':'manual-stop',details:blocked?'LoxPanel vor der Vorprüfung in seiner eigenen Oberfläche stoppen (nicht nur Docker). Nach dem Backup dort wieder starten. <img src=x onerror="window.unsafeWatchdog=true">':'LoxPanel ist bewusst gestoppt. Die Stopppause bleibt unverändert; nach dem Backup dort wieder starten.'}],notices:[]};
+}
 let targetNoticeMode='http-error',targetNoticeRequests=0;
 let stopTargetsMode='ok',stopTargetsRich=false,stopTargetsRequests=0;
 const heldStopResponses=[];
@@ -255,6 +260,7 @@ const server=http.createServer(async(req,res)=>{
         assert.deepEqual(Array.from(params.keys()).sort(),['action','csrf_token'],'Preview never submits draft settings');
         maintenancePreviews.push({...savedMaintenance});return json(res,{ok:true,data:{applied:false,keep:[{backup_id:'saved-policy-'+savedMaintenance.keep_daily,reasons:['Gespeicherte Regel']}],delete:[]},message:'Vorschau ohne Löschung erstellt'});
       }
+      if(action==='backup'&&watchdogPreviewMode==='blocked')return json(res,{ok:false,error:'Backup nicht gestartet: Die Vorprüfung ist fehlgeschlagen.',preflight:watchdogPreflightFixture()},400);
       if(action==='backup'&&failBackupMetadata)return json(res,{ok:false,error:'Backup nicht gestartet: Metadatenprüfung fehlgeschlagen.',preflight:{status:'error',checks:[{name:'Metadaten-Modus',ok:false,value:'network-compatible'}],metadata_probe:probe},metadata_probe:probe},400);
       if(action==='record-restore-test') {
         assert.equal(params.get('backup_id'),'fixture-ok');assert.equal(params.get('result'),'passed');assert.match(params.get('tested_at'),/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
@@ -299,7 +305,7 @@ const server=http.createServer(async(req,res)=>{
       if(mode==='no-targets'){res.end(emptyStopRows);return;}
       await new Promise(resolve=>setTimeout(resolve,mode==='slow'?22000:100));res.end(fragment);return;
     }
-    if(action==='backup-preview')return json(res,{saved_config:true,backup_mode:'snapshot',metadata_mode:'network-compatible',full_baseline_required:true,excludes:['/fixture/backup/***'],source_volumes:panelFlowFixture?Array.from({length:90},(_,i)=>({path:'/fixture/long-source-'+i,included:true,reason:'Lange Vorprüfung – reine Browser-Testdaten'})):[{path:'/',included:true,reason:'System'}],available_mb:20000,baseline_estimate_mb:3000,metadata_probe:probe});
+    if(action==='backup-preview')return json(res,{saved_config:true,backup_mode:'snapshot',metadata_mode:'network-compatible',full_baseline_required:true,excludes:['/fixture/backup/***'],source_volumes:panelFlowFixture?Array.from({length:90},(_,i)=>({path:'/fixture/long-source-'+i,included:true,reason:'Lange Vorprüfung – reine Browser-Testdaten'})):[{path:'/',included:true,reason:'System'}],available_mb:20000,baseline_estimate_mb:3000,...(watchdogPreviewMode?{preflight:watchdogPreflightFixture()}:{metadata_probe:probe})});
     if(action==='verification-report'){
       if(verificationMode==='missing')return json(res,{backup_id:'fixture-ok',status:'not_checked',content_verified:false,report_available:false,message:'Noch keine Dateiinhaltsprüfung vorhanden.'});
       if(['invalid','unreadable'].includes(verificationMode))return json(res,{backup_id:'fixture-ok',status:'error',content_verified:false,report_available:false,message:'Prüfbericht kann nicht gelesen werden.',report_error:verificationMode==='invalid'?'Invalid JSON':'Permission denied'});
@@ -345,6 +351,44 @@ async function configurationControls(page) {
   try { await page.locator('#stop-targets-list [name="stop_targets_loaded"]').waitFor({state:'attached'}); }
   catch (error) { throw new Error(error.message+'; stop-target state: '+JSON.stringify(await page.evaluate(()=>({status:document.querySelector('#stop-targets-status')?.textContent,list:document.querySelector('#stop-targets-list')?.innerHTML,saved:document.querySelector('#hostbackup-app')?.dataset.draftStops})))); }
   return page.evaluate(()=>Array.from(document.getElementById('settings-save-form').elements).filter(node=>node.name&&node.name!=='csrf_token').map(node=>[node.name,node.value,node.checked||false]));
+}
+async function checkWatchdogPreflight(browser,base) {
+  const previousFinished=taskFinished;
+  taskFinished=true;watchdogPreviewMode='blocked';
+  try {
+    for(const [view,width,height] of [['desktop',1440,1100],['mobile',390,844]]) {
+      const page=await browser.newPage({viewport:{width,height}});page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
+      try {
+        await page.goto(base);await configurationControls(page);
+        const postsBefore=postCount,result=page.locator('#operation-result');
+        await page.locator('#overview-details').evaluate(node=>node.open=true);
+        await page.locator('[data-load-action="backup-preview"]').click();
+        await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('Backup noch nicht möglich'));
+        assert.match(await result.innerText(),/Docker-Watchdog-Koordination: Nicht erfüllt/);
+        assert.match(await result.innerText(),/LoxPanel vor der Vorprüfung in seiner eigenen Oberfläche stoppen/);
+        assert.equal(await result.locator('img').count(),0);assert.equal(await page.evaluate(()=>window.unsafeWatchdog),undefined);
+        assert.equal(postCount,postsBefore,'Reading the failed preview never starts a backup');
+        await result.screenshot({path:path.join(temp,'watchdog-preflight-'+view+'.png')});
+        await page.locator('[data-close-view="operation-result"]').click();await result.waitFor({state:'hidden'});
+        await page.locator('.topbar-actions button[type="submit"]').click();
+        await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('Backup nicht gestartet'));
+        assert.match(await result.innerText(),/LoxPanel vor der Vorprüfung in seiner eigenen Oberfläche stoppen/);
+        assert.equal(await page.locator('.preflight-confirm').count(),0,'A missing coordination cannot be overridden as a warning');
+        assert.equal(postCount,postsBefore+1);assert.equal(new URL(page.url()).searchParams.has('active_task'),false);
+        watchdogPreviewMode='manual';
+        await page.locator('[data-load-action="backup-preview"]').click();
+        await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('LoxPanel ist bewusst gestoppt'));
+        assert.match(await result.innerText(),/Docker-Watchdog-Koordination: OK/);
+        assert.match(await result.innerText(),/nach dem Backup dort wieder starten/);
+        assert.doesNotMatch(await result.innerText(),/Backup noch nicht möglich/);
+        assert.equal(await result.locator('img').count(),0);
+        const layout=await result.evaluate(node=>({right:node.getBoundingClientRect().right,overflow:node.scrollWidth-node.clientWidth}));
+        assert.ok(layout.right<=width+1&&layout.overflow<=1,JSON.stringify(layout));
+        await page.locator('[data-close-view="operation-result"]').click();await result.waitFor({state:'hidden'});
+        receipts.push(view+': watchdog preflight displays failed cause and own-app stop instructions before start; blocked start retains details without override or redirect; confirmed manual stop gives restart reminder; report remains closable and safe text');
+      } finally {watchdogPreviewMode='blocked';await page.close();}
+    }
+  } finally {watchdogPreviewMode=null;taskFinished=previousFinished;}
 }
 async function checkContainerIssues(browser,base) {
   containerIssueFixture=true;
@@ -997,11 +1041,12 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     const base='http://127.0.0.1:'+server.address().port+'/';
     const launch={headless:true};if(process.env.HOSTBACKUP_BROWSER_EXECUTABLE)launch.executablePath=process.env.HOSTBACKUP_BROWSER_EXECUTABLE;
     browser=await chromium.launch(launch);
-    if(['panels','actions','stops','runtime','container-issues'].includes(process.env.HOSTBACKUP_BROWSER_FOCUS)) {
+    if(['panels','actions','stops','runtime','container-issues','watchdog'].includes(process.env.HOSTBACKUP_BROWSER_FOCUS)) {
       if(process.env.HOSTBACKUP_BROWSER_FOCUS==='actions'){await checkActionWiring(browser,base);const afterImport=await browser.newPage();await afterImport.close();}
       else if(process.env.HOSTBACKUP_BROWSER_FOCUS==='stops')await checkStopTargets(browser,base);
       else if(process.env.HOSTBACKUP_BROWSER_FOCUS==='runtime')await checkRuntimeLogs(browser,base);
       else if(process.env.HOSTBACKUP_BROWSER_FOCUS==='container-issues')await checkContainerIssues(browser,base);
+      else if(process.env.HOSTBACKUP_BROWSER_FOCUS==='watchdog')await checkWatchdogPreflight(browser,base);
       else await checkResultPanels(browser,base);
       assert.deepEqual(errors,[]);
       const result={status:'passed',tests:receipts,artifacts:temp,renderer:'actual CGI with mocked backend; focused '+process.env.HOSTBACKUP_BROWSER_FOCUS,browser:await browser.version()};
@@ -1463,6 +1508,7 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     await checkMaintenance(browser,base);
     await checkRuntimeLogs(browser,base);
     await checkContainerIssues(browser,base);
+    await checkWatchdogPreflight(browser,base);
     assert.deepEqual(errors,[]);
     const result={status:'passed',tests:receipts,artifacts:temp,renderer:'actual CGI with mocked backend; read-only mount discovery',browser:await browser.version()};
     fs.writeFileSync(path.join(temp,'receipt.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));

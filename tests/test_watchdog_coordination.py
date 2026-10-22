@@ -65,7 +65,7 @@ if os.environ.get("GUARD_START_FAILURE") == "1":
 marker = root / "guard-held"
 marker.write_text(str(os.getpid()), encoding="ascii")
 event("guard-acquired")
-print("READY loxpanel", flush=True)
+print("READY loxpanel manual-stop" if os.environ.get("GUARD_MANUAL_STOP") == "1" else "READY loxpanel", flush=True)
 checks = 0
 try:
     for line in sys.stdin:
@@ -73,6 +73,8 @@ try:
         if action == "CHECK":
             checks += 1
             event("guard-check:" + str(checks))
+            if os.environ.get("GUARD_CHECK_DELAY"):
+                time.sleep(float(os.environ["GUARD_CHECK_DELAY"]))
             if str(checks) == os.environ.get("GUARD_CHECK_EOF", ""):
                 raise SystemExit(20)
             if str(checks) == os.environ.get("GUARD_CHECK_FAILURE", ""):
@@ -204,7 +206,13 @@ class WatchdogWorkerCoordinationTests(unittest.TestCase):
         names = ("portable_snapshot", "checked_source_info", *GUARD_FUNCTIONS,
                  "backup_cleanup_on_exit", "create_backup")
         source = portable.FIXTURE + "\n" + WORKER_OVERRIDES + "\n"
-        source += "\n".join(portable.function(name) for name in names)
+        functions = "\n".join(portable.function(name) for name in names)
+        if options.get("GUARD_TEST_SCALED_CHECK_TIMEOUT"):
+            # Only the disposable extracted fixture is accelerated; production
+            # keeps its bounded Docker-inventory/inspection budget unchanged.
+            self.assertEqual(functions.count("read -r -t 25 reply"), 1)
+            functions = functions.replace("read -r -t 25 reply", "read -r -t 1 reply")
+        source += functions
         source += "\ncreate_backup portable-test\n"
         result = subprocess.run(
             [portable.BASH, "--noprofile", "--norc", "-s"], input=source,
@@ -277,6 +285,30 @@ class WatchdogWorkerCoordinationTests(unittest.TestCase):
         self.assertIn("guard-acquired", events)
         self.assertIn("watchdog-blocked:copy", events)
         self.before(events, "services-start", "guard-released")
+
+    def test_manual_stop_handshake_is_supported_and_user_restart_is_explained(self):
+        root, events, _ = self.run_worker(GUARD_MANUAL_STOP="1")
+        self.assertIn("notify:success", events)
+        self.before(events, "services-start", "guard-released")
+        log = (root / "state/logs/backup-portable-test.log").read_text(encoding="utf-8")
+        self.assertIn("LoxPanel ist bewusst", log)
+        self.assertIn("manuell wieder einschalten", log)
+        self.assertNotIn("automatic restart paused", log)
+
+    def test_delayed_guard_checks_are_supported_within_the_protocol_budget(self):
+        _, events, _ = self.run_worker(GUARD_CHECK_DELAY="0.15", GUARD_TEST_SCALED_CHECK_TIMEOUT="1")
+        self.assertIn("notify:success", events)
+        self.before(events, "services-start", "guard-released")
+
+    def test_timed_out_check_cannot_be_mistaken_for_success_or_a_release_reply(self):
+        root, events, _ = self.run_worker(expected=20, GUARD_CHECK_DELAY="2", GUARD_TEST_SCALED_CHECK_TIMEOUT="1")
+        self.assertNotIn("repository-copy", events)
+        self.assertNotIn("notify:success", events)
+        self.assertIn("services-start", events)
+        self.assertIn("guard-process-ended", events)
+        log = (root / "state/logs/backup-portable-test.log").read_text(encoding="utf-8")
+        self.assertIn("coordination was lost", log)
+        self.assertIn("ended unexpectedly: OK", log)
 
     def test_unselected_container_has_no_guard_or_configuration_changes(self):
         _, events, _ = self.run_worker(GUARD_SELECTED="false")

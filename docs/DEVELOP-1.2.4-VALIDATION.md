@@ -166,8 +166,12 @@ eine neu erschienene Docker-Overlay-Einbindung während der Kopierphase. Der
 Quellenfehler darf nicht pauschal als harmlos gelten: Ein gestoppter Container
 kann durch eine fremde Überwachung wieder starten und Daten verändern.
 
-LoxPanels [bestehende Steuerung](https://github.com/Lenardo1/Loxpanel/blob/61bfd1d82e86f6feb06162e11e41e3fca7944bf6/loxberry-plugin/bin/loxpanel-ctl.sh)
+LoxPanels [neuere Steuerung](https://github.com/Lenardo1/Loxpanel/blob/61bfd1d82e86f6feb06162e11e41e3fca7944bf6/loxberry-plugin/bin/loxpanel-ctl.sh)
 verwendet für `check`, Backup und Restore eine gemeinsame `flock`-Sperre.
+Diese Steuerung ist nicht in den veröffentlichten Plugin-ZIPs 0.3.0 bis 0.7.0
+enthalten. Die ursprünglichen Sperrtests belegten daher keine Kompatibilität
+mit diesen installierbaren Paketen. Die nachfolgende Ergänzung korrigiert diese
+Prüflücke ausdrücklich.
 HostBackup nutzt diese Sperre beim ausgewählten LoxPanel-Container vor dem Stopp
 bis nach dem Wiederanlaufversuch. Der Helfer läuft ausserhalb der
 `stop_backup_targets | tee`-Pipeline, damit die Sperre nicht bereits mit dem
@@ -253,6 +257,49 @@ In der verpflichtenden Linux-CI führen fehlendes Bash, flock oder benötigte
 Root-Rechte bei den neuen Koordinationstests zu Fehlern, nicht zu stillen Skips.
 
 ## Ergebnisse
+
+### Korrektur der veröffentlichten LoxPanel-Varianten (22.10.2026)
+
+Andreas' Lauf `backup-20261022-134825-2328655.log` endet bereits vor dem Kopieren:
+Die neue Erkennung setzte eine im veröffentlichten LoxPanel-Paket nicht
+vorhandene Sperre voraus. Das offizielle ZIP 0.7.0 reproduziert dieselbe
+Fehlermeldung. Die acht veröffentlichten ZIPs 0.3.0 bis 0.7.0 enthalten denselben
+Controller mit `loxpanel_stopped.cfg`; ihre neue Testsuite verwendet deshalb
+ein dedupliziertes Original mit Herkunft, SHA-256 und Lizenznachweis.
+
+- Veröffentlichung ohne Sperre: bewussten Stopp aus eigener LoxPanel-Oberfläche
+  anhand des unterstützten Markers und des Docker-Zustands prüfen. Stoppmarker
+  weder anlegen noch löschen; manuell gestoppte Anwendungen bleiben gestoppt.
+- Neuere Sperrsteuerung: automatisches, zeitlich begrenztes Koordinieren wie
+  bisher. Fremder Plugin-Code wird von HostBackup weiterhin nicht ausgeführt.
+- Gemeinsame lesende Vorprüfung vor Backup-Anlage und erneute Prüfung im Worker;
+  Änderungen nach einer Vorprüfung bleiben erkennbar. Nicht voraussetzen, dass
+  ein beliebiges Vorab-Skript einen noch laufenden Legacy-Watchdog sicher stoppt:
+  bei dieser Variante muss der bewusste Stopp bereits vor der Vorprüfung erfolgen.
+- Kombinationen: Name/ID/alte Gesamtauswahl, fehlender oder nicht ausgewählter
+  Container, laufend/gestoppt/entfernt, Marker vorhanden/fehlend/ausgetauscht,
+  Docker nicht erreichbar, unbekannte Controller, Symlinks, Rechte, Abbrüche und
+  gleichzeitige Watchdog-Aufrufe. Bestehende Quellen-, Recovery-, Installer-,
+  NAS- und Oberflächentests bleiben Teil der Regression.
+
+Lokale Nachweise dieser Ergänzung:
+
+- Gesamtlauf `test_watchdog*.py`: 78 Tests, davon 55 erfolgreich und 23 wegen
+  fehlender Linux-Funktionen unter Windows übersprungen. Die abschliessend
+  erweiterten reinen Guard-/Kompatibilitätstests wurden separat erneut geprüft.
+- Vorprüfung: 11 Tests erfolgreich; zusätzlich die vollständige Matrix aus vier
+  Metadatenprofilen, zwei Sicherungsarten und `skip`/`lock` (16 Kombinationen).
+- Bestehende RuntimeSafety: 42 Tests, davon 40 erfolgreich und zwei erwartete
+  Windows-Skips. ShellCheck, Bash-/JavaScript-Syntax und Web-Verhalten erfolgreich.
+- Gezielter echter Browsertest für die neue Vorprüfung auf Desktop und Handy
+  erfolgreich. Der vollständige lokale Edge-Lauf wurde durch ein unerwartetes
+  Schliessen des Browsers unterbrochen und gilt nicht als bestanden.
+
+Massgeblicher Linux-/NAS-/Browsernachweis ist der vollständige GitHub-Workflow
+zum Commit dieser Änderung. Vor dessen erfolgreichem Abschluss sind insbesondere
+die Linux-Skips und der vollständige Browserlauf offen; frühere grüne Läufe
+ersetzen diesen Nachweis nicht. Eine erfolgreiche Linux-Simulation ist weiterhin
+kein Praxistest auf Andreas' Installation und kein vollständiger System-Restore.
 
 Bestätigter vollständiger Referenzlauf vor den zusätzlichen Internet-Sonderfällen:
 [`b17f903`, GitHub-Lauf 39483556279](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39483556279)

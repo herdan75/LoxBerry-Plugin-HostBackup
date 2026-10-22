@@ -20,8 +20,16 @@ ohne vorherige Deinstallation; aktive Vorgänge vorher beenden lassen.
 Auch eine Neuinstallation ist möglich, mit anschliessender Einrichtung und
 Vorprüfung des eigenen Backup-Ziels.
 
-**Zusätzliche Korrektur im Entwicklungsstand, noch nicht veröffentlicht:** LoxPanels vorhandene
-Watchdog-Sperre wird für einen ausgewählten Container während des Backups genutzt.
+**Zusätzliche Korrektur im Entwicklungsstand, noch nicht veröffentlicht:** LoxPanel
+wird bereits unter **„Nächstes Backup prüfen“** auf eine unterstützte
+Watchdog-Koordination geprüft. Die veröffentlichten LoxPanel-Plugin-Pakete
+**0.3.0 bis 0.7.0** besitzen noch keine gemeinsame Watchdog-Sperre:
+LoxPanel dafür **vor der Vorprüfung in seiner eigenen Oberfläche stoppen**.
+HostBackup erkennt den bewussten Stopp und verändert dessen Stoppmarker nicht.
+LoxPanel bleibt nach der Sicherung gestoppt und muss über seine eigene Oberfläche
+wieder eingeschaltet werden. Ein blosses `docker stop` ist nicht gleichwertig.
+Bei einer erkannten neueren Steuerung mit Sperrfunktion wird die vorhandene
+Watchdog-Sperre für den ausgewählten Container automatisch während des Backups genutzt.
 Zusätzlich werden tatsächlich gestoppte Docker-Container vor und nach der Kopie
 auf unerwarteten Wiederanlauf geprüft. Keine neue Einstellung. Dies ersetzt nicht
 die gesonderte Abstimmung mit AudioServer4Home oder anderen Überwachungen;
