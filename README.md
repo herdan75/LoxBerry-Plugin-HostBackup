@@ -1,209 +1,81 @@
 # LoxBerry Host Backup
 
-**Entwicklungsstand 1.2.4 · noch nicht veröffentlicht.**
-Programm- und Paketversion auf `develop`: `1.2.4`. Öffentlich bleibt
-**1.2.3-beta** die Vorabversion (Release-Tag `v1.2.3-beta`).
-Tag-Pipeline und öffentlicher ZIP-Download sind erfolgreich geprüft. Die
-Vorab-Kanaldatei dieses Aktivierungsstands verweist auf **1.2.3-beta**; der stabile
-Kanal und `main` bleiben auf **1.2.0**. Die Prüfung des Aktivierungscommits und
-des live abgefragten Feeds erfolgt getrennt von der bereits bestätigten
-Paketfreigabe. Nachweise stehen in den [Release Notes](docs/RELEASE-1.2.3.md).
+**Version 1.2.4 · Reguläres Release · 23.10.2026.**
+Dateibasiertes Host-Backup und Restore für LoxBerry, Docker und Linux-Dienste:
+lokale und portable NAS-Sicherungen, Vollbackups, platzsparende Sicherungsstände,
+Zeitplanung, Datenquellenauswahl und Integritätsprüfung.
 
-Die bereits veröffentlichten Korrekturen aus 1.2.3 enthalten den Umgang mit veralteten
-Docker-Wiederanläufen, sicherere Dienstempfehlungen und die Journal-Korrektur für
-konkrete systemd-Namen einschliesslich Instanzen, `:`, `-`, `_`, Punkten und
-wörtlichen Backslashes wie in `dienst@geraet\x2d1.service`.
-Gespeicherte ungültige Stop-Auswahlen werden vor dem ersten Stopp mit einer
-verständlichen Fehlermeldung abgewiesen. Keine neuen Sicherungsmodi oder
-zusätzlichen Einstellungen waren dafür nötig. Für bestehende Installationen genügt das Update
-ohne vorherige Deinstallation; aktive Vorgänge vorher beenden lassen.
-Auch eine Neuinstallation ist möglich, mit anschliessender Einrichtung und
-Vorprüfung des eigenen Backup-Ziels.
+Der reguläre Kanal und der Vorabversionskanal verwenden dasselbe stabile Paket
+**1.2.4** unter dem Tag `v1.2.4`. Es ist keine zusätzliche 1.2.4-beta-Installation
+erforderlich. [Download und Update](#installation) ·
+[Release Notes 1.2.4](docs/RELEASE-1.2.4.md) · [Versionsverlauf](CHANGELOG.md)
 
-**Zusätzliche Korrektur im Entwicklungsstand, noch nicht veröffentlicht:** LoxPanel
-wird bereits unter **„Nächstes Backup prüfen“** auf eine unterstützte
-Watchdog-Koordination geprüft. Die veröffentlichten LoxPanel-Plugin-Pakete
-**0.3.0 bis 0.7.0** besitzen noch keine gemeinsame Watchdog-Sperre:
-LoxPanel dafür **vor der Vorprüfung in seiner eigenen Oberfläche stoppen**.
-HostBackup erkennt den bewussten Stopp und verändert dessen Stoppmarker nicht.
-LoxPanel bleibt nach der Sicherung gestoppt und muss über seine eigene Oberfläche
-wieder eingeschaltet werden. Ein blosses `docker stop` ist nicht gleichwertig.
-Das veröffentlichte **LoxPanel 0.9.9** besitzt dagegen eine gemeinsame
-Watchdog-Sperre. HostBackup unterstützt auch dessen ausgelagerte Sperrprüfung
-und nutzt die Sperre für den ausgewählten Container automatisch: vor dem Stopp
-bis nach dem Wiederanlaufversuch. Es erfolgt weder eine Container-Neuanlage noch
-ein Image-Update. Die bereits unterstützten Sperrvarianten bleiben erhalten.
-Die Unterstützung wird anhand des vorhandenen Sperrprotokolls geprüft, nicht
-allein anhand einer Versionsnummer. Beliebige künftige Umbauten sind damit nicht
-automatisch freigegeben; eine dauerhaft vereinbarte Backup-Schnittstelle mit
-LoxPanel besteht noch nicht.
-Zusätzlich werden tatsächlich gestoppte Docker-Container vor und nach der Kopie
-auf unerwarteten Wiederanlauf geprüft. Keine neue Einstellung. Dies ersetzt nicht
-die gesonderte Abstimmung mit AudioServer4Home oder anderen Überwachungen;
-[Umfang und Prüfgrenzen](docs/DEVELOP-1.2.4-VALIDATION.md#nachbesserung-watchdogs-und-containerzustand).
-Bei einem erkannten Containerproblem erklärt **„Fehlerursache: Containerprüfung“**
-im Live-Status den ursprünglichen Namen, die ID, den beobachteten Zustand und
-den nächsten Schritt. Wiederstart, entfernte ID und nicht erreichbares Docker
-werden getrennt behandelt. Die aufklappbare Diagnose bleibt nach dem Wiederanlauf
-und Neuladen erhalten; sie behauptet keinen unbekannten Verursacher. Änderungen
-zwischen zwei abgeschlossenen Backups lösen diese Prüfung nicht aus.
+## Neu in 1.2.4
 
-> [!NOTE]
-> **Neu auf develop, noch nicht im öffentlichen 1.2.3-beta-Paket:**
-> Flüchtige Diagnoseinhalte in den verwalteten LoxBerry-Logbereichen werden
-> standardmässig bereits aus der gemeinsamen Dateiliste ausgelassen. Das gilt
-> für Linux-Dateisicherungen, portable Vollarchive und portable Sicherungsstände.
-> Rotierende Diagnoseprotokolle werden damit nicht nachträglich als Kopierfehler
-> ignoriert. Verzeichnisse, Rechte und Links bleiben erhalten; Daten, Konfigurationen
-> und dauerhafte Installationsnachweise werden nicht durch diese Regel ausgeschlossen.
-> TAR-Meldungen über diese rotierenden Verzeichnisse werden nur nach zusätzlichem
-> Vergleich von Identität, Rechten und Archivmetadaten als unkritisch behandelt.
-> Echte Dateifehler und gemischte Fehlermeldungen bleiben sichtbar.
-> Unter **Skripte und Ausschlüsse** lassen sich die Diagnoseprotokolle ausdrücklich
-> wieder einschliessen. Das ist ein geänderter Standard auch bei Updates.
->
-> Die Mount-Prüfung vergleicht die eingefrorenen Sicherungsquellen samt ihren
-> Zugriffswegen. Änderungen an vollständig ausgeschlossenen Freigaben dürfen
-> den Lauf nicht blockieren; verschwundene, ersetzte oder neu überdeckte Quellen
-> bleiben Fehler. Neue Stände mit Hinweisen verdrängen bei der automatischen
-> Aufbewahrung nicht den letzten vollständig geprüften Stand derselben
-> Host-/Formatlinie. Keine neue Sicherungsart und keine Änderung alter Bewertungen.
-> Die im ersten 1.2.4-Testpaket aufgetretene Fehlermeldung „Quellpfad muss ein
-> absoluter Pfad sein“ bei gültigen Docker-Namespace-Einbindungen ist korrigiert;
-> dafür müssen weder Backup-Ziel noch Sicherungsverfahren geändert werden.
-> Details und Testnachweise: [Entwicklungsstand 1.2.4](docs/DEVELOP-1.2.4-VALIDATION.md).
-> Ein erfolgreicher Abschluss belegt keinen System-Restore und keine
-> Anwendungskonsistenz laufender Datenbanken.
+- **LoxPanel 0.9.9:** HostBackup koordiniert dessen Watchdog-Sperre für den
+  ausgewählten Container automatisch, vom Stopp bis nach dem Wiederanlaufversuch.
+  Kein Image-Update und keine Container-Neuanlage. Die Erkennung prüft das
+  tatsächlich unterstützte Sperrprotokoll, nicht nur die Versionsnummer.
+- **Weniger unnötige Abbrüche durch Diagnoseprotokolle:** Flüchtige Inhalte in
+  bekannten LoxBerry-Logbereichen werden standardmässig bereits aus der Dateiliste
+  ausgelassen, für alle Sicherungsverfahren. Verzeichnisstruktur, Rechte und
+  Links bleiben erhalten; Daten, Konfigurationen und dauerhafte
+  Installationsnachweise werden nicht durch diese Regel ausgeschlossen.
+  Die optionale Mitsicherung ist standardmässig aus und kann bei Logrotation
+  wieder zu Kopierfehlern führen. Keine pauschale Ausnahme für beliebige
+  `.log`-Dateien oder wichtige geänderte Quelldaten.
+- **Genauere Quellenprüfung:** Änderungen an vollständig ausgeschlossenen
+  Einbindungen blockieren den Lauf nicht mehr. Verschwundene, ersetzte oder neu
+  überdeckte ausgewählte Quellen bleiben Fehler. Gültige Docker-Namespace-
+  Einbindungen lösen keine falsche Meldung über einen relativen Quellpfad aus.
+- **Verständliche Containerdiagnose:** Unerwarteter Wiederanlauf, entfernte IDs
+  und nicht erreichbares Docker werden getrennt mit Namen, ID und nächsten
+  Schritten angezeigt. Ein unbekannter Verursacher wird nicht als bewiesen
+  ausgegeben. Änderungen zwischen abgeschlossenen Backups bleiben möglich.
+- **Sicherere Aufbewahrung:** Neue Stände mit Hinweisen verdrängen nicht den
+  letzten vollständig geprüften Stand derselben Host-/Formatlinie.
 
-> [!NOTE]
-> **Neu in 1.2.3-beta:** Veraltete
-> Wiederanlauf-Einträge für nachweislich nicht mehr vorhandene Docker-Container
-> werden automatisch abgeschlossen und mit ihrem Nachweis archiviert. Dadurch
-> blockieren diese alten IDs nach der Prüfung weder weitere Backups noch eine
-> Deinstallation. Tatsächliche Startfehler werden weiterhin erneut versucht;
-> unveränderte Fehler erzeugen nicht mehr alle fünf Minuten eine Cron-Mail.
-> Keine neue Einstellung und kein neuer Sicherungsmodus. Im älteren
-> Paket 1.2.2-beta sind diese Korrekturen noch nicht enthalten.
-
-> **Sicherere Dienstempfehlungen:** Empfehlungen für Stop-Dienste
-> verwechseln `dbus` nicht mehr mit einer Datenbank. Avahi, ModemManager und
-> D-Bus bleiben auch über Dienst-Aliase vor dem Stoppen geschützt; alte Auswahlen
-> dieser geschützten Dienste werden protokolliert übersprungen. Das betrifft
-> nur das Stoppen, nicht die Sicherung ihrer Dateien.
-
-> [!NOTE]
-> **Neu in 1.2.2-beta (15.10.2026):** Die Dienst-/Container-Auswahl verwendet
-> gebündelte systemd-Abfragen und eigene, begrenzte Zeitlimits. Erneutes Laden
-> und Schutz bestehender Auswahlen machen verzögerte oder fehlgeschlagene
-> Antworten handhabbar; die konkrete Installation bleibt separat zu prüfen.
-> Zusätzlich sind Ergebnisse und Live-Status schliessbar und erneut
-> aufrufbar; Hinweise der ursprünglichen Backup-Abschlussprüfung lassen sich
-> direkt beim Backup ansehen. Zusätzliche aufwendige Vorprüfungen werden während
-> eines laufenden Vorgangs frühzeitig abgewiesen; gespeicherte Hinweise und
-> Dateien älterer Backups bleiben lesbar. Der Inhaltsprüfbericht unterscheidet
-> fehlende, nicht lesbare und nicht mehr zum aktuellen Backup passende Nachweise.
-
-**Aus den bisherigen Vorabversionen weiterhin enthalten:** Korrigierte
-Inode-Prüfung für NAS-/Dateisysteme,
-die keine auswertbare Gesamtzahl melden, beispielsweise `df -i` mit `0/0/0`.
-Tatsächlich erschöpfte Inodes und andere Pflichtfehler bleiben blockierend.
-Der bisherige Testumfang bleibt in den
-[Release Notes für 1.2.2-beta](docs/RELEASE-1.2.2.md) dokumentiert.
-
-> [!NOTE]
-> **Reguläres Release 1.2.0:** Übernimmt den Programmstand der geprüften
-> 1.2.0-beta unverändert als stabiles Release, einschliesslich verständlicher
-> Sicherungsverfahren und portabler, platzsparender NAS-Sicherungsstände.
-> Ein Wechsel auf den Vorabkanal ist für 1.2.0 nicht nötig. Der stabile
-> Updatekanal bleibt auch bei der Freigabe von 1.2.3-beta auf diesem Paket.
-> Einrichtung und Schlüssel-Recovery erklärt die
-> [Anleitung für portable Sicherungsstände](docs/PORTABLE-REPOSITORY.md).
-
-**Version 1.2.0 · Reguläres Release · 04.10.2026.**
-Programm- und Paketversion lauten `1.2.0`; der zugehörige GitHub-Tag ist `v1.2.0`.
-Gegenüber der übernommenen Beta-Basis `af2d55d` gibt es keine Programmänderungen.
-Freigabestatus und Prüfgrenzen stehen in den
-[Release Notes für 1.2.0](docs/RELEASE-1.2.0.md).
-
-**Neu im regulären Release gegenüber 1.0.0:** Weiterhin vier, verständlicher benannte Sicherungsverfahren;
-portable, verschlüsselte und platzsparende NAS-Sicherungsstände mit gemeinsamer
-Datenbasis sowie zielgebundener Einrichtung und extern aufzubewahrendem Schlüssel.
-Das eigenständige portable TAR-Vollbackup bleibt erhalten. Bestehende Einstellungen
-werden nicht automatisch umgestellt. Ein NAS muss die eigene Zielprüfung bestehen;
-die Veröffentlichung ist keine pauschale Kompatibilitätszusage für jedes NAS.
-
-**Aus 1.1.0-beta übernommen:** Eine explizite Auswahl von Laufwerken und Netzfreigaben,
-schrittweise Metadaten-Diagnosen und Korrekturen für die Neuinstallation nach
-zurückgebliebenen Programmdateien. Die [NAS- und Datenquellen-Anleitung](docs/DEVELOP-NAS-SOURCES.md)
-beschreibt die Anwendung. Diese Änderungen sind nicht im unveränderten
-öffentlichen Download von 1.0.0 enthalten.
-Die Datenquellen-Ansicht trennt auswählbare Laufwerke von aufklappbaren technischen
-Einbindungen. Diese Gruppierung verändert keine Auswahl; gespeicherte Ausnahmen
-bleiben direkt sichtbar. Hinweistexte sind gegen globale LoxBerry-Schriftregeln
-abgegrenzt und ausführliche Erläuterungen lassen sich separat öffnen.
-Kontextbezogene Infobuttons erklären ausserdem die Prüf- und Schutzaktionen,
-Speicher- und Laufzeitbereinigung, erweiterte Aufbewahrung und Restore-Eingaben.
-Sie unterscheiden ausdrücklich zwischen Strukturprüfung, Prüfsummenvergleich
-und persönlich dokumentiertem Restore-Test. Das Öffnen einer Hilfe startet
-keine Aktion und verändert keine Einstellung; lange Hilfen sind auch mobil
-und per Tastatur scrollbar. Einfache Navigations- und Speicherbuttons bleiben
-ohne zusätzliche, wiederholende Erklärung.
-Die Kurzanleitung führt von Ziel und Quellenauswahl über
-bewusst gewählte Stop-Dienste, Speichern und Vorschau zum Testbackup und Restore-Test.
-Sie erklärt den Unterschied zwischen technischen Einbindungen und gesicherten
-Ordnern, Zielordner- und Datenträgerausschluss sowie die Grenzen des dateibasierten
-Backups: keine automatische Einrichtung von Partitionen oder Bootloader und
-ausdrückliche Zuordnung separater Boot-/Datenlaufwerke beim Restore.
+Aus 1.2.1 bis 1.2.3 sind die NAS-Inode-Korrektur, robustere Dienstelisten mit
+Zeitlimits, schliessbare Ergebnisansichten, lesbare Prüfberichte, sichere
+systemd-Instanznamen und die Behandlung veralteter Docker-Wiederanläufe enthalten.
+Nachweislich gelöschte Container-IDs blockieren nach ihrer Prüfung weder neue
+Backups noch die Deinstallation; ihr Nachweis bleibt archiviert. Echte offene
+Wiederanläufe behalten ihren Schutz, unveränderte Fehler erzeugen nicht mehr
+alle fünf Minuten eine Mail. Keine zusätzlichen Sicherungsmodi.
 
 > [!IMPORTANT]
-> **Update auf 1.2.3-beta:** In der Plugin-Verwaltung Vorabversionen zulassen
-> und erneut nach Updates suchen; alternativ das öffentliche Beta-ZIP installieren.
-> Die interne Version 1.2.3 ist höher als 1.2.0, 1.2.1 und 1.2.2. Wer bereits
-> ein manuelles Paket mit interner Version 1.2.3 installiert hat, erhält keinen
-> zusätzlichen numerischen Versionssprung und kann das öffentliche Beta-ZIP darüber installieren.
-> Vor einem Update Einstellungen exportieren, aktive Vorgänge beenden lassen
-> und nicht vorher deinstallieren.
-
-**Enthaltene Korrekturen:** Der automatische Dienst-Wiederanlauf setzt
-bei einer belegten Vorgangssperre still aus, statt dadurch Cron-Mails auszulösen.
-Die abschliessende Aufbewahrungsprüfung erhält eine eigene Live-Status-Phase.
-Alle übernommenen Änderungen sind im [Changelog](CHANGELOG.md) dokumentiert.
-
-**Installation und Wiederinstallation:** Vor dem Dateiaustausch wird die vorhandene
-Konfiguration gesichert. Veraltete Programmkopien werden auch dann gezielt
-vorbereitet, wenn LoxBerry nach einer früheren Deinstallation kein Upgrade erkennt.
-Das eigentliche Backup-Programm wird vor seiner Aktivierung geprüft.
-Ein zurückgebliebenes Weiterleitungs-Startskript wird nicht mehr als Backend
-übernommen. Die Zeitplan-Einrichtung ist auf 30 Sekunden plus höchstens
-5 Sekunden zum Beenden begrenzt. Die bereits vorhandene Unterstützung für
-LoxBerrys Cron-Symlink und `root:root 775` bleibt erhalten; gemeinsame
-Systemrechte werden nicht geändert.
-
-> [!WARNING]
-> **Eine noch hängende alte Installation zuerst klären:** Keinen zweiten
-> Installationsversuch parallel starten und nicht deinstallieren. Ein neues
-> ZIP beendet bereits laufende fehlerhafte Altprozesse nicht automatisch.
-> Erst nach Wiederherstellung einer bedienbaren Plugin-Verwaltung aktualisieren.
-> Frühere Versionspakete, einschliesslich 1.0.0 und 1.2.0-beta, bleiben unverändert.
-
-Bei Updates bleiben die geschützten Programmstände unter `/usr/libexec/loxberryhostbackup`
-erhalten. Tests bilden den Dateiaustausch als unprivilegierter Plattformbenutzer
-nach, einschliesslich Neuinstallation mit Restdateien ohne Upgrade-Bereinigung.
-Kopieren als Root allein reicht nicht als Installationstest. Die Fehleranzeige
-der Dateisystem-Prüfung behält ihre Hinweisformatierung und erlaubt einen erneuten
-lesenden Prüfversuch; sie verändert weder Einstellungen noch Backup-Auswahl.
+> **LoxPanel und AudioServer4Home:** Die automatische Koordination wurde mit
+> LoxPanel **0.9.9** und den bereits unterstützten Sperrvarianten geprüft.
+> Bei den veröffentlichten LoxPanel-Versionen **0.3.0 bis 0.7.0** ist weiterhin
+> ein Stopp in der eigenen Oberfläche **vor der Vorprüfung** erforderlich;
+> danach dort selbst wieder einschalten. Ein blosses `docker stop` genügt nicht.
+> **AudioServer4Home wird nicht automatisch koordiniert:** vor der Vorprüfung
+> in seiner eigenen Oberfläche stoppen und danach selbst wieder einschalten.
+> Keine manuellen Container-Updates oder Starts während der Sicherung.
+> Änderungen künftiger Watchdog-Protokolle können eine erneute Prüfung erfordern.
 
 > [!IMPORTANT]
-> **Erst Einstellungen speichern, dann sichern.** Auch ausgewählte Optionen,
-> Dienste, Container und Zeitpläne gelten erst nach **Änderungen speichern**.
-> Automatische Backups verwenden ausschliesslich die zuletzt gespeicherten Werte.
+> **Update ohne vorherige Deinstallation.** Aktive Vorgänge beenden lassen,
+> Einstellungen exportieren und bewährte Backups behalten. Ziel, Quellen,
+> Ausschlüsse, Verfahren und Zeitplan bleiben erhalten. Geänderter Standard:
+> flüchtige LoxBerry-Diagnoseprotokolle sind ohne ausdrückliche Freigabe aus.
+> Nach dem Update Stop-Auswahl kontrollieren, speichern, **Nächstes Backup prüfen**
+> ausführen und ein manuelles Backup samt Wiederanlauf kontrollieren.
+> Bereits manuell installierte Testpakete mit Version **1.2.4** erhalten keinen
+> numerischen Versionssprung; das endgültige Release-ZIP nochmals darüber
+> installieren, um sicher den veröffentlichten Stand zu verwenden.
 
-Dieses Plugin wurde bereits auf einem LoxBerry-/DietPi-Testsystem installiert,
-konfiguriert und für echte Vollbackups sowie inkrementelle Snapshot-Backups
-genutzt. Ein vollständiger Ende-zu-Ende-Restore auf ein frisch installiertes
-Zielsystem ist noch nicht produktiv validiert. Verwende es deshalb aktuell
-weiterhin mit zusätzlicher Absicherung und nicht als einziges Backup für ein
-kritisches System.
+> [!IMPORTANT]
+> **Erst Einstellungen speichern, dann sichern.** Automatische Backups verwenden
+> ausschliesslich die zuletzt gespeicherten Werte. Die Freigabe trotz laufender
+> Container garantiert keine konsistenten Datenbanken.
+
+Das Plugin erstellt kein bootfähiges Disk-Image. Portable System-Restores
+erfolgen offline; Repository-Stände benötigen das gemeinsame Repository und
+den extern gesicherten Wiederherstellungsschlüssel. Ein erfolgreicher
+Backup-Abschluss oder eine Inhaltsprüfung ist kein vollständiger System-Restore
+und keine Garantie für die Konsistenz weiterlaufender Anwendungen.
+Zusätzliche unabhängige Sicherungen und ein eigener Restore-Test bleiben wichtig.
 
 ## Zweck
 
@@ -347,9 +219,17 @@ Siehe [Offline-Wiederherstellung](docs/PORTABLE-REPOSITORY.md#offline-wiederhers
 
 ## Aktueller Validierungsstand
 
-Bisherige veröffentlichte Stände wurden wie folgt geprüft. Diese historischen
-Praxistests sind **kein** vollständiger Hardware-Nachweis für 1.2.0, 1.2.1-beta,
-1.2.2-beta oder 1.2.3-beta:
+Die Programmbasis von 1.2.4, Commit `62c13f4`, bestand die
+[GitHub-Prüfung 39995108339](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39995108339):
+825 Tests mit zehn vorgesehenen Auslassungen, zusätzliche Linux-/CIFS-/Repository-
+Prüfungen, 65 Browserprüfungen und acht Paketprüfungen. Die Auslassungen sind keine
+bestandenen Einzeltests. Release-Tag, öffentlicher Download und beide Updatekanäle
+werden gesondert geprüft; die endgültigen Belege stehen in den
+[Release Notes](docs/RELEASE-1.2.4.md) und beim
+[GitHub-Release](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.4).
+
+Die folgenden historischen Praxistests sind **kein** vollständiger Hardware-
+oder Restore-Nachweis für 1.2.4:
 
 - Bash-Syntax für Backend, Postinstall, Restore-Helper und Uninstall
 - Perl/CGI-Syntax mit lokalem `CGI.pm`-Stub
@@ -368,7 +248,7 @@ Noch nicht produktiv validiert:
 - Docker-/Datenbank-Konsistenz in allen produktiven Anwendungsszenarien
 - Migration zwischen unterschiedlichen CPU-Architekturen
 
-Der neue Arbeitsstand ergänzt Verhaltenstests für Importangriffe, Dienst-Neustart,
+Die Regressionssuite ergänzt Verhaltenstests für Importangriffe, Dienst-Neustart,
 Zeitpläne, Ausschlüsse beim Restore, Metadaten-Roundtrips, Downloads, Aufbewahrung,
 Inhaltsprüfung und Browserbedienung. Windows-Prüfungen ersetzen die separat
 erforderlichen Linux-, NAS- und Offline-Restoretests nicht. Die
@@ -451,117 +331,76 @@ Prüfsumme, Testumfang und getrennten Feed-Nachweis nennen die
 
 ## Installation
 
-1. Das reguläre Release 1.2.0 unten herunterladen oder das angebotene Update in
-   der LoxBerry-Plugin-Verwaltung verwenden. Der stabile Kanal genügt;
-   ein Beta-/Vorabkanal muss dafür nicht aktiviert werden. Für die
-   aktuellen Korrekturen in 1.2.3-beta das unten verlinkte Vorabpaket verwenden
-   oder in der Plugin-Verwaltung Vorabversionen zulassen.
-2. In LoxBerry unter **Plugins > Plugin installieren** hochladen.
-3. Nach der Installation die Plugin-Oberfläche öffnen.
-4. Root-Freigabe in den Einstellungen bewusst bestätigen.
-5. Backup-Verzeichnis und Ausschlüsse prüfen.
-6. Einstellungen speichern.
-7. Zuerst ein manuelles Testbackup auf einem externen oder separaten Datenträger
-   ausführen.
+1. In der LoxBerry-Pluginverwaltung nach Updates suchen oder das unten verlinkte
+   Plugin-ZIP unter **Plugins > Plugin installieren** hochladen.
+   Für 1.2.4 ist kein Beta-/Vorabkanal nötig; beide Kanäle verwenden dasselbe Paket.
+2. Nach der Installation die Plugin-Oberfläche öffnen und bei Neuinstallationen
+   die Root-Freigabe bewusst bestätigen.
+3. Backup-Ziel auf einem separaten Datenträger, Sicherungsverfahren, Quellen,
+   Ausschlüsse und zu stoppende Dienste prüfen.
+4. **Änderungen speichern** und **Nächstes Backup prüfen** ausführen.
+5. Ein manuelles Testbackup vollständig abschliessen lassen und den Wiederanlauf
+   kontrollieren. Anschliessend den eigenen Restore-Test planen.
 
 Die Weboberfläche ist in die normale LoxBerry-Oberfläche eingebettet. Die
 LoxBerry-Kopfzeile mit Haus-Symbol und Menü bleibt sichtbar, sodass jederzeit
 zur LoxBerry-Administration gewechselt werden kann.
 
-Aktuelles reguläres Release-Paket:
+[**LoxBerryHostBackup_1.2.4.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.4/LoxBerryHostBackup_1.2.4.zip)
 
-[**LoxBerryHostBackup_1.2.0.zip herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0/LoxBerryHostBackup_1.2.0.zip)
-
-Der stabile Download und der reguläre Kanal bleiben unverändert. Den
-Freigabestatus dieses Pakets nennen die [Release Notes für 1.2.0](docs/RELEASE-1.2.0.md).
-
-Neue Vorabversion mit sicherem Dienstnamen-Handling, automatischer Behandlung
-veralteter Docker-Wiederanläufe und den bisherigen NAS-/Bedienungskorrekturen:
-
-[**LoxBerryHostBackup_1.2.3.zip herunterladen (1.2.3-beta)**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.3-beta/LoxBerryHostBackup_1.2.3.zip)
-
-Der öffentliche Beta-Download ist geprüft und ohne GitHub-Anmeldung erreichbar.
-Die Vorab-Kanaldatei wird getrennt auf genau dieses Paket umgestellt.
-Paketnachweis und Status der Kanalprüfung nennen die
-[Release Notes für 1.2.3-beta](docs/RELEASE-1.2.3.md).
-
-Historische Pakete bleiben unverändert erhalten:
-[1.2.2-beta](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.2-beta/LoxBerryHostBackup_1.2.2.zip),
-[1.2.1-beta](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.1-beta/LoxBerryHostBackup_1.2.1.zip),
-[1.0.0](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.0.0/LoxBerryHostBackup_1.0.0.zip),
-[1.2.0-beta](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.0-beta/LoxBerryHostBackup_1.2.0.zip) und
-[LoxBerryHostBackup_1.1.0.zip](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.1.0-beta/LoxBerryHostBackup_1.1.0.zip)
-(1.1.0-beta enthält noch keine portablen Repository-Stände).
-
-Dieses öffentliche Release-ZIP direkt installieren, **nicht entpacken**.
+Dieses öffentliche Plugin-ZIP direkt installieren, **nicht entpacken**.
 Ein GitHub-Konto ist für den Release-Download nicht nötig. Nur Downloads aus
 GitHub Actions sind äussere Artefakt-ZIPs, aus denen das innere Plugin-ZIP
-zuerst entpackt werden muss. Alte Downloads bleiben in der
-[Release-Historie](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases) erhalten.
+zuerst entpackt werden muss. Freigabe- und Prüfnachweise stehen in den
+[Release Notes 1.2.4](docs/RELEASE-1.2.4.md); ältere Downloads bleiben unverändert
+in der [Release-Historie](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases).
 
-### Update auf 1.2.3-beta
+### Update auf 1.2.4
 
-Einstellungen exportieren und laufende Aufgaben beenden lassen. In der
-LoxBerry-Plugin-Verwaltung Vorabversionen zulassen und nach Updates suchen,
-oder das freigegebene öffentliche Beta-ZIP
-direkt installieren. Auch neue Nutzer können dieses ZIP installieren und ihr
-Backup-Ziel danach einrichten und prüfen.
-**Nicht vorher deinstallieren.** Programmversion, Release-Tag und Paket lauten
-`1.2.3`, `v1.2.3-beta` und `LoxBerryHostBackup_1.2.3.zip`.
+Einstellungen exportieren, bewährte Backups behalten und laufende Aufgaben
+beenden lassen. Das Update direkt über die bestehende Installation ausführen,
+**nicht vorher deinstallieren**. Ein aktiver Backup-/Recovery-Vorgang darf die
+Installation weiterhin vorübergehend sperren. Keinen zweiten Installationsversuch
+parallel zu einem noch laufenden alten starten.
 
-Für bisherige Installationen mit interner Version 1.2.0, 1.2.1 oder 1.2.2 wird
-dadurch eine höhere Pluginversion angeboten.
-Die automatische Installation hängt weiterhin von der persönlichen
-Update-Einstellung ab. Wer bereits ein develop-Testpaket mit interner Version
-1.2.3 installiert hat, bekommt keinen neuen numerischen Versionshinweis und
-kann das öffentliche Beta-ZIP bei Bedarf manuell darüber installieren.
-
-Bestehende Einstellungen, Sicherungsverfahren und Backupformate bleiben
-unverändert. Nach dem Update Einstellungen und Quellenauswahl prüfen,
-**Nächstes Backup prüfen** öffnen und ein manuelles Testbackup vollständig
-abschliessen lassen. Bei unbekannten Inode-Angaben erscheint ein Hinweis;
-andere Pflichtfehler müssen weiterhin zuerst geklärt werden.
-Die Diensteliste erneut laden, gewünschte Stop-Ziele prüfen und speichern;
-eine Freigabe trotz laufender Container ersetzt deren kontrolliertes Stoppen nicht.
-
-### Reguläres Release 1.2.0
-
-In der LoxBerry-Plugin-Verwaltung nach Updates suchen oder das ZIP manuell
-installieren. Das reguläre Release benötigt kein Beta-Opt-in. Der stabile Kanal
-bleibt auf diesem Paket; der Vorabkanal ist separat auf 1.2.3-beta ausgerichtet.
+Programmversion, Release-Tag und Paket lauten
+`1.2.4`, `v1.2.4` und `LoxBerryHostBackup_1.2.4.zip`.
 Die automatische Installation hängt von der persönlichen Update-Einstellung ab.
-Programmversion, Release-Tag und Paket lauten `1.2.0`, `v1.2.0` und
-`LoxBerryHostBackup_1.2.0.zip`.
+Für ältere Installationen einschliesslich 1.2.3-beta ist dies eine höhere
+Pluginversion. Wer schon ein manuelles Testpaket mit interner Version **1.2.4**
+installiert hat, bekommt keinen numerischen Versionssprung: Das endgültige
+Release-ZIP nochmals manuell darüber installieren, um sicher den veröffentlichten
+Stand zu verwenden.
 
-**Bereits 1.2.0-beta installiert?** Die interne Pluginversion war schon `1.2.0`.
-Es gibt deshalb keinen Versionssprung und allein durch die stabile Freigabe kein
-neues automatisches Update-Angebot. Der Programmstand bleibt unverändert.
-Bei Bedarf das stabile ZIP manuell darüber installieren, **nicht vorher deinstallieren**.
-Weder vorhandene Backups noch ein eingerichtetes Repository müssen für diesen
-Wechsel neu erstellt werden; die externe Wiederherstellungsdatei weiter sicher aufbewahren.
+Backup-Ziel, Sicherungsverfahren, Quellenregeln, Ausschlüsse, Zeitplan und
+Wiederanlauf-Nachweise bleiben erhalten. Vorhandene Backups werden nicht in ein
+anderes Format umgewandelt. **Geänderter Standard:** Flüchtige Diagnoseprotokolle
+in bekannten LoxBerry-Logbereichen sind ohne ausdrückliche Freigabe ausgeschlossen.
+Die Vorschau zeigt den tatsächlichen Umfang; Nutzdaten und Konfigurationen
+werden nicht durch diese Regel ausgeschlossen. Eine bereits ausdrücklich
+aktivierte Mitsicherung bleibt erhalten.
 
-**Bereits 1.0.0, 1.1.0-beta oder ein manuelles 1.1.0-develop-Paket installiert?**
-1.2.0 ist eine höhere, eindeutig unterscheidbare Paketversion. Das neue ZIP als
-Update installieren,
-**nicht vorher deinstallieren**. Bestehende Datenquellenregeln und Ausnahmen
-bleiben erhalten; für die lokale Empfehlung diese bewusst auswählen und speichern.
+Nach dem Update die Diensteliste neu laden, gewünschte Stop-Ziele kontrollieren
+und speichern. LoxPanel 0.9.9 wird bei ausgewähltem Container automatisch
+koordiniert; AudioServer4Home weiterhin vor der Vorprüfung über seine eigene
+Oberfläche stoppen und danach dort wieder einschalten. Anschliessend
+**Nächstes Backup prüfen** und ein manuelles Testbackup durchführen.
+Unbekannte Inode-Angaben allein blockieren nicht; andere Pflichtfehler müssen
+weiterhin geklärt werden. Die Freigabe trotz laufender Container ersetzt deren
+kontrolliertes Stoppen oder anwendungsspezifische Datenbank-Dumps nicht.
 
-Vor dem Update laufende Backup-/Restoreaufgaben beenden lassen und die
-Plugin-Einstellungen exportieren. Vorhandene Einstellungen und Backupdaten
-werden beim Update nicht absichtlich zurückgesetzt oder gelöscht. Nach dem
-Update Ziel, Ausschlüsse, Profil und Zeitplan kontrollieren, geänderte Werte
-**speichern** und zunächst ein manuelles Testbackup ausführen. Neue optionale
-Inhaltsprüfungen und Aufbewahrungsregeln bewusst konfigurieren; Inhaltsprüfungen
-benötigen zusätzlichen Speicher und Zeit.
+Für eingerichtete portable Repository-Stände die externe Wiederherstellungsdatei
+weiter sicher aufbewahren. Der Konfigurationsexport enthält diesen Schlüssel
+nicht. Neue optionale Inhaltsprüfungen und Aufbewahrungsregeln bewusst konfigurieren;
+Inhaltsprüfungen benötigen zusätzlichen Speicher und Zeit.
 
 **Wichtig beim Umstieg von 0.5.8 und älter:** Der erste inkrementelle Lauf
 benötigt nochmals eine vollständige Basiskopie, weil diesen alten Backups die
-Information zum Sicherungsverfahren fehlt. Erst ein nachfolgender erfolgreicher Lauf
-kann wieder Hardlinks verwenden. Genügend zusätzlichen freien Platz einplanen;
+Information zum Sicherungsverfahren fehlt. Erst ein nachfolgender erfolgreicher
+Lauf kann wieder Hardlinks verwenden. Genügend zusätzlichen freien Platz einplanen;
 das letzte brauchbare Backup wird nicht vorab zur Platzbeschaffung gelöscht.
-Ein Update von 0.6.x oder 0.7.x auf 1.0.0 erzwingt allein durch die Versionsnummer keine
-neue Basiskopie: Entscheidend ist weiterhin eine verwendbare Referenz mit
-passendem Profil.
+Ein Update neuerer Pakete erzwingt allein durch die Versionsnummer keine neue
+Basiskopie: Entscheidend ist eine verwendbare Referenz mit passendem Verfahren.
 
 ## Erste Tests Auf LoxBerry
 
@@ -966,7 +805,7 @@ Der Zeitplan wird installiert als:
 
 Der Cron-Eintrag wird bei der Deinstallation wieder entfernt.
 
-Im neuen Entwicklungsstand verwenden alle Zeitplanarten denselben Startweg:
+Alle Zeitplanarten verwenden denselben Startweg:
 übergehbare Preflight-Warnungen werden für den automatischen Lauf akzeptiert,
 echte Fehler blockieren. Auch ein abgewiesener Start bleibt als fehlgeschlagener
 Versuch mit Protokoll sichtbar. Ein leeres Wochen-/Monatsraster wird nicht
@@ -974,7 +813,7 @@ stillschweigend als Sonntag, Monatserster oder alle Monate gespeichert.
 
 ### Backups Behalten
 
-Standard bleibt die Anzahlaufbewahrung mit 10 Backups; im Entwicklungsstand sind
+Standard bleibt die Anzahlaufbewahrung mit 10 Backups; zusätzlich sind
 1 bis 3650 auswählbar. Alternativ lässt sich tägliche, wöchentliche und monatliche
 Aufbewahrung kombinieren (GFS: standardmässig 7/4/6 Zeitgruppen). Pro Zeitgruppe
 bleibt die jüngste passende Sicherung erhalten. Nach einem erfolgreichen Backup
@@ -1082,8 +921,8 @@ ausgewählte Ziele sichtbar und angehakt; nicht mehr benötigte Ziele bewusst
 abwählen. Nach erfolgreichem Laden die gewünschten Ziele auswählen,
 **Änderungen speichern** und anschliessend **Nächstes Backup prüfen** öffnen.
 Die Freigabe eines Backups trotz laufender Container ersetzt deren Stoppen nicht
-und garantiert keine konsistenten Datenbanken. Die Korrektur gehört zum
-1.2.2-beta-Paket und bleibt in 1.2.3-beta enthalten.
+und garantiert keine konsistenten Datenbanken. Die Korrektur aus 1.2.2-beta
+bleibt in 1.2.4 enthalten.
 
 Das verbessert die Konsistenz von Container-, Datenbank- und Dienst-Daten, kann
 aber diese Dienste während des Backups unterbrechen. Das Plugin startet nur
@@ -1092,6 +931,27 @@ gestoppt wurden. Kritische LoxBerry-, Web-, SSH-, Docker- und Backup-Dienste
 werden in der Auswahl nicht angeboten. LoxBerry-Plugins ohne eigenen
 systemd-Dienst werden nicht hart beendet; dafür sind Pre-/Post-Backup-Hooks
 der sicherere Weg.
+
+**Watchdogs und automatische Container-Neustarts:** LoxPanel 0.9.9 verwendet
+eine von HostBackup unterstützte gemeinsame Sperre. Ist sein Container zum
+Stoppen ausgewählt, hält HostBackup diese Sperre vom kontrollierten Stopp bis
+nach dem Wiederanlaufversuch und gibt sie auch bei Fehlern wieder frei.
+Bereits ausgeschaltete Container werden nicht eigenmächtig gestartet.
+Die Vorprüfung prüft das vorhandene Protokoll; eine spätere Versionsnummer
+allein ist keine Kompatibilitätszusage. Bei den veröffentlichten LoxPanel-Paketen
+0.3.0 bis 0.7.0 sowie bei AudioServer4Home ist der bewusste Stopp vor der
+Vorprüfung in der eigenen Plugin-Oberfläche nötig, mit anschliessendem
+manuellem Wiedereinschalten. Ein blosses `docker stop` kann von deren
+Überwachung rückgängig gemacht werden und ist nicht gleichwertig.
+Andere Überwachungen müssen passend zur Anwendung abgestimmt werden.
+
+HostBackup prüft tatsächlich gestoppte Container vor und nach der Kopie.
+Unerwarteter Wiederanlauf, entfernte IDs und nicht erreichbares Docker erhalten
+getrennte Diagnosen mit ursprünglichem Namen, ID und nächsten Schritten.
+Diese Diagnose bleibt beim Vorgang erhalten, auch nach Cleanup und Neuladen;
+sie behauptet keinen unbekannten Verursacher. Kein Ersatzcontainer wird nach
+Namen übernommen. Manuelle Container-Starts und Updates während des Backups
+deshalb vermeiden. Änderungen zwischen abgeschlossenen Backups bleiben möglich.
 
 Die Wiederanlaufliste liegt dauerhaft im lokalen, root-geschützten Verzeichnis
 `/var/lib/loxberryhostbackup/restart-journals/`, unabhängig vom Backup-Medium.
@@ -1126,8 +986,8 @@ Der korrigierte Stand kann als Plugin-Update über die bestehende Installation
 installiert werden; eine vorherige Deinstallation oder manuelle Änderung der
 Journale ist nicht nötig. Einstellungen und Wiederanlauf-Nachweise bleiben
 erhalten. Ein gerade laufender Backup-/Recovery-Vorgang kann die Installation
-vorübergehend sperren; nach dessen Ende erneut versuchen. Erst das korrigierte
-Paket 1.2.3 verwenden, nicht lediglich die unveränderte öffentliche 1.2.2 erneut
+vorübergehend sperren; nach dessen Ende erneut versuchen. Das aktuelle
+Release 1.2.4 verwenden, nicht lediglich ein älteres betroffenes Paket erneut
 installieren.
 
 **Update ist nicht Deinstallation:** LoxBerry 4.0.0.15 und 4.0.1.1 führen beim
@@ -1390,7 +1250,7 @@ Offline-Schritte; Bootpartition, Bootloader und Systemtest bleiben eigene Schrit
 
 ## Inhaltsprüfung, Wartung und Diagnose
 
-In 1.2.0 liegt **Erweiterte Aufbewahrung und Integritätsprüfung**
+Seit 1.2.0 liegt **Erweiterte Aufbewahrung und Integritätsprüfung**
 unter **Optionen und Freigaben**, direkt unter **Zu stoppende Dienste vor dem
 Backup**. Der Bereich ist zunächst zugeklappt und verwendet dieselbe kompakte
 Schriftgrösse wie die übrigen Einstellungsbereiche. Die neue Anordnung und das
@@ -1575,7 +1435,7 @@ Prüfung möglich bleibt.
 
 ## Bekannte Grenzen
 
-- erste vorsichtig freigegebene Version, produktive Nutzung weiterhin mit eigener Prüfung
+- produktive Nutzung weiterhin mit eigener Prüfung der Sicherungen und Wiederherstellung
 - noch kein echter Ende-zu-Ende-Restore auf LoxBerry/DietPi produktiv validiert
 - kein Ersatz für applikationsspezifische Datenbank-Backups
 - Plattformmigration kann manuelle Nacharbeit erfordern
@@ -1600,24 +1460,24 @@ Repository:
 https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 ```
 
-Aktueller Entwicklungs- und Veröffentlichungsstand:
+Entwicklungs- und Veröffentlichungsstand zur Freigabe von 1.2.4:
 
-- `main`: regulärer Hauptstand 1.2.0
-- `develop`: unveröffentlichter Paketstand 1.2.4; Vorabkanal weiterhin 1.2.3-beta
+- `main`: regulärer Hauptstand 1.2.4
+- `develop`: Weiterentwicklung auf der Basis von 1.2.4; Vorabkanal folgt dem stabilen Paket
 - `pre-develop`: älterer Referenzstand; unverändert
 
 Öffentliche Update-Dateien und Freigabereihenfolge:
 
-- `main/release.cfg`: reguläres Paket 1.2.0 unter Tag `v1.2.0`
-- `develop/prerelease.cfg`: Paket 1.2.3 unter Tag `v1.2.3-beta`
+- `main/release.cfg`: reguläres Paket 1.2.4 unter Tag `v1.2.4`
+- `develop/prerelease.cfg`: dasselbe stabile Paket 1.2.4 unter Tag `v1.2.4`
 
-Ein develop-Push allein veröffentlicht kein neues Paket. Für 1.2.3-beta sind
-Tag-Pipeline und öffentlicher ZIP-Download geprüft. Die Kanalumstellung wird
-anschliessend mit einem separaten Aktivierungscommit veröffentlicht und am
-live abgefragten Feed überprüft; die Paketprüfung belegt diesen Schritt nicht
-automatisch. Nachweise stehen in den [Release Notes](docs/RELEASE-1.2.3.md).
-`main`, bestehende Tags, ältere öffentliche ZIPs und die Wiki-Seite werden
-dabei nicht geändert.
+Ein develop-Push allein veröffentlicht kein neues Paket. Für 1.2.4 wird das
+Release-Paket zunächst über die Tag-Pipeline gebaut und öffentlich geprüft.
+Erst danach werden die Branch-Kanaldateien aktiviert und live abgefragt;
+die Paketprüfung belegt diesen Schritt nicht automatisch. Nachweise stehen
+in den [Release Notes](docs/RELEASE-1.2.4.md) und beim GitHub-Release.
+Bestehende ältere Tags und öffentliche ZIPs bleiben unverändert. Die Wiki-Seite
+wird separat gepflegt, nicht durch einen Git-Push geändert.
 
 Die in `plugin.cfg` hinterlegten Kanaladressen bleiben unverändert, damit
 bestehende Installationen die neuen Metadaten finden. Sobald eine neuere

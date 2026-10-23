@@ -5,7 +5,32 @@ bei Änderungen an rsync-/tar-Optionen, Mount-Prüfung, Import, Restore oder
 Retention auszuführen. Produktive Daten werden durch synthetische Marker und
 Testdienste ersetzt.
 
-## Gemeinsame Abnahme 1.2.3-beta
+## Freigabeabnahme 1.2.4 vom 23.10.2026
+
+Die Programmgrundlage `62c13f4` ist mit
+[CI-Lauf 39995108339](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39995108339)
+geprüft: 825 allgemeine Tests mit zehn vorgesehenen Skips, getrennte Linux-/CIFS-
+Integrationen, 65 Browserprüfungen und acht Paketprüfungen. Der neue Release-Commit,
+sein öffentliches ZIP und die Kanalaktivierung benötigen eigene Nachweise;
+siehe [Freigabestatus 1.2.4](RELEASE-1.2.4.md).
+
+1. Vollständige CI für den endgültigen Release-Commit ausführen. Flüchtige
+   Diagnoseprotokolle standardmässig auslassen, ausdrücklich eingeschlossene
+   Nutzdaten weiter schützen; echte Lese-, Mount- und Speicherfehler bleiben Fehler.
+2. Originalcontroller von LoxPanel 0.3.0 bis 0.7.0 mit bewusstem manuellem Stopp
+   sowie 0.9.9 mit automatischer Sperrkoordination prüfen. Vorher ausgeschaltete
+   Container bleiben aus; Fehler und Abbruch müssen die Sperre freigeben.
+   AudioServer4Home bleibt manuell in seiner eigenen Oberfläche zu stoppen.
+3. Update ohne Deinstallation über 1.2.0 bis 1.2.3 und erneute Installation über
+   einen gleich nummerierten 1.2.4-Teststand prüfen. Ziel, Quellen, Repository,
+   Schlüssel und Wiederanlauf-Journale erhalten; geänderten Logstandard erklären.
+4. Tag `v1.2.4`, Paketversion `1.2.4`, öffentliches ZIP und Prüfsumme abgleichen.
+   Erst nach erfolgreicher Tag-CI und Downloadprüfung beide Updatekanäle auf
+   dasselbe stabile ZIP umstellen; kein zusätzliches Beta-Paket veröffentlichen.
+5. Reale NAS-/USB-Konfiguration, Dienste und System-Restore gesondert abnehmen.
+   Kontrollierte Prozess-Fixtures und CI sind keine allgemeine Hardware-Zusage.
+
+## Historische gemeinsame Abnahme 1.2.3-beta
 
 Diese Fälle ergänzen die nachfolgenden Docker-/Dienstprüfungen. Die
 Entwicklungsbasis `d4e8e38` wurde in
@@ -13,7 +38,7 @@ Entwicklungsbasis `d4e8e38` wurde in
 erfolgreich geprüft. Auch die Tag-/Paketfreigabe auf `3818549` ist mit
 [Tag-CI 39303332839](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39303332839)
 und öffentlichem ZIP-Audit nachgewiesen. Aktivierungscommit und live abgefragter
-Vorabfeed bleiben eine getrennte Abnahme; der stabile Kanal bleibt auf 1.2.0.
+Vorabfeed blieben eine getrennte Abnahme; der stabile Kanal blieb damals auf 1.2.0.
 Ergebnisse immer für den genauen Commit dokumentieren, keine pauschale
 Hardware-Zusage. Siehe [Freigabestatus](RELEASE-1.2.3.md).
 
@@ -158,7 +183,7 @@ genauen Commit, Testumgebung und übersprungene Fälle separat dokumentieren.
     der Folgeprüfung still bleiben. Docker-Antworten in dieser Fehlernachstellung
     sind simuliert; keine produktiven Container oder Nutzerdaten verwenden.
 
-## Ergänzende Freigabe- und Bedienungsabnahme für 1.2.2-beta
+## Historische Freigabe- und Bedienungsabnahme für 1.2.2-beta
 
 Diese Szenarien gelten für die Vorabversion vom **15.10.2026**. Sie prüfen die
 robuste Dienst-/Container-Auswahl, schliessbare Ansichten, lesbare

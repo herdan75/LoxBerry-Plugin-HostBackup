@@ -1,7 +1,24 @@
 # Umsetzung der Analyse vom 13.09.2026
 
+## Aktuelle Freigabe 1.2.4 am 23.10.2026
+
+- Geprüfte Programmgrundlage `62c13f4` als stabiles Paket unter `v1.2.4`
+  bereitstellen; normale und Vorab-Updatefeeds erhalten dasselbe ZIP.
+- Enthalten sind die bisherigen NAS-/Inode-, Dienstlisten-, Recovery- und
+  Bedienkorrekturen sowie die begrenzte Auslassung flüchtiger Diagnoseprotokolle
+  und die Watchdog-Koordination für den ausgewählten LoxPanel-Container 0.9.9.
+  AudioServer4Home bleibt manuell zu stoppen. Keine pauschale Zusage für künftige
+  LoxPanel-Versionen oder beliebige Anwendungs-Watchdogs.
+- Updates von 1.2.0 bis 1.2.3 ohne Deinstallation; gleich nummerierte manuelle
+  1.2.4-Testpakete gegebenenfalls mit dem öffentlichen Paket erneut installieren.
+- Die Programmgrundlage ist durch [CI 39995108339](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39995108339)
+  geprüft. Release-/Tag-CI, öffentliches ZIP und Kanalaktivierung separat
+  nachweisen: [RELEASE-1.2.4.md](RELEASE-1.2.4.md).
+
+## Historischer Ausgangsstand
+
 Entwicklungsbasis: develop, da9aa80. Reihenfolge: Sicherheit, Betrieb, Bedienung,
-Erweiterungen. Neuer stabiler Hauptstand: **1.2.0 auf main** vom 04.10.2026,
+Erweiterungen. Damaliger stabiler Hauptstand: **1.2.0 auf main** vom 04.10.2026,
 übernommen aus **1.2.0-beta / develop af2d55d**, interne Plugin-Version **1.2.0**.
 Die bisher zurückgestellte AP-14 zur Mail-/Benachrichtigungssemantik ist ausgenommen.
 Am 19.09.2026 wird der vollständige develop-Stand `4da7cf6` auf `main` übernommen.

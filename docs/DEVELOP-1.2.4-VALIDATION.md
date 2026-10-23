@@ -1,7 +1,19 @@
-# Entwicklungsstand 1.2.4 – Umfang und Prüfnachweise
+# Version 1.2.4 – Entwicklungsumfang und Prüfnachweise
 
-Stand: 20.10.2026. Nur `develop`, noch kein veröffentlichtes Release.
-Stabiles Paket 1.2.0 und Vorabkanal 1.2.3-beta bleiben unverändert.
+Freigabestand: **23.10.2026**, reguläres Release 1.2.4. Die geprüfte
+Programmgrundlage `62c13f4` hat den vollständigen
+[GitHub-Lauf 39995108339](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/39995108339)
+bestanden: 825 allgemeine Tests mit zehn vorgesehenen Skips, 15 unprivilegierte
+Downloads, Linux-/CIFS-Integrationen (32 + 18 + 30 + 6 + 32 + 18 Prüfungen),
+65 Browserprüfungen und acht Paketprüfungen. Das heruntergeladene Test-ZIP wurde
+gegen diesen Commit geprüft.
+
+Diese Nachweise gelten für die Programmgrundlage, nicht automatisch für den
+nachfolgenden Release-Commit, das öffentliche ZIP oder die Feed-Aktivierung.
+Die gesonderte Freigabe beider Updatekanäle mit demselben stabilen Paket wird in
+[RELEASE-1.2.4.md](RELEASE-1.2.4.md) dokumentiert. Die folgenden datierten Abschnitte
+halten den damaligen Entwicklungs- und Prüfstatus fest; frühere Hinweise auf
+noch ausstehende CI oder unveränderte öffentliche Kanäle sind historisch.
 
 ## Korrektur und Grenzen
 
@@ -300,13 +312,14 @@ Lokale Nachweise dieser Ergänzung:
 - Python-Kompilierung, Bash-Syntax der neuen Fixture und `git diff --check`
   erfolgreich. Der Controller ist nur Testmaterial und nicht Teil des ZIPs.
 
-Der vollständige GitHub-Workflow **zum Commit dieser Ergänzung** ist der
-massgebliche Nachweis für echte Linux-Sperren, Watchdog-/Boot-Aufrufe,
-Abbrüche, Wiederanlauf, Installer, NAS und Browser. Vor dessen grünem Abschluss
-sind diese Laufzeitprüfungen offen; frühere Läufe ersetzen ihn nicht.
-Auch ein erfolgreicher CI-Lauf ist kein Test auf Andreas' Gerät und kein
-vollständiger System-Restore. Installations-/Paketversion bleibt 1.2.4 auf
-`develop`; öffentlicher Vorabkanal, stabiles Release und `main` bleiben unverändert.
+Der vollständige GitHub-Workflow **39995108339 für `62c13f4`** ist erfolgreich
+abgeschlossen. Er prüft echte Linux-Sperren, Watchdog-/Boot-Aufrufe, Abbrüche,
+Wiederanlauf, Installer, NAS und Browser; Umfang und getrennte Testzahlen stehen
+am Dokumentanfang. Dieser Lauf ersetzte die zuvor noch offenen Linux-Nachweise
+der Ergänzung. Ein erfolgreicher CI-Lauf ist kein Test auf Andreas' Gerät und
+kein vollständiger System-Restore. Bei diesem `develop`-Push blieben öffentliche
+Kanäle und `main` unverändert; die anschliessende stabile Freigabe 1.2.4 benötigt
+die separaten Nachweise in [RELEASE-1.2.4.md](RELEASE-1.2.4.md).
 
 ### Korrektur der veröffentlichten LoxPanel-Varianten (22.10.2026)
 

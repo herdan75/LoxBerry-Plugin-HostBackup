@@ -1,9 +1,39 @@
 # Sicherheitsmodell
 
-## 1.2.3-beta: Journal-Identitäten und Stop-Auswahl
+## 1.2.4: Quellenprüfung und abgestimmte Containerstopps
 
-Paketfreigabe und Vorabkanal-Aktivierung erfolgen getrennt; Nachweise stehen in
-den [Release Notes](RELEASE-1.2.3.md). Der stabile Kanal bleibt auf 1.2.0.
+Aktueller Freigabestand: **1.2.4 vom 23.10.2026**. Normale und Vorab-Updatefeeds
+verwenden nach geprüfter Aktivierung dasselbe stabile Paket; Freigabenachweise
+und Grenzen stehen in den [Release Notes](RELEASE-1.2.4.md).
+
+Flüchtige reguläre LoxBerry-Diagnoseprotokolle werden standardmässig ausgelassen,
+auch nach einem Update. Dauerhafte Nutzdaten, Konfigurationen und wichtige
+Lesefehler erhalten keine pauschale Ausnahme. Ausdrücklich eingeschlossene
+Teilquellen bleiben geschützt. Die Vorprüfung und `source-selection.json`
+erklären den Umfang. Wer Diagnoseprotokolle bewusst einschliesst, kann weiterhin
+Änderungsfehler während der Kopie erhalten. Die eng begrenzte Behandlung rotierender
+Verzeichnisse ist keine globale Abschaltung von TAR-/rsync-Fehlerprüfungen.
+
+HostBackup koordiniert einen ausgewählten LoxPanel-Container nur bei erkanntem
+Sperrprotokoll; geprüft ist das tatsächliche Paket **0.9.9**. Der fremde Controller
+wird nicht als root ausgeführt, Container werden weder neu erstellt noch über
+Ersatznamen gestartet. Vorher gestoppte Container bleiben gestoppt. LoxPanel
+0.3.0 bis 0.7.0 ohne diese Sperre muss bereits vor der Vorprüfung in seiner eigenen
+Oberfläche gestoppt werden. AudioServer4Home bleibt ebenfalls manuell zu stoppen
+und nach dem Backup wieder einzuschalten. Eine Versionsnummer allein belegt kein
+unverändertes Sperrprotokoll; künftige Versionen sind nicht pauschal freigegeben.
+
+Unerwartet neu gestartete, entfernte oder nicht überprüfbare ausgewählte Container
+werden mit Identität und konkreter Ursache gemeldet. Quellen- und Wiederanlaufschutz
+bleiben aktiv. Während der Sicherung keine manuellen Container-Starts oder Updates
+ausführen. Details und tatsächliche Nachweise:
+[Entwicklungsvalidierung 1.2.4](DEVELOP-1.2.4-VALIDATION.md).
+
+## Seit 1.2.3-beta: Journal-Identitäten und Stop-Auswahl
+
+Die damalige Paketfreigabe und Vorabkanal-Aktivierung erfolgten getrennt;
+Nachweise stehen in den [Release Notes](RELEASE-1.2.3.md). Der stabile Kanal
+blieb zu dieser Veröffentlichung auf 1.2.0.
 Dieser Stand bündelt die nachfolgenden Docker-/Dienstkorrekturen
 mit der durchgängigen Prüfung konkreter systemd-Dienstnamen. Unterstützt werden
 ASCII-Buchstaben/Ziffern, `:`, `-`, `_`, Punkte und wörtliche Backslashes, auch

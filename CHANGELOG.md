@@ -3,16 +3,25 @@
 Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
-1.2.3-beta ist als Vorabversion vom 19.10.2026 veröffentlicht; Tag-Pipeline und
-öffentlicher ZIP-Download sind geprüft. Die Vorab-Kanaldatei wird im separaten
-Aktivierungsstand auf dieses Paket gestellt; dessen Remote-Prüfung ist ein
-eigener Nachweis. Version 1.2.0 bleibt das reguläre Release. Frühere Vorabversionen bleiben als
-historische Einträge erhalten.
+Version 1.2.4 ist das reguläre Release vom 23.10.2026. Regulärer Kanal und
+Vorabversionskanal verwenden dasselbe stabile Paket; eine zusätzliche Beta ist
+nicht erforderlich. Frühere Versionen bleiben als historische Einträge erhalten.
 Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
-## [Unreleased] - Entwicklungsstand 1.2.4
+## [Unreleased]
+
+Noch keine weiteren Änderungen.
+
+## [1.2.4] - 2026-10-23
+
+- Reguläres Release mit allen Korrekturen aus 1.2.1-beta, 1.2.2-beta und
+  1.2.3-beta sowie den nachfolgenden Quellen-, Laufzeitdaten- und Watchdog-
+  Korrekturen. Beide LoxBerry-Updatekanäle verwenden das Paket 1.2.4 unter
+  `v1.2.4`. Update ohne vorherige Deinstallation; gleich nummerierte manuelle
+  Testpakete mit dem endgültigen ZIP überschreiben, da kein Versionssprung erfolgt.
+  Freigabebasis, Prüfgrenzen und Upgrade-Hinweise: [Release Notes](docs/RELEASE-1.2.4.md).
 
 - LoxPanel 0.9.9 unterstützen: Die im offiziellen Installationspaket in eine
   Hilfsfunktion ausgelagerte Watchdog-Sperrprüfung erkennen. Die vorhandene
@@ -45,8 +54,8 @@ validiert werden.
   lokalen Journals prüfen. Fremder Wiederanlauf, fehlende ID oder eine nicht
   verfügbare Docker-Abfrage bleiben konkrete Konsistenzfehler; Ersatzcontainer
   werden nicht automatisch übernommen. AudioServer4Home und andere Überwachungen
-  sind dadurch nicht automatisch koordiniert. Diese Nachbesserung gehört zum
-  Entwicklungsstand; der veröffentlichte Vorabkanal bleibt unverändert.
+  sind dadurch nicht automatisch koordiniert und müssen weiterhin über ihre
+  eigene Oberfläche vor der Vorprüfung gestoppt und danach wieder gestartet werden.
 - Regression der neuen Quellenprüfung korrigiert: gültige Docker-/Linux-
   Namespace-Einbindungen mit Kennungen wie `net:[123]` werden als Mount-Identität
   erkannt und nicht mehr als ungültiger Quellpfad abgewiesen. Benutzerpfade,
@@ -94,8 +103,9 @@ validiert werden.
 - Regressionen und reale Linux-Simulationen für Logrotation, wichtige fehlende
   Dateien, Metadaten-Restore, inkrementelle Wiederverwendung, private Mount-
   Namensräume und Installations-/Wiederanlaufpfade. Prüfgrenzen und Ergebnisse
-  stehen in `docs/DEVELOP-1.2.4-VALIDATION.md`. Noch keine Veröffentlichung;
-  stabiles Release und Vorabkanal bleiben unverändert.
+  stehen in `docs/DEVELOP-1.2.4-VALIDATION.md`. Die GitHub-Prüfung der Programmbasis
+  `62c13f4` ist erfolgreich; Tag-, Download- und Kanalprüfung werden bei der
+  Veröffentlichung separat nachgewiesen.
 
 ## [1.2.3-beta] - 2026-10-19
 
@@ -1119,7 +1129,8 @@ nicht überarbeitet worden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.3-beta...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.4...develop
+[1.2.4]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.0...v1.2.4
 [1.2.3-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.2-beta...v1.2.3-beta
 [1.2.2-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.1-beta...v1.2.2-beta
 [1.2.1-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.0...v1.2.1-beta

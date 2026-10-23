@@ -1,25 +1,22 @@
 # Portable Sicherungsstände auf NAS
 
-Diese Anleitung gilt für das **reguläre Release 1.2.0 vom 04.10.2026** und
-die **Vorabversion 1.2.2-beta vom 15.10.2026**. Die seit 1.2.1-beta enthaltene Inode-Korrektur
-ändert weder Repository-Format, Einrichtung, Schlüssel noch Restoreabläufe.
-Vorhandene Repositorys nicht neu initialisieren. Bei NAS-Statistiken mit 0/0
-behandelt die Beta die Inode-Kapazität als unbekannt; echte Erschöpfung und
-andere Pflichtfehler bleiben blockierend. Details: [1.2.1-beta](RELEASE-1.2.1.md).
-1.2.2-beta ergänzt Dienstelisten- und Bedienungskorrekturen, ohne das
-Repository-Format oder den Restoreweg zu ändern; aktueller Freigabestatus und
-Prüfgrenzen: [1.2.2-beta](RELEASE-1.2.2.md).
+Diese Anleitung gilt für das **reguläre Release 1.2.4 vom 23.10.2026**.
+Repository-Format, Einrichtung, Schlüssel und Restoreabläufe bleiben erhalten.
+Bei NAS-Statistiken mit Gesamtzahl und freien Inodes `0/0` gilt die Kapazität
+als unbekannt; echte Erschöpfung und andere Pflichtfehler bleiben blockierend.
+Freigabestatus und Prüfgrenzen: [Release Notes 1.2.4](RELEASE-1.2.4.md).
 
-Die in
-1.2.0-beta eingeführte Repository-Erweiterung wird unverändert übernommen;
-ältere 1.0.0- und 1.1.0-beta-Pakete erhalten dadurch keine neuen Funktionen.
-Das reguläre Release 1.2.0 benötigt keinen Vorabkanal. Da 1.2.0-beta intern
-bereits `1.2.0` verwendete, ist deren Wechsel zu Stable 1.2.0 kein Versionssprung.
-Nur für diesen gleich nummerierten Wechsel bei Bedarf das stabile ZIP ohne
-Deinstallation darüber installieren; keine installierte 1.2.1 oder 1.2.2 auf 1.2.0
-zurücksetzen. Ein vorhandenes Repository nicht neu initialisieren und seinen
-externen Schlüssel behalten.
-Freigabestatus und Prüfgrenzen nennen die [Release Notes](RELEASE-1.2.0.md).
+Von 1.2.0 bis 1.2.3 ohne vorherige Deinstallation aktualisieren. Ein manuell
+installierter 1.2.4-Teststand hat dieselbe numerische Paketversion: bei Bedarf
+das veröffentlichte Paket nochmals darüber installieren. Normale und Vorab-
+Updatefeeds verwenden dasselbe stabile Paket. Ein vorhandenes Repository nicht
+neu initialisieren; den externen Wiederherstellungsschlüssel aufbewahren.
+
+Seit 1.2.4 werden flüchtige LoxBerry-Diagnoseprotokolle standardmässig ausgelassen,
+auch beim Update. Dauerhafte Daten und Konfigurationen bleiben gemäss der
+gespeicherten Quellenauswahl enthalten. Den konkreten Umfang vor dem ersten
+neuen Lauf unter **Nächstes Backup prüfen** kontrollieren. Die bewusste Mitsicherung
+der Diagnoseprotokolle kann weiterhin Änderungsfehler während des Backups auslösen.
 
 ## Was sich ändert
 

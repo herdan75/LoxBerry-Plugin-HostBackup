@@ -1,0 +1,35 @@
+Pluginseiten-Metadaten für das reguläre Release 1.2.4 vom 23.10.2026
+Erst nach Veröffentlichung und Prüfung des öffentlichen Downloads übernehmen.
+Diese Vorlage ändert die öffentliche Wiki-Seite nicht automatisch.
+
+Autor: Daniel Hermann
+Logo: :plugins:host-backup:icon_256.png
+Status: STABLE
+Version: 1.2.4
+Min. LB Version: 2.0.0
+Release Download: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.4/LoxBerryHostBackup_1.2.4.zip
+Pre-Release Download: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.4/LoxBerryHostBackup_1.2.4.zip
+Beschreibung: Host-Backup und Restore für LoxBerry, Docker und Linux-Dienste. Lokale und portable NAS-Sicherungen mit Vollbackups, platzsparenden Sicherungsständen, Zeitplanung, Dienstesteuerung und Integritätsprüfung.
+Sprachen: DE
+Diskussion: https://www.loxforum.com/forum/projektforen/loxberry/plugins/485008-neues-loxberry-plugin-host-backup-f%C3%BCr-loxberry-docker-und-dietpi-systeme
+
+Zusammenfassung:
+Release 1.2.4: NAS- und Dienstkorrekturen, weniger Störungen durch flüchtige Diagnoseprotokolle, verständlichere Fehlerhinweise und LoxPanel-0.9.9-Koordination; beide Updatekanäle auf dasselbe stabile Paket gesetzt.
+
+Beide Downloads verweisen auf Stable 1.2.4, solange keine neuere Vorabversion
+angeboten wird. Historische Beta-Downloads bleiben unverändert erhalten.
+Von 1.2.0 bis 1.2.3 ohne vorherige Deinstallation aktualisieren. Ein manuelles
+1.2.4-Testpaket hat dieselbe Versionsnummer und muss gegebenenfalls mit dem
+veröffentlichten Paket nochmals installiert werden. Einstellungen, Ziel,
+Repository und Wiederherstellungsschlüssel bleiben erhalten.
+
+Flüchtige LoxBerry-Diagnoseprotokolle werden auch beim Update standardmässig
+ausgelassen; der genaue Umfang steht unter „Nächstes Backup prüfen“.
+LoxPanel 0.9.9 ist mit automatischer Watchdog-Koordination für ausgewählte
+Container geprüft. LoxPanel 0.3.0 bis 0.7.0 sowie AudioServer4Home weiterhin vor
+der Vorprüfung in der eigenen Oberfläche stoppen und nach dem Backup selbst
+wieder starten. Keine pauschale Freigabe beliebiger zukünftiger Versionen.
+
+Weitere Informationen:
+https://github.com/herdan75/LoxBerry-Plugin-HostBackup/blob/main/README.md
+https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.4
