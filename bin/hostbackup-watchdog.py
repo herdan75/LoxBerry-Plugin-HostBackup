@@ -317,7 +317,8 @@ def validate_controller(text, home):
         check_lines = check_lines[1:]
     # A busy lock may print a literal message and leave, but never execute
     # another command (including command substitution inside the message).
-    busy = r'\[ \$\? = 1 \] && \{(?: echo "[^"$`\\\n]*";)? ' + leave + r' 0; \}'
+    literal = r'''(?:"[^"$`\\\n]*"|'[^'\n]*'|[A-Za-z0-9_.-]+)'''
+    busy = r'\[ \$\? = 1 \] && \{(?: echo ' + literal + r';)? ' + leave + r' 0; \}'
     if (body != expected or len(check_lines) != 3 or check_lines[0] != "_sperre"
             or not re.fullmatch(busy, check_lines[1])
             or check_lines[2] != "running || start"):

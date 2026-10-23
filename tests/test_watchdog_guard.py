@@ -139,6 +139,17 @@ class WatchdogValidationTests(unittest.TestCase):
             with self.subTest(index=index):
                 self.assertEqual(watchdog.controller_profile(source, "/fixture/loxberry")["mode"], "lock")
 
+    def test_busy_lock_accepts_inert_messages_in_inline_and_delegated_contracts(self):
+        # The existing real-Linux coordination fixture uses unquoted echo busy.
+        # Keep harmless literal messages, without accepting shell evaluation.
+        for original in (controller(), delegated_controller()):
+            for message in ('echo busy;', "echo 'Backup running';",
+                            "echo 'literal $value `text`';", ''):
+                with self.subTest(delegated='pruefen()' in original, message=message):
+                    source = original.replace('echo "Backup running";', message)
+                    source = source.replace('{  ', '{ ')
+                    self.assertEqual(watchdog.controller_profile(source, "/fixture/loxberry")["mode"], "lock")
+
     def test_delegated_dispatch_must_only_call_one_valid_function(self):
         original = delegated_controller()
         variants = (

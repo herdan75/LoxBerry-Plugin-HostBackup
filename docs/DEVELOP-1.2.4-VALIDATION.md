@@ -287,10 +287,13 @@ Unverändert gelten:
 
 Lokale Nachweise dieser Ergänzung:
 
-- Guard-/Kompatibilitätssuite: 37 Tests, 29 erfolgreich und acht Linux-Skips.
-  Enthalten sind zwölf zusätzliche positive Varianten und 46 Negativvarianten,
+- Guard-/Kompatibilitätssuite: 38 Tests, 30 erfolgreich und acht Linux-Skips.
+  Enthalten sind 20 zusätzliche positive Varianten und 46 Negativvarianten,
   darunter doppelte Funktionsdefinitionen, mehrdeutige Aufrufzweige, entfernte
   Sperren und vorzeitige Starts. Eine unabhängige Gegenprüfung ist erfolgt.
+  Der erste Linux-Lauf deckte eine zu strenge Ablehnung einer bestehenden
+  Variante mit `echo busy` auf. Die Erkennung erlaubt nun harmlose, wörtliche
+  Ausgaben auch ohne Anführungszeichen; Shell-Ersetzungen bleiben gesperrt.
 - Originalcontroller-Suite: 17 Tests, vier erfolgreich und 13 Linux-Skips.
   Herkunft, unveränderte Bytes und SHA-256 des veröffentlichten 0.9.9-Pakets
   sind geprüft; alte veröffentlichte Varianten bleiben in derselben Matrix.
