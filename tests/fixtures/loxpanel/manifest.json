@@ -1,6 +1,6 @@
 {
   "upstream": "https://github.com/Lenardo1/Loxpanel",
-  "checked_on": "2026-10-22",
+  "checked_on": "2026-10-23",
   "license": "PolyForm Noncommercial License 1.0.0",
   "license_url": "https://polyformproject.org/licenses/noncommercial/1.0.0",
   "required_notice": "Copyright © 2025–2026 Lenardo1 and LoxPanel contributors (https://github.com/Lenardo1/Loxpanel)",
@@ -115,6 +115,19 @@
       "fixture": "loxpanel-controller-released.sh",
       "expected_mode": "manual-stop",
       "url": "https://github.com/Lenardo1/Loxpanel/releases/download/v0.7.0/loxpanel-plugin.zip"
+    },
+    {
+      "kind": "release_asset",
+      "ref": "v0.9.9",
+      "version": "0.9.9",
+      "asset_sha256": "688703ca5bac048535711f749edfad4e65c21114a6643a9b7df24ef227d4b224",
+      "sha256": "f065cd12aff353b1f7760b07a28377acebe782f6decee6cb106f9865f3715ae0",
+      "controller_bytes": 18272,
+      "path": "bin/loxpanel-ctl.sh",
+      "fixture": "loxpanel-controller-v0.9.9.sh",
+      "expected_mode": "lock",
+      "supports_boot": true,
+      "url": "https://github.com/Lenardo1/Loxpanel/releases/download/v0.9.9/loxpanel-plugin.zip"
     },
     {
       "path": "loxberry-plugin/bin/loxpanel-ctl.sh",

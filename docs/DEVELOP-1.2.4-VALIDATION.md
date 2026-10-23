@@ -172,6 +172,9 @@ Diese Steuerung ist nicht in den veröffentlichten Plugin-ZIPs 0.3.0 bis 0.7.0
 enthalten. Die ursprünglichen Sperrtests belegten daher keine Kompatibilität
 mit diesen installierbaren Paketen. Die nachfolgende Ergänzung korrigiert diese
 Prüflücke ausdrücklich.
+Das am 23.10.2026 veröffentlichte Paket **0.9.9** enthält eine solche Sperre,
+verlegt deren Prüfung jedoch in eine eigene Hilfsfunktion. Die zusätzliche
+Kompatibilitätskorrektur dafür wird unten getrennt dokumentiert.
 HostBackup nutzt diese Sperre beim ausgewählten LoxPanel-Container vor dem Stopp
 bis nach dem Wiederanlaufversuch. Der Helfer läuft ausserhalb der
 `stop_backup_targets | tee`-Pipeline, damit die Sperre nicht bereits mit dem
@@ -257,6 +260,50 @@ In der verpflichtenden Linux-CI führen fehlendes Bash, flock oder benötigte
 Root-Rechte bei den neuen Koordinationstests zu Fehlern, nicht zu stillen Skips.
 
 ## Ergebnisse
+
+### Kompatibilität mit LoxPanel 0.9.9 (23.10.2026)
+
+Das tatsächliche [Release-Paket 0.9.9](https://github.com/Lenardo1/Loxpanel/releases/tag/v0.9.9)
+enthält weiterhin die gemeinsame Watchdog-Sperre, aber eine ausgelagerte
+Prüffunktion. Die bisherige enge Strukturerkennung weist diese Variante zurück,
+obwohl das unterstützte Sperrverfahren vorhanden ist. Die Korrektur erweitert
+gezielt die Protokollerkennung; sie akzeptiert nicht pauschal jede neuere
+Versionsnummer und führt keinen fremden Controller als root aus.
+
+Unverändert gelten:
+
+- 0.3.0 bis 0.7.0: bereits vor der Vorprüfung in der eigenen LoxPanel-Oberfläche
+  stoppen; vorhandenen Stoppmarker erhalten und später selbst wieder starten.
+- 0.9.9 und die bereits unterstützten Sperrvarianten: den ausgewählten Container
+  unter der gemeinsamen Sperre stoppen und wieder starten. Keine Neuerstellung,
+  kein Pull und kein neuer Sicherungsmodus.
+- Bereits vorher ausgeschaltete Container nicht automatisch starten; unbekannte
+  Controller, unbrauchbare Sperren und unerwartete Containeränderungen weiterhin
+  verständlich melden. Andere Anwendungen wie AudioServer4Home werden dadurch
+  nicht automatisch koordiniert.
+- Manuelle Start-/Updateaktionen während des Backups bleiben zu vermeiden.
+  Eine gemeinsame, dauerhaft zugesicherte Backup-Schnittstelle mit LoxPanel ist
+  nicht implementiert; Änderungen des Sperrprotokolls können neue Prüfung erfordern.
+
+Lokale Nachweise dieser Ergänzung:
+
+- Guard-/Kompatibilitätssuite: 37 Tests, 29 erfolgreich und acht Linux-Skips.
+  Enthalten sind zwölf zusätzliche positive Varianten und 46 Negativvarianten,
+  darunter doppelte Funktionsdefinitionen, mehrdeutige Aufrufzweige, entfernte
+  Sperren und vorzeitige Starts. Eine unabhängige Gegenprüfung ist erfolgt.
+- Originalcontroller-Suite: 17 Tests, vier erfolgreich und 13 Linux-Skips.
+  Herkunft, unveränderte Bytes und SHA-256 des veröffentlichten 0.9.9-Pakets
+  sind geprüft; alte veröffentlichte Varianten bleiben in derselben Matrix.
+- Python-Kompilierung, Bash-Syntax der neuen Fixture und `git diff --check`
+  erfolgreich. Der Controller ist nur Testmaterial und nicht Teil des ZIPs.
+
+Der vollständige GitHub-Workflow **zum Commit dieser Ergänzung** ist der
+massgebliche Nachweis für echte Linux-Sperren, Watchdog-/Boot-Aufrufe,
+Abbrüche, Wiederanlauf, Installer, NAS und Browser. Vor dessen grünem Abschluss
+sind diese Laufzeitprüfungen offen; frühere Läufe ersetzen ihn nicht.
+Auch ein erfolgreicher CI-Lauf ist kein Test auf Andreas' Gerät und kein
+vollständiger System-Restore. Installations-/Paketversion bleibt 1.2.4 auf
+`develop`; öffentlicher Vorabkanal, stabiles Release und `main` bleiben unverändert.
 
 ### Korrektur der veröffentlichten LoxPanel-Varianten (22.10.2026)
 

@@ -40,6 +40,22 @@ esac
 '''.replace("HOME", home)
 
 
+def delegated_controller(home="/fixture/loxberry", function="pruefen"):
+    """The 0.9.9 check dispatch delegates to a function, not a version check."""
+    prefix = controller(home).split('case "$1" in', 1)[0]
+    return prefix + '''STOPPED="HOME/config/plugins/loxpanel/loxpanel_stopped.cfg"
+FUNCTION() {
+    [ -f "$STOPPED" ] && return 0 # deliberate user stop
+    _sperre
+    [ $? = 1 ] && { echo "Backup running"; return 0; }
+    running || start
+}
+case "$1" in
+    check) FUNCTION || exit 1 ;;
+esac
+'''.replace("HOME", home).replace("FUNCTION", function)
+
+
 class WatchdogValidationTests(unittest.TestCase):
     def test_canonical_paths_and_invalid_components(self):
         for value in ("/opt/loxberry", "/tmp/fixture with spaces"):
@@ -97,6 +113,100 @@ class WatchdogValidationTests(unittest.TestCase):
         self.assertEqual(watchdog.validate_controller(direct, "/fixture/loxberry"),
                          "/fixture/loxberry/data/plugins/loxpanel/.loxpanel-ctl.lock")
 
+    def test_delegated_lock_contract_is_recognised_by_behavior_not_function_name(self):
+        for function in ("pruefen", "watchdog_check", "_check_v2"):
+            for home in ("/fixture/loxberry", "/fixture/loxberry with spaces"):
+                with self.subTest(function=function, home=home), \
+                        patch.object(watchdog.subprocess, "run", side_effect=AssertionError("Never execute foreign code")):
+                    profile = watchdog.controller_profile(delegated_controller(home, function), home)
+                    self.assertEqual(profile, {
+                        "mode": "lock",
+                        "path": home + "/data/plugins/loxpanel/.loxpanel-ctl.lock",
+                        "stop_path": home + "/config/plugins/loxpanel/loxpanel_stopped.cfg",
+                    })
+
+    def test_delegated_contract_tolerates_layout_and_nonexecuting_comments(self):
+        original = delegated_controller()
+        variants = (
+            original,
+            original.replace('    check) pruefen || exit 1 ;;', 'check)\n    pruefen || exit 1\n    ;;'),
+            original.replace('    check) pruefen || exit 1 ;;', '    check) pruefen ;;'),
+            original.replace('    _sperre\n', '\n    # Do not race an active backup.\n\t_sperre\n'),
+            original.replace('pruefen() {', 'pruefen()    {').replace('    ', '\t'),
+            original.replace('echo "Backup running"', 'echo "Sicherung oder Wiederherstellung laeuft."'),
+        )
+        for index, source in enumerate(variants):
+            with self.subTest(index=index):
+                self.assertEqual(watchdog.controller_profile(source, "/fixture/loxberry")["mode"], "lock")
+
+    def test_delegated_dispatch_must_only_call_one_valid_function(self):
+        original = delegated_controller()
+        variants = (
+            original.replace('check) pruefen || exit 1 ;;', 'check) missing_function || exit 1 ;;'),
+            original.replace('check) pruefen || exit 1 ;;', 'check) "$SELECTED_FUNCTION" || exit 1 ;;'),
+            original.replace('check) pruefen || exit 1 ;;', 'check) eval pruefen || exit 1 ;;'),
+            original.replace('check) pruefen || exit 1 ;;', 'check) pruefen extra || exit 1 ;;'),
+            original.replace('check) pruefen || exit 1 ;;', 'check) start; pruefen || exit 1 ;;'),
+            original.replace('check) pruefen || exit 1 ;;', 'check) pruefen; start ;;'),
+            original.replace('check) pruefen || exit 1 ;;', 'check) pruefen || start ;;'),
+            original.replace('check) pruefen || exit 1 ;;', 'check) pruefen & ;;'),
+            original.replace('check) pruefen || exit 1 ;;', 'check) pruefen | cat ;;'),
+            original.replace('check) pruefen || exit 1 ;;', 'check) pruefen || exit 1 ;;\n    check) start ;;'),
+            original.replace('    check) pruefen', '    check|boot) start ;;\n    check) pruefen'),
+            original.replace('    check) pruefen', '    "check") start ;;\n    check) pruefen'),
+            original.replace('case "$1" in', 'pruefen() {\n    start\n}\ncase "$1" in'),
+            original.replace('case "$1" in', 'pruefen() { start; }\ncase "$1" in'),
+            original.replace('case "$1" in', 'function pruefen { start; }\ncase "$1" in'),
+            original.replace('case "$1" in', 'pruefen()\n{\n    start\n}\ncase "$1" in'),
+            original.replace('case "$1" in', 'pruefen ( ) {\n    start\n}\ncase "$1" in'),
+            original.replace('    running || start\n', '    pruefen\n'),
+        )
+        for index, source in enumerate(variants):
+            with self.subTest(index=index), self.assertRaises(watchdog.GuardError):
+                watchdog.controller_profile(source, "/fixture/loxberry")
+
+    def test_delegated_check_cannot_bypass_or_release_lock_before_start(self):
+        original = delegated_controller()
+        variants = (
+            original.replace('    _sperre\n', ''),
+            original.replace('    _sperre\n', '    running || start\n    _sperre\n'),
+            original.replace('    _sperre\n', '    :\n'),
+            original.replace('    running || start\n', '    start\n'),
+            original.replace('    running || start\n', '    flock -u 9\n    running || start\n'),
+            original.replace('    running || start\n', '    exec 9<&-\n    running || start\n'),
+            original.replace('[ $? = 1 ]', '[ $? = 2 ]'),
+            original.replace('return 0; }', 'return 1; }'),
+            original.replace('return 0; }', 'true; }'),
+            original.replace('echo "Backup running"; return 0', 'start; return 0'),
+            original.replace('echo "Backup running"', 'echo "$(start)"'),
+            original.replace('echo "Backup running"', 'echo "`start`"'),
+            original.replace('flock -n 9 || return 1', 'flock -n 9 || return 0'),
+            original.replace('flock -n 9', 'flock -s -n 9'),
+            original.replace('exec 9<"$SPERRE"', 'exec 9>"$SPERRE"'),
+            original.replace('case "$1" in', '_sperre() {\n    :\n}\ncase "$1" in'),
+            original.replace('case "$1" in', '_sperre() { :; }\ncase "$1" in'),
+            original.replace('case "$1" in', '_sperre()\n{\n    :\n}\ncase "$1" in'),
+        )
+        for index, source in enumerate(variants):
+            with self.subTest(index=index), self.assertRaises(watchdog.GuardError):
+                watchdog.controller_profile(source, "/fixture/loxberry")
+
+    def test_delegated_check_requires_known_unambiguous_stop_marker(self):
+        original = delegated_controller()
+        marker = 'STOPPED="/fixture/loxberry/config/plugins/loxpanel/loxpanel_stopped.cfg"'
+        variants = (
+            original.replace(marker + '\n', ''),
+            original.replace('loxpanel_stopped.cfg', 'different_stopped.cfg'),
+            original.replace('/fixture/loxberry/config/plugins/loxpanel', '/different/config'),
+            original.replace(marker, marker + '\nSTOPPED="/different/marker"'),
+            original.replace('    [ -f "$STOPPED" ] && return 0 # deliberate user stop\n', ''),
+            original.replace('[ -f "$STOPPED" ] && return 0', '[ -f "$STOPPED" ] && return 1'),
+            original.replace('[ -f "$STOPPED" ]', '[ ! -f "$STOPPED" ]'),
+        )
+        for index, source in enumerate(variants):
+            with self.subTest(index=index), self.assertRaises(watchdog.GuardError):
+                watchdog.controller_profile(source, "/fixture/loxberry")
+
     def test_unsupported_or_moved_controller_is_not_guessed_safe(self):
         original = controller()
         variants = (
@@ -108,6 +218,9 @@ class WatchdogValidationTests(unittest.TestCase):
             original.replace('    _sperre\n', '    running || start\n    _sperre\n'),
             original.replace('[ $? = 1 ]', '[ $? = 2 ]'),
             original.replace('exit 0; }', 'true; }'),
+            original.replace('echo "Backup running"; exit 0', 'start; exit 0'),
+            original.replace('echo "Backup running"', 'echo "$(start)"'),
+            original.replace('echo "Backup running"', 'echo "`start`"'),
             original.replace('    running || start', '    start'),
             original + '\nDATADIR="/different"\n',
             original + '\nSPERRE="/different"\n',

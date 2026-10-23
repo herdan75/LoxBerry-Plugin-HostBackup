@@ -28,8 +28,15 @@ LoxPanel dafür **vor der Vorprüfung in seiner eigenen Oberfläche stoppen**.
 HostBackup erkennt den bewussten Stopp und verändert dessen Stoppmarker nicht.
 LoxPanel bleibt nach der Sicherung gestoppt und muss über seine eigene Oberfläche
 wieder eingeschaltet werden. Ein blosses `docker stop` ist nicht gleichwertig.
-Bei einer erkannten neueren Steuerung mit Sperrfunktion wird die vorhandene
-Watchdog-Sperre für den ausgewählten Container automatisch während des Backups genutzt.
+Das veröffentlichte **LoxPanel 0.9.9** besitzt dagegen eine gemeinsame
+Watchdog-Sperre. HostBackup unterstützt auch dessen ausgelagerte Sperrprüfung
+und nutzt die Sperre für den ausgewählten Container automatisch: vor dem Stopp
+bis nach dem Wiederanlaufversuch. Es erfolgt weder eine Container-Neuanlage noch
+ein Image-Update. Die bereits unterstützten Sperrvarianten bleiben erhalten.
+Die Unterstützung wird anhand des vorhandenen Sperrprotokolls geprüft, nicht
+allein anhand einer Versionsnummer. Beliebige künftige Umbauten sind damit nicht
+automatisch freigegeben; eine dauerhaft vereinbarte Backup-Schnittstelle mit
+LoxPanel besteht noch nicht.
 Zusätzlich werden tatsächlich gestoppte Docker-Container vor und nach der Kopie
 auf unerwarteten Wiederanlauf geprüft. Keine neue Einstellung. Dies ersetzt nicht
 die gesonderte Abstimmung mit AudioServer4Home oder anderen Überwachungen;

@@ -1,8 +1,9 @@
 """Compatibility against byte-pinned, actual upstream LoxPanel controllers.
 
-The Linux tests execute only `check`, in a temporary installation with fake
-sudo/docker programs. They never contact Docker or run an upstream start/stop
-command against the host. See fixtures/loxpanel/README.md for provenance.
+The Linux tests execute only `check` and the v0.9.9 `boot` dispatch, in a
+temporary installation with fake sudo/docker/timeout programs. They never
+contact Docker or network ports, or run an upstream start/stop command against
+the host. See fixtures/loxpanel/README.md for provenance.
 """
 
 import hashlib
@@ -22,6 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests/fixtures/loxpanel"
 MANIFEST = json.loads((FIXTURES / "manifest.json").read_text(encoding="utf-8"))
 SOURCES = MANIFEST["sources"]
+LOCK_SOURCES = [source for source in SOURCES if source["expected_mode"] == "lock"]
+RELEASE_099 = next(source for source in SOURCES if source["ref"] == "v0.9.9")
 SPEC = importlib.util.spec_from_file_location("watchdog_release_test", ROOT / "bin/hostbackup-watchdog.py")
 watchdog = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(watchdog)
@@ -39,8 +42,11 @@ class ReleasedControllerTests(unittest.TestCase):
     def test_actual_published_zip_and_source_fixtures_match_recorded_hashes(self):
         releases = [source for source in SOURCES if source["kind"] == "release_asset"]
         self.assertEqual([source["ref"] for source in releases], [
-            "v0.3.0", "v0.3.1", "v0.3.2", "v0.3.3", "v0.4.0", "v0.5.0", "v0.6.0", "v0.7.0"])
-        self.assertEqual(len({source["sha256"] for source in releases}), 1)
+            "v0.3.0", "v0.3.1", "v0.3.2", "v0.3.3", "v0.4.0", "v0.5.0", "v0.6.0", "v0.7.0",
+            "v0.9.9"])
+        self.assertEqual(len({source["sha256"] for source in releases}), 2)
+        self.assertEqual(len({source["sha256"] for source in releases
+                              if source["expected_mode"] == "manual-stop"}), 1)
         for source in SOURCES:
             with self.subTest(ref=source["ref"], kind=source["kind"]):
                 content = (FIXTURES / source["fixture"]).read_bytes()
@@ -51,7 +57,7 @@ class ReleasedControllerTests(unittest.TestCase):
                 if source["kind"] == "release_asset":
                     self.assertRegex(source["asset_sha256"], r"^[0-9a-f]{64}$")
                     self.assertEqual(source["path"], "bin/loxpanel-ctl.sh")
-                    self.assertEqual(len(content), 4237)
+                    self.assertEqual(len(content), source.get("controller_bytes", 4237))
 
     def test_every_recorded_controller_is_recognised_after_real_install_substitution(self):
         for source in SOURCES:
@@ -126,6 +132,11 @@ else:
             target = self.fake_bin / name
             target.write_text(stub, encoding="utf-8")
             target.chmod(0o755)
+        # Newer releases check whether their configured port is occupied before
+        # restarting. Do not probe any real network port from fixture tests.
+        timeout_stub = self.fake_bin / "timeout"
+        timeout_stub.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        timeout_stub.chmod(0o755)
         self.env = dict(os.environ, PATH=str(self.fake_bin) + ":/usr/bin:/bin",
                         FIXTURE_CALLS=str(self.calls), FIXTURE_RUNNING="0",
                         LOXPANEL_CTL_CONFIGDIR=str(self.config), LOXPANEL_CTL_DATADIR=str(self.data),
@@ -143,10 +154,11 @@ else:
     def install(self, source):
         self.controller.write_text(installed_controller(source, str(self.home)), encoding="utf-8")
 
-    def check(self, unprivileged=False):
+    def check(self, unprivileged=False, action="check"):
+        self.assertIn(action, ("check", "boot"))
         options = ({"user": self.account[0], "group": self.account[1], "extra_groups": self.account[2]}
                    if unprivileged and os.geteuid() == 0 else {})
-        result = subprocess.run([self.bash, str(self.controller), "check"], env=self.env,
+        result = subprocess.run([self.bash, str(self.controller), action], env=self.env,
                                 cwd=self.root, capture_output=True, text=True, timeout=10, **options)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return result
@@ -179,7 +191,7 @@ else:
         self.calls.write_text("", encoding="utf-8")
         self.calls.chmod(0o666)  # Unexpected fake Docker calls remain observable.
         self.marker.write_text("owned by the manual stop\n", encoding="utf-8")
-        for source in (SOURCES[0], next(source for source in SOURCES if source["expected_mode"] == "lock")):
+        for source in (SOURCES[0], *LOCK_SOURCES):
             self.install(source)
             for mode in (0o000, 0o600):
                 with self.subTest(ref=source["ref"], mode=oct(mode)):
@@ -200,17 +212,49 @@ else:
         self.assertEqual([call[0] for call in self.docker_calls()], ["ps"])
 
     def test_current_check_really_obeys_existing_flock_and_resumes_after_release(self):
-        self.install(next(source for source in SOURCES if source["expected_mode"] == "lock"))
-        lock = self.data / ".loxpanel-ctl.lock"
-        guard = watchdog.LockGuard(str(lock), Mock(alive=Mock(return_value=True)))
+        for source in LOCK_SOURCES:
+            with self.subTest(ref=source["ref"]):
+                self.install(source)
+                self.calls.write_text("", encoding="utf-8")
+                lock = self.data / ".loxpanel-ctl.lock"
+                guard = watchdog.LockGuard(str(lock), Mock(alive=Mock(return_value=True)))
+                try:
+                    self.check()
+                    self.assertEqual(self.docker_calls(), [])
+                finally:
+                    guard.close()
+                self.check()
+                self.assertEqual(self.docker_calls()[0][0], "ps")
+                self.assertTrue(any(call[0] == "compose" and call[-2:] == ["up", "-d"]
+                                    for call in self.docker_calls()))
+
+    def test_release_099_boot_route_remains_guarded_even_after_it_removes_user_marker(self):
+        self.install(RELEASE_099)
+        self.marker.write_text("user stop\n", encoding="utf-8")
+        guard = watchdog.LockGuard(str(self.data / ".loxpanel-ctl.lock"), Mock(alive=Mock(return_value=True)))
+        try:
+            self.check(action="boot")
+            # This is upstream's documented reboot behaviour, not HostBackup
+            # modifying its marker. The shared lock must still prevent restart.
+            self.assertFalse(self.marker.exists())
+            self.assertEqual(self.docker_calls(), [])
+        finally:
+            guard.close()
+        self.check(action="boot")
+        self.assertTrue(any(call[0] == "compose" and call[-2:] == ["up", "-d"]
+                            for call in self.docker_calls()))
+
+    def test_release_099_running_container_is_not_recreated_after_lock_release(self):
+        self.install(RELEASE_099)
+        self.env["FIXTURE_RUNNING"] = "1"
+        guard = watchdog.LockGuard(str(self.data / ".loxpanel-ctl.lock"), Mock(alive=Mock(return_value=True)))
         try:
             self.check()
             self.assertEqual(self.docker_calls(), [])
         finally:
             guard.close()
         self.check()
-        self.assertEqual(self.docker_calls()[0][0], "ps")
-        self.assertTrue(any(call[0] == "compose" and call[-2:] == ["up", "-d"] for call in self.docker_calls()))
+        self.assertEqual([call[0] for call in self.docker_calls()], ["ps"])
 
     def test_every_released_profile_allows_only_observed_manual_pause_and_preserves_marker(self):
         self.marker.write_text("user stop\n", encoding="utf-8")
@@ -278,14 +322,40 @@ else:
         self.assertEqual(self.docker_calls(), [])
 
     def test_modern_probe_is_read_only_and_does_not_create_lock_or_stop_marker(self):
-        self.install(next(source for source in SOURCES if source["expected_mode"] == "lock"))
-        with patch.object(watchdog, "docker_inventory", return_value=[(IDENTITY, "loxpanel")]):
-            result = watchdog.probe(str(self.home), "docker\tloxpanel", False)
-        self.assertTrue(result["ok"], result)
-        self.assertEqual(result["mode"], "lock")
-        self.assertFalse((self.data / ".loxpanel-ctl.lock").exists())
-        self.assertFalse(self.marker.exists())
-        self.assertEqual(self.docker_calls(), [])
+        for source in LOCK_SOURCES:
+            with self.subTest(ref=source["ref"]):
+                self.install(source)
+                with patch.object(watchdog, "docker_inventory", return_value=[(IDENTITY, "loxpanel")]):
+                    result = watchdog.probe(str(self.home), "docker\tloxpanel", False)
+                self.assertTrue(result["ok"], result)
+                self.assertEqual(result["mode"], "lock")
+                self.assertFalse((self.data / ".loxpanel-ctl.lock").exists())
+                self.assertFalse(self.marker.exists())
+                self.assertEqual(self.docker_calls(), [])
+
+    def test_release_099_probe_rejects_symlink_and_hardlinked_lock_without_modifying_target(self):
+        self.install(RELEASE_099)
+        target = self.root / "untouched"
+        target.write_text("do not modify\n", encoding="utf-8")
+        lock = self.data / ".loxpanel-ctl.lock"
+        for kind in ("symlink", "hardlink"):
+            with self.subTest(kind=kind):
+                if kind == "symlink":
+                    lock.symlink_to(target)
+                else:
+                    os.link(target, lock)
+                before = target.stat()
+                try:
+                    with patch.object(watchdog, "docker_inventory", return_value=[(IDENTITY, "loxpanel")]):
+                        result = watchdog.probe(str(self.home), "docker\tloxpanel", False)
+                    self.assertFalse(result["ok"], result)
+                    after = target.stat()
+                    self.assertEqual((after.st_ino, after.st_mtime_ns, after.st_mode),
+                                     (before.st_ino, before.st_mtime_ns, before.st_mode))
+                    self.assertEqual(target.read_text(encoding="utf-8"), "do not modify\n")
+                    self.assertEqual(self.docker_calls(), [])
+                finally:
+                    lock.unlink()
 
 
 if __name__ == "__main__":

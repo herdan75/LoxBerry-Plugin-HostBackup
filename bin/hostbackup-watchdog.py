@@ -243,6 +243,47 @@ def controller_profile(text, home):
         "LoxPanel-Version und Installation pruefen; die Sicherheitspruefung nicht umgehen.")
 
 
+def controller_function_body(code, name):
+    """Read one plain function, rejecting overrides without evaluating shell.
+
+    This deliberately recognises a small compatibility contract, not arbitrary
+    shell syntax. Count even alternative/one-line declarations so an earlier
+    harmless definition cannot hide a later override of the guarded function.
+    """
+    name = re.escape(name)
+    declarations = re.findall(
+        r"(?m)^(?:function[ \t]+" + name + r"(?=[ \t({]|$)|"
+        + name + r"[ \t]*\([ \t]*\))", code)
+    bodies = re.findall(r"(?:^|\n)" + name + r"[ \t]*\(\)[ \t]*\{[ \t]*\n(.*?)\n\}",
+                        code, re.S)
+    if len(declarations) != 1 or len(bodies) != 1:
+        raise GuardError("LoxPanel watchdog function is missing, ambiguous or unsupported.")
+    return bodies[0].splitlines()
+
+
+def controller_check_body(code):
+    """Recognise an inline check or its single synchronous function call.
+
+    Released 0.9.9 moved check into pruefen(). The function name is immaterial;
+    its complete guarded body, fixed paths and lock semantics still must match.
+    No foreign code is executed and no version number grants compatibility.
+    """
+    # Also count quoted/alternative dispatch labels. A preceding check|boot)
+    # must not hide behind a later, otherwise valid plain check) branch.
+    heads = list(re.finditer(r"(?m)^(?:\([ \t]*)?(?=[^()\n]*\bcheck\b)[^()\n]*\)", code))
+    if len(heads) != 1 or heads[0].group() != "check)":
+        raise GuardError("LoxPanel watchdog check dispatch is missing or ambiguous.")
+    tail = code[heads[0].end():]
+    end = re.search(r";;[ \t]*(?:#[^\n]*)?(?:\n|$)", tail)
+    if end is None:
+        raise GuardError("LoxPanel watchdog check dispatch is incomplete.")
+    body = tail[:end.start()].strip()
+    delegate = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)(?:[ \t]+\|\|[ \t]+exit[ \t]+1)?", body)
+    if delegate:
+        return controller_function_body(code, delegate.group(1)), "return"
+    return body.splitlines(), "exit"
+
+
 def validate_controller(text, home):
     """Recognise the installed controller's narrow, existing lock contract.
 
@@ -264,16 +305,21 @@ def validate_controller(text, home):
         raise GuardError("LoxPanel watchdog data directory is unsupported; stop LoxPanel in its own interface before backup.")
     if [line for line in lines if line.startswith("SPERRE=")] != ['SPERRE="$DATADIR/' + LOCK_NAME + '"']:
         raise GuardError("LoxPanel does not expose the supported watchdog lock; stop it in its own interface before backup.")
-    matches = list(re.finditer(r"(?:^|\n)_sperre\(\)\s*\{\s*\n(.*?)\n\}", code, re.S))
     expected = ('[ -e "$SPERRE" ] || : >"$SPERRE"',
                 'exec 9<"$SPERRE" || return 2', 'flock -n 9 || return 1')
-    body = tuple(line.strip() for line in matches[0].group(1).splitlines()) if len(matches) == 1 else ()
-    checks = list(re.finditer(r"(?:^|\n)check\)\s*\n(.*?)\n;;", code, re.S))
-    check_lines = checks[0].group(1).splitlines() if len(checks) == 1 else []
-    if check_lines and re.fullmatch(r'\[ -f "\$STOPPED" \] && exit 0(?:\s+#.*)?', check_lines[0]):
+    body = tuple(controller_function_body(code, "_sperre"))
+    check_lines, leave = controller_check_body(code)
+    has_stop_check = bool(check_lines and re.fullmatch(
+        r'\[ -f "\$STOPPED" \] && ' + leave + r' 0(?:\s+#.*)?', check_lines[0]))
+    if leave == "return" and (not has_stop_check or not controller_stop_path(text, home)):
+        raise GuardError("LoxPanel delegated watchdog requires its recognised intentional-stop marker.")
+    if has_stop_check:
         check_lines = check_lines[1:]
+    # A busy lock may print a literal message and leave, but never execute
+    # another command (including command substitution inside the message).
+    busy = r'\[ \$\? = 1 \] && \{(?: echo "[^"$`\\\n]*";)? ' + leave + r' 0; \}'
     if (body != expected or len(check_lines) != 3 or check_lines[0] != "_sperre"
-            or not re.fullmatch(r"\[ \$\? = 1 \] && \{[^\n]*exit 0; \}", check_lines[1])
+            or not re.fullmatch(busy, check_lines[1])
             or check_lines[2] != "running || start"):
         raise GuardError("LoxPanel watchdog lock protocol is unsupported; stop LoxPanel in its own interface before backup.")
     return data_path + "/" + LOCK_NAME

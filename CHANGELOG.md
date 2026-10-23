@@ -14,6 +14,14 @@ validiert werden.
 
 ## [Unreleased] - Entwicklungsstand 1.2.4
 
+- LoxPanel 0.9.9 unterstützen: Die im offiziellen Installationspaket in eine
+  Hilfsfunktion ausgelagerte Watchdog-Sperrprüfung erkennen. Die vorhandene
+  Sperre vor dem Container-Stopp bis nach dem Wiederanlaufversuch halten;
+  kein Image-Update, keine Container-Neuanlage und kein zusätzlicher Modus.
+  Alte manuelle Stoppvarianten und bisherige Sperrvarianten bleiben unterstützt.
+  Erkennung und Regressionen verwenden das veröffentlichte Originalpaket,
+  nicht nur dessen Versionsnummer. Keine allgemeine Freigabe unbekannter
+  Controller und keine neue AudioServer4Home-Automatisierung.
 - LoxPanel-Kompatibilität anhand echter veröffentlichter Plugin-Pakete korrigieren:
   Die Versionen 0.3.0 bis 0.7.0 verwenden einen bewussten Stoppmarker statt der
   erst später hinzugefügten Watchdog-Sperre. Vorprüfung und Worker unterscheiden
