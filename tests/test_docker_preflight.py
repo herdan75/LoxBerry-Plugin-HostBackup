@@ -179,6 +179,23 @@ docker_preflight_status
                 self.assertTrue(check["required"])
                 self.assertTrue(check["ok"])
 
+    def test_required_unavailable_docker_blocks_start_and_worker_before_mutations(self):
+        for entrypoint in ("start_backup", "create_backup"):
+            with self.subTest(entrypoint=entrypoint):
+                script = runtime.PREFLIGHT_MOCKS + STUB + r'''
+launch_background() { echo forbidden > "$TEST_ROOT/launch-called"; return 99; }
+stop_backup_targets() { echo forbidden > "$TEST_ROOT/stop-called"; return 99; }
+run_hook() { echo forbidden > "$TEST_ROOT/hook-called"; return 99; }
+''' + f"\n{entrypoint} docker-error-{entrypoint}\n"
+                self.run_shell(script, (*runtime.PREFLIGHT_FUNCTIONS, entrypoint),
+                               {"NO_ESTIMATE": "true", "FREE_MB": "20000", "TEST_DOCKER_STATE": "unavailable",
+                                "TEST_TARGETS": "docker\tsonn-core"}, expected=17)
+                for action in ("launch", "stop", "hook", "copy"):
+                    self.assertFalse((self.root / (action + "-called")).exists())
+                self.assertFalse((self.root / ("target/docker-error-" + entrypoint)).exists())
+                task = json.loads((self.root / ("state/tasks/backup-docker-error-" + entrypoint + ".log.json")).read_text())
+                self.assertEqual(task["phase"], "preflight_error")
+
     def test_unavailable_optional_docker_cannot_downgrade_other_failures(self):
         cases = (
             ({"FREE_INODES": "0"}, "", "Freie Inodes"),
