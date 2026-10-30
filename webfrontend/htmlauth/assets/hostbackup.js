@@ -442,7 +442,7 @@
       var label = typeof check.name === 'string' ? check.name : 'Vorprüfung';
       var value = typeof check.value === 'string' || typeof check.value === 'number' ? String(check.value) : '';
       var detail = typeof check.details === 'string' ? check.details : '';
-      var line = el('p'), status = check.ok === false ? 'Nicht erfüllt' : check.ok === true ? 'OK' : 'Nicht bestätigt';
+      var line = el('p'), status = check.ok === false ? 'Nicht erfüllt' : check.applicable === false ? 'Nicht erforderlich' : check.ok === true ? 'OK' : check.informational === true ? 'Nicht geprüft' : 'Nicht bestätigt';
       line.append(el('strong', label + ': ' + status));
       if (detail || value) line.append(document.createTextNode(' – ' + (detail || value)));
       target.append(line);

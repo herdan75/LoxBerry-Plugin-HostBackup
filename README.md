@@ -1,6 +1,7 @@
 # LoxBerry Host Backup
 
-**Version 1.2.4 · Reguläres Release · 23.10.2026.**
+**Entwicklungsstand 1.2.5 · noch nicht veröffentlicht.**
+Stabiles Release: **1.2.4 vom 23.10.2026**.
 Dateibasiertes Host-Backup und Restore für LoxBerry, Docker und Linux-Dienste:
 lokale und portable NAS-Sicherungen, Vollbackups, platzsparende Sicherungsstände,
 Zeitplanung, Datenquellenauswahl und Integritätsprüfung.
@@ -9,6 +10,26 @@ Der reguläre Kanal und der Vorabversionskanal verwenden dasselbe stabile Paket
 **1.2.4** unter dem Tag `v1.2.4`. Es ist keine zusätzliche 1.2.4-beta-Installation
 erforderlich. [Download und Update](#installation) ·
 [Release Notes 1.2.4](docs/RELEASE-1.2.4.md) · [Versionsverlauf](CHANGELOG.md)
+
+## Auf develop: 1.2.5
+
+- **systemd-nspawn:** Vom Kernel erzeugte Mount-Root-Kennungen mit `//deleted`
+  werden als Identitäten erkannt. Benutzerpfade und Mount-Ziele bleiben streng
+  geprüft; ausgewählte verschwundene, ersetzte oder überdeckte Quellen bleiben Fehler.
+- **Docker-Vorprüfung:** Kein Docker, eine nicht erreichbare Docker-Engine und
+  eine erreichbare Engine ohne laufende Container werden getrennt angezeigt.
+  Nicht benötigtes Docker blockiert das Backup nicht. Sind Docker-Stopps
+  konfiguriert, muss die erforderliche Engine erreichbar sein.
+- Keine neuen Sicherungsmodi, keine Änderung gespeicherter Quellen oder Ziele.
+  Beide öffentlichen Updatekanäle bleiben bei **1.2.4**. Das Testpaket wird erst
+  nach erfolgreicher GitHub-Prüfung als Actions-Artefakt angeboten, nicht als Release.
+
+**Bei LoxBerry in einem Container:** Gesichert werden die dort sichtbaren und
+ausgewählten Quellen. Docker auf dem äusseren Host wird nicht automatisch
+erkannt, gestoppt oder mitgesichert. Die Korrektur öffnet keinen Docker-Socket
+und verbindet sich nicht selbständig mit einer anderen Engine.
+
+[Prüfumfang und Grenzen für 1.2.5](docs/DEVELOP-1.2.5-VALIDATION.md)
 
 ## Neu in 1.2.4
 

@@ -229,7 +229,7 @@ latest_complete_backup() { echo "${REFERENCE:-}"; }
 latest_sized_complete_backup() { [ "${NO_ESTIMATE:-false}" = true ] || echo "$TEST_ROOT/historical"; }
 backup_excludes() { echo /proc; }
 rsync() { echo forbidden-copy >> "$TEST_ROOT/copy-called"; return 99; }
-selected_docker_stop_count() { echo 0; }
+selected_stop_targets() { :; }
 mkdir -p "$TEST_ROOT/historical"
 printf '{"size_bytes":10737418240}\n' > "$TEST_ROOT/historical/manifest.json"
 mkdir -p "$LBP_BINDIR"
@@ -237,7 +237,7 @@ printf '#!/bin/sh\nexit 99\n' > "$LBP_BINDIR/restic"
 chmod +x "$LBP_BINDIR/restic"
 '''
 
-PREFLIGHT_FUNCTIONS = ("backup_inode_status", "baseline_space_requirement_mb", "preflight_backup")
+PREFLIGHT_FUNCTIONS = ("backup_inode_status", "baseline_space_requirement_mb", "docker_preflight_status", "preflight_backup")
 METADATA_PROFILES = ("native-strict", "network-compatible", "fake-super", "portable-archive")
 
 LOCK_MOCKS = r'''

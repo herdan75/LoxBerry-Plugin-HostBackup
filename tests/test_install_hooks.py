@@ -252,23 +252,22 @@ class InstallHookTests(unittest.TestCase):
                 self.assertIn(f"## [{tag[1:]}]", CHANGELOG)
         self.assertIn("prerelease: ${{ contains(github.ref_name, '-') }}", WORKFLOW)
 
-    def test_stable_package_version_matches_release_documentation(self) -> None:
+    def test_develop_package_keeps_unpublished_version_separate_from_live_feeds(self) -> None:
         plugin = configparser.ConfigParser()
         plugin.read_string(PLUGIN_CFG)
         version = plugin["PLUGIN"]["VERSION"]
-        self.assertEqual(version, "1.2.4")
-        notes = (ROOT / "docs" / f"RELEASE-{version}.md").read_text(encoding="utf-8")
+        self.assertEqual(version, "1.2.5")
+        notes = (ROOT / "docs" / f"DEVELOP-{version}-VALIDATION.md").read_text(encoding="utf-8")
         self.assertIn(version, notes)
-        self.assertIn(f"## [{version}]", CHANGELOG)
-        self.assertIn(f"LoxBerryHostBackup_{version}.zip", README)
-        self.assertIn(f"v{version}", notes)
-        self.assertNotIn(f"**Entwicklungsstand {version} · noch nicht veröffentlicht", README)
+        self.assertIn(f"Geplant: {version} (develop, noch nicht veröffentlicht)", CHANGELOG)
+        self.assertIn(f"**Entwicklungsstand {version} · noch nicht veröffentlicht", README)
+        self.assertNotIn(f"/releases/download/v{version}/", README)
         self.assertNotIn(f"VERSION={version}-beta", PLUGIN_CFG)
         self.assertNotIn(f"## [{version}-beta]", CHANGELOG)
         for source in (RELEASE_CFG, PRERELEASE_CFG):
             channel = configparser.ConfigParser()
             channel.read_string(source)
-            self.assertEqual(channel["AUTOUPDATE"]["VERSION"], version)
+            self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.4")
 
     def test_prerelease_channel_follows_same_stable_1_2_4_package(self) -> None:
         channel = configparser.ConfigParser()

@@ -53,11 +53,18 @@ def validate_mount_root(value, fstype):
     """Mount roots are identities, not necessarily paths in our namespace.
 
     Linux nsfs.show_path emits names such as net:[4026531992] for namespace
-    bind mounts. Keep these opaque identities (including the namespace ID)
-    without relaxing source paths or mount targets, or dropping the mount.
+    bind mounts. VFS dentry_path appends //deleted to unlinked bind roots,
+    including systemd-nspawn's temporary /proc file mounts. These are kernel
+    identities, not paths to open. Keep the marker and namespace ID for later
+    mount comparisons without relaxing source paths or mount targets.
     """
     if (fstype == "nsfs" and isinstance(value, str) and len(value) <= 4096
             and re.fullmatch(r"[a-z][a-z0-9_]*:\[[0-9]+\]", value)):
+        return value
+    if isinstance(value, str) and len(value) <= 4096 and value.endswith("//deleted"):
+        # Only the exact terminal kernel marker is special. Validate its
+        # absolute, non-root prefix strictly; never normalise away identity.
+        canonical_path(value[:-len("//deleted")])
         return value
     return canonical_path(value, allow_root=True)
 

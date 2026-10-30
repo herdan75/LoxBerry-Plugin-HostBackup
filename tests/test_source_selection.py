@@ -166,6 +166,72 @@ class SourceSelectionTests(unittest.TestCase):
         self.assertEqual(sources.validate_mount_root("/", "nsfs"), "/")
         self.assertEqual(sources.validate_mount_root("/bound/file", "ext4"), "/bound/file")
 
+    def test_deleted_bind_roots_keep_exact_kernel_identity_for_all_filesystems(self):
+        for fstype in ("tmpfs", "ext4", "btrfs", "overlay", "cifs", "nfs4"):
+            for identity in ("/.#proc-kmsg123//deleted", "/bound/My File [2]//deleted"):
+                encoded = identity.replace(" ", r"\040")
+                content = ("1 0 8:1 / / rw - ext4 /dev/root rw\n"
+                           f"2 1 0:2 {encoded} /proc/kmsg rw - {fstype} source rw\n")
+                with self.subTest(fstype=fstype, identity=identity), \
+                     patch.object(Path, "read_text", return_value=content):
+                    mounts = sources.read_mounts()
+                    self.assertEqual(mounts[1]["root"], identity)
+                    self.assertEqual(mounts[1]["path"], "/proc/kmsg")
+                    self.assertEqual(len(mounts), 2)
+
+    def test_deleted_marker_does_not_relax_sources_or_mount_targets(self):
+        identity = "/.#proc-kmsg123//deleted"
+        for enabled in (True, False):
+            with self.subTest(enabled=enabled), self.assertRaises(sources.SourceError):
+                plan(overrides={identity: enabled})
+        with self.assertRaises(sources.SourceError):
+            sources.canonical_path(identity, allow_root=True)
+        content = ("1 0 8:1 / / rw - ext4 /dev/root rw\n"
+                   f"2 1 0:2 {identity} {identity} rw - tmpfs tmpfs rw\n")
+        with patch.object(Path, "read_text", return_value=content), self.assertRaises(sources.SourceError):
+            sources.read_mounts()
+
+    def test_deleted_marker_only_accepts_strict_absolute_prefix_and_terminal_suffix(self):
+        invalid = ["//deleted", "///deleted", "relative//deleted", "//absolute//deleted",
+                   "/path/../other//deleted", "/path/./other//deleted", "/path//other//deleted",
+                   "/path///deleted", "/path//deleted/child", "/path//deleted/",
+                   "/path//deleted//deleted", "/path//deleted.extra", "net:[123]//deleted",
+                   "/path\x00//deleted", "/path\n//deleted", "/path\t//deleted", "/path\x7f//deleted",
+                   "/" + "a" * 4087 + "//deleted"]
+        for identity in invalid:
+            for fstype in ("tmpfs", "nsfs", "ext4"):
+                with self.subTest(identity=repr(identity[:60]), fstype=fstype), self.assertRaises(sources.SourceError):
+                    sources.validate_mount_root(identity, fstype)
+        maximum = "/" + "a" * (4096 - 1 - len("//deleted")) + "//deleted"
+        self.assertEqual(sources.validate_mount_root(maximum, "tmpfs"), maximum)
+
+    def test_nspawn_deleted_proc_roots_source_info_cli_local_and_legacy(self):
+        content = ("1 0 8:1 / / rw - ext4 /dev/root rw\n"
+                   "2 1 8:2 / /boot/firmware rw - vfat /dev/boot rw\n"
+                   "3 1 0:3 / /proc rw - proc proc rw\n"
+                   "4 3 0:4 /.#proc-sys-kernel-random-boot-id123//deleted /proc/sys/kernel/random/boot_id rw - tmpfs tmpfs rw\n"
+                   "5 3 0:4 /.#proc-kmsg456//deleted /proc/kmsg rw - tmpfs tmpfs rw\n"
+                   "6 1 0:6 / /media/smb rw - autofs systemd-1 rw\n"
+                   "7 6 0:7 / /media/smb/nas rw - cifs //nas/share rw\n"
+                   "8 1 0:8 net:[4026531992] /run/docker/netns/default rw - nsfs nsfs rw\n")
+        for policy in ("local", "legacy"):
+            output, errors = io.StringIO(), io.StringIO()
+            with self.subTest(policy=policy), patch.object(Path, "read_text", return_value=content), \
+                 patch.object(sources, "read_config", return_value={"source_selection": {"policy": policy, "overrides": {}}}), \
+                 patch.object(sources, "read_excludes", return_value=["/proc", "/run"]), \
+                 patch.object(sys, "stdout", output), patch.object(sys, "stderr", errors):
+                status = sources.main(["source-info", "--config", "/unused", "--excludes", "/unused"])
+            self.assertEqual(status, 0, errors.getvalue())
+            self.assertEqual(errors.getvalue(), "")
+            report = json.loads(output.getvalue())
+            self.assertEqual(report["status"], "ok")
+            volumes = {item["path"]: item for item in report["volumes"]}
+            self.assertTrue(volumes["/"]["included"])
+            self.assertTrue(volumes["/boot/firmware"]["included"])
+            self.assertFalse(volumes["/proc/kmsg"]["included"])
+            self.assertFalse(volumes["/proc/sys/kernel/random/boot_id"]["included"])
+            self.assertEqual(volumes["/media/smb/nas"]["included"], policy == "legacy")
+
     def test_invalid_or_rootless_mount_inventory_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             inventory = Path(tmp) / "mountinfo"
@@ -313,6 +379,99 @@ class FrozenMountVerificationTests(unittest.TestCase):
                     with self.subTest(layer=change_layer, identity=identity, fstype=fstype), \
                          patch.object(sources, "read_mounts", return_value=mounts), self.assertRaises(sources.SourceError):
                         sources.verify_report(path)
+
+    def test_deleted_root_frozen_roundtrip_and_excluded_proc_churn(self):
+        deleted = self.volume("/proc/kmsg", "41", "tmpfs", "/.#proc-kmsg123//deleted")
+        mounts = self.mounts + [deleted]
+        for policy in ("local", "legacy"):
+            with self.subTest(policy=policy):
+                selected = plan(policy=policy, mounts=mounts, excludes=["/proc"])
+                saved = next(item for item in sources.verification_report(selected)["mount_identity"]
+                             if item["path"] == "/proc/kmsg")
+                self.assertEqual(saved["root"], deleted["root"])
+                self.verify(selected, mounts)
+                self.verify(selected, self.mounts)
+                self.verify(selected, self.mounts + [{**deleted, "root": "/.#proc-kmsg456//deleted"}])
+
+    def test_deleted_selected_root_identity_change_is_not_normalised_or_ignored(self):
+        deleted = self.volume("/selected/file", "41", "ext4", "/backing/file//deleted")
+        selected = plan(mounts=self.mounts + [deleted])
+        self.verify(selected, self.mounts + [deleted])
+        for root in ("/backing/file", "/backing/other//deleted"):
+            with self.subTest(root=root), self.assertRaisesRegex(sources.SourceError, "/selected/file.*ersetzt/geaendert"):
+                self.verify(selected, self.mounts + [{**deleted, "root": root}])
+        with self.assertRaisesRegex(sources.SourceError, "/selected/file.*neu eingebunden"):
+            self.verify(plan(mounts=self.mounts), self.mounts + [deleted])
+
+    def test_deleted_stack_roots_remain_distinct_and_selected_stack_is_rejected(self):
+        for fstype, path, excludes in (("tmpfs", "/proc/kmsg", ["/proc"]), ("ext4", "/selected", [])):
+            content = ("1 0 8:1 / / rw - ext4 /dev/root rw\n"
+                       f"2 1 0:2 /backing/first//deleted {path} rw - {fstype} source rw\n"
+                       f"3 2 0:2 /backing/second//deleted {path} rw - {fstype} source rw\n")
+            with self.subTest(fstype=fstype), patch.object(Path, "read_text", return_value=content):
+                mounts = sources.read_mounts()
+            self.assertEqual([item["root"] for item in mounts[1]["stack"]],
+                             ["/backing/first//deleted", "/backing/second//deleted"])
+            selected = plan(mounts=mounts, excludes=excludes)
+            if excludes:
+                self.verify(selected, mounts)
+                self.verify(selected, mounts[:1])
+            else:
+                self.assertEqual(selected.report()["status"], "error")
+                with self.assertRaisesRegex(sources.SourceError, "Mehrere Einbindungen"):
+                    sources.verify_mounts(selected, mounts)
+
+    def test_deleted_automount_data_root_roundtrip_keeps_parent_chain_and_identity(self):
+        content = ("1 0 8:1 / / rw - ext4 /dev/root rw\n"
+                   "20 1 0:20 / /data rw - autofs systemd-1 rw\n"
+                   "21 20 8:2 /backing/data//deleted /data rw - ext4 /dev/data rw\n")
+        with patch.object(Path, "read_text", return_value=content):
+            mounts = sources.read_mounts()
+        selected = plan(mounts=mounts)
+        self.assertEqual(selected.report()["status"], "ok")
+        self.assertTrue(selected.included("/data/file"))
+        self.assertEqual(mounts[1]["root"], "/backing/data//deleted")
+        self.assertEqual(mounts[1]["parent_id"], "20")
+        self.verify(selected, mounts)
+        changed = json.loads(json.dumps(mounts))
+        changed[1]["root"] = changed[1]["stack"][1]["root"] = "/backing/other//deleted"
+        with self.assertRaisesRegex(sources.SourceError, "/data.*ersetzt/geaendert"):
+            self.verify(selected, changed)
+
+    def test_invalid_deleted_roots_in_frozen_items_and_stack_layers_are_rejected(self):
+        deleted = self.volume("/proc/kmsg", "41", "tmpfs", "/.#proc-kmsg123//deleted")
+        deleted["stack"] = [{key: deleted[key] for key in ("fstype", "device", "mount_id", "root")},
+                            {"fstype": "tmpfs", "device": "8:42", "mount_id": "42", "root": "/.#proc-kmsg456//deleted"}]
+        mounts = self.mounts + [deleted]
+        original = sources.verification_report(plan(mounts=mounts, excludes=["/proc"]))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "report.json"
+            for change_layer in (False, True):
+                for identity in ("/bad/../path//deleted", "/bad//path//deleted", "/path//deleted/child",
+                                 "relative//deleted", "//deleted", "///deleted", "/bad\x00//deleted"):
+                    report = json.loads(json.dumps(original))
+                    item = next(item for item in report["mount_identity"] if item["path"] == "/proc/kmsg")
+                    target = item["stack"][0] if change_layer else item
+                    target["root"] = identity
+                    path.write_text(json.dumps(report))
+                    with self.subTest(layer=change_layer, identity=repr(identity)), \
+                         patch.object(sources, "read_mounts", return_value=mounts), self.assertRaises(sources.SourceError):
+                        sources.verify_report(path)
+
+    def test_deleted_marker_in_frozen_mountpoint_or_source_override_is_rejected(self):
+        original = sources.verification_report(plan(mounts=self.mounts))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "report.json"
+            for field in ("mountpoint", "override"):
+                report = json.loads(json.dumps(original))
+                if field == "mountpoint":
+                    report["mount_identity"][1]["path"] = "/boot//deleted"
+                else:
+                    report["selection"]["overrides"]["/boot//deleted"] = False
+                path.write_text(json.dumps(report))
+                with self.subTest(field=field), patch.object(sources, "read_mounts", return_value=self.mounts), \
+                     self.assertRaises(sources.SourceError):
+                    sources.verify_report(path)
 
     def test_new_network_mount_outside_old_excluded_boundary_shadows_selected_tree(self):
         selected = plan(mounts=self.mounts)

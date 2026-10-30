@@ -28,7 +28,7 @@ ENABLED = bool(TARGET) and sys.platform.startswith("linux") and os.geteuid() == 
 FUNCTIONS = (
     "json_escape", "current_mount_value", "metadata_mode", "portable_snapshot",
     "portable_helper", "metadata_capability_probe", "require_root_permission_ack",
-    "checked_source_info", "baseline_space_requirement_mb", "backup_inode_status", "watchdog_guard_probe", "preflight_backup",
+    "checked_source_info", "baseline_space_requirement_mb", "backup_inode_status", "docker_preflight_status", "watchdog_guard_probe", "preflight_backup",
 )
 
 
@@ -65,8 +65,9 @@ source_info() { printf '%s\n' '{"status":"ok","selection":{"policy":"local","ove
 latest_complete_backup() { :; }
 latest_sized_complete_backup() { :; }
 backup_excludes() { printf '%s\n' /proc /sys /dev; }
-selected_docker_stop_count() { echo 0; }
+selected_stop_targets() { :; }
 docker() { [ "$1" = ps ] || { echo 'Forbidden host Docker operation' >&2; exit 97; }; }
+timeout() { [ "$1:$2:$3:$4" = '-k:2:10:docker' ] || exit 97; shift 3; "$@"; }
 systemctl() { echo 'Forbidden host service operation' >&2; exit 97; }
 '''
 

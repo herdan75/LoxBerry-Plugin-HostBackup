@@ -12,7 +12,24 @@ validiert werden.
 
 ## [Unreleased]
 
-Noch keine weiteren Änderungen.
+### Geplant: 1.2.5 (develop, noch nicht veröffentlicht)
+
+- Quellenprüfung in systemd-nspawn korrigieren: Der vom Kernel angehängte
+  terminale Marker `//deleted` wird nur in Mount-Root-Identitäten akzeptiert.
+  Die vollständige Kennung bleibt für Vergleiche erhalten. Benutzerpfade,
+  Mount-Ziele, Namespace-Kennungen und der Schutz ausgewählter Quellen bleiben
+  geprüft; technische Mounts werden nicht einfach aus dem Inventar entfernt.
+- Docker-Vorprüfung zwischen fehlendem Client, unerreichbarer Engine und
+  erreichbarer Engine mit null laufenden Containern unterscheiden. Abfragen
+  zeitlich begrenzen und Fehler nicht als bekannte Anzahl null ausgeben.
+  Ohne erforderlichen Docker-Stopp kein falscher Startblock; konfigurierte
+  Docker-Stopps benötigen weiterhin eine erreichbare Engine. Kein automatischer
+  Zugriff auf Docker ausserhalb des LoxBerry-Containers.
+- Regressionen für Mount-Identitäten und Docker-Prüfzustände ergänzen; bestehende
+  NAS-, Quellen-, Dienstestopp-, Recovery-, Watchdog-, UI- und Sicherheitstests
+  bleiben Teil der vollständigen GitHub-Prüfung.
+- Nur develop-Testpaket 1.2.5. Release und beide öffentlichen Updatekanäle bleiben
+  unverändert bei 1.2.4; kein neues veröffentlichtes Release oder Pre-Release.
 
 ## [1.2.4] - 2026-10-23
 

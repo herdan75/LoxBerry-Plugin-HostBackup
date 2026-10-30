@@ -660,6 +660,27 @@ def mount_worker(scenario):
 
         excluded = scenario.startswith("excluded-")
         mount(backing, target)
+        deleted_scenarios = {"deleted-root-excluded-churn", "deleted-root-selected-unchanged",
+                             "selected-root-unlinked-after-freeze"}
+        if scenario in deleted_scenarios:
+            deleted_source = replacement / "content"
+            deleted_target = target / "content"
+            if scenario == "deleted-root-excluded-churn":
+                # Reproduce nspawn's real tmpfs file-bind then unlink pattern,
+                # but only below this private disposable fixture, never /proc.
+                tmpfs = fixture / "runtime"
+                tmpfs.mkdir()
+                command(["mount", "-t", "tmpfs", "-o", "size=1m", "hostbackup-fixture", tmpfs])
+                mounted.append(tmpfs)
+                deleted_source = tmpfs / ".#proc-kmsg-fixture"
+                deleted_source.write_bytes(b"runtime handle\n")
+                deleted_target = target / "runtime-handle"
+                deleted_target.write_bytes(b"")
+            mount(deleted_source, deleted_target)
+            bound = next(item for item in sources.read_mounts() if item["path"] == str(deleted_target))
+            expected_deleted_root = bound["root"] + "//deleted"
+            if scenario != "selected-root-unlinked-after-freeze":
+                deleted_source.unlink()
         namespace_target = target / "namespace-handle"
         if scenario == "nsfs-excluded-churn":
             namespace_target.write_bytes(b"")
@@ -689,6 +710,24 @@ def mount_worker(scenario):
         plan = sources.SourcePlan(selection, initial, excludes=excludes)
         if plan.errors:
             raise AssertionError(plan.errors)
+        if scenario in deleted_scenarios:
+            bound = next(item for item in initial if item["path"] == str(deleted_target))
+            if scenario != "selected-root-unlinked-after-freeze" and bound["root"] != expected_deleted_root:
+                raise AssertionError("Kernel deleted root marker was lost: " + str(bound))
+            if scenario == "deleted-root-excluded-churn":
+                if bound["fstype"] != "tmpfs" or plan.included(str(deleted_target)):
+                    raise AssertionError("Unlinked runtime bind must remain an excluded tmpfs mount")
+            else:
+                if not plan.included(str(deleted_target)):
+                    raise AssertionError("An unlinked backing name must not silently omit the selected bind")
+                if deleted_target.read_text() != "different backing data\n":
+                    raise AssertionError("Selected bound file must remain readable after source unlink")
+                # Walk only the fixture. A deleted root identity must not be
+                # mistaken for a deleted, inaccessible selected mountpoint.
+                walk_plan = sources.SourcePlan({"policy": "local", "overrides": {}},
+                                              [{**info, "path": "/"}, {**bound, "path": "/content"}])
+                if "./content" not in list(sources.enumerate_files(walk_plan, root=target)):
+                    raise AssertionError("Selected deleted-root bind was omitted from enumeration")
         if scenario == "nsfs-excluded-churn":
             namespace = next(item for item in initial if item["path"] == str(namespace_target))
             if namespace["fstype"] != "nsfs" or namespace["kind"] != "system":
@@ -712,6 +751,11 @@ def mount_worker(scenario):
                 raise AssertionError("Directory-only exclude silently removed a real bound regular file")
         report = fixture / "selection.json"
         report.write_text(json.dumps(sources.verification_report(plan)))
+        if scenario in deleted_scenarios:
+            saved = next(item for item in json.loads(report.read_text())["mount_identity"]
+                         if item["path"] == str(deleted_target))
+            if saved["root"] != bound["root"] or saved["mount_id"] != bound["mount_id"]:
+                raise AssertionError("Frozen report lost the exact bound-file root identity")
         if scenario == "nsfs-excluded-churn":
             saved = next(item for item in json.loads(report.read_text())["mount_identity"]
                          if item["path"] == str(namespace_target))
@@ -721,6 +765,21 @@ def mount_worker(scenario):
 
         if scenario in {"excluded-unmount", "selected-unmount"}:
             unmount(target)
+        elif scenario == "deleted-root-excluded-churn":
+            unmount(deleted_target)
+            sources.verify_report(report)
+            deleted_source = deleted_source.with_name(".#proc-kmsg-replacement")
+            deleted_source.write_bytes(b"new runtime handle\n")
+            mount(deleted_source, deleted_target)
+            deleted_source.unlink()
+            changed = next(item for item in sources.read_mounts() if item["path"] == str(deleted_target))
+            if changed["root"] != "/.#proc-kmsg-replacement//deleted" or changed["root"] == bound["root"]:
+                raise AssertionError("Excluded deleted-bind fixture did not change its kernel root identity")
+        elif scenario == "selected-root-unlinked-after-freeze":
+            deleted_source.unlink()
+            changed = next(item for item in sources.read_mounts() if item["path"] == str(deleted_target))
+            if changed["root"] != expected_deleted_root or changed["mount_id"] != bound["mount_id"]:
+                raise AssertionError("Unlink must change root identity without changing mount ID")
         elif scenario == "selected-replacement":
             unmount(target)
             mount(replacement, target)
@@ -752,10 +811,12 @@ def mount_worker(scenario):
             if not propagated:
                 raise AssertionError("Fixture did not produce real shared-peer mount propagation")
             mounted.append(nested)
-        elif scenario not in {"selected-unchanged", "selected-existing-file-directory-exclude"}:
+        elif scenario not in {"selected-unchanged", "selected-existing-file-directory-exclude",
+                              "deleted-root-selected-unchanged"}:
             raise AssertionError("Unknown mount test scenario")
 
-        if excluded or scenario in {"selected-unchanged", "selected-existing-file-directory-exclude", "nsfs-excluded-churn"}:
+        if excluded or scenario in {"selected-unchanged", "selected-existing-file-directory-exclude", "nsfs-excluded-churn",
+                                    "deleted-root-excluded-churn", "deleted-root-selected-unchanged"}:
             sources.verify_report(report)
             if scenario == "nsfs-excluded-churn" and plan.included(str(namespace_target)):
                 raise AssertionError("Excluded namespace handle became part of the frozen selection")
@@ -836,6 +897,15 @@ class LiveMountScopeIntegrationTests(OptInLinuxCase):
 
     def test_real_nsfs_mount_shadowing_selected_file_is_rejected(self):
         self.scenario("selected-nsfs-file-shadow")
+
+    def test_real_unlinked_tmpfs_bind_root_roundtrip_and_excluded_churn(self):
+        self.scenario("deleted-root-excluded-churn")
+
+    def test_real_deleted_bind_root_stays_selected_and_readable(self):
+        self.scenario("deleted-root-selected-unchanged")
+
+    def test_real_selected_bind_unlinked_after_freeze_is_detected(self):
+        self.scenario("selected-root-unlinked-after-freeze")
 
 
 class LiveRamlogCopyIntegrationTests(OptInLinuxCase):

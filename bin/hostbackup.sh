@@ -2760,10 +2760,6 @@ backup_cleanup_on_exit() {
   return "$cleanup_failed"
 }
 
-selected_docker_stop_count() {
-  selected_stop_targets | awk '$1 == "docker" { count++ } END { print count + 0 }'
-}
-
 calculate_size() {
   local path="$1"
   du -sB1 "$path" 2>/dev/null | awk '{print $1}' || printf '0'
@@ -3019,8 +3015,43 @@ else:
 '
 }
 
+docker_preflight_status() {
+  # The CLI can exist without a reachable daemon (notably in nspawn guests).
+  # Never turn a failed/unfinished query into a trustworthy running=0 count.
+  # Do not change Docker's configured endpoint or discover a host daemon.
+  local output result=0 count=0 identity
+  if ! command -v docker >/dev/null 2>&1; then
+    printf 'not-installed -1\n'
+    return 0
+  fi
+  if ! command -v timeout >/dev/null 2>&1; then
+    printf 'probe-unavailable -1\n'
+    return 0
+  fi
+  output="$(LC_ALL=C timeout -k 2 10 docker ps --no-trunc -q 2>/dev/null)" || result=$?
+  if [ "$result" -ne 0 ]; then
+    case "$result" in
+      124|137) printf 'timeout -1\n' ;;
+      *) printf 'unavailable -1\n' ;;
+    esac
+    return 0
+  fi
+  if [ -n "$output" ]; then
+    while IFS= read -r identity; do
+      if [[ ! "$identity" =~ ^[0-9a-f]{64}$ ]]; then
+        printf 'invalid-response -1\n'
+        return 0
+      fi
+      count=$((count + 1))
+    done <<< "$output"
+  fi
+  printf 'available %s\n' "$count"
+}
+
 preflight_backup() {
-  local root available_mb docker_available docker_running excludes_count status warnings_json notices_json checks_json rsync_available target_writable backup_mode fs_type mode probe_ok target_ok target_message copy_tool_name
+  local root available_mb docker_running excludes_count status warnings_json notices_json checks_json rsync_available target_writable backup_mode fs_type mode probe_ok target_ok target_message copy_tool_name
+  local docker_state docker_required=false docker_ok=true docker_applicable=true docker_informational=false docker_message="" docker_value="" docker_targets docker_type
+  local docker_selection_ok=true docker_selected=0
   local full_baseline_required baseline_estimate_mb baseline_required_mb baseline_space_ok baseline_reference estimate_backup estimate_bytes baseline_check_value available_inodes
   local total_inodes inode_result inode_status inode_check_value inode_space_ok=true inode_informational=false
   local -a notices=()
@@ -3125,11 +3156,47 @@ preflight_backup() {
     command -v rsync >/dev/null 2>&1 && rsync_available=true
   fi
   target_writable=$target_ok
-  docker_available=false
-  docker_running=0
-  if command -v docker >/dev/null 2>&1; then
-    docker_available=true
-    docker_running="$(docker ps -q 2>/dev/null | wc -l | tr -d ' ')"
+  # Match the worker: an explicit selection replaces the legacy stop-all flag,
+  # even when that explicit selection contains only native systemd services.
+  if docker_targets="$(selected_stop_targets 2>/dev/null)"; then
+    while IFS=$'\t' read -r docker_type _; do
+      if [ "$docker_type" = docker ]; then docker_selected=$((docker_selected + 1)); fi
+    done <<< "$docker_targets"
+    if [ "$docker_selected" -gt 0 ] || { [ -z "$docker_targets" ] && [ "$(json_get_bool stop_docker_before_backup)" = true ]; }; then
+      docker_required=true
+    fi
+  else
+    docker_selection_ok=false
+    docker_required=true
+  fi
+  read -r docker_state docker_running < <(docker_preflight_status)
+  if [ "$docker_selection_ok" != true ]; then
+    docker_ok=false
+    docker_message="Gespeicherte Dienst-/Container-Auswahl konnte nicht geprueft werden. Bitte die Stop-Auswahl pruefen und speichern."
+  elif [ "$docker_state" = available ]; then
+    docker_value="running=$docker_running"
+  else
+    docker_value="running=unbekannt"
+    case "$docker_state" in
+      not-installed) docker_message="Docker ist in dieser LoxBerry-Umgebung nicht installiert." ;;
+      timeout) docker_message="Die Docker-Abfrage hat ihr Zeitlimit erreicht; der Container-Status ist unbekannt." ;;
+      probe-unavailable) docker_message="Docker kann ohne das Zeitlimit-Werkzeug nicht sicher abgefragt werden; der Container-Status ist unbekannt." ;;
+      invalid-response) docker_message="Docker hat keine auswertbare Container-Liste geliefert; der Container-Status ist unbekannt." ;;
+      *) docker_message="Der konfigurierte Docker-Daemon ist nicht erreichbar oder der Zugriff wurde verweigert; der Container-Status ist unbekannt." ;;
+    esac
+    if [ "$docker_required" = true ]; then
+      docker_ok=false
+      docker_message+=" Docker-Stopps sind konfiguriert und koennen so nicht sicher ausgefuehrt werden."
+    else
+      docker_informational=true
+      docker_message+=" Keine Docker-Stopps konfiguriert. Docker auf einem separaten Host wird nicht automatisch erfasst."
+      if [ "$docker_state" = not-installed ]; then
+        docker_applicable=false
+        docker_value="nicht erforderlich"
+      else
+        docker_ok=null
+      fi
+    fi
   fi
   excludes_count="$(backup_excludes "$root" | wc -l | tr -d ' ')"
   watchdog_json="$(watchdog_guard_probe)" || watchdog_json='{"ok":false,"applicable":true,"mode":"error","details":"Die Docker-Watchdog-Pruefung ist fehlgeschlagen. Bitte erneut pruefen."}'
@@ -3166,9 +3233,16 @@ preflight_backup() {
   elif [ "$available_mb" -lt 1024 ]; then
     status="warning"
     warnings_json='["Backup-Ziel hat weniger als 1 GB freien Speicher."]'
-  elif [ "$docker_running" -gt 0 ] && [ "$(json_get_bool stop_docker_before_backup)" != "true" ] && [ "$(selected_docker_stop_count)" -eq 0 ]; then
+  elif [ "$docker_running" -gt 0 ] && [ "$docker_required" != true ]; then
     status="warning"
     warnings_json='["Docker-Container laufen. Fuer konsistente Datenbanken ggf. einzelne Container in den Stop-Zielen auswaehlen oder Hooks konfigurieren."]'
+  fi
+  if [ "$docker_ok" = false ]; then
+    status="error"
+    warnings_json="$(printf '%s' "$warnings_json" | perl -MJSON::PP -e 'local $/; my $d=decode_json(<STDIN>); push @$d, $ARGV[0]; print encode_json($d);' "$docker_message")"
+  elif [ "$docker_ok" = null ]; then
+    [ "$status" != ok ] || status="warning"
+    warnings_json="$(printf '%s' "$warnings_json" | perl -MJSON::PP -e 'local $/; my $d=decode_json(<STDIN>); push @$d, $ARGV[0]; print encode_json($d);' "$docker_message")"
   fi
   # A valid target/metadata probe cannot compensate for an unsafe service pause.
   # Keep other failures, but always expose this blocking cause in the checklist.
@@ -3192,7 +3266,7 @@ preflight_backup() {
   {"name":"Freier Speicher MB","ok":$([ "$available_mb" -ge 1024 ] && echo true || echo false),"value":"$available_mb"},
   {"name":"Speicher fuer Snapshot-Basiskopie","ok":$baseline_space_ok,"value":$(json_escape "$baseline_check_value")},
   {"name":"Freie Inodes","ok":$inode_space_ok,"value":$(json_escape "$inode_check_value"),"informational":$inode_informational},
-  {"name":"Docker verfuegbar","ok":$docker_available,"value":"running=$docker_running"},
+  {"name":"Docker im LoxBerry-Kontext","ok":$docker_ok,"value":$(json_escape "$docker_value"),"details":$(json_escape "$docker_message"),"state":$(json_escape "$docker_state"),"required":$docker_required,"applicable":$docker_applicable,"informational":$docker_informational},
   {"name":"Docker-Watchdog-Koordination","ok":$watchdog_ok,"value":$(json_escape "$watchdog_mode"),"details":$(json_escape "$watchdog_message"),"informational":$([ "$watchdog_applicable" = false ] && echo true || echo false)},
   {"name":"Exclude-Regeln","ok":true,"value":"$excludes_count"}
 ]

@@ -189,6 +189,12 @@ const runtimeSettingPosts=[];
 const startedTasks={backup:'backup-fixture.log','start-export':'export-fixture.log',import:'import-fixture.log','restore-backup':'restore-fixture.log','restore-files':'restore-files-fixture.log','verify-backup':'verify-fixture.log'};
 let lastSavedSources, failSources=false, failBackupMetadata=false;
 let watchdogPreviewMode=null;
+let dockerPreviewMode=null;
+function dockerPreflightFixture() {
+  const state=dockerPreviewMode,blocked=state==='required-unavailable';
+  const check={name:'Docker im LoxBerry-Kontext',ok:state==='unavailable'?null:!blocked,applicable:state!=='absent',informational:state==='absent'||state==='unavailable',required:blocked,value:state==='available'?'running=0':state==='absent'?'nicht erforderlich':'running=unbekannt',details:state==='available'?'':state==='absent'?'Docker ist in dieser LoxBerry-Umgebung nicht installiert. Keine Docker-Stopps konfiguriert.':blocked?'Docker-Stopps sind konfiguriert und koennen so nicht sicher ausgefuehrt werden.':'Die Docker-Abfrage hat ihr Zeitlimit erreicht; der Container-Status ist unbekannt. <img src=x onerror="window.unsafeDockerProbe=true">'};
+  return {status:blocked?'error':state==='unavailable'?'warning':'ok',checks:[check],warnings:state==='unavailable'||blocked?[check.details]:[],notices:[]};
+}
 function watchdogPreflightFixture() {
   const blocked=watchdogPreviewMode==='blocked';
   return {status:blocked?'error':'ok',checks:[{name:'Docker-Watchdog-Koordination',ok:!blocked,value:blocked?'error':'manual-stop',details:blocked?'LoxPanel vor der Vorprüfung in seiner eigenen Oberfläche stoppen (nicht nur Docker). Nach dem Backup dort wieder starten. <img src=x onerror="window.unsafeWatchdog=true">':'LoxPanel ist bewusst gestoppt. Die Stopppause bleibt unverändert; nach dem Backup dort wieder starten.'}],notices:[]};
@@ -261,6 +267,7 @@ const server=http.createServer(async(req,res)=>{
         maintenancePreviews.push({...savedMaintenance});return json(res,{ok:true,data:{applied:false,keep:[{backup_id:'saved-policy-'+savedMaintenance.keep_daily,reasons:['Gespeicherte Regel']}],delete:[]},message:'Vorschau ohne Löschung erstellt'});
       }
       if(action==='backup'&&watchdogPreviewMode==='blocked')return json(res,{ok:false,error:'Backup nicht gestartet: Die Vorprüfung ist fehlgeschlagen.',preflight:watchdogPreflightFixture()},400);
+      if(action==='backup'&&dockerPreviewMode==='required-unavailable')return json(res,{ok:false,error:'Backup nicht gestartet: Docker-Stopps koennen nicht geprueft werden.',preflight:dockerPreflightFixture()},400);
       if(action==='backup'&&failBackupMetadata)return json(res,{ok:false,error:'Backup nicht gestartet: Metadatenprüfung fehlgeschlagen.',preflight:{status:'error',checks:[{name:'Metadaten-Modus',ok:false,value:'network-compatible'}],metadata_probe:probe},metadata_probe:probe},400);
       if(action==='record-restore-test') {
         assert.equal(params.get('backup_id'),'fixture-ok');assert.equal(params.get('result'),'passed');assert.match(params.get('tested_at'),/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
@@ -305,7 +312,7 @@ const server=http.createServer(async(req,res)=>{
       if(mode==='no-targets'){res.end(emptyStopRows);return;}
       await new Promise(resolve=>setTimeout(resolve,mode==='slow'?22000:100));res.end(fragment);return;
     }
-    if(action==='backup-preview')return json(res,{saved_config:true,backup_mode:'snapshot',metadata_mode:'network-compatible',full_baseline_required:true,excludes:['/fixture/backup/***'],source_volumes:panelFlowFixture?Array.from({length:90},(_,i)=>({path:'/fixture/long-source-'+i,included:true,reason:'Lange Vorprüfung – reine Browser-Testdaten'})):[{path:'/',included:true,reason:'System'}],available_mb:20000,baseline_estimate_mb:3000,...(watchdogPreviewMode?{preflight:watchdogPreflightFixture()}:{metadata_probe:probe})});
+    if(action==='backup-preview')return json(res,{saved_config:true,backup_mode:'snapshot',metadata_mode:'network-compatible',full_baseline_required:true,excludes:['/fixture/backup/***'],source_volumes:panelFlowFixture?Array.from({length:90},(_,i)=>({path:'/fixture/long-source-'+i,included:true,reason:'Lange Vorprüfung – reine Browser-Testdaten'})):[{path:'/',included:true,reason:'System'}],available_mb:20000,baseline_estimate_mb:3000,...(dockerPreviewMode?{preflight:dockerPreflightFixture()}:watchdogPreviewMode?{preflight:watchdogPreflightFixture()}:{metadata_probe:probe})});
     if(action==='verification-report'){
       if(verificationMode==='missing')return json(res,{backup_id:'fixture-ok',status:'not_checked',content_verified:false,report_available:false,message:'Noch keine Dateiinhaltsprüfung vorhanden.'});
       if(['invalid','unreadable'].includes(verificationMode))return json(res,{backup_id:'fixture-ok',status:'error',content_verified:false,report_available:false,message:'Prüfbericht kann nicht gelesen werden.',report_error:verificationMode==='invalid'?'Invalid JSON':'Permission denied'});
@@ -351,6 +358,41 @@ async function configurationControls(page) {
   try { await page.locator('#stop-targets-list [name="stop_targets_loaded"]').waitFor({state:'attached'}); }
   catch (error) { throw new Error(error.message+'; stop-target state: '+JSON.stringify(await page.evaluate(()=>({status:document.querySelector('#stop-targets-status')?.textContent,list:document.querySelector('#stop-targets-list')?.innerHTML,saved:document.querySelector('#hostbackup-app')?.dataset.draftStops})))); }
   return page.evaluate(()=>Array.from(document.getElementById('settings-save-form').elements).filter(node=>node.name&&node.name!=='csrf_token').map(node=>[node.name,node.value,node.checked||false]));
+}
+async function checkDockerPreflight(browser,base) {
+  const previousFinished=taskFinished;taskFinished=true;
+  try {
+    for(const [view,width,height] of [['desktop',1440,1100],['mobile',390,844]]) {
+      const page=await browser.newPage({viewport:{width,height}});page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
+      try {
+        await page.goto(base);await configurationControls(page);
+        await page.locator('#overview-details').evaluate(node=>node.open=true);
+        const result=page.locator('#operation-result'),postsBefore=postCount;
+        for(const [state,label] of [['absent','Nicht erforderlich'],['available','OK'],['unavailable','Nicht geprüft'],['required-unavailable','Nicht erfüllt']]) {
+          dockerPreviewMode=state;
+          await page.locator('[data-load-action="backup-preview"]').click();
+          await page.waitForFunction(expected=>document.querySelector('#operation-result').textContent.includes('Docker im LoxBerry-Kontext: '+expected),label);
+          const text=await result.innerText();
+          if(state==='available')assert.match(text,/running=0/);
+          else assert.doesNotMatch(text,/running=0/,'Unknown or absent Docker must not claim a known zero count');
+          if(state==='required-unavailable')assert.match(text,/Backup noch nicht möglich/);
+          else assert.doesNotMatch(text,/Backup noch nicht möglich|Nicht erfüllt/);
+          assert.equal(await result.locator('img').count(),0);assert.equal(await page.evaluate(()=>window.unsafeDockerProbe),undefined);
+          assert.equal(postCount,postsBefore,'Read-only Docker preview never starts a backup');
+          const layout=await result.evaluate(node=>({right:node.getBoundingClientRect().right,overflow:node.scrollWidth-node.clientWidth}));
+          assert.ok(layout.right<=width+1&&layout.overflow<=1,JSON.stringify(layout));
+          await page.locator('[data-close-view="operation-result"]').click();await result.waitFor({state:'hidden'});
+        }
+        await page.locator('.topbar-actions button[type="submit"]').click();
+        await page.waitForFunction(()=>document.querySelector('#operation-result').textContent.includes('Backup nicht gestartet'));
+        assert.match(await result.innerText(),/Docker im LoxBerry-Kontext: Nicht erfüllt/);
+        assert.equal(await page.locator('.preflight-confirm').count(),0,'Required Docker stop failure cannot be overridden as a warning');
+        assert.equal(new URL(page.url()).searchParams.has('active_task'),false);
+        await page.locator('[data-close-view="operation-result"]').click();await result.waitFor({state:'hidden'});
+        receipts.push(view+': Docker absent is not required, reachable zero is OK, unknown is not checked, required unavailable blocks without override; all previews close and render safe text');
+      } finally {dockerPreviewMode=null;await page.close();}
+    }
+  } finally {dockerPreviewMode=null;taskFinished=previousFinished;}
 }
 async function checkWatchdogPreflight(browser,base) {
   const previousFinished=taskFinished;
@@ -1509,6 +1551,7 @@ async function checkActionHelp(page,key,viewportName,expectedTopics=[],saveScree
     await checkRuntimeLogs(browser,base);
     await checkContainerIssues(browser,base);
     await checkWatchdogPreflight(browser,base);
+    await checkDockerPreflight(browser,base);
     assert.deepEqual(errors,[]);
     const result={status:'passed',tests:receipts,artifacts:temp,renderer:'actual CGI with mocked backend; read-only mount discovery',browser:await browser.version()};
     fs.writeFileSync(path.join(temp,'receipt.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));
