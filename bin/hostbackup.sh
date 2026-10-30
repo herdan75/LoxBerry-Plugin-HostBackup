@@ -3178,7 +3178,7 @@ preflight_backup() {
   else
     docker_value="running=unbekannt"
     case "$docker_state" in
-      not-installed) docker_message="Docker ist in dieser LoxBerry-Umgebung nicht installiert." ;;
+      not-installed) docker_message="Das Docker-Kommando ist in dieser LoxBerry-Umgebung nicht verfuegbar." ;;
       timeout) docker_message="Die Docker-Abfrage hat ihr Zeitlimit erreicht; der Container-Status ist unbekannt." ;;
       probe-unavailable) docker_message="Docker kann ohne das Zeitlimit-Werkzeug nicht sicher abgefragt werden; der Container-Status ist unbekannt." ;;
       invalid-response) docker_message="Docker hat keine auswertbare Container-Liste geliefert; der Container-Status ist unbekannt." ;;

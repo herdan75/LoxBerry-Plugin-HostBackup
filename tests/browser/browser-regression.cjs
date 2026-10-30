@@ -192,7 +192,7 @@ let watchdogPreviewMode=null;
 let dockerPreviewMode=null;
 function dockerPreflightFixture() {
   const state=dockerPreviewMode,blocked=state==='required-unavailable';
-  const check={name:'Docker im LoxBerry-Kontext',ok:state==='unavailable'?null:!blocked,applicable:state!=='absent',informational:state==='absent'||state==='unavailable',required:blocked,value:state==='available'?'running=0':state==='absent'?'nicht erforderlich':'running=unbekannt',details:state==='available'?'':state==='absent'?'Docker ist in dieser LoxBerry-Umgebung nicht installiert. Keine Docker-Stopps konfiguriert.':blocked?'Docker-Stopps sind konfiguriert und koennen so nicht sicher ausgefuehrt werden.':'Die Docker-Abfrage hat ihr Zeitlimit erreicht; der Container-Status ist unbekannt. <img src=x onerror="window.unsafeDockerProbe=true">'};
+  const check={name:'Docker im LoxBerry-Kontext',ok:state==='unavailable'?null:!blocked,applicable:state!=='absent',informational:state==='absent'||state==='unavailable',required:blocked,value:state==='available'?'running=0':state==='absent'?'nicht erforderlich':'running=unbekannt',details:state==='available'?'':state==='absent'?'Das Docker-Kommando ist in dieser LoxBerry-Umgebung nicht verfuegbar. Keine Docker-Stopps konfiguriert.':blocked?'Docker-Stopps sind konfiguriert und koennen so nicht sicher ausgefuehrt werden.':'Die Docker-Abfrage hat ihr Zeitlimit erreicht; der Container-Status ist unbekannt. <img src=x onerror="window.unsafeDockerProbe=true">'};
   return {status:blocked?'error':state==='unavailable'?'warning':'ok',checks:[check],warnings:state==='unavailable'||blocked?[check.details]:[],notices:[]};
 }
 function watchdogPreflightFixture() {

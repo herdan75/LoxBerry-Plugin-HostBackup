@@ -229,7 +229,12 @@ latest_complete_backup() { echo "${REFERENCE:-}"; }
 latest_sized_complete_backup() { [ "${NO_ESTIMATE:-false}" = true ] || echo "$TEST_ROOT/historical"; }
 backup_excludes() { echo /proc; }
 rsync() { echo forbidden-copy >> "$TEST_ROOT/copy-called"; return 99; }
-selected_stop_targets() { :; }
+# Some worker tests extract the real selection reader before installing these
+# unrelated preflight doubles. Preserve it: otherwise the fixture silently
+# changes an explicit stop selection into the legacy empty-selection path.
+if ! declare -F selected_stop_targets >/dev/null; then
+  selected_stop_targets() { :; }
+fi
 mkdir -p "$TEST_ROOT/historical"
 printf '{"size_bytes":10737418240}\n' > "$TEST_ROOT/historical/manifest.json"
 mkdir -p "$LBP_BINDIR"
@@ -275,6 +280,13 @@ class RuntimeSafetyTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
         return result
+
+    def test_preflight_fixtures_preserve_the_real_stop_selection_reader(self):
+        selection = {"stop_targets": [{"type": "systemd", "name": "squeezelite-lbp@inst_bad.service"},
+                                      {"type": "docker", "name": "sonn-core"}]}
+        (self.root / "config.json").write_text(json.dumps(selection), encoding="utf-8")
+        result = self.run_shell(PREFLIGHT_MOCKS + '\nselected_stop_targets\n', ("selected_stop_targets",))
+        self.assertEqual(result.stdout, "systemd\tsqueezelite-lbp@inst_bad.service\ndocker\tsonn-core\n")
 
     def test_baseline_comparison_rejects_insufficient_space(self):
         for mode in ("snapshot", "full"):
