@@ -19,12 +19,22 @@ validiert werden.
   Die vollständige Kennung bleibt für Vergleiche erhalten. Benutzerpfade,
   Mount-Ziele, Namespace-Kennungen und der Schutz ausgewählter Quellen bleiben
   geprüft; technische Mounts werden nicht einfach aus dem Inventar entfernt.
+- Weitere Container-Sonderfälle abdecken: Führende Elternsegmente wie `/..`
+  nur in internen cgroup-/cgroup2-Mount-Roots erlauben und unverändert vergleichen.
+  Mount-Inventare nach ihren tatsächlichen Feld-/Zeilentrennern lesen, damit
+  Unicode-Leerzeichen weder Pfade verkürzen noch zusätzliche Datensätze erzeugen.
+  Strenge Benutzerpfade, Ausschlüsse und Erkennung geänderter Quellen beibehalten.
 - Docker-Vorprüfung zwischen fehlendem Client, unerreichbarer Engine und
   erreichbarer Engine mit null laufenden Containern unterscheiden. Abfragen
   zeitlich begrenzen und Fehler nicht als bekannte Anzahl null ausgeben.
   Ohne erforderlichen Docker-Stopp kein falscher Startblock; konfigurierte
   Docker-Stopps benötigen weiterhin eine erreichbare Engine. Kein automatischer
   Zugriff auf Docker ausserhalb des LoxBerry-Containers.
+- Die zusätzliche Docker-Inventarisierung beim Schreiben der Backup-Dokumentation
+  ebenfalls zeitlich begrenzen und Fehler als unbekannten Zustand festhalten.
+  Vollständiges `docker.json` atomar schreiben; fehlende optionale Inventardaten
+  dürfen den Backup-Worker nicht abbrechen. Echte Dateischreibfehler und nicht
+  ausführbare erforderliche Docker-Stopps bleiben blockierend.
 - Regressionen für Mount-Identitäten und Docker-Prüfzustände ergänzen; bestehende
   NAS-, Quellen-, Dienstestopp-, Recovery-, Watchdog-, UI- und Sicherheitstests
   bleiben Teil der vollständigen GitHub-Prüfung.

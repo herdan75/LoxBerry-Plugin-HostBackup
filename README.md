@@ -13,13 +13,19 @@ erforderlich. [Download und Update](#installation) ·
 
 ## Auf develop: 1.2.5
 
-- **systemd-nspawn:** Vom Kernel erzeugte Mount-Root-Kennungen mit `//deleted`
-  werden als Identitäten erkannt. Benutzerpfade und Mount-Ziele bleiben streng
-  geprüft; ausgewählte verschwundene, ersetzte oder überdeckte Quellen bleiben Fehler.
+- **Container und Mount-Pfade:** Vom Kernel erzeugte Mount-Root-Kennungen mit
+  `//deleted` sowie cgroup-Kennungen mit führenden Elternsegmenten werden als
+  interne Identitäten erkannt. Unicode-Leerzeichen in Mount-Namen bleiben
+  unverändert. Benutzerpfade und Mount-Ziele bleiben streng geprüft; ausgewählte
+  verschwundene, ersetzte oder überdeckte Quellen bleiben Fehler.
 - **Docker-Vorprüfung:** Kein Docker, eine nicht erreichbare Docker-Engine und
   eine erreichbare Engine ohne laufende Container werden getrennt angezeigt.
   Nicht benötigtes Docker blockiert das Backup nicht. Sind Docker-Stopps
   konfiguriert, muss die erforderliche Engine erreichbar sein.
+- **Docker-Zusatzdokumentation:** Auch die Inventarabfrage während des Backups
+  hat ein Zeitlimit. Eine nicht erreichbare Engine wird als unbekannter Zustand
+  dokumentiert und bricht ohne erforderliche Docker-Stopps die Sicherung nicht
+  ab. Schreibfehler am Ziel und echte Stopp-/Wiederanlauffehler bleiben Fehler.
 - Keine neuen Sicherungsmodi, keine Änderung gespeicherter Quellen oder Ziele.
   Beide öffentlichen Updatekanäle bleiben bei **1.2.4**. Das Testpaket wird erst
   nach erfolgreicher GitHub-Prüfung als Actions-Artefakt angeboten, nicht als Release.

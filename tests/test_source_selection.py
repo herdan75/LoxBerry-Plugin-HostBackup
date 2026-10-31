@@ -118,7 +118,7 @@ class SourceSelectionTests(unittest.TestCase):
     def test_mount_inventory_decodes_paths_and_never_exports_credentials(self):
         with tempfile.TemporaryDirectory() as tmp:
             inventory = Path(tmp) / "mountinfo"
-            inventory.write_text("23 1 8:1 / / rw - ext4 /dev/sda1 rw\n24 23 0:8 / /media/My\\040NAS rw - cifs //user:secret@host/share rw,password=secret\n")
+            inventory.write_bytes(b"23 1 8:1 / / rw - ext4 /dev/sda1 rw\n24 23 0:8 / /media/My\\040NAS rw - cifs //user:secret@host/share rw,password=secret\n")
             mounts = sources.read_mounts(inventory)
             result = plan(mounts=mounts).report()
             self.assertEqual(mounts[1]["path"], "/media/My NAS")
@@ -131,7 +131,7 @@ class SourceSelectionTests(unittest.TestCase):
             identity = namespace + ":[4026531992]"
             content = ("23 1 8:1 / / rw - ext4 /dev/sda1 rw\n"
                        f"24 23 0:4 {identity} /run/docker/netns/default rw - nsfs nsfs rw\n")
-            with self.subTest(namespace=namespace), patch.object(Path, "read_text", return_value=content):
+            with self.subTest(namespace=namespace), patch.object(Path, "read_bytes", return_value=content.encode()):
                 mounts = sources.read_mounts()
                 self.assertEqual(len(mounts), 2)
                 self.assertEqual(mounts[1]["root"], identity)
@@ -140,12 +140,95 @@ class SourceSelectionTests(unittest.TestCase):
                 self.assertEqual(result["status"], "ok")
                 self.assertFalse(result["volumes"][1]["included"])
 
+    def test_cgroup_namespace_parent_roots_preserve_identity_and_excluded_scope(self):
+        for fstype in ("cgroup", "cgroup2"):
+            for identity in ("/..", "/../..", "/../../system.slice", "/../user.slice/session-1.scope"):
+                content = ("1 0 8:1 / / rw - ext4 /dev/root rw\n"
+                           f"2 1 0:2 {identity} /sys/fs/cgroup rw - {fstype} cgroup rw\n")
+                with self.subTest(fstype=fstype, identity=identity), \
+                     patch.object(Path, "read_bytes", return_value=content.encode()):
+                    mounts = sources.read_mounts()
+                self.assertEqual(mounts[1]["root"], identity)
+                for policy in ("local", "legacy"):
+                    selected = plan(policy=policy, mounts=mounts, excludes=["/sys"])
+                    self.assertEqual(selected.report()["status"], "ok")
+                    self.assertFalse(selected.included("/sys/fs/cgroup/cgroup.procs"))
+                    self.assertTrue(selected.included("/etc/hostname"))
+
+    def test_cgroup_parent_roots_are_narrowly_scoped_not_general_path_traversal(self):
+        valid = ("/..", "/../../system.slice")
+        for identity in valid:
+            for fstype in ("ext4", "tmpfs", "nsfs", "cifs", "overlay"):
+                with self.subTest(identity=identity, fstype=fstype), self.assertRaises(sources.SourceError):
+                    sources.validate_mount_root(identity, fstype)
+            for enabled in (True, False):
+                with self.assertRaises(sources.SourceError):
+                    plan(overrides={identity: enabled})
+            content = ("1 0 8:1 / / rw - ext4 /dev/root rw\n"
+                       f"2 1 0:2 /.. {identity} rw - cgroup2 cgroup rw\n")
+            with patch.object(Path, "read_bytes", return_value=content.encode()), self.assertRaises(sources.SourceError):
+                sources.read_mounts()
+        for identity in (None, 12, "../..", "//..", "/../", "/..//x", "/.././x", "/x/../y",
+                         "/../x/../y", "/../../x/", "/../x//deleted", "/../x\n", "/../x\x00",
+                         "/../x\t", "/../x\x7f", "/../" + "x" * 4096):
+            for fstype in ("cgroup", "cgroup2"):
+                with self.subTest(identity=repr(identity), fstype=fstype), self.assertRaises(sources.SourceError):
+                    sources.validate_mount_root(identity, fstype)
+        self.assertEqual(sources.validate_mount_root("/..normal", "cgroup2"), "/..normal")
+        maximum = "/../" + "x" * (4096 - 4)
+        self.assertEqual(sources.validate_mount_root(maximum, "cgroup2"), maximum)
+
+    def test_mount_inventory_preserves_unicode_whitespace_in_roots_and_targets(self):
+        for whitespace in ("\u00a0", "\u2003", "\u2028", "\u2029", "\u0085"):
+            identity = "/backing" + whitespace + "data"
+            target = "/mnt/NAS" + whitespace + "data"
+            content = ("1 0 8:1 / / rw shared:1 future:opaque - ext4 /dev/root rw\n"
+                       f"2 1 0:2 {identity} {target} rw shared:42 master:1 future:opaque - cifs //nas/share rw\n")
+            with self.subTest(whitespace=ascii(whitespace)), \
+                 patch.object(Path, "read_bytes", return_value=content.encode()):
+                mounts = sources.read_mounts()
+            self.assertEqual(mounts[1]["path"], target)
+            self.assertEqual(mounts[1]["root"], identity)
+            self.assertFalse(plan(mounts=mounts).included(target + "/data.db"))
+            self.assertTrue(plan(policy="legacy", mounts=mounts).included(target + "/data.db"))
+            self.assertTrue(plan(mounts=mounts, overrides={target: True}).included(target + "/data.db"))
+            self.assertFalse(plan(policy="legacy", mounts=mounts, overrides={target: False}).included(target + "/data.db"))
+
+    def test_mount_inventory_preserves_non_utf8_and_only_decodes_kernel_escapes_once(self):
+        raw = (b"1 0 8:1 / / rw - ext4 /dev/root rw\n"
+               b"2 1 0:2 /backing\xff\\040space /mnt/NAS\xff\\134040data rw - cifs //nas/share rw\n")
+        with patch.object(Path, "read_bytes", return_value=raw):
+            mounts = sources.read_mounts()
+        self.assertEqual(mounts[1]["root"].encode("utf-8", "surrogateescape"), b"/backing\xff space")
+        self.assertEqual(mounts[1]["path"].encode("utf-8", "surrogateescape"), b"/mnt/NAS\xff\\040data")
+        self.assertFalse(plan(mounts=mounts).included(mounts[1]["path"] + "/data"))
+
+    def test_mount_inventory_rejects_malformed_ascii_records_instead_of_skipping_them(self):
+        root = b"1 0 8:1 / / rw - ext4 /dev/root rw\n"
+        invalid = (b"\n", b"2 1 0:2 / /data rw - ext4 source rw extra\n",
+                   b"2  1 0:2 / /data rw - ext4 source rw\n",
+                   b"2 1 0:2 / /data rw -  ext4 source rw\n",
+                   b"2\t1 0:2 / /data rw - ext4 source rw\n",
+                   b"2 1 0:2 / /data\rhidden rw - ext4 source rw\n",
+                   b"2 1 0:2 / /data rw - ext4 source rw\r\n",
+                   b"2 1 0:2 / /data rw - ext4 source\n")
+        for row in invalid:
+            with self.subTest(row=row), patch.object(Path, "read_bytes", return_value=root + row), \
+                 self.assertRaises(sources.SourceError):
+                sources.read_mounts()
+        # A real bytes fixture proves universal-newline handling is not hiding CR.
+        with tempfile.TemporaryDirectory() as tmp:
+            inventory = Path(tmp) / "mountinfo"
+            inventory.write_bytes(root + invalid[5])
+            with self.assertRaises(sources.SourceError):
+                sources.read_mounts(inventory)
+
     def test_namespace_identity_does_not_relax_source_paths_or_mount_targets(self):
         with self.assertRaises(sources.SourceError):
             plan(overrides={"net:[4026531992]": True})
         content = ("23 1 8:1 / / rw - ext4 /dev/sda1 rw\n"
                    "24 23 0:4 net:[4026531992] net:[4026531992] rw - nsfs nsfs rw\n")
-        with patch.object(Path, "read_text", return_value=content), self.assertRaises(sources.SourceError):
+        with patch.object(Path, "read_bytes", return_value=content.encode()), self.assertRaises(sources.SourceError):
             sources.read_mounts()
 
     def test_invalid_namespace_and_other_relative_mount_roots_are_rejected(self):
@@ -158,7 +241,7 @@ class SourceSelectionTests(unittest.TestCase):
             content = ("23 1 8:1 / / rw - ext4 /dev/sda1 rw\n"
                        f"24 23 0:4 {identity} /run/example rw - {fstype} source rw\n")
             with self.subTest(identity=identity[:50], fstype=fstype), \
-                 patch.object(Path, "read_text", return_value=content), self.assertRaises(sources.SourceError):
+                 patch.object(Path, "read_bytes", return_value=content.encode()), self.assertRaises(sources.SourceError):
                 sources.read_mounts()
         for value in (None, 123, "", "/path/../other", "/path//other"):
             with self.subTest(value=value), self.assertRaises(sources.SourceError):
@@ -173,7 +256,7 @@ class SourceSelectionTests(unittest.TestCase):
                 content = ("1 0 8:1 / / rw - ext4 /dev/root rw\n"
                            f"2 1 0:2 {encoded} /proc/kmsg rw - {fstype} source rw\n")
                 with self.subTest(fstype=fstype, identity=identity), \
-                     patch.object(Path, "read_text", return_value=content):
+                     patch.object(Path, "read_bytes", return_value=content.encode()):
                     mounts = sources.read_mounts()
                     self.assertEqual(mounts[1]["root"], identity)
                     self.assertEqual(mounts[1]["path"], "/proc/kmsg")
@@ -188,7 +271,7 @@ class SourceSelectionTests(unittest.TestCase):
             sources.canonical_path(identity, allow_root=True)
         content = ("1 0 8:1 / / rw - ext4 /dev/root rw\n"
                    f"2 1 0:2 {identity} {identity} rw - tmpfs tmpfs rw\n")
-        with patch.object(Path, "read_text", return_value=content), self.assertRaises(sources.SourceError):
+        with patch.object(Path, "read_bytes", return_value=content.encode()), self.assertRaises(sources.SourceError):
             sources.read_mounts()
 
     def test_deleted_marker_only_accepts_strict_absolute_prefix_and_terminal_suffix(self):
@@ -216,7 +299,7 @@ class SourceSelectionTests(unittest.TestCase):
                    "8 1 0:8 net:[4026531992] /run/docker/netns/default rw - nsfs nsfs rw\n")
         for policy in ("local", "legacy"):
             output, errors = io.StringIO(), io.StringIO()
-            with self.subTest(policy=policy), patch.object(Path, "read_text", return_value=content), \
+            with self.subTest(policy=policy), patch.object(Path, "read_bytes", return_value=content.encode()), \
                  patch.object(sources, "read_config", return_value={"source_selection": {"policy": policy, "overrides": {}}}), \
                  patch.object(sources, "read_excludes", return_value=["/proc", "/run"]), \
                  patch.object(sys, "stdout", output), patch.object(sys, "stderr", errors):
@@ -336,6 +419,70 @@ class FrozenMountVerificationTests(unittest.TestCase):
         self.verify(selected, self.mounts + [{**namespace, "root": "net:[4026531993]"}])
         self.verify(selected, self.mounts + [self.volume("/run/docker/netns/new", "42", "nsfs", "net:[4026531994]")])
 
+    def test_cgroup_parent_roots_roundtrip_with_stacks_and_excluded_churn(self):
+        content = ("1 0 8:1 / / rw - ext4 /dev/root rw\n"
+                   "2 1 0:2 /.. /sys/fs/cgroup rw - cgroup2 cgroup rw\n"
+                   "3 2 0:3 /../../system.slice /sys/fs/cgroup rw - cgroup2 cgroup rw\n")
+        with patch.object(Path, "read_bytes", return_value=content.encode()):
+            mounts = sources.read_mounts()
+        self.assertEqual([layer["root"] for layer in mounts[1]["stack"]], ["/..", "/../../system.slice"])
+        for policy in ("local", "legacy"):
+            selected = plan(policy=policy, mounts=mounts, excludes=["/sys"])
+            self.assertEqual(selected.report()["status"], "ok")
+            self.verify(selected, mounts)
+            self.verify(selected, mounts[:1])
+            changed = json.loads(json.dumps(mounts))
+            changed[1]["root"] = changed[1]["stack"][1]["root"] = "/../../other.slice"
+            self.verify(selected, changed)
+
+    def test_cgroup_parent_root_cannot_conceal_new_mount_over_selected_data(self):
+        selected = plan(mounts=self.mounts)
+        cgroup = self.volume("/etc/required", "41", "cgroup2", "/..")
+        with self.assertRaisesRegex(sources.SourceError, "/etc/required.*neu eingebunden"):
+            self.verify(selected, self.mounts + [cgroup])
+        # Legacy can include system mounts without an exclusion. In that case
+        # a changed root is relevant and must not be canonicalised to '/'.
+        selected = plan(policy="legacy", mounts=self.mounts + [cgroup])
+        self.verify(selected, self.mounts + [cgroup])
+        with self.assertRaisesRegex(sources.SourceError, "/etc/required.*ersetzt/geaendert"):
+            self.verify(selected, self.mounts + [{**cgroup, "root": "/../.."}])
+
+    def test_invalid_cgroup_parent_roots_in_frozen_items_and_stack_are_rejected(self):
+        cgroup = self.volume("/sys/fs/cgroup", "41", "cgroup2", "/..")
+        cgroup["stack"] = [{key: cgroup[key] for key in ("fstype", "device", "mount_id", "root")},
+                            {"fstype": "cgroup2", "device": "8:42", "mount_id": "42", "root": "/../.."}]
+        mounts = self.mounts + [cgroup]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "report.json"
+            for field in ("item", "stack"):
+                for identity in ("/../x/../y", "/..//x", "/.././x", "/../", "/../x//deleted"):
+                    report = sources.verification_report(plan(mounts=mounts, excludes=["/sys"]))
+                    record = next(item for item in report["mount_identity"] if item["path"] == "/sys/fs/cgroup")
+                    (record if field == "item" else record["stack"][0])["root"] = identity
+                    path.write_text(json.dumps(report))
+                    with self.subTest(field=field, identity=identity), \
+                         patch.object(sources, "read_mounts", return_value=mounts), self.assertRaises(sources.SourceError):
+                        sources.verify_report(path)
+
+    def test_unicode_mount_identity_roundtrip_and_selected_changes(self):
+        for char in ("\u00a0", "\u2003", "\u2028", "\u0085", "\udcff"):
+            target = "/mnt/NAS" + char + "data"
+            identity = "/backing" + char + "data"
+            remote = self.volume(target, "41", "cifs", identity)
+            mounts = self.mounts + [remote]
+            with self.subTest(char=ascii(char)):
+                excluded = plan(mounts=mounts)
+                self.assertFalse(excluded.included(target + "/file"))
+                self.verify(excluded, mounts)
+                self.verify(excluded, self.mounts)
+                for policy in ("local", "legacy"):
+                    selected = plan(policy=policy, mounts=mounts, overrides={target: True})
+                    self.verify(selected, mounts)
+                    with self.assertRaises(sources.SourceError):
+                        self.verify(selected, self.mounts)
+                    with self.assertRaises(sources.SourceError):
+                        self.verify(selected, self.mounts + [{**remote, "root": "/different" + char + "data"}])
+
     def test_new_namespace_mount_cannot_hide_previously_selected_data(self):
         selected = plan(mounts=self.mounts)
         namespace = self.volume("/etc/required-file", "41", "nsfs", "net:[4026531992]")
@@ -354,7 +501,7 @@ class FrozenMountVerificationTests(unittest.TestCase):
                    "2 1 0:2 / /run rw - tmpfs tmpfs rw\n"
                    "3 2 0:4 net:[4026531992] /run/ns rw - nsfs nsfs rw\n"
                    "4 3 0:4 net:[4026531993] /run/ns rw - nsfs nsfs rw\n")
-        with patch.object(Path, "read_text", return_value=content):
+        with patch.object(Path, "read_bytes", return_value=content.encode()):
             mounts = sources.read_mounts()
         self.assertEqual([layer["root"] for layer in mounts[-1]["stack"]],
                          ["net:[4026531992]", "net:[4026531993]"])
@@ -408,7 +555,7 @@ class FrozenMountVerificationTests(unittest.TestCase):
             content = ("1 0 8:1 / / rw - ext4 /dev/root rw\n"
                        f"2 1 0:2 /backing/first//deleted {path} rw - {fstype} source rw\n"
                        f"3 2 0:2 /backing/second//deleted {path} rw - {fstype} source rw\n")
-            with self.subTest(fstype=fstype), patch.object(Path, "read_text", return_value=content):
+            with self.subTest(fstype=fstype), patch.object(Path, "read_bytes", return_value=content.encode()):
                 mounts = sources.read_mounts()
             self.assertEqual([item["root"] for item in mounts[1]["stack"]],
                              ["/backing/first//deleted", "/backing/second//deleted"])
@@ -425,7 +572,7 @@ class FrozenMountVerificationTests(unittest.TestCase):
         content = ("1 0 8:1 / / rw - ext4 /dev/root rw\n"
                    "20 1 0:20 / /data rw - autofs systemd-1 rw\n"
                    "21 20 8:2 /backing/data//deleted /data rw - ext4 /dev/data rw\n")
-        with patch.object(Path, "read_text", return_value=content):
+        with patch.object(Path, "read_bytes", return_value=content.encode()):
             mounts = sources.read_mounts()
         selected = plan(mounts=mounts)
         self.assertEqual(selected.report()["status"], "ok")
@@ -547,9 +694,9 @@ class FrozenMountVerificationTests(unittest.TestCase):
     def test_mount_stack_is_not_silently_collapsed(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "mountinfo"
-            path.write_text("1 0 8:1 / / rw - ext4 /dev/root rw\n"
-                            "2 1 8:1 /data /etc rw - ext4 /dev/root rw\n"
-                            "3 1 8:1 /secret /etc rw - ext4 /dev/root rw\n")
+            path.write_bytes(b"1 0 8:1 / / rw - ext4 /dev/root rw\n"
+                             b"2 1 8:1 /data /etc rw - ext4 /dev/root rw\n"
+                             b"3 1 8:1 /secret /etc rw - ext4 /dev/root rw\n")
             mounts = sources.read_mounts(path)
             selected = plan(mounts=mounts)
             self.assertEqual(len(mounts[1]["stack"]), 2)
@@ -569,9 +716,9 @@ class FrozenMountVerificationTests(unittest.TestCase):
     def test_stack_order_cannot_hide_a_selected_local_layer_behind_network_classification(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "mountinfo"
-            path.write_text("1 0 8:1 / / rw - ext4 /dev/root rw\n"
-                            "2 1 8:2 / /data rw - ext4 /dev/data rw\n"
-                            "3 1 0:3 / /data rw - cifs //nas/data rw\n")
+            path.write_bytes(b"1 0 8:1 / / rw - ext4 /dev/root rw\n"
+                             b"2 1 8:2 / /data rw - ext4 /dev/data rw\n"
+                             b"3 1 0:3 / /data rw - cifs //nas/data rw\n")
             mounts = sources.read_mounts(path)
             self.assertEqual(mounts[1]["fstype"], "cifs")
             self.assertEqual(plan(mounts=mounts).report()["status"], "error")
@@ -583,7 +730,7 @@ class FrozenMountVerificationTests(unittest.TestCase):
                  f"21 {upper_parent} 0:21 / /data rw - {fstype} data-source rw\n"]
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "mountinfo"
-            path.write_text("".join(reversed(lines) if reverse else lines) + extra)
+            path.write_bytes(("".join(reversed(lines) if reverse else lines) + extra).encode())
             return sources.read_mounts(path)
 
     def test_direct_automount_data_stack_uses_parent_chain_not_table_order(self):

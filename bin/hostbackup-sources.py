@@ -61,6 +61,18 @@ def validate_mount_root(value, fstype):
     if (fstype == "nsfs" and isinstance(value, str) and len(value) <= 4096
             and re.fullmatch(r"[a-z][a-z0-9_]*:\[[0-9]+\]", value)):
         return value
+    if (fstype in ("cgroup", "cgroup2") and isinstance(value, str)
+            and len(value) <= 4096 and (value == "/.." or value.startswith("/../"))):
+        # kernfs reports roots outside the current cgroup namespace with
+        # leading /.. components. They are opaque identities, never paths to
+        # traverse. Only a leading parent chain is special; any remainder
+        # must still be an ordinary absolute path without dot segments.
+        parts = value.split("/")[1:]
+        while parts and parts[0] == "..":
+            parts.pop(0)
+        if parts:
+            canonical_path("/" + "/".join(parts))
+        return value
     if isinstance(value, str) and len(value) <= 4096 and value.endswith("//deleted"):
         # Only the exact terminal kernel marker is special. Validate its
         # absolute, non-root prefix strictly; never normalise away identity.
@@ -127,14 +139,22 @@ def automount_data_layer(item):
 def read_mounts(path="/proc/self/mountinfo"):
     """Use the kernel table, not findmnt traversal or mount options/credentials."""
     try:
-        content = Path(path).read_text(encoding="utf-8", errors="surrogateescape")
+        # Do not apply universal-newline or Unicode whitespace conversion:
+        # mountinfo uses literal LF records and ASCII-space fields. Other
+        # Unicode whitespace is part of the filename, not a separator.
+        content = Path(path).read_bytes().decode("utf-8", errors="surrogateescape")
     except OSError as exc:
         raise SourceError("Mount-Inventar konnte nicht gelesen werden.") from exc
     mounts = {}
-    for line in content.splitlines():
+    lines = content.split("\n")
+    if lines[-1] == "":
+        lines.pop()
+    for line in lines:
         before, separator, after = line.partition(" - ")
-        fields, tail = before.split(), after.split()
-        if not separator or len(fields) < 6 or len(tail) < 3:
+        fields, tail = before.split(" "), after.split(" ")
+        if (not separator or len(fields) < 6 or len(tail) != 3
+                or any(not field for field in fields + tail)
+                or any(ord(char) < 32 or ord(char) == 127 for char in line)):
             raise SourceError("Ungueltiger Eintrag im Mount-Inventar.")
         target = unescape_mount(fields[4])
         canonical_path(target, allow_root=True)

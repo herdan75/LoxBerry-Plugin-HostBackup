@@ -1399,20 +1399,42 @@ loxberry_version() {
 }
 
 docker_summary_json() {
-  if command -v docker >/dev/null 2>&1; then
-    printf '"available": true,'
-    printf '"containers": '
-    docker ps -a --format '{{json .}}' 2>/dev/null | perl -MJSON::PP -e '
+  # Documentary inventory is optional, unlike configured stop/recovery work.
+  # A present CLI does not prove a reachable daemon. Never let this secondary
+  # query abort/hang a backup or publish partial rows as an empty inventory.
+  local output result=0 state=available summary
+  if ! command -v docker >/dev/null 2>&1; then
+    printf '{"available":false,"state":"not-installed","inventory_complete":false,"containers":[]}\n'
+    return 0
+  fi
+  if ! command -v timeout >/dev/null 2>&1; then
+    state='probe-unavailable'
+  else
+    output="$(LC_ALL=C timeout -k 2 10 docker ps -a --no-trunc --format '{{json .}}' 2>/dev/null)" || result=$?
+    if [ "$result" -ne 0 ]; then
+      case "$result" in 124|137) state=timeout ;; *) state=unavailable ;; esac
+    elif summary="$(printf '%s' "$output" | perl -MJSON::PP -e '
       my @rows;
       while (<STDIN>) {
         chomp;
-        push @rows, eval { decode_json($_) } if length;
+        die "Invalid Docker inventory\n" unless length;
+        my $row = decode_json($_);
+        die "Invalid Docker inventory\n" unless ref($row) eq "HASH"
+          && defined($row->{ID}) && !ref($row->{ID}) && $row->{ID} =~ /\A[0-9a-f]{64}\z/
+          && defined($row->{Names}) && !ref($row->{Names}) && length($row->{Names});
+        push @rows, $row;
       }
-      print encode_json(\@rows);
-    '
-  else
-    printf '"available": false, "containers": []'
+      print encode_json({available => JSON::PP::true, state => "available",
+        inventory_complete => JSON::PP::true, containers => \@rows});
+    ' 2>/dev/null)"; then
+      printf '%s\n' "$summary"
+      return 0
+    else
+      state='invalid-response'
+    fi
   fi
+  # null means unknown, not a verified absence of a Docker engine/containers.
+  printf '{"available":null,"state":"%s","inventory_complete":false,"containers":[]}\n' "$state"
 }
 
 write_manifest() {
@@ -1427,6 +1449,7 @@ write_manifest() {
   local package_file="$target/package-list.txt"
   local services_file="$target/systemd-services.txt"
   local mounts_file="$target/mounts.txt"
+  local docker_summary
 
   if [ ! -e "$package_file" ] && command -v dpkg-query >/dev/null 2>&1; then
     dpkg-query -W -f='${binary:Package}\t${Version}\n' > "$package_file" 2>/dev/null || true
@@ -1511,16 +1534,28 @@ write_manifest() {
     $fh->flush or die $!;
     close $fh or die $!;
     rename $tmp, $manifest or die "Cannot replace $manifest: $!";
-  ' "$manifest" "$backup_id" "$status" "$started_at" "$finished_at" "$size_bytes" "$files_count" "$(host_os_pretty)" "$(host_arch)" "$(loxberry_version)" "$(json_get_string backup_mode)" "$(metadata_mode)" "$(json_get_string target_source)" "$(json_get_string target_fstype)" "$(json_get_string target_mountpoint)"
+  ' "$manifest" "$backup_id" "$status" "$started_at" "$finished_at" "$size_bytes" "$files_count" "$(host_os_pretty)" "$(host_arch)" "$(loxberry_version)" "$(json_get_string backup_mode)" "$(metadata_mode)" "$(json_get_string target_source)" "$(json_get_string target_fstype)" "$(json_get_string target_mountpoint)" || return 1
 
-  {
-    printf '{\n'
-    printf '  "captured_at": "%s",\n' "$(date -Iseconds)"
-    printf '  "docker": {'
-    docker_summary_json
-    printf '}\n'
-    printf '}\n'
-  } > "$target/docker.json"
+  docker_summary="$(docker_summary_json)" || return 1
+  # Replace only a complete document. Unknown optional inventory is valid;
+  # filesystem/serialization failures are not silently ignored.
+  printf '%s' "$docker_summary" | perl -MJSON::PP -MFile::Basename=dirname -MFile::Temp=tempfile -MIO::Handle -e '
+    my ($destination, $captured_at) = @ARGV;
+    local $/;
+    my $data = {captured_at => $captured_at, docker => decode_json(<STDIN>)};
+    my ($fh, $tmp) = tempfile(".docker-XXXXXX", DIR => dirname($destination), UNLINK => 0);
+    my $ok = eval {
+      # As for manifest.json, NAS targets may expose fixed mount permissions.
+      # The metadata-profile probe, not this documentary file, validates them.
+      chmod 0600, $tmp;
+      print $fh JSON::PP->new->ascii->pretty->canonical->encode($data) or die $!;
+      $fh->flush or die $!;
+      close $fh or die $!;
+      rename $tmp, $destination or die "Cannot replace Docker inventory: $!";
+      1;
+    };
+    if (!$ok) { my $error = $@; close $fh; unlink $tmp; die $error; }
+  ' "$target/docker.json" "$(date -Iseconds)"
 }
 
 backup_excludes() {

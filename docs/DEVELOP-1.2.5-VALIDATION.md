@@ -1,6 +1,6 @@
 # 1.2.5 – Entwicklungsstand und Prüfgrenzen
 
-Stand: 30.10.2026. Nur develop; noch nicht veröffentlicht. Beide öffentlichen
+Stand: 31.10.2026. Nur develop; noch nicht veröffentlicht. Beide öffentlichen
 Updatekanäle bleiben unverändert bei 1.2.4. Dieser Text beschreibt den Prüfumfang,
 nicht das Ergebnis eines noch laufenden oder zukünftigen CI-Laufs. Massgeblich
 ist der erfolgreiche GitHub-Actions-Lauf des tatsächlich installierten Commits.
@@ -15,6 +15,13 @@ behält ihn unverändert. Strenge Pfadprüfung und Schutz gegen den Austausch
 ausgewählter Quellen werden nicht abgeschaltet. Die vorhandene Unterstützung
 von Namespace-Kennungen und Automount-Schichten bleibt erhalten.
 
+cgroup-/cgroup2-Namespaces können weitere interne Kennungen wie `/..` oder
+`/../../system.slice` liefern. Führende Elternsegmente sind ausschliesslich in
+diesem dateisystemspezifischen Identitätsfeld zulässig, nicht in auswählbaren
+Quellpfaden oder Mount-Zielen. Die Mount-Tabelle wird nach ihrem Linux-Format
+zerlegt: Unicode-Leerzeichen oder Unicode-Zeilentrenner in Dateinamen sind keine
+Feld- oder Datensatztrenner. Echte ungültige Inventare bleiben Fehler.
+
 Die Docker-Vorprüfung unterscheidet fehlenden Client, fehlgeschlagene oder
 zeitüberschrittene Engine-Abfrage und eine erfolgreiche Abfrage mit null oder
 mehr laufenden Containern. Eine unbekannte Anzahl wird nicht als null angezeigt.
@@ -22,6 +29,14 @@ Docker ist keine Pflicht für ein LoxBerry ohne benötigte Docker-Stopps. Sind
 solche Stopps konfiguriert, bleibt die Erreichbarkeit Voraussetzung. Ein Fehler
 darf weder andere Vorprüfungsfehler verdecken noch durch Shell-Fehlerbehandlung
 eine unlesbare Antwort erzeugen.
+
+Dies gilt auch nach der Vorprüfung: Die zusätzliche Inventarisierung für
+`docker.json` ist zeitlich begrenzt und dokumentiert einen unbekannten Zustand
+bei nicht erreichbarer Engine oder ungültiger Antwort. Optionale Inventardaten
+sind keine Voraussetzung für die Sicherung. Die Datei wird vollständig und
+atomar geschrieben; echte Schreibfehler werden nicht unterdrückt. Tests des
+Backup-Workers müssen deshalb das echte `write_manifest()` einschliessen,
+nicht nur die isolierte Vorprüfung oder eine ersetzte Manifest-Funktion.
 
 Ein LoxBerry-Container sichert nur sichtbare ausgewählte Quellen. Die Korrektur
 erkennt oder steuert keine Anwendungen auf dem äusseren Host automatisch.
@@ -32,9 +47,11 @@ Erweiterung der Berechtigungen.
 
 | Bereich | Weiterhin zu prüfende Fälle |
 | --- | --- |
-| Mount-Identitäten | nspawn-Muster für boot_id/kmsg, terminales `//deleted`, Namespace-IDs, Automount/gestapelte Mounts, Report-Roundtrip, beide Grundregeln |
+| Mount-Identitäten | nspawn-Muster für boot_id/kmsg, terminales `//deleted`, cgroup-/cgroup2-Elternsegmente, Namespace-IDs, Automount/gestapelte Mounts, Report-Roundtrip, beide Grundregeln |
+| Mount-Namen | Unicode-Leerzeichen und -Zeilentrenner, normale maskierte Leerzeichen und Backslashes, unveränderte Pfade und Netzquellen-Ausschlüsse, ungültige Datensätze |
 | Quellenschutz | Ungültige Benutzerpfade/Mount-Ziele, relevante Mount-Ersetzung/Entfernung/Überdeckung, Ausschlüsse, nicht relevante Mount-Änderungen |
 | Docker-Vorprüfung | Client fehlt, leere/laufende Engine, Fehler/Timeout/ungültige Antwort, explizite Docker-Stopps, Legacy-Stop-all, reine systemd-Auswahl, direkte und abgefangene Shell-Aufrufe |
+| Docker-Dokumentation | Echte Manifest-/Worker-Funktionen, fehlender Client, nicht erreichbare oder hängende Engine, gültige leere Liste gegenüber unbekanntem Status, ungültige/partielle Antworten, atomare Datei, echte Schreibfehler |
 | NAS | Unbekannte Inodes bei 0/0/0 gegenüber tatsächlich erschöpften Inodes, CIFS, Profile/Metadaten, portable Vollarchive und Repository-Stände |
 | Dienste und Wiederanlauf | systemd-Instanzen und Aliasnamen, gestoppte/ersetzte/gelöschte Docker-IDs, unerreichbare Engine, persistente Journale und Upgrade ohne Deinstallation |
 | Überwachungen | LoxPanel-Sperrprotokolle und manuelle Altvarianten, fehlende Plugins, fremde Wiederstarts, keine automatische AudioServer4Home-Koordination |
@@ -51,6 +68,14 @@ keine Linux-Mounts, Dateisperren, Signale oder Eigentümerprüfungen. Übersprun
 Tests sind keine bestandenen Tests. Ein fehlgeschlagener Pflichtschritt ist
 kein freigegebener Teststand.
 
+Die cgroup-Elternkennungen werden anhand dokumentierter Kernel-Ausgaben in
+Parser-, Auswahl- und Identitätsvergleichstests simuliert; dabei wird keine
+laufende Host-cgroup verändert. Unicode-Namen und gelöschte Bind-Mount-Quellen
+werden zusätzlich in privaten Linux-Mount-Namespaces geprüft. Docker-Fehler
+werden mit kontrollierten Client-/Dienst-Doubles simuliert; die echten
+Manifest- und Worker-Funktionen sowie die Linux-Prozesszeitlimits bleiben im
+Test aktiv. Das ist kein Test gegen eine produktive Docker-Engine.
+
 Das getestete Actions-Artefakt muss zum geprüften Commit gehören. Seine
 Installation erfolgt ohne vorherige Deinstallation, nach Abschluss aktiver
 Vorgänge und mit aufbewahrten bewährten Backups. Anschliessend gespeicherte
@@ -64,5 +89,8 @@ vollständiger System-Restore sind damit noch nicht praktisch bestätigt.
 
 - [Linux v6.8: dentry_path und //deleted](https://github.com/torvalds/linux/blob/v6.8/fs/d_path.c#L349-L357)
 - [systemd v255: temporäre nspawn-Bind-Mounts](https://github.com/systemd/systemd/blob/v255/src/nspawn/nspawn.c)
+- [Linux: cgroup-Namespaces und Mount-Roots mit Elternsegmenten](https://man7.org/linux/man-pages/man7/cgroup_namespaces.7.html)
+- [Linux v6.8: Format der Mount-Tabelle und maskierte Zeichen](https://github.com/torvalds/linux/blob/v6.8/fs/proc_namespace.c)
+- [Docker: Container-Inventar und Ausgabeformat](https://docs.docker.com/reference/cli/docker/container/ls/)
 - [Docker: Client-/Daemon-Verbindung prüfen](https://docs.docker.com/engine/daemon/troubleshoot/#check-which-host-your-client-is-connecting-to)
 - [Docker: Zugriff auf die Engine absichern](https://docs.docker.com/engine/security/protect-access/)

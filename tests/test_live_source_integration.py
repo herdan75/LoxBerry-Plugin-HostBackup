@@ -640,9 +640,14 @@ def mount_worker(scenario):
     fixture = Path(tempfile.mkdtemp(prefix="hostbackup-live-mount-")).resolve()
     mounted = []
     try:
-        backing = fixture / "backing"
-        replacement = fixture / "replacement"
-        target = fixture / "volume"
+        unicode_scenarios = {"unicode-selected-unchanged", "unicode-selected-replacement", "unicode-excluded-churn"}
+        # These bytes are legal Linux names. Only ordinary ASCII space and
+        # backslash are escaped by mountinfo; Unicode separators must survive
+        # unchanged, including alongside a non-UTF8 byte and literal '\\040'.
+        edge_suffix = " data\u00a0\u2003\u2028\u2029\u0085-\\040-\udcff" if scenario in unicode_scenarios else ""
+        backing = fixture / ("backing" + edge_suffix)
+        replacement = fixture / ("replacement" + edge_suffix)
+        target = fixture / ("volume" + edge_suffix)
         nested = target / "nested"
         for path in (backing, replacement, nested):
             path.mkdir(parents=True, exist_ok=True)
@@ -658,7 +663,7 @@ def mount_worker(scenario):
             command(["umount", "--", destination])
             mounted.remove(destination)
 
-        excluded = scenario.startswith("excluded-")
+        excluded = scenario.startswith("excluded-") or scenario == "unicode-excluded-churn"
         mount(backing, target)
         deleted_scenarios = {"deleted-root-excluded-churn", "deleted-root-selected-unchanged",
                              "selected-root-unlinked-after-freeze"}
@@ -702,6 +707,11 @@ def mount_worker(scenario):
         info = next(item for item in initial if item["path"] == str(target))
         if info["kind"] != "local":
             raise AssertionError("Mount fixture must reside on a local filesystem: " + str(info))
+        if scenario in unicode_scenarios:
+            if not info["root"].endswith("/" + backing.name):
+                raise AssertionError("Kernel bind root lost literal filename bytes: " + repr(info))
+            if os.fsencode(info["path"]) != os.fsencode(target):
+                raise AssertionError("Kernel bind target lost literal filename bytes: " + repr(info))
         selection = {"policy": "local", "overrides": {str(target): not excluded}}
         if peer is not None:
             selection["overrides"][str(peer)] = False
@@ -710,6 +720,13 @@ def mount_worker(scenario):
         plan = sources.SourcePlan(selection, initial, excludes=excludes)
         if plan.errors:
             raise AssertionError(plan.errors)
+        if scenario in unicode_scenarios:
+            if plan.included(str(target / "content")) == excluded:
+                raise AssertionError("Unicode mount selection was assigned to the wrong path")
+            if not excluded:
+                walk_plan = sources.SourcePlan({"policy": "local", "overrides": {}}, [{**info, "path": "/"}])
+                if "./content" not in list(sources.enumerate_files(walk_plan, root=target)):
+                    raise AssertionError("Selected Unicode bind was omitted from enumeration")
         if scenario in deleted_scenarios:
             bound = next(item for item in initial if item["path"] == str(deleted_target))
             if scenario != "selected-root-unlinked-after-freeze" and bound["root"] != expected_deleted_root:
@@ -780,7 +797,7 @@ def mount_worker(scenario):
             changed = next(item for item in sources.read_mounts() if item["path"] == str(deleted_target))
             if changed["root"] != expected_deleted_root or changed["mount_id"] != bound["mount_id"]:
                 raise AssertionError("Unlink must change root identity without changing mount ID")
-        elif scenario == "selected-replacement":
+        elif scenario in {"selected-replacement", "unicode-selected-replacement", "unicode-excluded-churn"}:
             unmount(target)
             mount(replacement, target)
         elif scenario in {"excluded-new-child", "selected-new-shadow"}:
@@ -812,11 +829,11 @@ def mount_worker(scenario):
                 raise AssertionError("Fixture did not produce real shared-peer mount propagation")
             mounted.append(nested)
         elif scenario not in {"selected-unchanged", "selected-existing-file-directory-exclude",
-                              "deleted-root-selected-unchanged"}:
+                              "deleted-root-selected-unchanged", "unicode-selected-unchanged"}:
             raise AssertionError("Unknown mount test scenario")
 
         if excluded or scenario in {"selected-unchanged", "selected-existing-file-directory-exclude", "nsfs-excluded-churn",
-                                    "deleted-root-excluded-churn", "deleted-root-selected-unchanged"}:
+                                    "deleted-root-excluded-churn", "deleted-root-selected-unchanged", "unicode-selected-unchanged"}:
             sources.verify_report(report)
             if scenario == "nsfs-excluded-churn" and plan.included(str(namespace_target)):
                 raise AssertionError("Excluded namespace handle became part of the frozen selection")
@@ -906,6 +923,15 @@ class LiveMountScopeIntegrationTests(OptInLinuxCase):
 
     def test_real_selected_bind_unlinked_after_freeze_is_detected(self):
         self.scenario("selected-root-unlinked-after-freeze")
+
+    def test_real_unicode_whitespace_and_non_utf8_bind_root_roundtrip(self):
+        self.scenario("unicode-selected-unchanged")
+
+    def test_real_unicode_selected_bind_replacement_is_detected(self):
+        self.scenario("unicode-selected-replacement")
+
+    def test_real_unicode_excluded_bind_replacement_is_ignored(self):
+        self.scenario("unicode-excluded-churn")
 
 
 class LiveRamlogCopyIntegrationTests(OptInLinuxCase):
