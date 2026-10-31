@@ -50,6 +50,32 @@ def command(argv, *, timeout=60, check=True):
     return result
 
 
+def assert_mount_failure_path(error, affected_path):
+    # Production diagnostics quote/escape filenames, including Unicode and
+    # non-UTF8 bytes. Match the exact displayed filename, not a raw prefix
+    # which could accidentally accept a different affected mount.
+    expected = json.dumps(str(affected_path), ensure_ascii=True)
+    if len(expected) > 220:
+        raise AssertionError("Fixture path is too long for an exact diagnostic assertion")
+    if expected not in str(error):
+        raise AssertionError("Mount failure must identify the exact affected path: " + str(error)) from error
+
+
+class MountFailureDiagnosticTests(unittest.TestCase):
+    def test_exact_escaped_diagnostic_matches_ascii_unicode_and_non_utf8_names(self):
+        for path in ("/fixture/volume", "/fixture/volume data\u00a0\u2028-\\040-\udcff"):
+            with self.subTest(path=ascii(path)):
+                error = sources.SourceError("Mount changed: " + json.dumps(path, ensure_ascii=True) + " (ersetzt/geaendert)")
+                assert_mount_failure_path(error, path)
+
+    def test_wrong_or_prefix_only_affected_mount_is_not_accepted(self):
+        path = "/fixture/volume\u00a0data-\udcff"
+        for other in ("/fixture/volume", path + "-other", path + "/child"):
+            error = sources.SourceError("Mount changed: " + json.dumps(other, ensure_ascii=True))
+            with self.subTest(other=ascii(other)), self.assertRaises(AssertionError):
+                assert_mount_failure_path(error, path)
+
+
 class OptInLinuxCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -844,8 +870,13 @@ def mount_worker(scenario):
             try:
                 sources.verify_report(report)
             except sources.SourceError as exc:
-                if str(target) not in str(exc):
-                    raise AssertionError("Mount failure must identify the affected path: " + str(exc)) from exc
+                affected = target
+                if scenario in {"selected-file-shadow", "selected-file-directory-exclude", "selected-nsfs-file-shadow",
+                                "selected-root-unlinked-after-freeze"}:
+                    affected = target / "content"
+                elif scenario in {"selected-new-shadow", "selected-propagated-from-excluded-peer"}:
+                    affected = nested
+                assert_mount_failure_path(exc, affected)
             else:
                 raise AssertionError("Relevant source mount change was accepted: " + scenario)
     finally:
