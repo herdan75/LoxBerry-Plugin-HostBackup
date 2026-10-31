@@ -5,7 +5,7 @@ dokumentiert.
 
 Version 1.2.4 bleibt das reguläre Release vom 23.10.2026. Die Vorabfreigabe
 1.2.5-beta vom 31.10.2026 übernimmt die geprüfte Programmbasis `da034bd`.
-Der Vorabkanal wird erst nach Prüfung des öffentlichen Pakets umgestellt;
+Der Vorabkanal verwendet das separat geprüfte öffentliche Beta-Paket;
 `main` und der reguläre Kanal bleiben unverändert. Frühere Versionen bleiben
 als historische Einträge erhalten.
 Die LoxBerry-Pluginseite wird separat gepflegt.
@@ -46,8 +46,9 @@ validiert werden.
 - Regressionen für Mount-Identitäten und Docker-Prüfzustände ergänzen; bestehende
   NAS-, Quellen-, Dienstestopp-, Recovery-, Watchdog-, UI- und Sicherheitstests
   bleiben Teil der vollständigen GitHub-Prüfung.
-- Vorabkanal-Aktivierung erst nach erfolgreicher Tag-Pipeline und Prüfung des
-  öffentlichen ZIPs. Stabiles Release und regulärer Updatekanal bleiben 1.2.4.
+- Vorabkanal auf 1.2.5-beta umgestellt, nach erfolgreicher Tag-Pipeline und
+  Prüfung des öffentlichen ZIPs. Stabiles Release und regulärer Updatekanal
+  bleiben 1.2.4.
 
 ## [1.2.4] - 2026-10-23
 

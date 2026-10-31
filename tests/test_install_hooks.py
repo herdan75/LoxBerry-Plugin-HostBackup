@@ -270,16 +270,16 @@ class InstallHookTests(unittest.TestCase):
         self.assertNotIn(f"/releases/download/v{version}/", README)
         self.assertNotIn(f"VERSION={version}-beta", PLUGIN_CFG)
 
-    def test_prerelease_preparation_keeps_live_feed_until_public_asset_is_verified(self) -> None:
-        # Publishing the tag/package precedes activation of the remote feed.
-        # The activation commit replaces this receipt with the exact beta URL.
+    def test_prerelease_channel_1_2_5_targets_the_verified_beta_package(self) -> None:
+        # This source contract does not replace the public download/hash check.
+        # Activate the remote branch only after that check has succeeded.
         channel = configparser.ConfigParser()
         channel.read_string(PRERELEASE_CFG)
-        self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.4")
+        self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.5")
         base = "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases"
         self.assertEqual(channel["AUTOUPDATE"]["ARCHIVEURL"],
-                         f"{base}/download/v1.2.4/LoxBerryHostBackup_1.2.4.zip")
-        self.assertEqual(channel["AUTOUPDATE"]["INFOURL"], f"{base}/tag/v1.2.4")
+                         f"{base}/download/v1.2.5-beta/LoxBerryHostBackup_1.2.5.zip")
+        self.assertEqual(channel["AUTOUPDATE"]["INFOURL"], f"{base}/tag/v1.2.5-beta")
 
     def test_stable_1_2_4_and_existing_update_addresses_remain_unchanged(self) -> None:
         expected_archive = "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.4/LoxBerryHostBackup_1.2.4.zip"

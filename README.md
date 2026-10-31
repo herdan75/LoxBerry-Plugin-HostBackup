@@ -1,14 +1,14 @@
 # LoxBerry Host Backup
 
-**Vorabversion 1.2.5-beta · Freigabe vorbereitet am 31.10.2026.**
+**Vorabversion 1.2.5-beta · Veröffentlicht am 31.10.2026.**
 Stabiles Release: **1.2.4 vom 23.10.2026**.
 Dateibasiertes Host-Backup und Restore für LoxBerry, Docker und Linux-Dienste:
 lokale und portable NAS-Sicherungen, Vollbackups, platzsparende Sicherungsstände,
 Zeitplanung, Datenquellenauswahl und Integritätsprüfung.
 
 Der reguläre Kanal bleibt bei **1.2.4** unter dem Tag `v1.2.4`. Der
-Vorabversionskanal wird erst nach Prüfung des öffentlichen ZIPs auf **1.2.5-beta**
-umgestellt. Die interne Pluginversion bleibt numerisch **1.2.5**.
+Vorabversionskanal bietet **1.2.5-beta** an. Die interne Pluginversion bleibt
+numerisch **1.2.5**.
 [Download und Update](#installation) ·
 [Release Notes 1.2.5-beta](docs/RELEASE-1.2.5-beta.md) ·
 [Stabiles Release 1.2.4](docs/RELEASE-1.2.4.md) · [Versionsverlauf](CHANGELOG.md)
@@ -378,8 +378,8 @@ Prüfsumme, Testumfang und getrennten Feed-Nachweis nennen die
 
 1. In der LoxBerry-Pluginverwaltung nach Updates suchen oder das unten verlinkte
    Plugin-ZIP unter **Plugins > Plugin installieren** hochladen.
-   Für **1.2.5-beta** Vorabversionen zulassen; das Update erscheint nach der
-   Kanalaktivierung. Ohne Vorabversionen bleibt **1.2.4** das stabile Release.
+   Für **1.2.5-beta** Vorabversionen zulassen und erneut nach Updates suchen.
+   Ohne Vorabversionen bleibt **1.2.4** das stabile Release.
 2. Nach der Installation die Plugin-Oberfläche öffnen und bei Neuinstallationen
    die Root-Freigabe bewusst bestätigen.
 3. Backup-Ziel auf einem separaten Datenträger, Sicherungsverfahren, Quellen,
@@ -395,7 +395,7 @@ zur LoxBerry-Administration gewechselt werden kann.
 [**Vorabversion 1.2.5-beta herunterladen**](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.5-beta/LoxBerryHostBackup_1.2.5.zip)
 · [Stabile Version 1.2.4 herunterladen](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.4/LoxBerryHostBackup_1.2.4.zip)
 
-Der Vorab-Download ist erst nach der öffentlichen Paketfreigabe erreichbar.
+Der öffentliche Vorab-Download wurde gegen das geprüfte Tag-Paket abgeglichen.
 Öffentliche Plugin-ZIPs direkt installieren, **nicht entpacken**.
 Ein GitHub-Konto ist für den Release-Download nicht nötig. Nur Downloads aus
 GitHub Actions sind äussere Artefakt-ZIPs, aus denen das innere Plugin-ZIP
@@ -1514,19 +1514,18 @@ https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 Entwicklungs- und Veröffentlichungsstand zur Vorabfreigabe von 1.2.5-beta:
 
 - `main`: regulärer Hauptstand 1.2.4
-- `develop`: geprüfte Programmbasis 1.2.5 und Vorbereitung des Vorabkanals
+- `develop`: Vorabversion 1.2.5-beta mit aktivem Vorabkanal
 - `pre-develop`: älterer Referenzstand; unverändert
 
 Öffentliche Update-Dateien und Freigabereihenfolge:
 
 - `main/release.cfg`: reguläres Paket 1.2.4 unter Tag `v1.2.4`
-- `develop/prerelease.cfg`: bis zur geprüften Aktivierung 1.2.4; danach
-  Vorabpaket 1.2.5 unter Tag `v1.2.5-beta`
+- `develop/prerelease.cfg`: Vorabpaket 1.2.5 unter Tag `v1.2.5-beta`
 
-Ein develop-Push allein veröffentlicht kein neues Paket. Für 1.2.5-beta wird
-das Vorabpaket zunächst über die Tag-Pipeline gebaut und öffentlich geprüft.
-Erst danach wird ausschliesslich der Vorabfeed aktiviert und live abgefragt;
-die Paketprüfung belegt diesen Schritt nicht automatisch. Nachweise stehen
+Ein develop-Push allein veröffentlicht kein neues Paket. Für 1.2.5-beta wurde
+das Vorabpaket über die Tag-Pipeline gebaut und der öffentliche Download geprüft.
+Erst danach folgt die Aktivierung ausschliesslich des Vorabfeeds mit separater
+Live-Kontrolle; die Paketprüfung belegt diesen Schritt nicht automatisch. Nachweise stehen
 in den [Release Notes](docs/RELEASE-1.2.5-beta.md) und beim GitHub-Pre-Release.
 `main`, der reguläre Feed und das stabile Release 1.2.4 bleiben unverändert.
 Bestehende ältere Tags und öffentliche ZIPs bleiben unverändert. Die Wiki-Seite

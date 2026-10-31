@@ -1,14 +1,14 @@
 # LoxBerry Host Backup 1.2.5-beta
 
-**Vorabfreigabe vorbereitet am 31.10.2026.** Interne Programm- und Paketversion:
+**Vorabversion veröffentlicht am 31.10.2026.** Interne Programm- und Paketversion:
 `1.2.5`, Release-Tag: `v1.2.5-beta`, Plugin-ZIP: `LoxBerryHostBackup_1.2.5.zip`.
 Das stabile Release, `main` und der reguläre Updatekanal bleiben **1.2.4**.
 
-**Freigabereihenfolge:** Zuerst prüft die Tag-Pipeline das Paket. Nach Prüfung
-des öffentlichen Downloads wird `develop/prerelease.cfg` auf 1.2.5 umgestellt
-und der live geladene Feed kontrolliert. Dieser Vorbereitungsstand behauptet
-weder eine bereits abgeschlossene Veröffentlichung noch einen aktiven Kanal.
-Die abschliessenden Paket-/Kanalnachweise werden beim
+**Freigabereihenfolge:** Die Tag-Pipeline und die Prüfung des öffentlichen
+Downloads sind erfolgreich abgeschlossen. Die anschliessende Kanalaktivierung
+verwendet genau dieses Paket in `develop/prerelease.cfg`. Die Live-Kontrolle des
+Feeds und die separate Aktivierungs-CI werden nach dem Push geprüft; deren
+abschliessende Nachweise stehen beim
 [GitHub-Pre-Release](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.5-beta)
 festgehalten.
 
@@ -37,11 +37,11 @@ gesteuert oder mitgesichert; es werden keine zusätzlichen Sockets freigegeben.
 
 ## Installation und Update
 
-Nach der Kanalaktivierung in der LoxBerry-Pluginverwaltung **Vorabversionen
+In der LoxBerry-Pluginverwaltung **Vorabversionen
 zulassen** und nach Updates suchen. Alternativ das öffentliche
 [LoxBerryHostBackup_1.2.5.zip](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.5-beta/LoxBerryHostBackup_1.2.5.zip)
-direkt installieren, **nicht entpacken**. Der Link funktioniert erst nach der
-öffentlichen Paketfreigabe; danach benötigt der Download kein GitHub-Konto.
+direkt installieren, **nicht entpacken**. Der öffentliche Download benötigt
+kein GitHub-Konto.
 
 Aktive Vorgänge beenden lassen, Einstellungen exportieren und bewährte Backups
 aufbewahren. Direkt über die bestehende Installation aktualisieren,
@@ -78,12 +78,29 @@ erfolgreich abgeschlossen. Der Release-Job dieses Branch-Laufs war absichtlich
 - **15** unprivilegierte Downloadtests, **67** Browserfälle und **8** Paketprüfungen.
 - Syntax, ShellCheck, sudoers und PHP erfolgreich. Das Actions-ZIP wurde zusätzlich
   gegen alle **66** versionierten Paketdateien und **12** ausführbaren Dateimodi
-  des Commits abgeglichen. Der Release-Tag wird erneut separat geprüft.
+  des Commits abgeglichen. Der Release-Tag wurde zusätzlich separat geprüft.
 
 Die Korrekturen bleiben durch Tests für NAS-Inodes, Metadaten, Quellenauswahl,
 Dienst-/Container-Wiederanlauf, Watchdogs, Installation über einen bestehenden
 Stand, Oberflächenaktionen und Downloadschutz abgesichert. Details:
 [Prüfumfang und Grenzen](DEVELOP-1.2.5-VALIDATION.md).
+
+## Veröffentlichungsnachweis
+
+- Tag `v1.2.5-beta` zeigt auf `74db5df8526317e748c3f5140d22c3c7e1a34a95`.
+- [Tag-Pipeline 41195340829](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/41195340829):
+  Build und Veröffentlichung erfolgreich, einschliesslich Hauptsuite,
+  verpflichtender Linux-/CIFS-, Browser-, Sicherheits- und Paketprüfungen.
+- Öffentliches ZIP ohne Anmeldung mit HTTP 200 geladen: **29 558 286 Bytes**.
+  SHA-256: `e35147be8c6e9ffebfb2e3e45a7b672de29bdc6fe1873db846694c51bb0985be`.
+  Identisch mit dem Tag-CI-Artefakt und dem veröffentlichten GitHub-Asset-Digest.
+- CRC, sichere ZIP-Pfade, alle **67** versionierten Paketdateien, **12**
+  ausführbare Dateimodi und interne Version 1.2.5 gegen den Tag abgeglichen.
+  Acht zusätzliche Pakettests am öffentlich heruntergeladenen ZIP erfolgreich.
+- `main`, `release.cfg` und das stabile Paket 1.2.4 werden nicht geändert.
+  Das Tag-Paket enthält noch den damaligen Vorabfeed-Stand; für Updates gilt
+  die unveränderte Remote-Adresse aus `plugin.cfg`. Der Tag und sein geprüftes
+  ZIP werden nach der Kanalaktivierung nicht nachträglich ersetzt.
 
 ## Prüfgrenzen
 
