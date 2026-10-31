@@ -1,9 +1,11 @@
-# 1.2.5 – Entwicklungsstand und Prüfgrenzen
+# 1.2.5 – Geprüfte Programmbasis und Prüfgrenzen
 
-Stand: 31.10.2026. Nur develop; noch nicht veröffentlicht. Beide öffentlichen
-Updatekanäle bleiben unverändert bei 1.2.4. Dieser Text beschreibt den Prüfumfang,
-nicht das Ergebnis eines noch laufenden oder zukünftigen CI-Laufs. Massgeblich
-ist der erfolgreiche GitHub-Actions-Lauf des tatsächlich installierten Commits.
+Stand: 31.10.2026. Die geprüfte Programmbasis `da034bd` wird unverändert für
+1.2.5-beta übernommen. Stabiles Release und regulärer Updatekanal bleiben 1.2.4.
+Dieser Text trennt die Entwicklungsprüfung von Tag-/Paketprüfung und Aktivierung
+des Vorabfeeds. Der aktuelle Freigabestatus steht in den
+[Release Notes](RELEASE-1.2.5-beta.md) und beim
+[GitHub-Pre-Release](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.5-beta).
 
 ## Korrekturen
 
@@ -45,7 +47,7 @@ Erweiterung der Berechtigungen.
 
 ## Regressionsumfang
 
-| Bereich | Weiterhin zu prüfende Fälle |
+| Bereich | Abgedeckte Regressionsfälle |
 | --- | --- |
 | Mount-Identitäten | nspawn-Muster für boot_id/kmsg, terminales `//deleted`, cgroup-/cgroup2-Elternsegmente, Namespace-IDs, Automount/gestapelte Mounts, Report-Roundtrip, beide Grundregeln |
 | Mount-Namen | Unicode-Leerzeichen und -Zeilentrenner, normale maskierte Leerzeichen und Backslashes, unveränderte Pfade und Netzquellen-Ausschlüsse, ungültige Datensätze |
@@ -60,6 +62,18 @@ Erweiterung der Berechtigungen.
 | Installation | Syntax/ShellCheck/sudoers/PHP, Update-Erhalt der Konfiguration, ZIP-Inhalt, Dateirechte und checksum-gepinnte Laufzeit |
 
 ## Nachweis und Grenzen
+
+Die [GitHub-Prüfung 41189024061](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/41189024061)
+für `da034bd2f59905c3aabab862e69f994aaf9e2a8d` war erfolgreich:
+
+- Hauptsuite: 874 Tests mit zehn zunächst ausgesparten Integrations-/Paketprüfungen.
+  Diese opt-in Prüfungen beziehungsweise Testklassen liefen in den nachfolgenden
+  verpflichtenden Schritten; die ursprünglichen Skips selbst sind keine Erfolge.
+- 144 zusätzliche Linux-/CIFS-Integrationstest-Durchläufe: 32 + 18 + 38 + 6 + 32 + 18.
+- 15 unprivilegierte Downloadtests, 67 Browserfälle und acht Paketprüfungen.
+- Syntax, ShellCheck, sudoers und PHP erfolgreich; das Actions-ZIP stimmte bei
+  allen 66 versionierten Paketdateien mit dem Commit überein, einschliesslich
+  der geprüften ausführbaren Dateimodi. Das belegt noch kein veröffentlichtes ZIP.
 
 Die vollständige bestehende Linux-Suite, echte Linux-/CIFS-Integration,
 unprivilegierte Downloads, Browserregressionen und Paketprüfung laufen im
@@ -81,9 +95,10 @@ Installation erfolgt ohne vorherige Deinstallation, nach Abschluss aktiver
 Vorgänge und mit aufbewahrten bewährten Backups. Anschliessend gespeicherte
 Quellen und Stop-Auswahl kontrollieren, Vorprüfung und manuelles Backup testen.
 
-Automatisierte Regressionen sind keine Zusicherung für jedes NAS, jeden Kernel
-oder jede Container-Konfiguration. MiLox' konkrete Installation und ein
-vollständiger System-Restore sind damit noch nicht praktisch bestätigt.
+Für den letzten Teststand liegt eine positive Rückmeldung vor. Sie ist keine
+Zusicherung für jedes NAS, jeden Kernel oder jede Container-Konfiguration und
+kein Nachweis eines vollständigen bootfähigen System-Restores. Produktive
+Hardware und Anwendungskonsistenz müssen weiterhin vor Ort geprüft werden.
 
 ## Technische Grundlagen
 

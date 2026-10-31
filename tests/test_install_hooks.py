@@ -252,24 +252,27 @@ class InstallHookTests(unittest.TestCase):
                 self.assertIn(f"## [{tag[1:]}]", CHANGELOG)
         self.assertIn("prerelease: ${{ contains(github.ref_name, '-') }}", WORKFLOW)
 
-    def test_develop_package_keeps_unpublished_version_separate_from_live_feeds(self) -> None:
+    def test_prerelease_1_2_5_keeps_numeric_package_version_and_documents_limits(self) -> None:
         plugin = configparser.ConfigParser()
         plugin.read_string(PLUGIN_CFG)
         version = plugin["PLUGIN"]["VERSION"]
         self.assertEqual(version, "1.2.5")
         notes = (ROOT / "docs" / f"DEVELOP-{version}-VALIDATION.md").read_text(encoding="utf-8")
         self.assertIn(version, notes)
-        self.assertIn(f"Geplant: {version} (develop, noch nicht veröffentlicht)", CHANGELOG)
-        self.assertIn(f"**Entwicklungsstand {version} · noch nicht veröffentlicht", README)
+        release_notes = (ROOT / "docs" / f"RELEASE-{version}-beta.md").read_text(encoding="utf-8")
+        self.assertIn(f"## [{version}-beta]", CHANGELOG)
+        self.assertIn(f"v{version}-beta", release_notes)
+        self.assertIn(f"LoxBerryHostBackup_{version}.zip", release_notes)
+        self.assertIn("1.2.5-beta", README)
+        self.assertIn("1.2.4", release_notes)
+        self.assertIn("da034bd", release_notes)
+        self.assertIn("41189024061", release_notes)
         self.assertNotIn(f"/releases/download/v{version}/", README)
         self.assertNotIn(f"VERSION={version}-beta", PLUGIN_CFG)
-        self.assertNotIn(f"## [{version}-beta]", CHANGELOG)
-        for source in (RELEASE_CFG, PRERELEASE_CFG):
-            channel = configparser.ConfigParser()
-            channel.read_string(source)
-            self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.4")
 
-    def test_prerelease_channel_follows_same_stable_1_2_4_package(self) -> None:
+    def test_prerelease_preparation_keeps_live_feed_until_public_asset_is_verified(self) -> None:
+        # Publishing the tag/package precedes activation of the remote feed.
+        # The activation commit replaces this receipt with the exact beta URL.
         channel = configparser.ConfigParser()
         channel.read_string(PRERELEASE_CFG)
         self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.4")
@@ -278,13 +281,12 @@ class InstallHookTests(unittest.TestCase):
                          f"{base}/download/v1.2.4/LoxBerryHostBackup_1.2.4.zip")
         self.assertEqual(channel["AUTOUPDATE"]["INFOURL"], f"{base}/tag/v1.2.4")
 
-    def test_stable_1_2_4_channels_keep_existing_update_addresses(self) -> None:
+    def test_stable_1_2_4_and_existing_update_addresses_remain_unchanged(self) -> None:
         expected_archive = "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.4/LoxBerryHostBackup_1.2.4.zip"
-        for source in (RELEASE_CFG, PRERELEASE_CFG):
-            channel = configparser.ConfigParser()
-            channel.read_string(source)
-            self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.4")
-            self.assertEqual(channel["AUTOUPDATE"]["ARCHIVEURL"], expected_archive)
+        channel = configparser.ConfigParser()
+        channel.read_string(RELEASE_CFG)
+        self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.4")
+        self.assertEqual(channel["AUTOUPDATE"]["ARCHIVEURL"], expected_archive)
         plugin = configparser.ConfigParser()
         plugin.read_string(PLUGIN_CFG)
         self.assertEqual(plugin["AUTOUPDATE"]["RELEASECFG"], "https://raw.githubusercontent.com/herdan75/LoxBerry-Plugin-HostBackup/main/release.cfg")

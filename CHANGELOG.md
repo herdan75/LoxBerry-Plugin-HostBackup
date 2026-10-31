@@ -3,16 +3,24 @@
 Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
-Version 1.2.4 ist das reguläre Release vom 23.10.2026. Regulärer Kanal und
-Vorabversionskanal verwenden dasselbe stabile Paket; eine zusätzliche Beta ist
-nicht erforderlich. Frühere Versionen bleiben als historische Einträge erhalten.
+Version 1.2.4 bleibt das reguläre Release vom 23.10.2026. Die Vorabfreigabe
+1.2.5-beta vom 31.10.2026 übernimmt die geprüfte Programmbasis `da034bd`.
+Der Vorabkanal wird erst nach Prüfung des öffentlichen Pakets umgestellt;
+`main` und der reguläre Kanal bleiben unverändert. Frühere Versionen bleiben
+als historische Einträge erhalten.
 Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
 ## [Unreleased]
 
-### Geplant: 1.2.5 (develop, noch nicht veröffentlicht)
+## [1.2.5-beta] - 2026-10-31
+
+- Interne Programm- und Paketversion 1.2.5, Tag `v1.2.5-beta` und
+  `LoxBerryHostBackup_1.2.5.zip`. Programmlogik unverändert gegenüber dem
+  geprüften Teststand `da034bd`; nur Freigabedokumentation und Kanalmetadaten
+  werden nachgezogen. Bestehende manuelle 1.2.5-Installationen erhalten keinen
+  numerischen Versionssprung. [Release Notes](docs/RELEASE-1.2.5-beta.md).
 
 - Quellenprüfung in systemd-nspawn korrigieren: Der vom Kernel angehängte
   terminale Marker `//deleted` wird nur in Mount-Root-Identitäten akzeptiert.
@@ -38,8 +46,8 @@ validiert werden.
 - Regressionen für Mount-Identitäten und Docker-Prüfzustände ergänzen; bestehende
   NAS-, Quellen-, Dienstestopp-, Recovery-, Watchdog-, UI- und Sicherheitstests
   bleiben Teil der vollständigen GitHub-Prüfung.
-- Nur develop-Testpaket 1.2.5. Release und beide öffentlichen Updatekanäle bleiben
-  unverändert bei 1.2.4; kein neues veröffentlichtes Release oder Pre-Release.
+- Vorabkanal-Aktivierung erst nach erfolgreicher Tag-Pipeline und Prüfung des
+  öffentlichen ZIPs. Stabiles Release und regulärer Updatekanal bleiben 1.2.4.
 
 ## [1.2.4] - 2026-10-23
 
@@ -1156,7 +1164,8 @@ nicht überarbeitet worden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.4...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.5-beta...develop
+[1.2.5-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.4...v1.2.5-beta
 [1.2.4]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.0...v1.2.4
 [1.2.3-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.2-beta...v1.2.3-beta
 [1.2.2-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.1-beta...v1.2.2-beta
