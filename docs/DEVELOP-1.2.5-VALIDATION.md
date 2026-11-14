@@ -3,7 +3,7 @@
 Stand: 31.10.2026. Die geprüfte Programmbasis `da034bd` wird unverändert für
 1.2.5-beta übernommen. Dieser Bericht dokumentiert die Entwicklungsabnahme;
 die unveränderte Programmbasis wird am 14.11.2026 als reguläres Release 1.2.5
-vorbereitet. Die separate Veröffentlichung und Kanalprüfung stehen in den
+veröffentlicht. Die separate Veröffentlichung und Kanalprüfung stehen in den
 [Release Notes 1.2.5](RELEASE-1.2.5.md).
 Dieser Text trennt die Entwicklungsprüfung von Tag-/Paketprüfung und Aktivierung
 der Updatekanäle. Der historische Vorabfreigabe-Nachweis steht in den

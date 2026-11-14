@@ -279,26 +279,25 @@ class InstallHookTests(unittest.TestCase):
         self.assertIn(f"/releases/download/v{version}/LoxBerryHostBackup_{version}.zip", README)
         self.assertNotIn(f"VERSION={version}-beta", PLUGIN_CFG)
 
-    def test_stable_preparation_keeps_existing_prerelease_feed_until_public_asset_is_verified(self) -> None:
-        # Keep the published beta download during stable tag preparation.
-        # Replace this receipt only after verifying the public stable ZIP.
+    def test_prerelease_channel_follows_verified_stable_1_2_5_package(self) -> None:
+        # Public ZIP matched tag CI 43602978550 before this feed activation.
+        # Remote branch availability is still verified separately after push.
         channel = configparser.ConfigParser()
         channel.read_string(PRERELEASE_CFG)
         self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.5")
         base = "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases"
         self.assertEqual(channel["AUTOUPDATE"]["ARCHIVEURL"],
-                         f"{base}/download/v1.2.5-beta/LoxBerryHostBackup_1.2.5.zip")
-        self.assertEqual(channel["AUTOUPDATE"]["INFOURL"], f"{base}/tag/v1.2.5-beta")
+                         f"{base}/download/v1.2.5/LoxBerryHostBackup_1.2.5.zip")
+        self.assertEqual(channel["AUTOUPDATE"]["INFOURL"], f"{base}/tag/v1.2.5")
 
-    def test_stable_preparation_keeps_existing_stable_feed_and_update_addresses(self) -> None:
-        # A new stable tag must not expose a feed URL before its ZIP exists.
-        # Feed activation is a separate commit after the public package audit.
-        expected_archive = "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.4/LoxBerryHostBackup_1.2.4.zip"
+    def test_stable_1_2_5_channel_preserves_existing_update_addresses(self) -> None:
+        # Both channels use the verified stable release; updater URLs stay fixed.
+        expected_archive = "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.5/LoxBerryHostBackup_1.2.5.zip"
         channel = configparser.ConfigParser()
         channel.read_string(RELEASE_CFG)
-        self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.4")
+        self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.5")
         self.assertEqual(channel["AUTOUPDATE"]["ARCHIVEURL"], expected_archive)
-        self.assertEqual(channel["AUTOUPDATE"]["INFOURL"], "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.4")
+        self.assertEqual(channel["AUTOUPDATE"]["INFOURL"], "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.5")
         plugin = configparser.ConfigParser()
         plugin.read_string(PLUGIN_CFG)
         self.assertEqual(plugin["AUTOUPDATE"]["RELEASECFG"], "https://raw.githubusercontent.com/herdan75/LoxBerry-Plugin-HostBackup/main/release.cfg")

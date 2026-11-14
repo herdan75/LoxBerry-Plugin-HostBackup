@@ -1,14 +1,14 @@
 # LoxBerry Host Backup
 
-**Stabile Version 1.2.5 · Freigabe vorbereitet am 14.11.2026.**
+**Stabile Version 1.2.5 · Veröffentlicht am 14.11.2026.**
 Dateibasiertes Host-Backup und Restore für LoxBerry, Docker und Linux-Dienste:
 lokale und portable NAS-Sicherungen, Vollbackups, platzsparende Sicherungsstände,
 Zeitplanung, Datenquellenauswahl und Integritätsprüfung.
 
-Die unveränderte Programmlogik aus **1.2.5-beta** wird als reguläres Release
-**1.2.5** unter dem Tag `v1.2.5` übernommen. Nach Prüfung des öffentlichen ZIPs
-werden beide Updatekanäle auf dieses stabile Paket umgestellt. Bis dahin bleiben
-der reguläre Kanal bei **1.2.4** und der Vorabkanal bei **1.2.5-beta**.
+Die unveränderte Programmlogik aus **1.2.5-beta** ist als reguläres Release
+**1.2.5** unter dem Tag `v1.2.5` veröffentlicht. Die Tag-Pipeline und das öffentlich
+heruntergeladene ZIP sind geprüft. Beide Kanaldateien verweisen auf dieses stabile
+Paket; Nachlauf-CI und Live-Kanalprüfung werden getrennt beim GitHub-Release belegt.
 Die interne Pluginversion bleibt numerisch **1.2.5**.
 [Download und Update](#installation) ·
 [Release Notes 1.2.5](docs/RELEASE-1.2.5.md) ·
@@ -96,7 +96,7 @@ alle fünf Minuten eine Mail. Keine zusätzlichen Sicherungsmodi.
 > erhalten keinen numerischen Versionssprung. Der Teststand `da034bd` und die
 > veröffentlichte Beta haben dieselbe Programmlogik; ein erneutes Funktionsupdate
 > ist für diese Stände nicht nötig. Bei einem älteren oder unbekannten Teststand
-> nach Freigabe das endgültige stabile ZIP manuell darüber installieren.
+> das endgültige stabile ZIP manuell darüber installieren.
 
 > [!IMPORTANT]
 > **Erst Einstellungen speichern, dann sichern.** Automatische Backups verwenden
@@ -260,10 +260,14 @@ Integrationstest-Durchläufe, 15 unprivilegierte Downloadtests, 67 Browserfälle
 und acht Paketprüfungen. Zusätzlich waren die
 [Beta-Tag-Pipeline 41195340829](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/41195340829)
 und die [Beta-Kanalprüfung 41196464065](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/41196464065)
-erfolgreich. Dies sind vorhandene Nachweise für den Vorabstand, noch keine
-Prüfbestätigung des neuen stabilen Pakets. Für `v1.2.5` werden Tag-Pipeline,
-öffentlicher Download und beide Live-Feeds erneut separat geprüft; die endgültigen
-Belege stehen in den [Release Notes](docs/RELEASE-1.2.5.md) und beim
+erfolgreich. Diese Nachweise bleiben als historische Vorabprüfungen erhalten.
+Die neue [stabile Tag-Pipeline 43602978550](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/43602978550)
+bestand denselben vollständigen Prüfumfang auf Ubuntu 24.04. Das öffentliche
+stabile ZIP wurde ohne Anmeldung geladen, bytegleich zum CI-Paket und gegen
+68 versionierte Paketdateien sowie zwölf ausführbare Dateimodi geprüft. Seine
+40 Laufzeitdateien entsprechen unverändert der Beta. Live-Feeds und abschliessende
+Branch-CI bleiben separate Nachweise; die endgültigen Belege stehen in den
+[Release Notes](docs/RELEASE-1.2.5.md) und beim
 [GitHub-Release](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.5).
 Die positive Anwender-Rückmeldung und das Ausbleiben weiterer gemeldeter Probleme
 sind keine allgemeine Hardware- oder vollständige System-Restore-Abnahme.
@@ -384,8 +388,8 @@ Prüfsumme, Testumfang und getrennten Feed-Nachweis nennen die
 
 1. In der LoxBerry-Pluginverwaltung nach Updates suchen oder das unten verlinkte
    Plugin-ZIP unter **Plugins > Plugin installieren** hochladen.
-   Nach der Kanalaktivierung wird **1.2.5** regulär angeboten; Vorabversionen
-   müssen dafür nicht zugelassen sein. Beide Kanäle verwenden dann dasselbe Paket.
+   Das stabile Release **1.2.5** benötigt keine zugelassenen Vorabversionen.
+   Regulärer und Vorabversionskanal sind auf dasselbe stabile Paket ausgerichtet.
 2. Nach der Installation die Plugin-Oberfläche öffnen und bei Neuinstallationen
    die Root-Freigabe bewusst bestätigen.
 3. Backup-Ziel auf einem separaten Datenträger, Sicherungsverfahren, Quellen,
@@ -402,7 +406,7 @@ zur LoxBerry-Administration gewechselt werden kann.
 · [Bisheriges Vorabpaket 1.2.5-beta](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.5-beta/LoxBerryHostBackup_1.2.5.zip)
 · [Bisherige stabile Version 1.2.4](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.4/LoxBerryHostBackup_1.2.4.zip)
 
-Der neue stabile Download ist erst nach der öffentlichen Paketfreigabe erreichbar.
+Der stabile Download wurde öffentlich ohne Anmeldung erfolgreich geprüft.
 Öffentliche Plugin-ZIPs direkt installieren, **nicht entpacken**.
 Ein GitHub-Konto ist für den Release-Download nicht nötig. Nur Downloads aus
 GitHub Actions sind äussere Artefakt-ZIPs, aus denen das innere Plugin-ZIP
@@ -429,7 +433,7 @@ Versionssprung. Die Beta und der geprüfte Teststand `da034bd` verwenden dieselb
 Programmlogik; für sie ist kein erneutes Funktionsupdate nötig. Die stabile
 Freigabe zieht Dokumentation, Kanalmetadaten und zugehörige Tests nach, nicht
 die Laufzeitdateien. Das gesamte ZIP ist deshalb nicht zwangsläufig bytegleich.
-Bei einem älteren oder unbekannten Teststand nach Freigabe das endgültige stabile
+Bei einem älteren oder unbekannten Teststand das endgültige stabile
 ZIP manuell darüber installieren.
 
 Backup-Ziel, Sicherungsverfahren, Quellenregeln, Ausschlüsse, Zeitplan und
@@ -1520,7 +1524,7 @@ Repository:
 https://github.com/herdan75/LoxBerry-Plugin-HostBackup
 ```
 
-Geplante Zuordnung nach der stabilen Freigabe von 1.2.5:
+Branch-Zuordnung für die stabile Freigabe von 1.2.5:
 
 - `main`: regulärer Hauptstand 1.2.5
 - `develop`: derselbe freigegebene Programmstand; Vorabkanal folgt 1.2.5
@@ -1531,12 +1535,13 @@ Geplante Zuordnung nach der stabilen Freigabe von 1.2.5:
 - `main/release.cfg`: reguläres Paket 1.2.5 unter Tag `v1.2.5`
 - `develop/prerelease.cfg`: dasselbe stabile Paket 1.2.5 unter Tag `v1.2.5`
 
-Ein develop-Push allein veröffentlicht kein neues Paket. Für 1.2.5 wird das
-stabile Paket über die Tag-Pipeline geprüft und der öffentliche Download mit
-dem geprüften Artefakt verglichen. Erst danach werden beide Branch-Feeds umgestellt
-und live kontrolliert; die Paketprüfung belegt diesen Schritt nicht automatisch.
-Nachweise stehen in den [Release Notes](docs/RELEASE-1.2.5.md) und beim GitHub-Release.
-Bis zur Aktivierung bleiben die öffentlichen Feeds auf 1.2.4 beziehungsweise 1.2.5-beta.
+Ein develop-Push allein veröffentlicht kein neues Paket. Für 1.2.5 sind die
+Tag-Pipeline und der öffentliche Download erfolgreich geprüft; das öffentliche
+ZIP ist bytegleich zum CI-Paket. Anschliessend werden beide Branch-Feeds mit
+diesem Dokumentationsstand umgestellt. Ihre Live-Abfrage und die abschliessende
+Branch-CI sind getrennte Nachweise, keine automatische Folge der Paketprüfung.
+Die finalen Ergebnisse stehen beim GitHub-Release; bereits erbrachte Nachweise
+stehen in den [Release Notes](docs/RELEASE-1.2.5.md).
 Bestehende ältere Tags und öffentliche ZIPs bleiben unverändert. Die Wiki-Seite
 wird separat gepflegt, nicht durch einen Git-Push geändert.
 

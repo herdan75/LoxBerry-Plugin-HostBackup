@@ -4,9 +4,10 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
 Die stabile Freigabe 1.2.5 vom 14.11.2026 übernimmt die Programmlogik der
-veröffentlichten Vorabversion 1.2.5-beta unverändert. Beide Updatekanäle werden
-erst nach erfolgreicher Tag-Pipeline und Prüfung des öffentlichen stabilen ZIPs
-auf dieses Paket umgestellt. Bis dahin bleiben die bisherigen Feeds aktiv.
+veröffentlichten Vorabversion 1.2.5-beta unverändert. Tag-Pipeline und öffentliches
+stabiles ZIP sind erfolgreich geprüft. Beide Kanaldateien werden mit diesem
+Stand auf das stabile Paket umgestellt; die anschliessende Live-Kanalprüfung und
+Branch-CI werden separat beim GitHub-Release dokumentiert.
 Frühere Versionen bleiben als historische Einträge erhalten.
 Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
@@ -21,14 +22,14 @@ validiert werden.
   für systemd-nspawn/cgroup, die unveränderte Verarbeitung von Unicode-Zeichen
   in Mount-Namen und die verbesserte, zeitlich begrenzte Docker-Erkennung.
 - Programm- und Paketversion bleiben numerisch `1.2.5`; stabiler Tag `v1.2.5`
-  und Paket `LoxBerryHostBackup_1.2.5.zip`. Nach separater Prüfung des öffentlichen
-  ZIPs sollen regulärer und Vorabversionskanal dasselbe stabile Paket verwenden.
+  und Paket `LoxBerryHostBackup_1.2.5.zip`. Nach erfolgreicher Prüfung des öffentlichen
+  ZIPs verweisen reguläre und Vorabversions-Kanaldatei auf dasselbe stabile Paket.
   Ein Branch-Push allein aktiviert die neue Version nicht.
 - Bestehende Installationen von 1.2.5-beta und gleich nummerierte manuelle
   1.2.5-Pakete erhalten keinen numerischen Versionssprung. Die veröffentlichte
   Beta und der geprüfte Teststand `da034bd` enthalten dieselbe Programmlogik;
   kein erneutes Funktionsupdate erforderlich. Bei einem älteren oder unbekannten
-  Testpaket das endgültige stabile ZIP nach Freigabe direkt darüber installieren.
+  Testpaket das endgültige stabile ZIP direkt darüber installieren.
 - README, Release-Dokumentation und Kanalprüfungen nachgezogen. Keine neuen
   Sicherungsmodi und keine automatische Änderung gespeicherter Einstellungen.
   Vorhandene Beta-Testnachweise und die erneute Prüfung der stabilen Freigabe
