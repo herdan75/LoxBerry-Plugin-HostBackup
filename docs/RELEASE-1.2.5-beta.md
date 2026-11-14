@@ -1,5 +1,10 @@
 # LoxBerry Host Backup 1.2.5-beta
 
+Historischer Nachweis der Vorabfreigabe vom 31.10.2026. Für die anschliessende
+reguläre Freigabe derselben Programmbasis siehe
+[Release Notes 1.2.5](RELEASE-1.2.5.md). Die folgenden Kanalangaben beschreiben
+den damaligen Stand und sind keine aktuellen Update-Empfehlungen.
+
 **Vorabversion veröffentlicht am 31.10.2026.** Interne Programm- und Paketversion:
 `1.2.5`, Release-Tag: `v1.2.5-beta`, Plugin-ZIP: `LoxBerryHostBackup_1.2.5.zip`.
 Das stabile Release, `main` und der reguläre Updatekanal bleiben **1.2.4**.

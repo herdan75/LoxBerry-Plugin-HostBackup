@@ -252,27 +252,34 @@ class InstallHookTests(unittest.TestCase):
                 self.assertIn(f"## [{tag[1:]}]", CHANGELOG)
         self.assertIn("prerelease: ${{ contains(github.ref_name, '-') }}", WORKFLOW)
 
-    def test_prerelease_1_2_5_keeps_numeric_package_version_and_documents_limits(self) -> None:
+    def test_stable_1_2_5_keeps_numeric_version_and_historical_beta_evidence(self) -> None:
         plugin = configparser.ConfigParser()
         plugin.read_string(PLUGIN_CFG)
         version = plugin["PLUGIN"]["VERSION"]
         self.assertEqual(version, "1.2.5")
         notes = (ROOT / "docs" / f"DEVELOP-{version}-VALIDATION.md").read_text(encoding="utf-8")
         self.assertIn(version, notes)
-        release_notes = (ROOT / "docs" / f"RELEASE-{version}-beta.md").read_text(encoding="utf-8")
+        release_notes = (ROOT / "docs" / f"RELEASE-{version}.md").read_text(encoding="utf-8")
+        beta_notes = (ROOT / "docs" / f"RELEASE-{version}-beta.md").read_text(encoding="utf-8")
+        self.assertIn(f"## [{version}]", CHANGELOG)
         self.assertIn(f"## [{version}-beta]", CHANGELOG)
-        self.assertIn(f"v{version}-beta", release_notes)
+        self.assertIn(f"v{version}", release_notes)
+        self.assertIn("14.11.2026", release_notes)
         self.assertIn(f"LoxBerryHostBackup_{version}.zip", release_notes)
         self.assertIn("1.2.5-beta", README)
-        self.assertIn("1.2.4", release_notes)
-        self.assertIn("da034bd", release_notes)
-        self.assertIn("41189024061", release_notes)
-        self.assertNotIn(f"/releases/download/v{version}/", README)
+        self.assertIn("1.2.5-beta", release_notes)
+        self.assertIn("bab2563", release_notes)
+        self.assertIn("41196464065", release_notes)
+        self.assertIn("41195340829", release_notes)
+        self.assertIn(f"v{version}-beta", beta_notes)
+        self.assertIn("da034bd", beta_notes)
+        self.assertIn("41189024061", beta_notes)
+        self.assertIn(f"/releases/download/v{version}/LoxBerryHostBackup_{version}.zip", README)
         self.assertNotIn(f"VERSION={version}-beta", PLUGIN_CFG)
 
-    def test_prerelease_channel_1_2_5_targets_the_verified_beta_package(self) -> None:
-        # This source contract does not replace the public download/hash check.
-        # Activate the remote branch only after that check has succeeded.
+    def test_stable_preparation_keeps_existing_prerelease_feed_until_public_asset_is_verified(self) -> None:
+        # Keep the published beta download during stable tag preparation.
+        # Replace this receipt only after verifying the public stable ZIP.
         channel = configparser.ConfigParser()
         channel.read_string(PRERELEASE_CFG)
         self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.5")
@@ -281,12 +288,15 @@ class InstallHookTests(unittest.TestCase):
                          f"{base}/download/v1.2.5-beta/LoxBerryHostBackup_1.2.5.zip")
         self.assertEqual(channel["AUTOUPDATE"]["INFOURL"], f"{base}/tag/v1.2.5-beta")
 
-    def test_stable_1_2_4_and_existing_update_addresses_remain_unchanged(self) -> None:
+    def test_stable_preparation_keeps_existing_stable_feed_and_update_addresses(self) -> None:
+        # A new stable tag must not expose a feed URL before its ZIP exists.
+        # Feed activation is a separate commit after the public package audit.
         expected_archive = "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/download/v1.2.4/LoxBerryHostBackup_1.2.4.zip"
         channel = configparser.ConfigParser()
         channel.read_string(RELEASE_CFG)
         self.assertEqual(channel["AUTOUPDATE"]["VERSION"], "1.2.4")
         self.assertEqual(channel["AUTOUPDATE"]["ARCHIVEURL"], expected_archive)
+        self.assertEqual(channel["AUTOUPDATE"]["INFOURL"], "https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.4")
         plugin = configparser.ConfigParser()
         plugin.read_string(PLUGIN_CFG)
         self.assertEqual(plugin["AUTOUPDATE"]["RELEASECFG"], "https://raw.githubusercontent.com/herdan75/LoxBerry-Plugin-HostBackup/main/release.cfg")

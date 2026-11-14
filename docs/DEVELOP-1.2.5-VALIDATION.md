@@ -1,10 +1,13 @@
 # 1.2.5 – Geprüfte Programmbasis und Prüfgrenzen
 
 Stand: 31.10.2026. Die geprüfte Programmbasis `da034bd` wird unverändert für
-1.2.5-beta übernommen. Stabiles Release und regulärer Updatekanal bleiben 1.2.4.
+1.2.5-beta übernommen. Dieser Bericht dokumentiert die Entwicklungsabnahme;
+die unveränderte Programmbasis wird am 14.11.2026 als reguläres Release 1.2.5
+vorbereitet. Die separate Veröffentlichung und Kanalprüfung stehen in den
+[Release Notes 1.2.5](RELEASE-1.2.5.md).
 Dieser Text trennt die Entwicklungsprüfung von Tag-/Paketprüfung und Aktivierung
-des Vorabfeeds. Der aktuelle Freigabestatus steht in den
-[Release Notes](RELEASE-1.2.5-beta.md) und beim
+der Updatekanäle. Der historische Vorabfreigabe-Nachweis steht in den
+[Release Notes 1.2.5-beta](RELEASE-1.2.5-beta.md) und beim
 [GitHub-Pre-Release](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/releases/tag/v1.2.5-beta).
 
 ## Korrekturen

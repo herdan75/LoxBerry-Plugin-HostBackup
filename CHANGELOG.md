@@ -3,16 +3,36 @@
 Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei
 dokumentiert.
 
-Version 1.2.4 bleibt das reguläre Release vom 23.10.2026. Die Vorabfreigabe
-1.2.5-beta vom 31.10.2026 übernimmt die geprüfte Programmbasis `da034bd`.
-Der Vorabkanal verwendet das separat geprüfte öffentliche Beta-Paket;
-`main` und der reguläre Kanal bleiben unverändert. Frühere Versionen bleiben
-als historische Einträge erhalten.
+Die stabile Freigabe 1.2.5 vom 14.11.2026 übernimmt die Programmlogik der
+veröffentlichten Vorabversion 1.2.5-beta unverändert. Beide Updatekanäle werden
+erst nach erfolgreicher Tag-Pipeline und Prüfung des öffentlichen stabilen ZIPs
+auf dieses Paket umgestellt. Bis dahin bleiben die bisherigen Feeds aktiv.
+Frühere Versionen bleiben als historische Einträge erhalten.
 Die LoxBerry-Pluginseite wird separat gepflegt.
 Restore-Funktionen sollten weiterhin zuerst in einer Test- oder Rescue-Umgebung
 validiert werden.
 
 ## [Unreleased]
+
+## [1.2.5] - 2026-11-14
+
+- Reguläre Freigabe des seit 31.10.2026 veröffentlichten Vorabstands
+  `1.2.5-beta`, ohne neue Runtime-Änderungen. Enthalten sind die Quellenkorrekturen
+  für systemd-nspawn/cgroup, die unveränderte Verarbeitung von Unicode-Zeichen
+  in Mount-Namen und die verbesserte, zeitlich begrenzte Docker-Erkennung.
+- Programm- und Paketversion bleiben numerisch `1.2.5`; stabiler Tag `v1.2.5`
+  und Paket `LoxBerryHostBackup_1.2.5.zip`. Nach separater Prüfung des öffentlichen
+  ZIPs sollen regulärer und Vorabversionskanal dasselbe stabile Paket verwenden.
+  Ein Branch-Push allein aktiviert die neue Version nicht.
+- Bestehende Installationen von 1.2.5-beta und gleich nummerierte manuelle
+  1.2.5-Pakete erhalten keinen numerischen Versionssprung. Die veröffentlichte
+  Beta und der geprüfte Teststand `da034bd` enthalten dieselbe Programmlogik;
+  kein erneutes Funktionsupdate erforderlich. Bei einem älteren oder unbekannten
+  Testpaket das endgültige stabile ZIP nach Freigabe direkt darüber installieren.
+- README, Release-Dokumentation und Kanalprüfungen nachgezogen. Keine neuen
+  Sicherungsmodi und keine automatische Änderung gespeicherter Einstellungen.
+  Vorhandene Beta-Testnachweise und die erneute Prüfung der stabilen Freigabe
+  bleiben getrennt dokumentiert: [Release Notes](docs/RELEASE-1.2.5.md).
 
 ## [1.2.5-beta] - 2026-10-31
 
@@ -1165,7 +1185,8 @@ nicht überarbeitet worden.
 - Früher interner Entwicklungsstand vor der Beta-/Testversion 0.2.0.
 - Nur für Tests auf nicht-kritischen Systemen vorgesehen.
 
-[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.5-beta...develop
+[Unreleased]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.5...develop
+[1.2.5]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.5-beta...v1.2.5
 [1.2.5-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.4...v1.2.5-beta
 [1.2.4]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.0...v1.2.4
 [1.2.3-beta]: https://github.com/herdan75/LoxBerry-Plugin-HostBackup/compare/v1.2.2-beta...v1.2.3-beta
