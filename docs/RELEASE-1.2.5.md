@@ -111,6 +111,14 @@ erneute Prüfung des stabilen Pakets noch einen vollständigen System-Restore-Te
 
 ## Noch erforderliche Freigabenachweise
 
+Der erste Versuch [43601804511](https://github.com/herdan75/LoxBerry-Plugin-HostBackup/actions/runs/43601804511)
+bestand Hauptsuite, Downloads und Linux-/CIFS-Integration, scheiterte aber vor
+den Browsertests an der neuen `ubuntu-latest`-Plattform Ubuntu 26.04, die das
+festgelegte Playwright 1.58.2 nicht unterstützt. Es wurde kein Release-Paket
+veröffentlicht. Deshalb ist der Buildrunner jetzt auf Ubuntu 24.04 festgelegt;
+Programmlogik und Testabhängigkeiten bleiben unverändert. Erst der vollständige
+erneute Lauf gilt als Freigabenachweis.
+
 1. Erfolgreiche Tag-Pipeline für `v1.2.5` einschliesslich aller verpflichtenden
    Linux-/CIFS-, Browser-, Sicherheits- und Paketprüfungen.
 2. Öffentliches stabiles Release ohne Prerelease-Kennzeichnung; ZIP ohne Anmeldung

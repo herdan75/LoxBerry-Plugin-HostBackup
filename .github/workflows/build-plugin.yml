@@ -19,7 +19,9 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Keep the tested platform: the locked Playwright release does not support
+    # ubuntu-latest after its move to Ubuntu 26.04.
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
 
@@ -87,7 +89,7 @@ jobs:
   release:
     if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 

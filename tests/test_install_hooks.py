@@ -251,6 +251,8 @@ class InstallHookTests(unittest.TestCase):
                 self.assertIn(archive_url, README)
                 self.assertIn(f"## [{tag[1:]}]", CHANGELOG)
         self.assertIn("prerelease: ${{ contains(github.ref_name, '-') }}", WORKFLOW)
+        self.assertEqual(WORKFLOW.count("runs-on: ubuntu-24.04"), 2)
+        self.assertNotIn("runs-on: ubuntu-latest", WORKFLOW)
 
     def test_stable_1_2_5_keeps_numeric_version_and_historical_beta_evidence(self) -> None:
         plugin = configparser.ConfigParser()

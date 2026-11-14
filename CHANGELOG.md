@@ -33,6 +33,10 @@ validiert werden.
   Sicherungsmodi und keine automatische Änderung gespeicherter Einstellungen.
   Vorhandene Beta-Testnachweise und die erneute Prüfung der stabilen Freigabe
   bleiben getrennt dokumentiert: [Release Notes](docs/RELEASE-1.2.5.md).
+- GitHub-Buildumgebung auf Ubuntu 24.04 festgelegt, da das inzwischen auf 26.04
+  umgestellte `ubuntu-latest` mit der festgelegten Browser-Testversion nicht
+  kompatibel ist. Keine Änderung der installierten Plugin-Dateien oder Browser-
+  Testabhängigkeiten; vollständige Freigabeprüfung auf der festgelegten Plattform.
 
 ## [1.2.5-beta] - 2026-10-31
 
